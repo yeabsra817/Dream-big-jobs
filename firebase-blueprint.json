@@ -1,0 +1,159 @@
+{
+  "entities": {
+    "Vacancy": {
+      "title": "Job Vacancy",
+      "description": "A verified professional job vacancy posted manually or imported via Gemini bulk processing by the administrator.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 200, "description": "Official job title" },
+        "organization": { "type": "string", "maxLength": 200, "description": "Hiring company, embassy, NGO, bank, hotel, or organization" },
+        "category": { "type": "string", "maxLength": 100, "description": "One of the 16 primary Ethiopian job categories" },
+        "location": { "type": "string", "maxLength": 150, "description": "City or region in Ethiopia or Remote" },
+        "employmentType": { "type": "string", "maxLength": 50, "description": "Full-time, Part-time, Contract, Internship, etc." },
+        "vacanciesCount": { "type": "string", "maxLength": 50, "description": "Number of open positions or Not specified" },
+        "jobGrade": { "type": "string", "maxLength": 50, "description": "Position grade or classification" },
+        "salary": { "type": "string", "maxLength": 150, "description": "Salary in ETB or attractive / per company scale" },
+        "educationQualification": { "type": "string", "maxLength": 300, "description": "Degree, Diploma, Masters, etc." },
+        "requiredFieldOfStudy": { "type": "string", "maxLength": 300, "description": "Accounting, IT, Economics, Hospitality, etc." },
+        "experienceYears": { "type": "string", "maxLength": 150, "description": "Required years and nature of experience" },
+        "requiredSkills": { "type": "string", "maxLength": 1000, "description": "Comma separated or formatted skills" },
+        "description": { "type": "string", "maxLength": 15000, "description": "Detailed vacancy description" },
+        "responsibilities": { "type": "string", "maxLength": 10000, "description": "Main job duties and responsibilities" },
+        "requiredDocuments": { "type": "string", "maxLength": 1000, "description": "CV, Degree, Recommendation, etc." },
+        "applicationMethod": { "type": "string", "maxLength": 100, "description": "Online, Email, In-person, Postal" },
+        "applicationEmail": { "type": "string", "maxLength": 200, "description": "Target email for submissions" },
+        "applicationUrl": { "type": "string", "maxLength": 500, "description": "Target website or application portal" },
+        "applicationInstructions": { "type": "string", "maxLength": 5000, "description": "Exact step-by-step application instructions" },
+        "applicationDeadline": { "type": "string", "maxLength": 100, "description": "Closing date for applications" },
+        "contactInfo": { "type": "string", "maxLength": 500, "description": "Phone number, physical address, or PO Box" },
+        "languageRequirements": { "type": "string", "maxLength": 200, "description": "English, Amharic, Afaan Oromo, etc." },
+        "ageRequirements": { "type": "string", "maxLength": 100, "description": "Age limit if officially stated" },
+        "genderRequirements": { "type": "string", "maxLength": 100, "description": "Gender preferences if specified" },
+        "specialRequirements": { "type": "string", "maxLength": 1000, "description": "Driving license, security clearance, etc." },
+        "referenceNumber": { "type": "string", "maxLength": 100, "description": "Internal vacancy reference code" },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "pending_review", "published", "expired", "closed", "archived", "duplicate"],
+          "description": "Publication lifecycle status"
+        },
+        "featured": { "type": "boolean", "description": "Whether highlighted prominently on category pages" },
+        "viewsCount": { "type": "number", "description": "Read counter" },
+        "sharesCount": { "type": "number", "description": "Telegram/WhatsApp share counter" },
+        "createdAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of last update" },
+        "publishedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of publication" },
+        "createdBy": { "type": "string", "maxLength": 128, "description": "Admin user UID who added this job" }
+      },
+      "required": ["title", "organization", "category", "status"]
+    },
+    "SiteSettings": {
+      "title": "Site Settings",
+      "description": "Global website configuration, Telegram channel settings, and contact information.",
+      "type": "object",
+      "properties": {
+        "telegramChannelName": { "type": "string", "maxLength": 100, "description": "Public Telegram channel username or name" },
+        "telegramChannelUrl": { "type": "string", "maxLength": 300, "description": "Direct link to Telegram channel" },
+        "telegramGroupUrl": { "type": "string", "maxLength": 300, "description": "Direct link to Telegram community group" },
+        "telegramAutoPublish": { "type": "boolean", "description": "Preference for auto-sharing approved vacancies to Telegram" },
+        "contactEmail": { "type": "string", "maxLength": 150, "description": "Support and inquiries email" },
+        "contactPhone": { "type": "string", "maxLength": 50, "description": "Support telephone number" },
+        "aboutText": { "type": "string", "maxLength": 5000, "description": "About DREAM BIG JOBS summary" },
+        "updatedAt": { "type": "string", "maxLength": 100, "description": "Timestamp of update" }
+      }
+    },
+    "DuplicateReport": {
+      "title": "Duplicate Report",
+      "description": "Record of a duplicate vacancy identified during bulk or manual import.",
+      "type": "object",
+      "properties": {
+        "batchId": { "type": "string", "maxLength": 100, "description": "Bulk import batch identifier" },
+        "detectedAt": { "type": "string", "maxLength": 100, "description": "Timestamp of duplicate detection" },
+        "candidateTitle": { "type": "string", "maxLength": 200, "description": "Title of candidate vacancy" },
+        "candidateOrg": { "type": "string", "maxLength": 200, "description": "Organization of candidate vacancy" },
+        "matchedVacancyId": { "type": "string", "maxLength": 128, "description": "ID of existing vacancy it duplicates" },
+        "matchedTitle": { "type": "string", "maxLength": 200, "description": "Title of the matched vacancy" },
+        "matchedOrg": { "type": "string", "maxLength": 200, "description": "Organization of the matched vacancy" },
+        "reason": { "type": "string", "maxLength": 500, "description": "Explanation of match (exact match, high similarity, etc.)" },
+        "status": { "type": "string", "enum": ["discarded", "restored"], "description": "Admin resolution" },
+        "rawContent": { "type": "string", "maxLength": 10000, "description": "Raw pasted text for this candidate" }
+      },
+      "required": ["candidateTitle", "candidateOrg", "reason", "status"]
+    },
+    "TelegramBatch": {
+      "title": "Telegram Batch Record",
+      "description": "A batch of vacancies curated and sent or queued for the official Telegram channel.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 200, "description": "Batch name or title" },
+        "createdAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of batch creation" },
+        "updatedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of batch update" },
+        "totalCount": { "type": "number", "description": "Total vacancies in batch" },
+        "successCount": { "type": "number", "description": "Successfully posted count" },
+        "failedCount": { "type": "number", "description": "Failed count" },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "in_progress", "completed", "partially_failed"],
+          "description": "Batch lifecycle status"
+        }
+      },
+      "required": ["name", "status"]
+    },
+    "Admin": {
+      "title": "Administrator",
+      "description": "Authorized administrator account.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 150, "description": "Admin Google or email account" },
+        "role": { "type": "string", "enum": ["owner", "admin"], "description": "Role level" },
+        "createdAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp" }
+      },
+      "required": ["email", "role"]
+    },
+    "AutoApplyApplication": {
+      "title": "Auto Apply Application Record",
+      "description": "Record of a tailored application prepared and tracked for Yeabsra Tefera.",
+      "type": "object",
+      "properties": {
+        "vacancyId": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "organization": { "type": "string" },
+        "recruitmentEmail": { "type": "string" },
+        "matchScore": { "type": "number" },
+        "status": { "type": "string" },
+        "gmailMessageId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/vacancies/{vacancyId}": {
+      "schema": "Vacancy",
+      "description": "Verified Ethiopian job vacancies"
+    },
+    "/siteSettings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Platform settings including Telegram integration"
+    },
+    "/duplicates/{duplicateId}": {
+      "schema": "DuplicateReport",
+      "description": "Import duplicate reports and discard queue"
+    },
+    "/telegramBatches/{batchId}": {
+      "schema": "TelegramBatch",
+      "description": "Telegram posting sessions and batches"
+    },
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Designated administrators"
+    },
+    "/autoApplyApplications/{docId}": {
+      "schema": "AutoApplyApplication",
+      "description": "Personal auto-apply records for Yeabsra Tefera"
+    },
+    "/autoApplyProfile/{docId}": {
+      "description": "Personal configuration, target filters, and documents"
+    },
+    "/autoApplyDocuments/{docId}": {
+      "description": "Uploaded personal CV and credential files"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'nexusitsoultion@gmail.com' ||
+        (request.auth.token.email != null && request.auth.token.email.matches('(?i)^nexusitsoultion@gmail\\.com$')) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Vacancies Collection
+    match /vacancies/{vacancyId} {
+      // Public can read published vacancies; admin can read everything (drafts, duplicates, etc.)
+      allow get: if (resource.data.status == 'published') || isOwnerAdmin();
+      allow list: if (resource.data.status == 'published') || isOwnerAdmin();
+
+      // Only the verified website owner/admin can create, update, or delete vacancies
+      allow create: if isOwnerAdmin() && isValidId(vacancyId);
+      allow update: if isOwnerAdmin();
+      allow delete: if isOwnerAdmin();
+    }
+
+    // Duplicate Reports Collection
+    match /duplicates/{duplicateId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    // Telegram Posting Batches Collection
+    match /telegramBatches/{batchId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    // Site Settings Collection (e.g. Telegram links, contact info)
+    match /siteSettings/{settingId} {
+      // Public can read general settings for Telegram channel link & contact
+      allow get, list: if true;
+      allow write: if isOwnerAdmin();
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isOwnerAdmin();
+      allow write: if isOwnerAdmin();
+    }
+
+    // Personal AI Auto Apply Collections (Strictly Private to Owner Admin)
+    match /autoApplyApplications/{docId} {
+      allow read, write: if isOwnerAdmin();
+    }
+    match /autoApplyProfile/{docId} {
+      allow read, write: if isOwnerAdmin();
+    }
+    match /autoApplyDocuments/{docId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    // Test Collection (for connectivity verification)
+    match /test/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
