@@ -943,7 +943,7 @@ app.post('/api/telegram/configure-token', async (req: Request, res: Response): P
       return;
     }
 
-    const cleanToken = token.trim();
+    const cleanToken = token.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
     if (!/^\d+:[A-Za-z0-9_-]+$/.test(cleanToken)) {
       res.status(400).json({
         error:

@@ -46,6 +46,7 @@ import {
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, SAMPLE_BULK_PASTE_DATA } from './utils/helpers';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
+import { broadcastJobToTelegram } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { CategoryView } from './components/CategoryView';
@@ -241,24 +242,20 @@ export default function App() {
     // Auto-broadcast to Telegram channel if published and enabled
     if (v.status === 'published' && siteSettings.telegramAutoPublish && !v.telegramPublished) {
       try {
-        const tgRes = await fetch('/api/admin/telegram-publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vacancy: v,
-            channelName: siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          }),
-        });
-        const tgData = await tgRes.json();
-        if (tgData.success) {
+        const tgRes = await broadcastJobToTelegram(
+          v,
+          siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
+          siteSettings.telegramBotToken
+        );
+        if (tgRes.success) {
           finalVacancy.telegramPublished = true;
-          finalVacancy.telegramMessageId = tgData.telegramMessageId;
-          finalVacancy.telegramPublishedAt = tgData.telegramPublishedAt;
+          finalVacancy.telegramMessageId = tgRes.telegramMessageId;
+          finalVacancy.telegramPublishedAt = tgRes.telegramPublishedAt;
           finalVacancy.telegramPublishError = '';
-        } else if (tgData.error) {
-          finalVacancy.telegramPublishError = tgData.error;
+        } else if (tgRes.error) {
+          finalVacancy.telegramPublishError = tgRes.error;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Auto Telegram publish failed:', err);
       }
     }
@@ -366,24 +363,20 @@ export default function App() {
     // Auto-broadcast to Telegram if transitioning to published
     if (status === 'published' && siteSettings.telegramAutoPublish && !updated.telegramPublished) {
       try {
-        const tgRes = await fetch('/api/admin/telegram-publish', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vacancy: updated,
-            channelName: siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          }),
-        });
-        const tgData = await tgRes.json();
-        if (tgData.success) {
+        const tgRes = await broadcastJobToTelegram(
+          updated,
+          siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
+          siteSettings.telegramBotToken
+        );
+        if (tgRes.success) {
           updated.telegramPublished = true;
-          updated.telegramMessageId = tgData.telegramMessageId;
-          updated.telegramPublishedAt = tgData.telegramPublishedAt;
+          updated.telegramMessageId = tgRes.telegramMessageId;
+          updated.telegramPublishedAt = tgRes.telegramPublishedAt;
           updated.telegramPublishError = undefined;
-        } else if (tgData.error) {
-          updated.telegramPublishError = tgData.error;
+        } else if (tgRes.error) {
+          updated.telegramPublishError = tgRes.error;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Auto Telegram publish error on status change:', err);
       }
     }

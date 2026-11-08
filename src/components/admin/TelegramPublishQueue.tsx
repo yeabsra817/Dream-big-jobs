@@ -36,6 +36,7 @@ import {
   deleteTelegramBatch,
 } from '../../lib/firebase';
 import { VacancyDetailModal } from '../VacancyDetailModal';
+import { broadcastJobToTelegram } from '../../utils/telegramClient';
 
 interface Props {
   vacancies: Vacancy[];
@@ -306,20 +307,10 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
     try {
       const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
-      const res = await fetch('/api/admin/telegram-publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vacancy: job,
-          channelName: channel,
-          forceRetry,
-        }),
-      });
+      const data = await broadcastJobToTelegram(job, channel, siteSettings.telegramBotToken, forceRetry);
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        const errorMsg = data.error || data.message || 'Telegram broadcast failed';
+      if (!data.success) {
+        const errorMsg = data.error || 'Telegram broadcast failed';
         setStatusOverrides((prev) => ({
           ...prev,
           [job.id]: { status: 'failed', error: errorMsg },
