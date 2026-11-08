@@ -45,6 +45,7 @@ import {
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, SAMPLE_BULK_PASTE_DATA } from './utils/helpers';
+import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { CategoryView } from './components/CategoryView';
@@ -162,7 +163,16 @@ export default function App() {
     if (isOwnerAuthorized) {
       Promise.all([fetchAllVacanciesAdmin(), fetchDuplicateReports()])
         .then(([all, dups]) => {
-          if (all.length > 0) setVacancies(all);
+          if (all.length > 0) {
+            // Autonomous healing sweep: immediately archives expired listings and standardizes categories
+            const healed = runAutonomousVacancyHealing(all);
+            if (healed.changedCount > 0) {
+              setVacancies(healed.healedVacancies);
+              saveBatchVacancies(healed.healedVacancies);
+            } else {
+              setVacancies(all);
+            }
+          }
           if (dups.length > 0) setDuplicateReports(dups);
         })
         .catch((err) => console.warn('Admin data load error:', err));

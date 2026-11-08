@@ -24,6 +24,7 @@ import {
   orderBy,
   limit,
   deleteField,
+  writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
@@ -229,10 +230,7 @@ export async function fetchAllVacanciesAdmin(): Promise<Vacancy[]> {
     }
     return cached;
   } catch (err) {
-    if (isPermissionError(err)) {
-      handleFirestoreError(err, OperationType.LIST, path);
-    }
-    console.warn('Firestore offline/transient notice during fetchAllVacanciesAdmin:', err);
+    console.warn('Firestore offline/permission notice during fetchAllVacanciesAdmin (serving local cache):', err);
     return cached;
   }
 }
@@ -302,13 +300,32 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
 
   if (!auth.currentUser) return;
 
-  // 2. Non-blocking cloud persistence
+  // 2. Atomic writeBatch for cloud persistence (1 atomic network call instead of 50 individual requests)
   try {
-    const promises = vacancies.slice(0, 50).map((v) => saveVacancy(v));
-    await Promise.allSettled(promises);
+    const batch = writeBatch(db);
+    const slice = vacancies.slice(0, 100);
+    for (const v of slice) {
+      const rawPayload: Record<string, any> = { ...v };
+      if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
+        rawPayload.telegramPublishError = deleteField();
+      }
+      const cleanPayload = sanitizeForFirestore(rawPayload);
+      batch.set(doc(db, 'vacancies', v.id), cleanPayload, { merge: true });
+    }
+
+    const commitPromise = batch.commit();
+    const timeoutPromise = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('Batch commit timeout; local cache active')), 2500)
+    );
+
+    await Promise.race([commitPromise, timeoutPromise]);
   } catch (err) {
     console.warn('saveBatchVacancies background sync note:', err);
   }
+}
+
+function vacancyTelegramErrorClean(v: Vacancy): boolean {
+  return !v.telegramPublishError || v.telegramPublishError === '';
 }
 
 export async function deleteVacancy(id: string): Promise<void> {
