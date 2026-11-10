@@ -40,7 +40,7 @@ const ai = new GoogleGenAI({
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    app: 'DREAM BIG JOBS',
+    app: 'HOPELAND JOBS',
     time: new Date().toISOString(),
   });
 });
@@ -268,7 +268,7 @@ app.post('/api/gemini/parse-bulk-vacancies', async (req: Request, res: Response)
       return;
     }
 
-    const systemInstruction = `You are the specialized vacancy extraction parser for DREAM BIG JOBS in Ethiopia.
+    const systemInstruction = `You are the specialized vacancy extraction parser for HOPELAND JOBS in Ethiopia.
 The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, and employers.
 
 CRITICAL INSTRUCTIONS:
@@ -874,8 +874,82 @@ app.post('/api/admin/scan-existing-duplicates', (req: Request, res: Response) =>
   }
 });
 
-// Server-side Telegram Bot Token storage (never exposed to frontend/logs)
+// Persistent Site Settings & Telegram Credentials Storage (survives rebuilds & server restarts)
+const SETTINGS_FILE = path.join(__dirname, 'data', 'site_settings.json');
+const TELEGRAM_CONFIG_FILE = path.join(__dirname, 'data', 'telegram_config.json');
+
+function loadPersistedSettings(): any {
+  try {
+    let settings: any = {};
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      settings = JSON.parse(raw) || {};
+    }
+    // Also read dedicated telegram config if present
+    if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
+      try {
+        const tgRaw = fs.readFileSync(TELEGRAM_CONFIG_FILE, 'utf-8');
+        const tgData = JSON.parse(tgRaw);
+        if (tgData?.telegramBotToken) {
+          settings.telegramBotToken = tgData.telegramBotToken;
+        }
+        if (tgData?.telegramBotUsername) {
+          settings.telegramBotUsername = tgData.telegramBotUsername;
+        }
+        if (tgData?.customDomain) {
+          settings.customDomain = tgData.customDomain;
+        }
+      } catch {}
+    }
+    return settings;
+  } catch (e) {
+    console.warn('Notice: Failed reading persisted settings from disk:', e);
+  }
+  return null;
+}
+
+function savePersistedSettings(settings: any): any {
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const current = loadPersistedSettings() || {};
+    const merged = { ...current, ...settings, updatedAt: new Date().toISOString() };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+
+    // If telegram token or domain is included, also save to dedicated telegram_config.json
+    if (merged.telegramBotToken || merged.customDomain || merged.telegramBotUsername) {
+      const tgPayload = {
+        telegramBotToken: merged.telegramBotToken,
+        telegramBotUsername: merged.telegramBotUsername,
+        customDomain: (merged.customDomain && merged.customDomain !== 'healmorin.com') ? merged.customDomain : 'hopelandjobs.tech',
+        updatedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(TELEGRAM_CONFIG_FILE, JSON.stringify(tgPayload, null, 2), 'utf-8');
+    }
+
+    return merged;
+  } catch (e) {
+    console.warn('Notice: Failed saving persisted settings to disk:', e);
+    return settings;
+  }
+}
+
+// Server-side Telegram Bot Token storage (never exposed to frontend/public logs)
 let serverTelegramBotToken: string = process.env.TELEGRAM_BOT_TOKEN || '';
+
+// Initialize from persisted disk storage on startup
+try {
+  const bootSettings = loadPersistedSettings();
+  if (bootSettings?.telegramBotToken) {
+    const clean = String(bootSettings.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+    if (clean && clean.includes(':')) {
+      serverTelegramBotToken = clean;
+      process.env.TELEGRAM_BOT_TOKEN = clean;
+    }
+  }
+} catch {}
 
 function getTelegramToken(): string {
   const envToken = (process.env.TELEGRAM_BOT_TOKEN || '').replace(/['"]/g, '').trim();
@@ -886,8 +960,70 @@ function getTelegramToken(): string {
   if (memToken && memToken !== 'MY_TELEGRAM_BOT_TOKEN' && memToken.includes(':')) {
     return memToken;
   }
+  try {
+    const disk = loadPersistedSettings();
+    if (disk?.telegramBotToken && String(disk.telegramBotToken).includes(':')) {
+      const clean = String(disk.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+      serverTelegramBotToken = clean;
+      process.env.TELEGRAM_BOT_TOKEN = clean;
+      return clean;
+    }
+  } catch {}
   return '';
 }
+
+// Universal Site Settings Endpoint (serves settings across all admin logins and device sessions)
+app.get('/api/settings', (req: Request, res: Response): void => {
+  const persisted = loadPersistedSettings() || {};
+  const currentToken = getTelegramToken();
+  const effectiveDomain =
+    persisted.customDomain && persisted.customDomain !== 'healmorin.com'
+      ? persisted.customDomain
+      : 'hopelandjobs.tech';
+
+  res.json({
+    telegramChannelName: persisted.telegramChannelName || '@DreamBigJobsEthiopia',
+    telegramChannelUrl: persisted.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia',
+    telegramGroupUrl: persisted.telegramGroupUrl || 'https://t.me/DreamBigJobsEthiopia',
+    telegramBotUsername: persisted.telegramBotUsername || '@DreamBigJobsEthiopiaBot',
+    telegramAutoPublish: persisted.telegramAutoPublish ?? true,
+    telegramBotToken: currentToken || persisted.telegramBotToken || '',
+    telegramConnected: Boolean(currentToken),
+    gaMeasurementId: persisted.gaMeasurementId || '',
+    gaTrackingEnabled: persisted.gaTrackingEnabled ?? Boolean(persisted.gaMeasurementId),
+    contactEmail: persisted.contactEmail || 'nexusitsoultion@gmail.com',
+    contactPhone: persisted.contactPhone || '+251 91 123 4567',
+    contactAddress: persisted.contactAddress || 'Bole Subcity, Addis Ababa, Ethiopia',
+    aboutText:
+      persisted.aboutText && !persisted.aboutText.startsWith('DREAM BIG JOBS')
+        ? persisted.aboutText
+        : 'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
+    customDomain: effectiveDomain,
+    updatedAt: persisted.updatedAt || new Date().toISOString(),
+  });
+});
+
+app.post('/api/settings', (req: Request, res: Response): void => {
+  try {
+    const incoming = req.body || {};
+    const current = loadPersistedSettings() || {};
+    const merged = { ...current, ...incoming };
+
+    if (incoming.telegramBotToken) {
+      const clean = String(incoming.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+      if (clean && clean.includes(':')) {
+        serverTelegramBotToken = clean;
+        process.env.TELEGRAM_BOT_TOKEN = clean;
+        merged.telegramBotToken = clean;
+      }
+    }
+
+    const saved = savePersistedSettings(merged);
+    res.json({ success: true, settings: saved });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || String(err) });
+  }
+});
 
 // Telegram Bot Status Check
 app.get('/api/telegram/status', async (req: Request, res: Response): Promise<void> => {
@@ -905,6 +1041,13 @@ app.get('/api/telegram/status', async (req: Request, res: Response): Promise<voi
     const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
     const data = (await tgRes.json()) as any;
     if (data.ok) {
+      // Also ensure persisted settings have bot username updated
+      savePersistedSettings({
+        telegramBotToken: token,
+        telegramBotUsername: data.result?.username,
+        telegramConnected: true,
+      });
+
       res.json({
         configured: true,
         connected: true,
@@ -934,7 +1077,7 @@ app.get('/api/telegram/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
-// Configure Bot Token securely (tests connection before saving server-side)
+// Configure Bot Token securely (tests connection and persists to server disk)
 app.post('/api/telegram/configure-token', async (req: Request, res: Response): Promise<void> => {
   try {
     const { token } = req.body;
@@ -964,11 +1107,18 @@ app.post('/api/telegram/configure-token', async (req: Request, res: Response): P
       return;
     }
 
-    // Securely update server-side variable and process.env
+    // Securely update server-side memory, process.env, and disk persistence
     serverTelegramBotToken = cleanToken;
     process.env.TELEGRAM_BOT_TOKEN = cleanToken;
 
     const bot = data.result;
+
+    savePersistedSettings({
+      telegramBotToken: cleanToken,
+      telegramBotUsername: bot.username,
+      telegramConnected: true,
+    });
+
     res.json({
       success: true,
       message: `Successfully connected to Telegram bot @${bot.username}!`,
@@ -1038,81 +1188,99 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/>/g, '&gt;');
 }
 
-function buildTelegramJobHtml(vacancy: any, appUrl: string): string {
-  const vacancyLink = `${appUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=social&utm_campaign=job_posting`;
-  const applyUrlLine =
-    vacancy.applicationUrl &&
-    vacancy.applicationUrl !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationUrl).trim() !== ''
-      ? `🌐 <b>Official Apply Link:</b> ${escapeHtml(vacancy.applicationUrl)}\n`
-      : '';
-  const applyEmailLine =
-    vacancy.applicationEmail &&
-    vacancy.applicationEmail !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationEmail).trim() !== ''
-      ? `✉️ <b>Apply Email:</b> ${escapeHtml(vacancy.applicationEmail)}\n`
-      : '';
-
-  return `🌟 <b>NEW JOB VACANCY | DREAM BIG JOBS 🇪🇹</b>
-━━━━━━━━━━━━━━━━━━━━
-💼 <b>Position:</b> ${escapeHtml(vacancy.title || 'Job Vacancy')}
-🏢 <b>Organization:</b> ${escapeHtml(vacancy.organization || 'Ethiopian Employer')}
-📂 <b>Category:</b> ${escapeHtml(vacancy.category || 'General')}
-📍 <b>Location:</b> ${escapeHtml(vacancy.location || 'Addis Ababa, Ethiopia')}
-⏳ <b>Deadline:</b> ${escapeHtml(vacancy.applicationDeadline || 'See description')}
-💰 <b>Salary:</b> ${escapeHtml(vacancy.salary || 'Attractive / Company Scale')}
-📜 <b>Experience:</b> ${escapeHtml(vacancy.experienceYears || 'Relevant experience')}
-${applyUrlLine}${applyEmailLine}
-🔗 <b>Full Job Details & Requirements on Website:</b>
-${escapeHtml(vacancyLink)}
-
-━━━━━━━━━━━━━━━━━━━━
-👉 <b>Join DREAM BIG JOBS Channel:</b> @DreamBigJobsEthiopia
-<b>Dream Big. Find Your Opportunity.</b>`;
+function normalizeWebsiteDomain(domainOrUrl?: string): string {
+  if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
+  let clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  return `https://${clean}`;
 }
 
-function buildTelegramJobPlainText(vacancy: any, appUrl: string): string {
-  const vacancyLink = `${appUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=social&utm_campaign=job_posting`;
-  const applyUrlLine =
-    vacancy.applicationUrl &&
-    vacancy.applicationUrl !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationUrl).trim() !== ''
-      ? `🌐 Official Apply Link: ${vacancy.applicationUrl}\n`
-      : '';
-  const applyEmailLine =
-    vacancy.applicationEmail &&
-    vacancy.applicationEmail !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationEmail).trim() !== ''
-      ? `✉️ Apply Email: ${vacancy.applicationEmail}\n`
-      : '';
+function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', channel = '@DreamBigJobsEthiopia'): string {
+  const baseUrl = normalizeWebsiteDomain(domainOrUrl);
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const cleanChan = channel.replace(/^@/, '');
+  const channelUrl = `https://t.me/${cleanChan}`;
 
-  return `🌟 NEW JOB VACANCY | DREAM BIG JOBS 🇪🇹
-━━━━━━━━━━━━━━━━━━━━
-💼 Position: ${vacancy.title || 'Job Vacancy'}
-🏢 Organization: ${vacancy.organization || 'Ethiopian Employer'}
-📂 Category: ${vacancy.category || 'General'}
-📍 Location: ${vacancy.location || 'Addis Ababa, Ethiopia'}
-⏳ Deadline: ${vacancy.applicationDeadline || 'See description'}
-💰 Salary: ${vacancy.salary || 'Attractive / Company Scale'}
-📜 Experience: ${vacancy.experienceYears || 'Relevant experience'}
-${applyUrlLine}${applyEmailLine}
-🔗 Full Job Details & Requirements on Website:
-${vacancyLink}
+  const orgName = escapeHtml(vacancy.organization || 'Employer');
+  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : '';
+  const positionTitle = escapeHtml(vacancy.title || 'Various Positions');
 
-━━━━━━━━━━━━━━━━━━━━
-👉 Join DREAM BIG JOBS Channel: @DreamBigJobsEthiopia
-Dream Big. Find Your Opportunity.`;
+  const eduParts: string[] = [];
+  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
+  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
+  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(vacancy.requiredSkills.join(' / '));
+  }
+  if (eduParts.length === 0) {
+    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+  }
+  if (vacancy.experienceYears) {
+    eduParts.push(`${vacancy.experienceYears} experience`);
+  }
+  const educationFieldText = escapeHtml(eduParts.join(', '));
+
+  return `<b>Vacancy at ${orgName}</b>
+
+🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
+
+✅ <b>Education field:</b> ${educationFieldText}
+
+📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
+👉<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
+
+🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
+=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>
+
+🔰 <b>Telegram:-</b> <a href="${channelUrl}">${channelUrl}</a>`;
+}
+
+function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tech', channel = '@DreamBigJobsEthiopia'): string {
+  const baseUrl = normalizeWebsiteDomain(domainOrUrl);
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const cleanChan = channel.replace(/^@/, '');
+  const channelUrl = `https://t.me/${cleanChan}`;
+
+  const orgName = vacancy.organization || 'Employer';
+  const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : '';
+  const positionTitle = vacancy.title || 'Various Positions';
+
+  const eduParts: string[] = [];
+  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
+  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
+  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(vacancy.requiredSkills.join(' / '));
+  }
+  if (eduParts.length === 0) {
+    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+  }
+  if (vacancy.experienceYears) {
+    eduParts.push(`${vacancy.experienceYears} experience`);
+  }
+  const educationFieldText = eduParts.join(', ');
+
+  return `Vacancy at ${orgName}
+
+🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
+
+✅ Education field: ${educationFieldText}
+
+📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
+👉Read Detail:- ${vacancyLink}
+
+🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
+=>See Detail:- ${baseUrl}
+
+🔰 Telegram:- ${channelUrl}`;
 }
 
 async function sendTelegramVacancyMessage(
   token: string,
   channel: string,
   vacancy: any,
-  appUrl: string
+  domainOrUrl: string
 ): Promise<{ ok: boolean; messageId?: number; error?: string; formattedMessage: string }> {
   const cleanChannel = channel.startsWith('@') ? channel : `@${channel}`;
-  const htmlMsg = buildTelegramJobHtml(vacancy, appUrl);
-  const plainMsg = buildTelegramJobPlainText(vacancy, appUrl);
+  const htmlMsg = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel);
+  const plainMsg = buildTelegramJobPlainText(vacancy, domainOrUrl, cleanChannel);
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -1180,7 +1348,7 @@ async function sendTelegramVacancyMessage(
 // Telegram Publishing Endpoint
 app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancy, botToken, channelName, forceRetry } = req.body;
+    const { vacancy, botToken, channelName, forceRetry, customDomain } = req.body;
     if (!vacancy) {
       res.status(400).json({ error: 'Vacancy payload is required' });
       return;
@@ -1205,14 +1373,15 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
     }
 
     const targetChannel = (channelName || '@DreamBigJobsEthiopia').trim();
-    const appUrl = (
-      process.env.APP_URL ||
-      (req.headers.origin as string) ||
-      (req.headers.host ? `https://${req.headers.host}` : '') ||
-      'https://dreambigjobs.et'
-    ).replace(/\/+$/, '');
+    const persisted = loadPersistedSettings();
+    let effectiveDomain =
+      customDomain ||
+      persisted?.customDomain ||
+      (process.env.APP_URL ? process.env.APP_URL.replace(/^https?:\/\//i, '').replace(/\/+$/, '') : '') ||
+      'hopelandjobs.tech';
+    if (effectiveDomain === 'healmorin.com') effectiveDomain = 'hopelandjobs.tech';
 
-    const result = await sendTelegramVacancyMessage(effectiveToken, targetChannel, vacancy, appUrl);
+    const result = await sendTelegramVacancyMessage(effectiveToken, targetChannel, vacancy, effectiveDomain);
 
     if (!result.ok) {
       res.json({
@@ -2379,7 +2548,7 @@ app.post('/api/analytics/ai-insights', async (req: Request, res: Response): Prom
     const isInsufficient = uniqueVisitors === 0;
 
     // Build rigorous fact-based prompt
-    const prompt = `You are the executive AI Business Analyst for DREAM BIG JOBS, Ethiopia's premier employment recruitment information portal.
+    const prompt = `You are the executive AI Business Analyst for HOPELAND JOBS, Ethiopia's premier employment recruitment information portal.
 Analyze the following authentic, verified analytics and business data retrieved from the website.
 
 CRITICAL COMPLIANCE RULES:
@@ -3186,7 +3355,7 @@ async function setupServer() {
   }
 
   app.listen(port, () => {
-    console.log(`DREAM BIG JOBS Server running on port ${port}`);
+    console.log(`HOPELAND JOBS Server running on port ${port}`);
   });
 }
 

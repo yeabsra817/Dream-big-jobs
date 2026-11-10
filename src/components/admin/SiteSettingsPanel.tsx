@@ -9,8 +9,10 @@ import {
   MapPin,
   CheckCircle2,
   FileText,
+  Globe,
 } from 'lucide-react';
 import { SiteSettings, Vacancy, DuplicateReportItem, OFFICIAL_CATEGORIES } from '../../types/job';
+import { generateFullSystemBackupSnapshot } from '../../lib/firebase';
 
 interface Props {
   settings: SiteSettings;
@@ -36,6 +38,7 @@ export const SiteSettingsPanel: React.FC<Props> = ({
   const [contactAddress, setContactAddress] = useState(
     settings.contactAddress || 'Bole Subcity, Addis Ababa, Ethiopia'
   );
+  const [customDomain, setCustomDomain] = useState(settings.customDomain || 'hopelandjobs.tech');
   const [aboutText, setAboutText] = useState(settings.aboutText || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -43,15 +46,17 @@ export const SiteSettingsPanel: React.FC<Props> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
       await onSaveSettings({
         ...settings,
         contactEmail: contactEmail.trim(),
         contactPhone: contactPhone.trim(),
         contactAddress: contactAddress.trim(),
+        customDomain: cleanDomain,
         aboutText: aboutText.trim(),
         updatedAt: new Date().toISOString(),
       });
-      alert('Site settings saved successfully!');
+      alert(`Site settings saved! Active domain set to "${cleanDomain}". Telegram broadcasts will link to this domain automatically.`);
     } catch (err: any) {
       alert('Error saving settings: ' + err.message);
     } finally {
@@ -59,28 +64,28 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     }
   };
 
-  // Export full backup as JSON
-  const handleExportBackup = () => {
-    const backupObj = {
-      backupDate: new Date().toISOString(),
-      platform: 'DREAM BIG JOBS',
-      version: '1.0.0',
-      totalVacancies: vacancies.length,
-      vacancies,
-      settings,
-      duplicateReports,
-    };
+  // Export full backup as JSON (Full System Snapshot)
+  const handleExportBackup = async () => {
+    try {
+      const snapshot = await generateFullSystemBackupSnapshot(
+        vacancies,
+        settings,
+        duplicateReports
+      );
 
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupObj, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `DREAM_BIG_JOBS_BACKUP_${new Date().toISOString().slice(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snapshot, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', dataStr);
+      downloadAnchor.setAttribute('download', `DREAM_BIG_JOBS_FULL_SNAPSHOT_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err: any) {
+      alert('Failed to generate full system snapshot: ' + err.message);
+    }
   };
 
-  // Restore backup from JSON
+  // Restore backup from JSON (Backward compatible with both formats)
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -89,23 +94,20 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (!parsed.vacancies || !Array.isArray(parsed.vacancies)) {
-          alert('Invalid backup file. Must contain a valid vacancies array.');
+        const vacancyList = parsed.data?.vacancies || parsed.vacancies;
+
+        if (!vacancyList || !Array.isArray(vacancyList)) {
+          alert('Invalid backup file. Must contain a valid vacancies array or data object.');
           return;
         }
 
-        if (
-          confirm(
-            `Restore ${parsed.vacancies.length} vacancies from backup file dated ${
-              parsed.backupDate || 'Unknown'
-            }?`
-          )
-        ) {
+        const dateLabel = parsed.timestamp || parsed.backupDate || 'Unknown date';
+        if (confirm(`Restore ${vacancyList.length} vacancies and configuration from backup snapshot dated ${dateLabel}?`)) {
           setIsRestoring(true);
           await onRestoreData({
-            vacancies: parsed.vacancies,
-            settings: parsed.settings,
-            duplicateReports: parsed.duplicateReports,
+            vacancies: vacancyList,
+            settings: parsed.data?.siteSettings || parsed.settings,
+            duplicateReports: parsed.data?.duplicateReports || parsed.duplicateReports,
           });
           alert('Backup restored successfully!');
         }
@@ -226,11 +228,33 @@ export const SiteSettingsPanel: React.FC<Props> = ({
               className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
             />
           </div>
+
+          <div className="sm:col-span-3 bg-amber-50/70 p-4 rounded-2xl border border-amber-200">
+            <label className="text-xs font-bold text-slate-900 block mb-1 flex items-center gap-1.5">
+              <Globe className="w-4 h-4 text-amber-600" />
+              <span>Production Website Domain (Used in Telegram Posts & Deep Links)</span>
+            </label>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-xs font-mono text-slate-500 bg-white px-2.5 py-2.5 rounded-xl border border-slate-200 select-none">
+                https://
+              </span>
+              <input
+                type="text"
+                value={customDomain}
+                onChange={(e) => setCustomDomain(e.target.value)}
+                placeholder="hopelandjobs.tech"
+                className="flex-1 text-xs font-mono font-bold p-2.5 rounded-xl border border-amber-300 focus:border-amber-500 outline-none bg-white text-slate-900"
+              />
+            </div>
+            <p className="text-[11px] text-slate-600 mt-2 leading-relaxed">
+              💡 When you change your domain here (e.g. to <strong>hopelandjobs.tech</strong>), all Telegram vacancy broadcasts will automatically post links using this domain (e.g. <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">👉Read Detail:- https://{customDomain || 'hopelandjobs.tech'}/?jobId=...</code> and <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">=&gt;See Detail:- https://{customDomain || 'hopelandjobs.tech'}</code>).
+            </p>
+          </div>
         </div>
 
         <div>
           <label className="text-xs font-bold text-slate-700 block mb-1">
-            About DREAM BIG JOBS (Homepage Mission Statement)
+            About HOPELAND JOBS (Homepage Mission Statement)
           </label>
           <textarea
             rows={4}

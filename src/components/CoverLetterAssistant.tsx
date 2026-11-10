@@ -34,7 +34,7 @@ Dear Hiring Team,
 
 I am writing to express my strong enthusiasm and application for the position of ${vacancy.title} at ${
     vacancy.organization
-  }, as officially advertised on DREAM BIG JOBS. With my professional background in ${
+  }, as officially advertised on HOPELAND JOBS. With my professional background in ${
     vacancy.requiredFieldOfStudy || 'relevant field'
   } and my dedication to professional excellence, I am confident in my capacity to contribute immediately to your organization.
 

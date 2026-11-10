@@ -88,14 +88,14 @@ export const Navbar: React.FC<Props> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-2xl tracking-tight text-white font-['Plus_Jakarta_Sans',sans-serif]">
-                  DREAM BIG <span className="text-amber-400">JOBS</span>
+                  HOPELAND <span className="text-amber-400">JOBS</span>
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
                   ET
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium tracking-wide">
-                Dream Big. Find Your Opportunity.
+                Hopeland Jobs. Find Your Opportunity.
               </p>
             </div>
           </div>
@@ -271,7 +271,7 @@ export const Navbar: React.FC<Props> = ({
               className="w-full flex items-center justify-center gap-2 bg-[#229ED9] text-white font-bold text-sm py-3 rounded-xl shadow-sm cursor-pointer"
             >
               <Send className="w-4 h-4 fill-white" />
-              <span>Join Dream Big Jobs on Telegram</span>
+              <span>Join Hopeland Jobs on Telegram</span>
             </a>
             <button
               onClick={() => {

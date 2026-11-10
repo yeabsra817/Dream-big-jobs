@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": "ev_1794310851301_ao2xf",
+    "visitorId": "vid_1793973577880_17oi0qn",
+    "sessionId": "sid_1794310851298_myqskv",
+    "eventType": "page_view",
+    "path": "/",
+    "title": "HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.",
+    "source": "google",
+    "deviceType": "mobile",
+    "country": "Ethiopia",
+    "city": "Addis Ababa",
+    "timestamp": "2026-11-10T11:40:51.301Z",
+    "isInternal": false
+  }
+]

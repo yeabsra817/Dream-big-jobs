@@ -54,7 +54,7 @@ export const VacancyDetailModal: React.FC<Props> = ({
   const currentUrl = typeof window !== 'undefined' ? `${window.location.origin}/?jobId=${vacancy.id}` : '';
 
   const handleCopyVacancy = () => {
-    const text = `📋 JOB VACANCY | DREAM BIG JOBS 🇪🇹
+    const text = `📋 JOB VACANCY | HOPELAND JOBS 🇪🇹
 ━━━━━━━━━━━━━━━━━━━━
 Position: ${vacancy.title}
 Organization: ${vacancy.organization}
@@ -70,7 +70,7 @@ Application Method: ${vacancy.applicationMethod}
 ${vacancy.applicationUrl ? `Apply Link: ${vacancy.applicationUrl}` : ''}
 ${vacancy.applicationEmail ? `Apply Email: ${vacancy.applicationEmail}` : ''}
 
-🔗 View Full Vacancy on DREAM BIG JOBS:
+🔗 View Full Vacancy on HOPELAND JOBS:
 ${currentUrl}`;
 
     navigator.clipboard.writeText(text);
@@ -86,7 +86,7 @@ ${currentUrl}`;
       category: vacancy.category,
     });
     const text = encodeURIComponent(
-      `💼 ${vacancy.title} at ${vacancy.organization}\n📍 ${vacancy.location} | ⏳ Deadline: ${vacancy.applicationDeadline}\nCheck details on DREAM BIG JOBS:`
+      `💼 ${vacancy.title} at ${vacancy.organization}\n📍 ${vacancy.location} | ⏳ Deadline: ${vacancy.applicationDeadline}\nCheck details on HOPELAND JOBS:`
     );
     window.open(`https://t.me/share/url?url=${encodeURIComponent(currentUrl)}&text=${text}`, '_blank');
   };
@@ -445,7 +445,7 @@ ${currentUrl}`;
         <div className="bg-slate-50 p-4 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Verified by DREAM BIG JOBS Admin</span>
+            <span>Verified by HOPELAND JOBS Admin</span>
           </div>
           <button
             onClick={onClose}

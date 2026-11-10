@@ -156,7 +156,7 @@ export const LocationJobsView: React.FC<Props> = ({
     e.stopPropagation();
     const url = `${window.location.origin}/?jobId=${v.id}`;
     const text = encodeURIComponent(
-      `💼 ${v.title} at ${v.organization}\n📍 Location: ${v.location}\n💰 Salary: ${v.salary}\n⏳ Deadline: ${v.applicationDeadline}\nApply on DREAM BIG JOBS:\n${url}`
+      `💼 ${v.title} at ${v.organization}\n📍 Location: ${v.location}\n💰 Salary: ${v.salary}\n⏳ Deadline: ${v.applicationDeadline}\nApply on HOPELAND JOBS:\n${url}`
     );
     window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`, '_blank');
   };

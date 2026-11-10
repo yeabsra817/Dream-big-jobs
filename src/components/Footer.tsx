@@ -66,7 +66,7 @@ export const Footer: React.FC<Props> = ({
                 <Sparkles className="w-6 h-6 fill-current" />
               </div>
               <span className="font-extrabold text-2xl tracking-tight text-white">
-                DREAM BIG <span className="text-amber-400">JOBS</span>
+                HOPELAND <span className="text-amber-400">JOBS</span>
               </span>
             </div>
 
@@ -170,7 +170,7 @@ export const Footer: React.FC<Props> = ({
               <span>Administrator Portal</span>
             </button>
             <span>•</span>
-            <span>© {new Date().getFullYear()} DREAM BIG JOBS Ethiopia. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} HOPELAND JOBS. All rights reserved.</span>
           </div>
         </div>
       </div>

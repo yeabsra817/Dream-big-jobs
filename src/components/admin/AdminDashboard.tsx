@@ -15,6 +15,9 @@ import {
   BarChart3,
   HeartPulse,
   Bell,
+  Globe,
+  Save,
+  X,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -87,6 +90,29 @@ export const AdminDashboard: React.FC<Props> = ({
   const [editingVacancy, setEditingVacancy] = useState<Vacancy | null>(null);
   const [broadcastVacancy, setBroadcastVacancy] = useState<Vacancy | null>(null);
   const [analyticsSummary, setAnalyticsSummary] = useState<AnalyticsSummary | null>(null);
+
+  // Quick Domain Management Modal State
+  const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
+  const [editDomain, setEditDomain] = useState(siteSettings.customDomain || 'hopelandjobs.tech');
+  const [isSavingDomain, setIsSavingDomain] = useState(false);
+
+  const handleQuickSaveDomain = async (domainToSave: string) => {
+    setIsSavingDomain(true);
+    try {
+      const clean = domainToSave.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
+      await onSaveSiteSettings({
+        ...siteSettings,
+        customDomain: clean,
+        updatedAt: new Date().toISOString(),
+      });
+      setIsDomainModalOpen(false);
+      alert(`Primary website domain updated to "${clean}"! All Telegram broadcasts, share links, and applicant redirects now route to https://${clean}.`);
+    } catch (err: any) {
+      alert(`Failed to save domain: ${err.message}`);
+    } finally {
+      setIsSavingDomain(false);
+    }
+  };
 
   // Periodic fetch of analytics summary for live alerts watchdog
   const fetchAnalyticsSummary = async () => {
@@ -202,7 +228,7 @@ export const AdminDashboard: React.FC<Props> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    DREAM BIG JOBS • {adminEmail || 'nexusitsoultion@gmail.com'}
+                    HOPELAND JOBS • {adminEmail || 'nexusitsoultion@gmail.com'}
                   </p>
                 </div>
               </div>
@@ -236,6 +262,21 @@ export const AdminDashboard: React.FC<Props> = ({
                   <span>Sync to Cloud</span>
                 </button>
               )}
+
+              <button
+                onClick={() => {
+                  setEditDomain(siteSettings.customDomain || 'hopelandjobs.tech');
+                  setIsDomainModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors border border-slate-700"
+                title="Change Primary Website Domain (e.g. hopelandjobs.tech) - Automatically updates all Telegram posts and links"
+              >
+                <Globe className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline text-slate-400">Domain:</span>
+                <span className="text-amber-300 font-bold underline underline-offset-2">
+                  {siteSettings.customDomain || 'hopelandjobs.tech'}
+                </span>
+              </button>
 
               <button
                 onClick={() => {
@@ -470,6 +511,8 @@ export const AdminDashboard: React.FC<Props> = ({
         {activeTab === 'health' && (
           <SystemHealth
             vacancies={vacancies}
+            siteSettings={siteSettings}
+            duplicateReports={duplicateReports}
             onEditVacancy={handleEditVacancy}
             onUpdateVacancyStatus={onUpdateVacancyStatus}
             onBatchUpdateVacancies={onBatchSaveVacancies}
@@ -545,6 +588,91 @@ export const AdminDashboard: React.FC<Props> = ({
           }}
           initialData={editingVacancy}
         />
+      )}
+
+      {/* Quick Domain Change Modal */}
+      {isDomainModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-amber-400" />
+                <h3 className="font-extrabold text-sm tracking-wide">Primary Website Domain</h3>
+              </div>
+              <button
+                onClick={() => setIsDomainModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Set your primary custom domain. Every Telegram vacancy post, share URL, applicant redirect, and Harmeejobs-style link will automatically use this domain.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Website Domain
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">https://</span>
+                  <input
+                    type="text"
+                    value={editDomain}
+                    onChange={(e) => setEditDomain(e.target.value)}
+                    placeholder="hopelandjobs.tech"
+                    className="w-full pl-20 pr-4 py-2.5 rounded-xl border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-sm font-bold text-slate-900 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 mb-2">Quick Presets:</p>
+                <div className="flex flex-wrap gap-2">
+                  {['hopelandjobs.tech', 'hopelandjobs.com', 'ethio-jobs.org'].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setEditDomain(d)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                        editDomain === d
+                          ? 'bg-amber-400 text-slate-950 border border-amber-500'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                ✨ <strong>Automatic Sync:</strong> When saved, all Telegram post previews and live broadcast links instantly reflect <strong>https://{editDomain || 'hopelandjobs.tech'}</strong> without requiring manual edits on individual vacancies.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDomainModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingDomain}
+                  onClick={() => handleQuickSaveDomain(editDomain)}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSavingDomain ? 'Saving...' : 'Save & Update Domain'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

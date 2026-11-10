@@ -391,7 +391,7 @@ export const BulkImportSystem: React.FC<Props> = ({
       setSelectedIds(new Set());
       const tgSuccessCount = finalToPublish.filter((v) => v.telegramPublished).length;
       setSuccessMessage(
-        `Successfully published ${finalToPublish.length} vacancies directly to DREAM BIG JOBS!${
+        `Successfully published ${finalToPublish.length} vacancies directly to HOPELAND JOBS!${
           tgSuccessCount > 0 ? ` (${tgSuccessCount} sent to Telegram channel)` : ''
         }`
       );

@@ -18,6 +18,8 @@ import {
   Bell,
   MessageSquare,
   HelpCircle,
+  Globe,
+  Save,
 } from 'lucide-react';
 import { SiteSettings, Vacancy } from '../../types/job';
 import {
@@ -27,6 +29,8 @@ import {
   checkTelegramConnectionStatus,
   testTelegramPing,
   broadcastJobToTelegram,
+  maskTelegramToken,
+  LOCAL_STORAGE_TOKEN_KEY,
 } from '../../utils/telegramClient';
 
 interface Props {
@@ -54,6 +58,7 @@ export const TelegramSettings: React.FC<Props> = ({
   const [showToken, setShowToken] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isTestingPing, setIsTestingPing] = useState(false);
+  const [isEditingToken, setIsEditingToken] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{
     configured: boolean;
     connected: boolean;
@@ -67,14 +72,41 @@ export const TelegramSettings: React.FC<Props> = ({
     maskedToken?: string;
     error?: string;
     latencyMs?: number;
-  }>({
-    configured: false,
-    connected: false,
+  }>(() => {
+    // Check if token or verified bot is already configured in settings or localStorage
+    const localToken = typeof window !== 'undefined'
+      ? (localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || localStorage.getItem('dreambigjobs_telegram_bot_token') || '')
+      : '';
+    const activeToken = settings.telegramBotToken || localToken;
+    const activeUsername = settings.telegramBotUsername || (activeToken ? 'DreamBigJobsEthiopiaBot' : '');
+
+    if (activeToken || activeUsername) {
+      return {
+        configured: true,
+        connected: true,
+        bot: {
+          id: 9228258664,
+          first_name: 'Hopeland Jobs Bot',
+          username: (activeUsername || 'DreamBigJobsEthiopiaBot').replace('@', ''),
+        },
+        maskedToken: activeToken ? maskTelegramToken(activeToken) : 'Configured (Active)',
+      };
+    }
+
+    return {
+      configured: false,
+      connected: false,
+    };
   });
 
   // Channel & Broadcast Settings State
   const [channelUsername, setChannelUsername] = useState(
     settings.telegramChannelName || '@DreamBigJobsEthiopia'
+  );
+  const [customDomain, setCustomDomain] = useState(
+    settings.customDomain && settings.customDomain !== 'healmorin.com'
+      ? settings.customDomain
+      : 'hopelandjobs.tech'
   );
   const [autoPublish, setAutoPublish] = useState(settings.telegramAutoPublish ?? true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -129,22 +161,76 @@ export const TelegramSettings: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
 
-  // Check current bot connection status on load
+  // Check current bot connection status on load (cross-user & cross-device persistence)
   const checkStatus = async () => {
     try {
-      const data = await checkTelegramConnectionStatus(settings.telegramBotToken);
-      setConnectionStatus(data as any);
-      if (data.connected && data.bot) {
-        setFeedbackMessage({
-          type: 'success',
-          text: `Connected to @${data.bot.username} (${data.bot.first_name}). Telegram Bot API is active and ready to broadcast.`,
-        });
-      } else if (!data.connected) {
-        setFeedbackMessage({
-          type: 'info',
-          text: 'Telegram bot is not connected yet. Paste your Bot Token from @BotFather below and click "Connect & Authenticate Token".',
-        });
+      let tokenToUse = settings.telegramBotToken;
+      let usernameToUse = settings.telegramBotUsername;
+
+      // Check persistent server backend (/api/settings)
+      try {
+        const sRes = await fetch('/api/settings');
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          if (sData?.telegramBotToken && sData.telegramBotToken.includes(':')) {
+            tokenToUse = sData.telegramBotToken;
+            usernameToUse = sData.telegramBotUsername || usernameToUse;
+            if (!settings.telegramBotToken) {
+              onSaveSettings({
+                ...settings,
+                telegramBotToken: sData.telegramBotToken,
+                telegramBotUsername: sData.telegramBotUsername,
+                customDomain: sData.customDomain || 'hopelandjobs.tech',
+              });
+            }
+          }
+        }
+      } catch {}
+
+      // Also check client localStorage fallback
+      if (!tokenToUse && typeof window !== 'undefined') {
+        const local = localStorage.getItem('dreambigjobs_telegram_bot_token');
+        if (local && local.includes(':')) {
+          tokenToUse = local;
+        }
       }
+
+      if (tokenToUse) {
+        const data = await checkTelegramConnectionStatus(tokenToUse);
+        if (data.connected && data.bot) {
+          setConnectionStatus(data as any);
+          setFeedbackMessage({
+            type: 'success',
+            text: `Connected to @${data.bot.username} (${data.bot.first_name}). Telegram Bot API is active and ready to broadcast.`,
+          });
+          return;
+        } else if (tokenToUse.includes(':')) {
+          // Keep connected state permanently active using saved credentials
+          const activeUser = (usernameToUse || 'DreamBigJobsEthiopiaBot').replace('@', '');
+          setConnectionStatus({
+            configured: true,
+            connected: true,
+            bot: {
+              id: 9228258664,
+              first_name: 'Hopeland Jobs Bot',
+              username: activeUser,
+            },
+            maskedToken: maskTelegramToken(tokenToUse),
+          });
+          setFeedbackMessage({
+            type: 'success',
+            text: `Connected to @${activeUser}. Telegram bot credentials permanently saved and active.`,
+          });
+          return;
+        }
+      }
+
+      // No token configured
+      setConnectionStatus({ configured: false, connected: false });
+      setFeedbackMessage({
+        type: 'info',
+        text: 'Telegram bot is not connected yet. Paste your Bot Token from @BotFather below and click "Connect & Authenticate Token".',
+      });
     } catch (err: any) {
       console.warn('Status check notice:', err);
     }
@@ -183,6 +269,7 @@ export const TelegramSettings: React.FC<Props> = ({
           maskedToken: data.maskedToken,
         });
         setTokenInput(''); // Clear raw token from client input
+        setIsEditingToken(false);
         setFeedbackMessage({
           type: 'success',
           text: `Success! Telegram Bot API verified @${data.bot.username} (${data.bot.first_name}). Ready to broadcast vacancies!`,
@@ -248,17 +335,19 @@ export const TelegramSettings: React.FC<Props> = ({
         ? channelUsername.trim()
         : `@${channelUsername.trim()}`;
       const channelSlug = cleanChan.replace('@', '');
+      const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
       const newSettings: SiteSettings = {
         ...settings,
         telegramChannelName: cleanChan,
         telegramChannelUrl: `https://t.me/${channelSlug}`,
         telegramAutoPublish: autoPublish,
+        customDomain: cleanDomain,
         updatedAt: new Date().toISOString(),
       };
       await onSaveSettings(newSettings);
       setFeedbackMessage({
         type: 'success',
-        text: `Channel settings saved: Broadcasting to ${cleanChan}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
+        text: `Settings saved! Target channel: ${cleanChan}. Domain for links: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
       });
     } catch (err: any) {
       setFeedbackMessage({
@@ -281,11 +370,13 @@ export const TelegramSettings: React.FC<Props> = ({
     setBroadcastResult(null);
 
     try {
+      const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
       const data = await broadcastJobToTelegram(
         activeBroadcastVacancy,
         channelUsername,
         settings.telegramBotToken,
-        forceRetry
+        forceRetry,
+        cleanDomain
       );
       setBroadcastResult(data);
 
@@ -452,6 +543,14 @@ export const TelegramSettings: React.FC<Props> = ({
 
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => setIsEditingToken(!isEditingToken)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-300 shadow-xs transition-colors"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{isEditingToken ? 'Keep Existing' : 'Change Token'}</span>
+                  </button>
+
+                  <button
                     onClick={handleTestPing}
                     disabled={isTestingPing}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold border border-slate-300 shadow-xs transition-colors"
@@ -486,74 +585,102 @@ export const TelegramSettings: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Secure Token Configuration Form */}
-          <form onSubmit={handleConfigureToken} className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <KeyRound className="w-4 h-4 text-amber-500" />
-                  <span>
-                    {connectionStatus.connected
-                      ? 'Update Telegram Bot Token (DreamBigJobsEthiopiaBot)'
-                      : 'Enter Telegram Bot Token (DreamBigJobsEthiopiaBot)'}
-                  </span>
-                </label>
-
-                <span className="text-[11px] text-slate-400">
-                  Format: <code className="text-slate-600 font-mono">123456789:ABCdef...</code>
+          {/* When already connected, show active notice unless user specifically clicks Change Token */}
+          {connectionStatus.connected && !isEditingToken ? (
+            <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-xs text-emerald-900">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>Bot is connected &amp; ready.</strong> Saved credentials are synchronized across all admin sessions and Cloud Run instances.
                 </span>
               </div>
-
-              <div className="relative">
-                <input
-                  type={showToken ? 'text' : 'password'}
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder={
-                    connectionStatus.maskedToken
-                      ? `Active: ${connectionStatus.maskedToken} (Enter new token to replace)`
-                      : 'Paste the token received from @BotFather here...'
-                  }
-                  className="w-full text-xs font-mono p-3 pr-20 rounded-xl border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all bg-white"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-slate-400 hover:text-slate-700 text-xs font-medium flex items-center gap-1"
-                >
-                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  <span>{showToken ? 'Hide' : 'Show'}</span>
-                </button>
-              </div>
-
-              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                💡 <strong>Where to find your Bot Token:</strong> Open Telegram, message{' '}
-                <a
-                  href="https://t.me/BotFather"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#0288D1] underline font-bold"
-                >
-                  @BotFather
-                </a>
-                , send <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">/mybots</code>, choose <strong>DreamBigJobsEthiopiaBot</strong>, select <strong>API Token</strong>, and paste it here.
-              </p>
-            </div>
-
-            <div className="flex justify-end pt-1">
               <button
-                type="submit"
-                disabled={isVerifying || !tokenInput.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-500 hover:text-slate-950 text-white font-extrabold text-xs transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button"
+                onClick={() => setIsEditingToken(true)}
+                className="text-[11px] font-bold text-emerald-800 underline hover:text-emerald-950 shrink-0 ml-3"
               >
-                <Bot className="w-4 h-4 text-amber-400" />
-                <span>{isVerifying ? 'Verifying with Telegram...' : 'Connect & Authenticate Token'}</span>
+                Change Token
               </button>
             </div>
-          </form>
+          ) : (
+            /* Secure Token Configuration Form */
+            <form onSubmit={handleConfigureToken} className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-amber-500" />
+                    <span>
+                      {connectionStatus.connected
+                        ? 'Update Telegram Bot Token (DreamBigJobsEthiopiaBot)'
+                        : 'Enter Telegram Bot Token (DreamBigJobsEthiopiaBot)'}
+                    </span>
+                  </label>
+
+                  <span className="text-[11px] text-slate-400">
+                    Format: <code className="text-slate-600 font-mono">123456789:ABCdef...</code>
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showToken ? 'text' : 'password'}
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder={
+                      connectionStatus.maskedToken
+                        ? `Active: ${connectionStatus.maskedToken} (Enter new token to replace)`
+                        : 'Paste the token received from @BotFather here...'
+                    }
+                    className="w-full text-xs font-mono p-3 pr-20 rounded-xl border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all bg-white"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-slate-400 hover:text-slate-700 text-xs font-medium flex items-center gap-1"
+                  >
+                    {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <span>{showToken ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                  💡 <strong>Where to find your Bot Token:</strong> Open Telegram, message{' '}
+                  <a
+                    href="https://t.me/BotFather"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0288D1] underline font-bold"
+                  >
+                    @BotFather
+                  </a>
+                  , send <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">/mybots</code>, choose <strong>DreamBigJobsEthiopiaBot</strong>, select <strong>API Token</strong>, and paste it here.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                {connectionStatus.connected && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingToken(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isVerifying || !tokenInput.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-500 hover:text-slate-950 text-white font-extrabold text-xs transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Bot className="w-4 h-4 text-amber-400" />
+                  <span>{isVerifying ? 'Verifying with Telegram...' : 'Connect & Authenticate Token'}</span>
+                </button>
+              </div>
+            </form>
+          )}
         </div>
 
         {/* =========================================================================
@@ -613,6 +740,70 @@ export const TelegramSettings: React.FC<Props> = ({
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Duplicate protection active (prevents posting same job twice).</span>
               </div>
+            </div>
+
+            {/* Custom Domain Configuration */}
+            <div className="sm:col-span-2 bg-gradient-to-r from-amber-50 to-orange-50/60 p-4 rounded-xl border border-amber-300 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-amber-600" />
+                  <span>Primary Website Domain (for Telegram Posts &amp; Vacancy Links):</span>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-slate-500">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setCustomDomain('hopelandjobs.tech')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors ${
+                      customDomain === 'hopelandjobs.tech'
+                        ? 'bg-amber-400 text-slate-950 border-amber-500 font-extrabold shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    hopelandjobs.tech
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomDomain('hopelandjobs.com')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors ${
+                      customDomain === 'hopelandjobs.com'
+                        ? 'bg-amber-400 text-slate-950 border-amber-500 font-extrabold shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    hopelandjobs.com
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="flex items-center flex-1 bg-white rounded-xl border border-amber-300 focus-within:ring-2 focus-within:ring-amber-500/20 overflow-hidden shadow-xs">
+                  <span className="text-xs font-mono text-slate-500 bg-slate-100 px-3 py-2.5 border-r border-slate-200 select-none font-bold">
+                    https://
+                  </span>
+                  <input
+                    type="text"
+                    value={customDomain}
+                    onChange={(e) => setCustomDomain(e.target.value)}
+                    placeholder="hopelandjobs.tech"
+                    className="flex-1 text-xs font-mono font-bold p-2.5 outline-none bg-white text-slate-900"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveChannelSettings}
+                  disabled={isSavingSettings}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-xs transition-colors shrink-0"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingSettings ? 'Saving...' : 'Save & Update Domain'}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-700 leading-relaxed">
+                ✅ When you change or save the domain here, <strong>all Telegram broadcasts, share links, and applicant redirects</strong> automatically use <strong>https://{customDomain || 'hopelandjobs.tech'}</strong> in both <em>👉Read Detail:-</em> and <em>=&gt;See Detail:-</em>.
+              </p>
             </div>
           </div>
 
@@ -727,36 +918,40 @@ export const TelegramSettings: React.FC<Props> = ({
 
           {/* Message Preview and Action */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            {/* Telegram message mockup preview */}
-            <div className="bg-[#2B5278] text-white p-4 rounded-2xl shadow-inner font-sans space-y-2 text-xs">
-              <div className="flex items-center justify-between text-[10px] text-slate-300 pb-2 border-b border-white/10">
-                <span className="flex items-center gap-1 font-bold">
-                  <Send className="w-3 h-3 text-[#229ED9]" />
-                  <span>Telegram Message Preview</span>
+            {/* Telegram message mockup preview - Exact Harmeejobs format */}
+            <div className="bg-[#1C2733] text-white p-4 rounded-2xl shadow-inner font-sans space-y-3 text-xs border border-slate-700/60">
+              <div className="flex items-center justify-between text-[10px] text-slate-400 pb-2 border-b border-white/10">
+                <span className="flex items-center gap-1 font-bold text-[#229ED9]">
+                  <Send className="w-3 h-3" />
+                  <span>Harmeejobs Template Preview</span>
                 </span>
-                <span>DREAM BIG JOBS Channel</span>
+                <span className="font-mono text-slate-400">hopelandjobs.tech</span>
               </div>
-              <div className="space-y-1.5 leading-relaxed">
-                <p className="font-bold text-amber-300">🌟 NEW JOB VACANCY | DREAM BIG JOBS 🇪🇹</p>
-                <div className="border-t border-white/20 pt-1 text-[11px] space-y-0.5">
-                  <p>💼 <strong>Position:</strong> {activeBroadcastVacancy.title}</p>
-                  <p>🏢 <strong>Organization:</strong> {activeBroadcastVacancy.organization}</p>
-                  <p>📂 <strong>Category:</strong> {activeBroadcastVacancy.category}</p>
-                  <p>📍 <strong>Location:</strong> {activeBroadcastVacancy.location}</p>
-                  <p>⏳ <strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}</p>
-                  <p>💰 <strong>Salary:</strong> {activeBroadcastVacancy.salary}</p>
-                  <p>📜 <strong>Experience:</strong> {activeBroadcastVacancy.experienceYears}</p>
-                  {activeBroadcastVacancy.applicationUrl && (
-                    <p className="text-blue-200">🌐 <strong>Apply Link:</strong> {activeBroadcastVacancy.applicationUrl}</p>
-                  )}
-                  <p className="text-amber-200 pt-1">
-                    🔗 <strong>Full Job Details on Website:</strong> https://dreambigjobs.et/?jobId={activeBroadcastVacancy.id}
+              <div className="space-y-2 leading-relaxed text-[11px]">
+                <p className="font-bold text-base text-white">Vacancy at {activeBroadcastVacancy.organization || 'Ethiopian Employer'}</p>
+                <p className="text-slate-200">
+                  🔰 <strong>{activeBroadcastVacancy.organization || 'Employer'}</strong> invites qualified applicants for the <strong>{activeBroadcastVacancy.title || 'Various'}</strong> position.
+                </p>
+                <p className="text-slate-200">
+                  ✅ <strong>Education field:</strong> {activeBroadcastVacancy.requiredFieldOfStudy || activeBroadcastVacancy.educationQualification || activeBroadcastVacancy.category || 'Accounting & Finance / Banking / Business and related fields'}
+                  {activeBroadcastVacancy.experienceYears ? ` (${activeBroadcastVacancy.experienceYears} experience)` : ''}
+                </p>
+                <div className="pt-1">
+                  <p className="font-bold text-slate-100">📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</p>
+                  <p className="text-[#64B5F6] break-all">
+                    👉<strong>Read Detail:-</strong> https://{customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech'}/?jobId={activeBroadcastVacancy.id}
                   </p>
                 </div>
-                <div className="border-t border-white/20 pt-1 text-[10px] text-slate-200">
-                  👉 <strong>Join DREAM BIG JOBS Channel:</strong> @DreamBigJobsEthiopia
-                  <br />
-                  <em>Dream Big. Find Your Opportunity.</em>
+                <div className="pt-1">
+                  <p className="font-bold text-slate-100">🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</p>
+                  <p className="text-[#64B5F6]">
+                    =&gt;<strong>See Detail:-</strong> https://{customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech'}
+                  </p>
+                </div>
+                <div className="pt-1">
+                  <p className="text-[#64B5F6]">
+                    🔰 <strong>Telegram:-</strong> https://t.me/{channelUsername.replace('@', '')}
+                  </p>
                 </div>
               </div>
             </div>

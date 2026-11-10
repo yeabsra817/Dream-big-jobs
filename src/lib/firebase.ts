@@ -26,8 +26,10 @@ import {
   deleteField,
   writeBatch,
 } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
+import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
 
 // Initialize Firebase SDK with long polling auto-detection for reliable iframe/proxy connectivity
 const app = initializeApp(firebaseConfig);
@@ -47,6 +49,7 @@ try {
 
 export const db = firestoreInstance;
 export const auth = getAuth(app);
+export const storage = getStorage(app, (firebaseConfig as any).storageBucket || 'gen-lang-client-0056760370.firebasestorage.app');
 export const googleProvider = new GoogleAuthProvider();
 export const ADMIN_EMAIL = 'nexusitsoultion@gmail.com';
 export const PERSONAL_AUTO_APPLY_EMAIL = 'yeabsra45@gmail.com';
@@ -155,11 +158,16 @@ export async function testFirestoreConnection() {
 }
 testFirestoreConnection();
 
+export const ADMIN_EMAILS = [
+  'nexusitsoultion@gmail.com',
+  'yeabsra45@gmail.com',
+];
+
 // Check if user is the website owner / admin
 export function isUserAdmin(user: User | null): boolean {
   if (!user) return false;
-  if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return true;
-  return false;
+  const userEmail = (user.email || '').toLowerCase().trim();
+  return ADMIN_EMAILS.some((adm) => adm.toLowerCase().trim() === userEmail);
 }
 
 // Vacancy Firestore helpers
@@ -383,44 +391,131 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     contactEmail: 'nexusitsoultion@gmail.com',
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
+    customDomain: 'hopelandjobs.tech',
     aboutText:
-      'DREAM BIG JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, and leading corporate sectors.',
+      'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     updatedAt: new Date().toISOString(),
   };
 
+  // 1. Check local storage cache
+  let cached: Partial<SiteSettings> = {};
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+    if (raw) cached = JSON.parse(raw);
+  } catch {}
+
+  // 2. Fetch server persisted disk settings (/api/settings)
+  let serverSettings: Partial<SiteSettings> = {};
+  try {
+    const sRes = await fetch('/api/settings');
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      if (sData && typeof sData === 'object') {
+        serverSettings = sData;
+      }
+    }
+  } catch {}
+
+  // 3. Fetch cloud Firestore document
+  let firestoreSettings: Partial<SiteSettings> = {};
   try {
     const d = await getDoc(doc(db, 'siteSettings', 'general'));
     if (d.exists()) {
-      return {
-        ...defaultSettings,
-        ...(d.data() as Partial<SiteSettings>),
-      };
+      firestoreSettings = d.data() as Partial<SiteSettings>;
     }
-    return defaultSettings;
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.GET, path);
     }
-    console.warn('Firestore offline/transient notice during getSiteSettings, using defaults:', err);
-    return defaultSettings;
   }
+
+  // Merge with highest priority: Firestore > Server > Local Cache > Defaults
+  const merged: SiteSettings = {
+    ...defaultSettings,
+    ...cached,
+    ...serverSettings,
+    ...firestoreSettings,
+  };
+
+  // Ensure any valid bot token, custom domain, or GA4 ID found in any layer is strictly preserved
+  const resolvedToken =
+    (firestoreSettings.telegramBotToken && firestoreSettings.telegramBotToken.includes(':') ? firestoreSettings.telegramBotToken : '') ||
+    (serverSettings.telegramBotToken && serverSettings.telegramBotToken.includes(':') ? serverSettings.telegramBotToken : '') ||
+    (cached.telegramBotToken && cached.telegramBotToken.includes(':') ? cached.telegramBotToken : '') ||
+    (typeof window !== 'undefined' ? (localStorage.getItem('dreambigjobs_telegram_bot_token') || '') : '');
+
+  if (resolvedToken) {
+    merged.telegramBotToken = resolvedToken;
+  }
+
+  let resolvedDomain =
+    firestoreSettings.customDomain ||
+    serverSettings.customDomain ||
+    cached.customDomain ||
+    'hopelandjobs.tech';
+  // Migrate legacy healmorin.com to hopelandjobs.tech automatically
+  if (resolvedDomain === 'healmorin.com') {
+    resolvedDomain = 'hopelandjobs.tech';
+  }
+  if (resolvedDomain) {
+    merged.customDomain = resolvedDomain;
+  }
+
+  const resolvedUsername =
+    firestoreSettings.telegramBotUsername ||
+    serverSettings.telegramBotUsername ||
+    cached.telegramBotUsername ||
+    '@DreamBigJobsEthiopiaBot';
+  if (resolvedUsername) {
+    merged.telegramBotUsername = resolvedUsername;
+  }
+
+  if (!merged.gaMeasurementId) {
+    if (firestoreSettings.gaMeasurementId) merged.gaMeasurementId = firestoreSettings.gaMeasurementId;
+    else if (serverSettings.gaMeasurementId) merged.gaMeasurementId = serverSettings.gaMeasurementId;
+    else if (cached.gaMeasurementId) merged.gaMeasurementId = cached.gaMeasurementId;
+  }
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(merged));
+    if (merged.telegramBotToken) {
+      localStorage.setItem('dreambigjobs_telegram_bot_token', merged.telegramBotToken);
+    }
+  } catch {}
+
+  return merged;
 }
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   const path = 'siteSettings/general';
+
+  // 1. Update localStorage immediately
   try {
     localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settings));
+    if (settings.telegramBotToken) {
+      localStorage.setItem('dreambigjobs_telegram_bot_token', settings.telegramBotToken);
+    }
   } catch {}
 
-  if (!auth.currentUser) {
-    return;
+  // 2. Persist to server backend disk
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+  } catch (e) {
+    console.warn('Server settings sync notice:', e);
   }
 
+  // 3. Persist to Cloud Firestore
   try {
     const cleanPayload = sanitizeForFirestore(settings);
     await setDoc(doc(db, 'siteSettings', 'general'), cleanPayload, { merge: true });
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
   }
 }
 
@@ -669,6 +764,266 @@ export async function checkFirebaseHealth(): Promise<{
     };
   }
 }
+
+// ============================================================================
+// CLOUD PERSISTENCE: PERSONAL AUTO APPLY (Cross-Device & Cross-Browser Continuity)
+// ============================================================================
+
+const LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY = 'personal_auto_apply_profile';
+const LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY = 'personal_auto_apply_documents';
+const LOCAL_STORAGE_AUTO_APPLY_APPS_KEY = 'personal_auto_apply_records';
+
+/**
+ * Fetch personal profile from Cloud Firestore (falls back to local cache)
+ */
+export async function fetchAutoApplyProfile(): Promise<PersonalProfile | null> {
+  let cached: PersonalProfile | null = null;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY);
+    if (raw) cached = JSON.parse(raw);
+  } catch {}
+
+  if (!auth.currentUser) return cached;
+
+  try {
+    const d = await getDoc(doc(db, 'autoApplyProfile', 'yeabsra_profile'));
+    if (d.exists()) {
+      const cloudData = d.data() as PersonalProfile;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(cloudData));
+      } catch {}
+      return cloudData;
+    }
+  } catch (err) {
+    console.warn('Firestore autoApplyProfile notice:', err);
+  }
+  return cached;
+}
+
+/**
+ * Save personal profile to Cloud Firestore and local storage
+ */
+export async function saveAutoApplyProfile(profile: PersonalProfile): Promise<void> {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(profile));
+  } catch {}
+
+  if (!auth.currentUser) return;
+
+  try {
+    const clean = sanitizeForFirestore(profile);
+    await setDoc(doc(db, 'autoApplyProfile', 'yeabsra_profile'), clean, { merge: true });
+  } catch (err) {
+    console.warn('Failed saving autoApplyProfile to Firestore:', err);
+  }
+}
+
+/**
+ * Fetch all documents metadata from Cloud Firestore (cross-device sync)
+ */
+export async function fetchAutoApplyDocuments(): Promise<PersonalDocument[]> {
+  const path = 'autoApplyDocuments';
+  let cached: PersonalDocument[] = [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY);
+    if (raw) cached = JSON.parse(raw);
+  } catch {}
+
+  if (!auth.currentUser) return cached;
+
+  try {
+    const snapshot = await getDocs(collection(db, path));
+    const list: PersonalDocument[] = [];
+    snapshot.forEach((d) => {
+      list.push({ ...(d.data() as PersonalDocument), id: d.id });
+    });
+    if (list.length > 0) {
+      list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      try {
+        const safeCache = list.map((docItem) => ({
+          ...docItem,
+          fileBase64: undefined,
+        }));
+        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(safeCache));
+      } catch {}
+      return list;
+    }
+  } catch (err) {
+    console.warn('Firestore autoApplyDocuments fetch notice:', err);
+  }
+  return cached;
+}
+
+/**
+ * Save document metadata to Cloud Firestore (cross-device sync)
+ */
+export async function saveAutoApplyDocument(documentItem: PersonalDocument): Promise<void> {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY);
+    let list: PersonalDocument[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((d) => d.id === documentItem.id);
+    if (idx >= 0) list[idx] = documentItem;
+    else list.unshift(documentItem);
+    localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(list));
+  } catch {}
+
+  if (!auth.currentUser) return;
+
+  try {
+    const firestorePayload: any = { ...documentItem };
+    if (firestorePayload.fileBase64 && firestorePayload.fileBase64.length > 200000) {
+      delete firestorePayload.fileBase64;
+    }
+    const clean = sanitizeForFirestore(firestorePayload);
+    await setDoc(doc(db, 'autoApplyDocuments', documentItem.id), clean, { merge: true });
+  } catch (err) {
+    console.warn('Failed saving autoApplyDocument to Firestore:', err);
+  }
+}
+
+/**
+ * Delete document from Cloud Firestore
+ */
+export async function deleteAutoApplyDocument(docId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY);
+    if (raw) {
+      const list = JSON.parse(raw).filter((d: PersonalDocument) => d.id !== docId);
+      localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(list));
+    }
+  } catch {}
+
+  if (!auth.currentUser) return;
+
+  try {
+    await deleteDoc(doc(db, 'autoApplyDocuments', docId));
+  } catch (err) {
+    console.warn('Failed deleting autoApplyDocument from Firestore:', err);
+  }
+}
+
+/**
+ * Fetch application records from Cloud Firestore (cross-device sync)
+ */
+export async function fetchAutoApplyApplications(): Promise<ApplicationRecord[]> {
+  const path = 'autoApplyApplications';
+  let cached: ApplicationRecord[] = [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY);
+    if (raw) cached = JSON.parse(raw);
+  } catch {}
+
+  if (!auth.currentUser) return cached;
+
+  try {
+    const snapshot = await getDocs(collection(db, path));
+    const list: ApplicationRecord[] = [];
+    snapshot.forEach((d) => {
+      list.push({ ...(d.data() as ApplicationRecord), id: d.id });
+    });
+    if (list.length > 0) {
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      try {
+        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
+      } catch {}
+      return list;
+    }
+  } catch (err) {
+    console.warn('Firestore autoApplyApplications fetch notice:', err);
+  }
+  return cached;
+}
+
+/**
+ * Save application record to Cloud Firestore
+ */
+export async function saveAutoApplyApplication(record: ApplicationRecord): Promise<void> {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY);
+    let list: ApplicationRecord[] = raw ? JSON.parse(raw) : [];
+    const idx = list.findIndex((a) => a.id === record.id);
+    if (idx >= 0) list[idx] = record;
+    else list.unshift(record);
+    localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
+  } catch {}
+
+  if (!auth.currentUser) return;
+
+  try {
+    const clean = sanitizeForFirestore(record);
+    await setDoc(doc(db, 'autoApplyApplications', record.id), clean, { merge: true });
+  } catch (err) {
+    console.warn('Failed saving autoApplyApplication to Firestore:', err);
+  }
+}
+
+// ============================================================================
+// AUTOMATIC BACKUPS & DATA DISASTER RECOVERY (Production Protection)
+// ============================================================================
+
+export interface FullSystemBackupSnapshot {
+  version: string;
+  timestamp: string;
+  exportedBy: string;
+  totalRecordsCount: number;
+  data: {
+    vacancies: Vacancy[];
+    siteSettings: SiteSettings;
+    duplicateReports: DuplicateReportItem[];
+    telegramBatches: TelegramBatchRecord[];
+    autoApplyProfile: PersonalProfile | null;
+    autoApplyDocuments: PersonalDocument[];
+    autoApplyApplications: ApplicationRecord[];
+  };
+}
+
+/**
+ * Generate a complete, verified snapshot backup of all persistent cloud data
+ */
+export async function generateFullSystemBackupSnapshot(
+  currentVacancies: Vacancy[],
+  currentSettings: SiteSettings,
+  currentDuplicates: DuplicateReportItem[],
+  currentProfile?: PersonalProfile | null,
+  currentDocs?: PersonalDocument[],
+  currentApps?: ApplicationRecord[]
+): Promise<FullSystemBackupSnapshot> {
+  const user = auth.currentUser;
+  const batches = await fetchTelegramBatches();
+  const docs = currentDocs || (await fetchAutoApplyDocuments());
+  const apps = currentApps || (await fetchAutoApplyApplications());
+  const profile = currentProfile || (await fetchAutoApplyProfile());
+
+  const snapshot: FullSystemBackupSnapshot = {
+    version: '2.4.0',
+    timestamp: new Date().toISOString(),
+    exportedBy: user?.email || 'nexusitsoultion@gmail.com',
+    totalRecordsCount: currentVacancies.length + docs.length + apps.length + currentDuplicates.length,
+    data: {
+      vacancies: currentVacancies,
+      siteSettings: currentSettings,
+      duplicateReports: currentDuplicates,
+      telegramBatches: batches,
+      autoApplyProfile: profile,
+      autoApplyDocuments: docs,
+      autoApplyApplications: apps,
+    },
+  };
+
+  if (user) {
+    try {
+      await setDoc(doc(db, 'siteSettings', 'lastBackup'), {
+        timestamp: snapshot.timestamp,
+        exportedBy: snapshot.exportedBy,
+        totalRecords: snapshot.totalRecordsCount,
+        version: snapshot.version,
+      });
+    } catch {}
+  }
+
+  return snapshot;
+}
+
 
 
 

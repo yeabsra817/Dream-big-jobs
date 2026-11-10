@@ -131,6 +131,7 @@ export interface SiteSettings {
   contactPhone: string;
   contactAddress: string;
   aboutText: string;
+  customDomain?: string; // e.g. "hopelandjobs.tech" (used for Telegram post links & site branding)
   updatedAt: string;
   // Smart Alerts & Thresholds
   alertTrafficDropThreshold?: number; // e.g. 50% drop

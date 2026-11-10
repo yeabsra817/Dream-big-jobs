@@ -117,6 +117,13 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [isSavingGa, setIsSavingGa] = useState<boolean>(false);
   const [gaSuccessMsg, setGaSuccessMsg] = useState<string | null>(null);
 
+  // Keep gaInput in sync when siteSettings updates from cloud or server
+  useEffect(() => {
+    if (siteSettings.gaMeasurementId) {
+      setGaInput(siteSettings.gaMeasurementId);
+    }
+  }, [siteSettings.gaMeasurementId]);
+
   // Ranking filter state
   const [rankingSearch, setRankingSearch] = useState<string>('');
   const [rankingCategory, setRankingCategory] = useState<string>('All');
@@ -348,7 +355,7 @@ export const WebsiteAnalytics: React.FC<Props> = ({
 
   const handleCopyAiReport = () => {
     if (!aiReport) return;
-    const reportText = `🧠 DREAM BIG JOBS — AI BUSINESS ANALYST REPORT
+    const reportText = `🧠 HOPELAND JOBS — AI BUSINESS ANALYST REPORT
 Period: ${aiReport.period} | Generated: ${new Date(aiReport.generatedAt).toLocaleString()}
 Model: ${aiReport.modelUsed}
 
@@ -409,7 +416,7 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
             </h1>
             <p className="text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
               Real-time measurement of genuine website visitors, full visitor conversion funnel, traffic attribution,
-              broken link health diagnostics, and Gemini AI business analysis for DREAM BIG JOBS.
+              broken link health diagnostics, and Gemini AI business analysis for HOPELAND JOBS.
             </p>
           </div>
 
@@ -664,7 +671,7 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
                   Exact Zero-Data Verification Active
                 </h4>
                 <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
-                  No genuine visitors recorded for this period yet. DREAM BIG JOBS strictly avoids fake visitor counters or random numbers.
+                  No genuine visitors recorded for this period yet. HOPELAND JOBS strictly avoids fake visitor counters or random numbers.
                   When a real person visits the site, the count will increment to 1.
                   {excludeAdmin && (
                     <span className="block mt-1 font-semibold text-amber-950">

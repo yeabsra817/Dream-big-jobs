@@ -1,6 +1,6 @@
 import { Vacancy } from '../types/job';
 
-const LOCAL_STORAGE_TOKEN_KEY = 'dreambigjobs_telegram_bot_token';
+export const LOCAL_STORAGE_TOKEN_KEY = 'dreambigjobs_telegram_bot_token';
 
 /**
  * Robust sanitizer for Telegram bot tokens:
@@ -44,75 +44,113 @@ function escapeHtml(str: any): string {
 }
 
 /**
- * Format telegram message HTML
+ * Normalizes user-configured domain or URL into a clean base URL (default: hopelandjobs.tech)
  */
-export function buildTelegramJobHtml(vacancy: any, appUrl = 'https://dreambigjobs.et'): string {
-  const vacancyLink = `${appUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=social&utm_campaign=job_posting`;
-  const applyUrlLine =
-    vacancy.applicationUrl &&
-    vacancy.applicationUrl !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationUrl).trim() !== ''
-      ? `🌐 <b>Official Apply Link:</b> ${escapeHtml(vacancy.applicationUrl)}\n`
-      : '';
-  const applyEmailLine =
-    vacancy.applicationEmail &&
-    vacancy.applicationEmail !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationEmail).trim() !== ''
-      ? `✉️ <b>Apply Email:</b> ${escapeHtml(vacancy.applicationEmail)}\n`
-      : '';
-
-  return `🌟 <b>NEW JOB VACANCY | DREAM BIG JOBS 🇪🇹</b>
-━━━━━━━━━━━━━━━━━━━━
-💼 <b>Position:</b> ${escapeHtml(vacancy.title || 'Job Vacancy')}
-🏢 <b>Organization:</b> ${escapeHtml(vacancy.organization || 'Ethiopian Employer')}
-📂 <b>Category:</b> ${escapeHtml(vacancy.category || 'General')}
-📍 <b>Location:</b> ${escapeHtml(vacancy.location || 'Addis Ababa, Ethiopia')}
-⏳ <b>Deadline:</b> ${escapeHtml(vacancy.applicationDeadline || 'See description')}
-💰 <b>Salary:</b> ${escapeHtml(vacancy.salary || 'Attractive / Company Scale')}
-📜 <b>Experience:</b> ${escapeHtml(vacancy.experienceYears || 'Relevant experience')}
-${applyUrlLine}${applyEmailLine}
-🔗 <b>Full Job Details & Requirements on Website:</b>
-${escapeHtml(vacancyLink)}
-
-━━━━━━━━━━━━━━━━━━━━
-👉 <b>Join DREAM BIG JOBS Channel:</b> @DreamBigJobsEthiopia
-<b>Dream Big. Find Your Opportunity.</b>`;
+export function normalizeWebsiteDomain(domainOrUrl?: string): string {
+  if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
+  let clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  return `https://${clean}`;
 }
 
 /**
- * Format telegram message plain text (safe fallback if HTML parse fails)
+ * Format Telegram message HTML - Exact Ethiopian Telegram vacancy template matching Harmeejobs screenshot:
+ * <b>Vacancy at [Organization]</b>
+ * 🔰 <b>[Organization] ([Amharic Org])</b> invites qualified applicants for the <b>[Position]</b> position.
+ * ✅ <b>Education field:</b> [Field & Qualifications]
+ * 📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
+ * 👉<b>Read Detail:-</b> <a href="[VacancyURL]">[VacancyURL]</a>
+ * 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
+ * =><b>See Detail:-</b> <a href="[BaseURL]">[BaseURL]</a>
+ * 🔰 <b>Telegram:-</b> <a href="[ChannelURL]">[ChannelURL]</a>
  */
-export function buildTelegramJobPlainText(vacancy: any, appUrl = 'https://dreambigjobs.et'): string {
-  const vacancyLink = `${appUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=social&utm_campaign=job_posting`;
-  const applyUrlLine =
-    vacancy.applicationUrl &&
-    vacancy.applicationUrl !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationUrl).trim() !== ''
-      ? `🌐 Official Apply Link: ${vacancy.applicationUrl}\n`
-      : '';
-  const applyEmailLine =
-    vacancy.applicationEmail &&
-    vacancy.applicationEmail !== 'Not specified in the original vacancy' &&
-    String(vacancy.applicationEmail).trim() !== ''
-      ? `✉️ Apply Email: ${vacancy.applicationEmail}\n`
-      : '';
+export function buildTelegramJobHtml(
+  vacancy: any,
+  customDomainOrUrl = 'hopelandjobs.tech',
+  channelUsername = '@DreamBigJobsEthiopia'
+): string {
+  const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const cleanChan = channelUsername.replace(/^@/, '');
+  const channelUrl = `https://t.me/${cleanChan}`;
 
-  return `🌟 NEW JOB VACANCY | DREAM BIG JOBS 🇪🇹
-━━━━━━━━━━━━━━━━━━━━
-💼 Position: ${vacancy.title || 'Job Vacancy'}
-🏢 Organization: ${vacancy.organization || 'Ethiopian Employer'}
-📂 Category: ${vacancy.category || 'General'}
-📍 Location: ${vacancy.location || 'Addis Ababa, Ethiopia'}
-⏳ Deadline: ${vacancy.applicationDeadline || 'See description'}
-💰 Salary: ${vacancy.salary || 'Attractive / Company Scale'}
-📜 Experience: ${vacancy.experienceYears || 'Relevant experience'}
-${applyUrlLine}${applyEmailLine}
-🔗 Full Job Details & Requirements on Website:
-${vacancyLink}
+  const orgName = escapeHtml(vacancy.organization || 'Employer');
+  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : '';
+  const positionTitle = escapeHtml(vacancy.title || 'Various Positions');
 
-━━━━━━━━━━━━━━━━━━━━
-👉 Join DREAM BIG JOBS Channel: @DreamBigJobsEthiopia
-Dream Big. Find Your Opportunity.`;
+  // Education field & qualifications description
+  const eduParts: string[] = [];
+  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
+  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
+  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(vacancy.requiredSkills.join(' / '));
+  }
+  if (eduParts.length === 0) {
+    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+  }
+  if (vacancy.experienceYears) {
+    eduParts.push(`${vacancy.experienceYears} experience`);
+  }
+  const educationFieldText = escapeHtml(eduParts.join(', '));
+
+  return `<b>Vacancy at ${orgName}</b>
+
+🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
+
+✅ <b>Education field:</b> ${educationFieldText}
+
+📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
+👉<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
+
+🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
+=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>
+
+🔰 <b>Telegram:-</b> <a href="${channelUrl}">${channelUrl}</a>`;
+}
+
+/**
+ * Format Telegram message plain text (safe fallback if HTML parse fails)
+ */
+export function buildTelegramJobPlainText(
+  vacancy: any,
+  customDomainOrUrl = 'hopelandjobs.tech',
+  channelUsername = '@DreamBigJobsEthiopia'
+): string {
+  const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const cleanChan = channelUsername.replace(/^@/, '');
+  const channelUrl = `https://t.me/${cleanChan}`;
+
+  const orgName = vacancy.organization || 'Employer';
+  const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : '';
+  const positionTitle = vacancy.title || 'Various Positions';
+
+  const eduParts: string[] = [];
+  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
+  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
+  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(vacancy.requiredSkills.join(' / '));
+  }
+  if (eduParts.length === 0) {
+    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+  }
+  if (vacancy.experienceYears) {
+    eduParts.push(`${vacancy.experienceYears} experience`);
+  }
+  const educationFieldText = eduParts.join(', ');
+
+  return `Vacancy at ${orgName}
+
+🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
+
+✅ Education field: ${educationFieldText}
+
+📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
+👉Read Detail:- ${vacancyLink}
+
+🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
+=>See Detail:- ${baseUrl}
+
+🔰 Telegram:- ${channelUrl}`;
 }
 
 /**
@@ -369,7 +407,8 @@ export async function broadcastJobToTelegram(
   vacancy: Vacancy,
   channelName: string,
   botToken?: string,
-  forceRetry = false
+  forceRetry = false,
+  customDomain?: string
 ): Promise<{
   success: boolean;
   telegramMessageId?: number;
@@ -381,6 +420,22 @@ export async function broadcastJobToTelegram(
     ? channelName.trim()
     : `@${channelName.trim()}`;
 
+  // Priority for domain: customDomain argument -> localStorage settings -> window.location.hostname -> hopelandjobs.tech
+  let effectiveDomain = customDomain;
+  if (!effectiveDomain) {
+    try {
+      const saved = localStorage.getItem('dreambigjobs_site_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.customDomain && parsed.customDomain !== 'healmorin.com') effectiveDomain = parsed.customDomain;
+      }
+    } catch {}
+  }
+  if (!effectiveDomain && typeof window !== 'undefined' && window.location.hostname && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('run.app')) {
+    effectiveDomain = window.location.hostname;
+  }
+  if (!effectiveDomain || effectiveDomain === 'healmorin.com') effectiveDomain = 'hopelandjobs.tech';
+
   // Channel 1: Try server backend proxy
   try {
     const res = await fetch('/api/admin/telegram-publish', {
@@ -391,6 +446,7 @@ export async function broadcastJobToTelegram(
         channelName: cleanChan,
         botToken: botToken ? cleanTelegramToken(botToken) : undefined,
         forceRetry,
+        customDomain: effectiveDomain,
       }),
     });
 
@@ -415,9 +471,8 @@ export async function broadcastJobToTelegram(
     };
   }
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://dreambigjobs.et';
-  const htmlMsg = buildTelegramJobHtml(vacancy, appUrl);
-  const plainMsg = buildTelegramJobPlainText(vacancy, appUrl);
+  const htmlMsg = buildTelegramJobHtml(vacancy, effectiveDomain, cleanChan);
+  const plainMsg = buildTelegramJobPlainText(vacancy, effectiveDomain, cleanChan);
 
   try {
     // Attempt HTML delivery

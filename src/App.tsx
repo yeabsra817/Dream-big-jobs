@@ -70,8 +70,9 @@ export default function App() {
     contactEmail: 'nexusitsoultion@gmail.com',
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
+    customDomain: 'hopelandjobs.tech',
     aboutText:
-      'DREAM BIG JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, and leading corporate sectors.',
+      'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     updatedAt: new Date().toISOString(),
   });
   const [duplicateReports, setDuplicateReports] = useState<DuplicateReportItem[]>([]);
@@ -159,11 +160,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // When admin logs in, load ALL vacancies (including drafts, pending_review, archived) and duplicate reports
+  // When admin logs in, load ALL vacancies, duplicate reports, and fresh site settings
   useEffect(() => {
     if (isOwnerAuthorized) {
-      Promise.all([fetchAllVacanciesAdmin(), fetchDuplicateReports()])
-        .then(([all, dups]) => {
+      Promise.all([fetchAllVacanciesAdmin(), fetchDuplicateReports(), getSiteSettings()])
+        .then(([all, dups, freshSettings]) => {
+          if (freshSettings) {
+            setSiteSettings(freshSettings);
+            if (freshSettings.gaMeasurementId) {
+              initGoogleAnalytics4(freshSettings.gaMeasurementId, false);
+            }
+          }
           if (all.length > 0) {
             // Autonomous healing sweep: immediately archives expired listings and standardizes categories
             const healed = runAutonomousVacancyHealing(all);
@@ -197,7 +204,7 @@ export default function App() {
     if (selectedLocation) {
       trackAnalyticsEvent('location_view', {
         path: `/?location=${encodeURIComponent(selectedLocation)}`,
-        title: `Vacancies in ${selectedLocation} - DREAM BIG JOBS`,
+        title: `Vacancies in ${selectedLocation} - HOPELAND JOBS`,
         gaMeasurementId: siteSettings.gaMeasurementId,
       });
     }
@@ -245,7 +252,9 @@ export default function App() {
         const tgRes = await broadcastJobToTelegram(
           v,
           siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          siteSettings.telegramBotToken
+          siteSettings.telegramBotToken,
+          false,
+          siteSettings.customDomain
         );
         if (tgRes.success) {
           finalVacancy.telegramPublished = true;
@@ -366,7 +375,9 @@ export default function App() {
         const tgRes = await broadcastJobToTelegram(
           updated,
           siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          siteSettings.telegramBotToken
+          siteSettings.telegramBotToken,
+          false,
+          siteSettings.customDomain
         );
         if (tgRes.success) {
           updated.telegramPublished = true;
@@ -569,9 +580,9 @@ export default function App() {
                 </div>
 
                 <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-                  DREAM BIG <span className="text-amber-400">JOBS</span>
+                  HOPELAND <span className="text-amber-400">JOBS</span>
                   <span className="block text-xl sm:text-2xl lg:text-3xl font-medium text-slate-300 mt-3">
-                    Dream Big. Find Your Opportunity.
+                    Hopeland Jobs. Find Your Opportunity.
                   </span>
                 </h1>
 
@@ -894,14 +905,14 @@ export default function App() {
                     <span>Our Quality Promise</span>
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B132B]">
-                    About DREAM BIG JOBS
+                    About HOPELAND JOBS
                   </h2>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     {siteSettings.aboutText ||
-                      'DREAM BIG JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, and leading corporate sectors.'}
+                      'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.'}
                   </p>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Unlike unregulated job scrapers, every vacancy on DREAM BIG JOBS is collected, checked, and approved personally by the website owner. We never generate fake vacancies or invent employer information.
+                    Unlike unregulated job scrapers, every vacancy on HOPELAND JOBS is collected, checked, and approved personally by the website owner. We never generate fake vacancies or invent employer information.
                   </p>
 
                   <div className="pt-2 flex items-center gap-4">
@@ -919,7 +930,7 @@ export default function App() {
 
                 <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 space-y-4">
                   <h3 className="text-base font-bold text-[#0B132B]">
-                    Why Ethiopian Job Seekers Choose DREAM BIG JOBS:
+                    Why Ethiopian Job Seekers Choose HOPELAND JOBS:
                   </h3>
                   <div className="space-y-3 text-xs text-slate-700">
                     <div className="flex items-start gap-3">

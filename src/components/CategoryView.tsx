@@ -256,7 +256,7 @@ export const CategoryView: React.FC<Props> = ({
                 className="px-4 py-2 rounded-xl bg-[#229ED9] text-white font-semibold text-xs hover:bg-[#1E88E5] transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Join Dream Big Jobs on Telegram</span>
+                <span>Join Hopeland Jobs on Telegram</span>
               </a>
             </div>
           </div>

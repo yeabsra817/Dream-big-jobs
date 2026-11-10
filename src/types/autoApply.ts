@@ -33,6 +33,10 @@ export interface PersonalDocument {
   fileSize: number;
   mimeType?: string;
   extractedText: string;
+  fileDataUrl?: string; // Stored PDF/document Data URL for prompt opening & preview
+  fileBase64?: string;  // Raw base64 for Gmail MIME attachment
+  storagePath?: string; // Firebase Cloud Storage path (gs://)
+  cloudDownloadUrl?: string; // Direct Firebase Storage authenticated download URL
   approved: boolean;
   uploadedAt: string;
   issuerOrOrg?: string;
@@ -80,6 +84,12 @@ export interface ApplicationRecord {
   emailBody: string;
   attachedDocumentIds: string[];
   attachedDocumentNames: string[];
+  attachedFiles?: {
+    filename: string;
+    contentType: string;
+    dataUrl?: string;
+    base64Content?: string;
+  }[];
   status: ApplicationStatus;
   gmailMessageId?: string;
   gmailSentAt?: string;
@@ -89,4 +99,29 @@ export interface ApplicationRecord {
   reviewedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InternationalVisaJob {
+  id: string;
+  title: string;
+  organization: string;
+  country: string;
+  city: string;
+  region: 'Europe' | 'Middle East';
+  monthlySalaryUsd: number;
+  salaryDisplay: string;
+  visaSponsorship: true;
+  relocationAssistance: boolean;
+  sourceWebsite: string;
+  sourceUrl: string;
+  recruitmentEmail: string;
+  requiredExperienceYears: number;
+  educationRequired: string;
+  description: string;
+  responsibilities: string[];
+  skillsRequired: string[];
+  publishedAt: string;
+  deadline: string;
+  matchScore: number;
+  matchCategory: 'excellent' | 'good';
 }

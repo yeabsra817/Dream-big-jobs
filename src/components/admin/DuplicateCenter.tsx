@@ -377,7 +377,7 @@ export const DuplicateCenter: React.FC<Props> = ({
               Duplicate Vacancy Detection Engine
             </h2>
             <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-              Guarantees 100% unique vacancies across DREAM BIG JOBS. Automatically screens incoming
+              Guarantees 100% unique vacancies across HOPELAND JOBS. Automatically screens incoming
               uploads (copy-paste, PDF, TXT) and continuously audits all vacancies currently stored in the
               database.
             </p>

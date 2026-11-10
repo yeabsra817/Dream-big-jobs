@@ -9,7 +9,7 @@ import {
   KeyRound,
   CheckCircle,
 } from 'lucide-react';
-import { auth, googleProvider, ADMIN_EMAIL } from '../../lib/firebase';
+import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, isUserAdmin } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 
 interface Props {
@@ -36,11 +36,11 @@ export const AdminAuthModal: React.FC<Props> = ({
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-        onLoginSuccess(user.email);
+      if (isUserAdmin(user)) {
+        onLoginSuccess(user.email || ADMIN_EMAIL);
         onClose();
       } else {
-        setError(`Access Denied: ${user.email} is not authorized. Only website owner (${ADMIN_EMAIL}) has admin rights.`);
+        setError(`Access Denied: ${user.email} is not authorized. Authorized administrators: ${ADMIN_EMAILS.join(', ')}.`);
       }
     } catch (err: any) {
       console.warn('Google sign-in popup issue:', err);
