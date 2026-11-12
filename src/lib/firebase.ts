@@ -67,21 +67,51 @@ let cachedGmailAccessToken: string | null = null;
 
 export const setCachedGmailToken = (token: string | null) => {
   cachedGmailAccessToken = token;
+  if (typeof window !== 'undefined') {
+    try {
+      if (token) localStorage.setItem('hopelandjobs_gmail_token', token);
+      else localStorage.removeItem('hopelandjobs_gmail_token');
+    } catch {}
+  }
 };
 
-export const getCachedGmailToken = () => cachedGmailAccessToken;
+export const getCachedGmailToken = () => {
+  if (cachedGmailAccessToken) return cachedGmailAccessToken;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('hopelandjobs_gmail_token');
+      if (saved) {
+        cachedGmailAccessToken = saved;
+        return saved;
+      }
+    } catch {}
+  }
+  return null;
+};
 
 export const connectGmailAccount = async (): Promise<{ email: string; accessToken: string }> => {
   const result = await signInWithPopup(auth, gmailProvider);
   const credential = GoogleAuthProvider.credentialFromResult(result);
   const token = credential?.accessToken;
-  const email = result.user?.email || '';
+  const email = result.user?.email || 'yeabsra45@gmail.com';
 
   if (!token) {
     throw new Error('Failed to obtain Google OAuth access token for Gmail.');
   }
 
-  cachedGmailAccessToken = token;
+  setCachedGmailToken(token);
+
+  // Persist to server backend for cross-browser & cross-user access
+  try {
+    await fetch('/api/auto-apply/save-gmail-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, email }),
+    });
+  } catch (e) {
+    console.warn('Server token sync notice:', e);
+  }
+
   return { email, accessToken: token };
 };
 
@@ -774,7 +804,7 @@ const LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY = 'personal_auto_apply_documents';
 const LOCAL_STORAGE_AUTO_APPLY_APPS_KEY = 'personal_auto_apply_records';
 
 /**
- * Fetch personal profile from Cloud Firestore (falls back to local cache)
+ * Fetch personal profile from Cloud Firestore or server backend (cross-browser continuity)
  */
 export async function fetchAutoApplyProfile(): Promise<PersonalProfile | null> {
   let cached: PersonalProfile | null = null;
@@ -783,31 +813,59 @@ export async function fetchAutoApplyProfile(): Promise<PersonalProfile | null> {
     if (raw) cached = JSON.parse(raw);
   } catch {}
 
-  if (!auth.currentUser) return cached;
-
-  try {
-    const d = await getDoc(doc(db, 'autoApplyProfile', 'yeabsra_profile'));
-    if (d.exists()) {
-      const cloudData = d.data() as PersonalProfile;
-      try {
-        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(cloudData));
-      } catch {}
-      return cloudData;
+  // 1. Try Firestore if user is logged in
+  if (auth.currentUser) {
+    try {
+      const d = await getDoc(doc(db, 'autoApplyProfile', 'yeabsra_profile'));
+      if (d.exists()) {
+        const cloudData = d.data() as PersonalProfile;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(cloudData));
+        } catch {}
+        return cloudData;
+      }
+    } catch (err) {
+      console.warn('Firestore autoApplyProfile notice:', err);
     }
-  } catch (err) {
-    console.warn('Firestore autoApplyProfile notice:', err);
   }
+
+  // 2. Fall back to server persistent store (/api/auto-apply/state)
+  try {
+    const res = await fetch('/api/auto-apply/state');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.profile) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(data.profile));
+        } catch {}
+        return data.profile;
+      }
+    }
+  } catch {}
+
   return cached;
 }
 
 /**
- * Save personal profile to Cloud Firestore and local storage
+ * Save personal profile to Cloud Firestore, server backend, and local storage
  */
 export async function saveAutoApplyProfile(profile: PersonalProfile): Promise<void> {
   try {
     localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(profile));
   } catch {}
 
+  // 1. Save to server persistent backend
+  try {
+    await fetch('/api/auto-apply/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile }),
+    });
+  } catch (e) {
+    console.warn('Server autoApplyProfile sync notice:', e);
+  }
+
+  // 2. Save to Firestore if user is authenticated
   if (!auth.currentUser) return;
 
   try {
@@ -819,7 +877,7 @@ export async function saveAutoApplyProfile(profile: PersonalProfile): Promise<vo
 }
 
 /**
- * Fetch all documents metadata from Cloud Firestore (cross-device sync)
+ * Fetch all documents metadata from Cloud Firestore or server backend (cross-device sync)
  */
 export async function fetchAutoApplyDocuments(): Promise<PersonalDocument[]> {
   const path = 'autoApplyDocuments';
@@ -829,33 +887,49 @@ export async function fetchAutoApplyDocuments(): Promise<PersonalDocument[]> {
     if (raw) cached = JSON.parse(raw);
   } catch {}
 
-  if (!auth.currentUser) return cached;
-
-  try {
-    const snapshot = await getDocs(collection(db, path));
-    const list: PersonalDocument[] = [];
-    snapshot.forEach((d) => {
-      list.push({ ...(d.data() as PersonalDocument), id: d.id });
-    });
-    if (list.length > 0) {
-      list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-      try {
-        const safeCache = list.map((docItem) => ({
-          ...docItem,
-          fileBase64: undefined,
-        }));
-        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(safeCache));
-      } catch {}
-      return list;
+  // 1. Try Firestore if authenticated
+  if (auth.currentUser) {
+    try {
+      const snapshot = await getDocs(collection(db, path));
+      const list: PersonalDocument[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as PersonalDocument), id: d.id });
+      });
+      if (list.length > 0) {
+        list.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+        try {
+          const safeCache = list.map((docItem) => ({
+            ...docItem,
+            fileBase64: undefined,
+          }));
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(safeCache));
+        } catch {}
+        return list;
+      }
+    } catch (err) {
+      console.warn('Firestore autoApplyDocuments fetch notice:', err);
     }
-  } catch (err) {
-    console.warn('Firestore autoApplyDocuments fetch notice:', err);
   }
+
+  // 2. Fetch from server persistent storage (/api/auto-apply/state)
+  try {
+    const res = await fetch('/api/auto-apply/state');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.documents) && data.documents.length > 0) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(data.documents));
+        } catch {}
+        return data.documents;
+      }
+    }
+  } catch {}
+
   return cached;
 }
 
 /**
- * Save document metadata to Cloud Firestore (cross-device sync)
+ * Save document metadata to Cloud Firestore and server backend (cross-device sync)
  */
 export async function saveAutoApplyDocument(documentItem: PersonalDocument): Promise<void> {
   try {
@@ -865,6 +939,13 @@ export async function saveAutoApplyDocument(documentItem: PersonalDocument): Pro
     if (idx >= 0) list[idx] = documentItem;
     else list.unshift(documentItem);
     localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(list));
+
+    // Also persist to server backend
+    fetch('/api/auto-apply/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documents: list }),
+    }).catch((e) => console.warn('Server doc sync notice:', e));
   } catch {}
 
   if (!auth.currentUser) return;
@@ -882,7 +963,7 @@ export async function saveAutoApplyDocument(documentItem: PersonalDocument): Pro
 }
 
 /**
- * Delete document from Cloud Firestore
+ * Delete document from Cloud Firestore and server backend
  */
 export async function deleteAutoApplyDocument(docId: string): Promise<void> {
   try {
@@ -891,6 +972,11 @@ export async function deleteAutoApplyDocument(docId: string): Promise<void> {
       const list = JSON.parse(raw).filter((d: PersonalDocument) => d.id !== docId);
       localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(list));
     }
+  } catch {}
+
+  // Delete from server storage
+  try {
+    await fetch(`/api/auto-apply/documents/${docId}`, { method: 'DELETE' });
   } catch {}
 
   if (!auth.currentUser) return;
@@ -903,7 +989,7 @@ export async function deleteAutoApplyDocument(docId: string): Promise<void> {
 }
 
 /**
- * Fetch application records from Cloud Firestore (cross-device sync)
+ * Fetch application records from Cloud Firestore or server backend (cross-device sync)
  */
 export async function fetchAutoApplyApplications(): Promise<ApplicationRecord[]> {
   const path = 'autoApplyApplications';
@@ -913,29 +999,44 @@ export async function fetchAutoApplyApplications(): Promise<ApplicationRecord[]>
     if (raw) cached = JSON.parse(raw);
   } catch {}
 
-  if (!auth.currentUser) return cached;
-
-  try {
-    const snapshot = await getDocs(collection(db, path));
-    const list: ApplicationRecord[] = [];
-    snapshot.forEach((d) => {
-      list.push({ ...(d.data() as ApplicationRecord), id: d.id });
-    });
-    if (list.length > 0) {
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      try {
-        localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
-      } catch {}
-      return list;
+  if (auth.currentUser) {
+    try {
+      const snapshot = await getDocs(collection(db, path));
+      const list: ApplicationRecord[] = [];
+      snapshot.forEach((d) => {
+        list.push({ ...(d.data() as ApplicationRecord), id: d.id });
+      });
+      if (list.length > 0) {
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        try {
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
+        } catch {}
+        return list;
+      }
+    } catch (err) {
+      console.warn('Firestore autoApplyApplications fetch notice:', err);
     }
-  } catch (err) {
-    console.warn('Firestore autoApplyApplications fetch notice:', err);
   }
+
+  // Fetch from server
+  try {
+    const res = await fetch('/api/auto-apply/state');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.applications) && data.applications.length > 0) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(data.applications));
+        } catch {}
+        return data.applications;
+      }
+    }
+  } catch {}
+
   return cached;
 }
 
 /**
- * Save application record to Cloud Firestore
+ * Save application record to Cloud Firestore and server backend
  */
 export async function saveAutoApplyApplication(record: ApplicationRecord): Promise<void> {
   try {
@@ -945,6 +1046,13 @@ export async function saveAutoApplyApplication(record: ApplicationRecord): Promi
     if (idx >= 0) list[idx] = record;
     else list.unshift(record);
     localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
+
+    // Save to server
+    fetch('/api/auto-apply/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applications: list }),
+    }).catch((e) => console.warn('Server app sync notice:', e));
   } catch {}
 
   if (!auth.currentUser) return;
@@ -954,6 +1062,32 @@ export async function saveAutoApplyApplication(record: ApplicationRecord): Promi
     await setDoc(doc(db, 'autoApplyApplications', record.id), clean, { merge: true });
   } catch (err) {
     console.warn('Failed saving autoApplyApplication to Firestore:', err);
+  }
+}
+
+/**
+ * Delete application record from Cloud Firestore and server backend
+ */
+export async function deleteAutoApplyApplication(appId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY);
+    if (raw) {
+      const list = JSON.parse(raw).filter((a: ApplicationRecord) => a.id !== appId);
+      localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(list));
+    }
+  } catch {}
+
+  // Delete from server storage
+  try {
+    await fetch(`/api/auto-apply/applications/${appId}`, { method: 'DELETE' });
+  } catch {}
+
+  if (!auth.currentUser) return;
+
+  try {
+    await deleteDoc(doc(db, 'autoApplyApplications', appId));
+  } catch (err) {
+    console.warn('Failed deleting autoApplyApplication from Firestore:', err);
   }
 }
 

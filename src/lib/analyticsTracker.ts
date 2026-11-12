@@ -125,19 +125,33 @@ export function detectTrafficSource(): {
   }
 }
 
+// Sanitize inputs to ensure no PII (passwords, emails, phone numbers) is ever sent to GA4 or telemetry
+export function sanitizeAnalyticsValue(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  return raw
+    .replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, '[REDACTED_EMAIL]')
+    .replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,9}/g, '[REDACTED_PHONE]')
+    .replace(/(password|passcode|token|key)=\S+/gi, '$1=[REDACTED]')
+    .trim()
+    .slice(0, 150);
+}
+
 // Check if current visit is considered internal / admin traffic
+// Note: ONLY genuine admin dashboard activity is marked internal; public visitors are NEVER excluded
 export function isInternalAdminVisit(isAdminLoggedIn: boolean = false): boolean {
   if (typeof window === 'undefined') return false;
 
   // Check explicit admin exclusion setting in localStorage
   const setting = localStorage.getItem(EXCLUDE_ADMIN_KEY);
   if (setting === 'false') {
-    return false; // Admin explicitly un-checked exclusion
+    return false; // Admin explicitly wants to record their visits
   }
 
-  // Default is true if admin is logged in or if on admin path or debug param
-  if (isAdminLoggedIn) return true;
-  if (window.location.search.includes('admin=true') || window.location.search.includes('is_admin=true')) {
+  // True only if admin is logged in AND actively on admin interface, or explicit debug param
+  if (isAdminLoggedIn && (window.location.search.includes('admin=true') || window.location.hash.includes('admin') || window.location.pathname.startsWith('/admin'))) {
+    return true;
+  }
+  if (window.location.search.includes('is_admin_test=true')) {
     return true;
   }
 
@@ -151,19 +165,28 @@ export function setInternalTrafficExclusion(exclude: boolean) {
 }
 
 export function getInternalTrafficExclusion(): boolean {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === 'undefined') return false;
   const val = localStorage.getItem(EXCLUDE_ADMIN_KEY);
-  return val === null ? true : val === 'true'; // Default true for security
+  // Default to false so public traffic is never accidentally suppressed
+  return val === 'true';
 }
 
-// Initialize official GA4 script tag dynamically
+// Initialize official GA4 script tag dynamically for continuous 24/7 tracking
 let isGaInitialized = false;
-export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean = false) {
-  if (typeof window === 'undefined' || !measurementId || measurementId.trim() === '') return;
-  if (isGaInitialized) return;
+let currentGaMeasurementId: string = '';
 
-  const cleanId = measurementId.trim();
+export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean = false) {
+  if (typeof window === 'undefined') return;
+
+  const idToUse =
+    measurementId ||
+    (import.meta as any).env?.VITE_GA_MEASUREMENT_ID ||
+    (window as any).__GA_MEASUREMENT_ID__ ||
+    '';
+
+  const cleanId = String(idToUse).trim().toUpperCase();
   if (!cleanId.startsWith('G-')) return;
+  if (isGaInitialized && currentGaMeasurementId === cleanId) return;
 
   try {
     window.dataLayer = window.dataLayer || [];
@@ -174,106 +197,215 @@ export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean
 
     gtag('js', new Date());
 
-    // Configure GA4 measurement with internal traffic flag if admin visit
+    // Continuous 24/7 GA4 configuration without full reload requirements
     gtag('config', cleanId, {
-      send_page_view: false, // We control page_view dispatch for accurate routing
+      send_page_view: false, // We dispatch page_view manually for SPA navigation
       traffic_type: isInternal ? 'internal' : undefined,
       debug_mode: isInternal ? true : undefined,
       cookie_domain: 'auto',
+      cookie_flags: 'SameSite=None;Secure',
+      anonymize_ip: true,
     });
 
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = `https://www.googletagmanager.com/gtag/js?id=${cleanId}`;
-    document.head.appendChild(script);
+    // Check if script tag already exists in head to prevent duplicates
+    const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`);
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${cleanId}`;
+      document.head.appendChild(script);
+    }
 
     isGaInitialized = true;
-    console.info(`[Analytics] Google Analytics 4 initialized successfully with ID: ${cleanId}`);
+    currentGaMeasurementId = cleanId;
+    (window as any).__GA_MEASUREMENT_ID__ = cleanId;
   } catch (err) {
     console.warn('[Analytics] Failed to initialize GA4:', err);
   }
 }
 
+export interface TrackEventDetails {
+  path?: string;
+  title?: string;
+  jobId?: string;
+  jobTitle?: string;
+  organization?: string;
+  category?: string;
+  applyUrl?: string;
+  applyMethod?: string;
+  searchTerm?: string;
+  resultsCount?: number;
+  hasResults?: boolean;
+  itemRank?: number;
+  filterType?: string;
+  filterValue?: string;
+  sortBy?: string;
+  channel?: string;
+  isAdminLoggedIn?: boolean;
+  gaMeasurementId?: string;
+}
+
 // Send event to backend telemetry store and GA4
 export async function trackAnalyticsEvent(
   eventType: AnalyticsEvent['eventType'],
-  details: {
-    path?: string;
-    title?: string;
-    jobId?: string;
-    jobTitle?: string;
-    organization?: string;
-    category?: string;
-    applyUrl?: string;
-    applyMethod?: string;
-    isAdminLoggedIn?: boolean;
-    gaMeasurementId?: string;
-  }
+  details: TrackEventDetails
 ) {
   if (typeof window === 'undefined') return;
 
-  const { visitorId } = getOrCreateVisitorId();
+  const { visitorId, isReturning } = getOrCreateVisitorId();
   const sessionId = getOrCreateSessionId();
   const deviceType = detectDeviceType();
   const { source, utmSource, utmMedium, utmCampaign } = detectTrafficSource();
   const isInternal = isInternalAdminVisit(details.isAdminLoggedIn);
+  const gaId = details.gaMeasurementId || currentGaMeasurementId || (window as any).__GA_MEASUREMENT_ID__;
 
-  // Send to GA4 if initialized
-  if (typeof window.gtag === 'function' && details.gaMeasurementId) {
+  // Sanitize values to prevent PII leakage
+  const safeSearchTerm = sanitizeAnalyticsValue(details.searchTerm);
+  const safeJobTitle = sanitizeAnalyticsValue(details.jobTitle);
+  const safeOrg = sanitizeAnalyticsValue(details.organization);
+  const safePath = details.path || window.location.pathname;
+
+  // 1. Dual-track to Google Analytics 4 (GA4) with strict PII protections
+  if (typeof window.gtag === 'function') {
     try {
-      if (eventType === 'page_view') {
-        window.gtag('event', 'page_view', {
-          page_location: window.location.href,
-          page_path: details.path || window.location.pathname,
-          page_title: details.title || document.title,
-          traffic_type: isInternal ? 'internal' : undefined,
-        });
-      } else if (eventType === 'vacancy_view') {
-        window.gtag('event', 'view_item', {
-          item_id: details.jobId,
-          item_name: details.jobTitle,
-          item_category: details.category,
-          item_brand: details.organization,
-        });
-      } else if (eventType === 'category_view') {
-        window.gtag('event', 'select_content', {
-          content_type: 'job_category',
-          item_id: details.category,
-        });
-      } else if (eventType === 'click_apply_link') {
-        window.gtag('event', 'click_apply_link', {
-          job_id: details.jobId,
-          job_title: details.jobTitle,
-          employer: details.organization,
-          apply_url: details.applyUrl,
-          apply_method: details.applyMethod,
-        });
-      } else if (eventType === 'share_telegram') {
-        window.gtag('event', 'share', {
-          method: 'telegram',
-          content_type: 'vacancy',
-          item_id: details.jobId,
-        });
+      switch (eventType) {
+        case 'page_view':
+          window.gtag('event', 'page_view', {
+            page_location: window.location.href,
+            page_path: safePath,
+            page_title: details.title || document.title,
+            traffic_type: isInternal ? 'internal' : undefined,
+            is_returning: isReturning ? 1 : 0,
+            device_category: deviceType,
+            traffic_source: source,
+          });
+          break;
+
+        case 'vacancy_view':
+          window.gtag('event', 'view_item', {
+            item_id: details.jobId,
+            item_name: safeJobTitle,
+            item_category: details.category,
+            item_brand: safeOrg,
+            currency: 'ETB',
+            source: source,
+          });
+          break;
+
+        case 'category_view':
+          window.gtag('event', 'select_content', {
+            content_type: 'job_category',
+            item_id: details.category,
+          });
+          break;
+
+        case 'location_view':
+          window.gtag('event', 'select_content', {
+            content_type: 'job_location',
+            item_id: details.filterValue || details.title,
+          });
+          break;
+
+        case 'search':
+          window.gtag('event', 'search', {
+            search_term: safeSearchTerm || '',
+            results_count: details.resultsCount ?? 0,
+            has_results: details.hasResults ? 1 : 0,
+            search_category: details.category || 'all',
+          });
+          break;
+
+        case 'view_search_results':
+          window.gtag('event', 'view_search_results', {
+            search_term: safeSearchTerm || '',
+            results_count: details.resultsCount ?? 0,
+          });
+          break;
+
+        case 'select_search_result':
+          window.gtag('event', 'select_item', {
+            item_id: details.jobId,
+            item_name: safeJobTitle,
+            item_category: details.category,
+            item_brand: safeOrg,
+            item_list_name: 'search_results',
+            index: details.itemRank || 1,
+          });
+          break;
+
+        case 'search_no_results':
+          window.gtag('event', 'search_no_results', {
+            search_term: safeSearchTerm || '',
+          });
+          break;
+
+        case 'click_apply_link':
+          window.gtag('event', 'click_apply_link', {
+            job_id: details.jobId,
+            job_title: safeJobTitle,
+            employer: safeOrg,
+            apply_method: details.applyMethod,
+          });
+          break;
+
+        case 'click_telegram_link':
+          window.gtag('event', 'click_telegram_link', {
+            channel: details.channel || '@DreamBigJobsEthiopia',
+            job_id: details.jobId,
+          });
+          break;
+
+        case 'share_telegram':
+          window.gtag('event', 'share', {
+            method: 'telegram',
+            content_type: 'vacancy',
+            item_id: details.jobId,
+          });
+          break;
+
+        case 'filter_change':
+          window.gtag('event', 'filter_change', {
+            filter_type: details.filterType,
+            filter_value: details.filterValue,
+          });
+          break;
+
+        case 'sort_change':
+          window.gtag('event', 'sort_change', {
+            sort_by: details.sortBy,
+          });
+          break;
+
+        default:
+          break;
       }
     } catch (gaErr) {
-      console.warn('[Analytics] GA4 event error:', gaErr);
+      console.warn('[Analytics] GA4 event dispatch error:', gaErr);
     }
   }
 
-  // Send to first-party verified event recorder
+  // 2. Dual-track to First-Party Database Event Store (Addis Ababa Timezone & 24/7 Logging)
   const eventPayload: AnalyticsEvent = {
     id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     visitorId,
     sessionId,
     eventType,
-    path: details.path || window.location.pathname,
+    path: safePath,
     title: details.title || document.title,
     jobId: details.jobId,
-    jobTitle: details.jobTitle,
-    organization: details.organization,
+    jobTitle: safeJobTitle,
+    organization: safeOrg,
     category: details.category,
     applyUrl: details.applyUrl,
     applyMethod: details.applyMethod,
+    searchTerm: safeSearchTerm,
+    resultsCount: details.resultsCount,
+    hasResults: details.hasResults,
+    itemRank: details.itemRank,
+    filterType: details.filterType,
+    filterValue: details.filterValue,
+    sortBy: details.sortBy,
+    channel: details.channel,
     source,
     utmSource,
     utmMedium,
@@ -296,7 +428,8 @@ export async function trackAnalyticsEvent(
         keepalive: true,
       }).catch(() => {});
     }
-  } catch (err) {
+  } catch {
     // Non-blocking telemetry
   }
 }
+

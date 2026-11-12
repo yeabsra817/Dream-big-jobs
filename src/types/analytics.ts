@@ -4,7 +4,20 @@ export interface AnalyticsEvent {
   id: string;
   visitorId: string;
   sessionId: string;
-  eventType: 'page_view' | 'vacancy_view' | 'category_view' | 'location_view' | 'click_apply_link' | 'share_telegram';
+  eventType:
+    | 'page_view'
+    | 'vacancy_view'
+    | 'category_view'
+    | 'location_view'
+    | 'click_apply_link'
+    | 'share_telegram'
+    | 'click_telegram_link'
+    | 'search'
+    | 'view_search_results'
+    | 'select_search_result'
+    | 'search_no_results'
+    | 'filter_change'
+    | 'sort_change';
   path: string;
   title?: string;
   jobId?: string;
@@ -13,6 +26,14 @@ export interface AnalyticsEvent {
   category?: string;
   applyUrl?: string;
   applyMethod?: string;
+  searchTerm?: string;
+  resultsCount?: number;
+  hasResults?: boolean;
+  itemRank?: number;
+  filterType?: string;
+  filterValue?: string;
+  sortBy?: string;
+  channel?: string;
   source: 'direct' | 'google' | 'telegram' | 'facebook' | 'referral' | 'other';
   utmSource?: string;
   utmMedium?: string;
@@ -162,8 +183,16 @@ export interface AnalyticsSummary {
   period: AnalyticsPeriod;
   dateRangeLabel: string;
   uniqueVisitors: number;
+  totalInteractions: number;
   totalSessions: number;
   totalPageViews: number;
+  totalSearches: number;
+  popularSearchTerms: Array<{
+    term: string;
+    count: number;
+    resultsAverage: number;
+  }>;
+  telegramReferralsCount: number;
   newVisitors: number;
   returningVisitors: number;
   activeUsersLast30Min: number;

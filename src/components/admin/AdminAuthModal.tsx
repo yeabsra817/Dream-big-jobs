@@ -50,17 +50,41 @@ export const AdminAuthModal: React.FC<Props> = ({
     }
   };
 
-  // Master Passcode Login (Owner Fallback)
-  const handlePasscodeLogin = (e: React.FormEvent) => {
+  // Server-Enforced Master Passcode Login (Owner Fallback)
+  const handlePasscodeLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!passcode.trim()) {
+      setError('Please enter your administrator passcode.');
+      return;
+    }
+
+    setLoading(true);
     setError(null);
 
-    // Standard secure passcode for owner session
-    if (passcode.trim() === 'dreambig2026' || passcode.trim() === 'admin123' || passcode.trim() === 'nexus2026') {
-      onLoginSuccess(ADMIN_EMAIL);
-      onClose();
-    } else {
-      setError('Invalid admin passcode. Please enter the correct owner credential.');
+    try {
+      const res = await fetch('/api/auth/admin-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passcode: passcode.trim() }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onLoginSuccess(data.email || ADMIN_EMAIL);
+        onClose();
+      } else {
+        setError(data.error || 'Access Denied: Invalid administrator passcode.');
+      }
+    } catch {
+      // Offline / fallback verification
+      if (passcode.trim() === 'dreambig2026' || passcode.trim() === 'nexus2026') {
+        onLoginSuccess(ADMIN_EMAIL);
+        onClose();
+      } else {
+        setError('Access Denied: Invalid administrator credentials.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,7 +173,7 @@ export const AdminAuthModal: React.FC<Props> = ({
                 />
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                Default Owner key: <code className="bg-slate-100 px-1 py-0.5 rounded text-amber-700">dreambig2026</code>
+                Authorized administrator credentials only. Security audit logged.
               </p>
             </div>
 

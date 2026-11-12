@@ -152,15 +152,6 @@ export const LocationJobsView: React.FC<Props> = ({
     sortBy,
   ]);
 
-  const handleQuickShareTelegram = (v: Vacancy, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const url = `${window.location.origin}/?jobId=${v.id}`;
-    const text = encodeURIComponent(
-      `💼 ${v.title} at ${v.organization}\n📍 Location: ${v.location}\n💰 Salary: ${v.salary}\n⏳ Deadline: ${v.applicationDeadline}\nApply on HOPELAND JOBS:\n${url}`
-    );
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${text}`, '_blank');
-  };
-
   const handleCopyLink = (v: Vacancy, e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${window.location.origin}/?jobId=${v.id}`;
@@ -438,13 +429,16 @@ export const LocationJobsView: React.FC<Props> = ({
                           <Heart className={`w-4 h-4 ${isSaved ? 'fill-current text-rose-500' : ''}`} />
                         </button>
 
-                        <button
-                          onClick={(e) => handleQuickShareTelegram(vacancy, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-sky-500 hover:bg-sky-50 transition-colors"
+                        <a
+                          href={`https://t.me/share/url?url=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : ''}/?jobId=${vacancy.id}`)}&text=${encodeURIComponent(`💼 ${vacancy.title} at ${vacancy.organization}\n📍 Location: ${vacancy.location}\n💰 Salary: ${vacancy.salary}\n⏳ Deadline: ${vacancy.applicationDeadline}\nApply on HOPELAND JOBS:\n${typeof window !== 'undefined' ? window.location.origin : ''}/?jobId=${vacancy.id}`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-sky-500 hover:bg-sky-50 transition-colors inline-flex items-center justify-center cursor-pointer"
                           title="Share to Telegram"
                         >
                           <Send className="w-4 h-4" />
-                        </button>
+                        </a>
                       </div>
                     </div>
 

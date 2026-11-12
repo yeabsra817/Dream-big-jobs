@@ -131,13 +131,27 @@ export default function App() {
           gaMeasurementId: loadedSettings.gaMeasurementId,
         });
 
-        // Check URL parameter for direct job link (from Telegram / WhatsApp / Social shares)
+        // Check URL parameter or path for direct job link (from Telegram / WhatsApp / Social shares)
         if (typeof window !== 'undefined') {
           const urlParams = new URLSearchParams(window.location.search);
-          const jobId = urlParams.get('jobId');
-          if (jobId) {
-            const found = loadedVacancies.find((v) => v.id === jobId);
-            if (found) setSelectedVacancy(found);
+          const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
+          const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
+          const targetId = jobId || pathMatch?.[1];
+
+          if (targetId) {
+            const found = loadedVacancies.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase());
+            if (found) {
+              setSelectedVacancy(found);
+              document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+              trackAnalyticsEvent('vacancy_view', {
+                jobId: found.id,
+                jobTitle: found.title,
+                organization: found.organization,
+                category: found.category,
+                path: `/?jobId=${found.id}`,
+                gaMeasurementId: loadedSettings.gaMeasurementId,
+              });
+            }
           }
         }
       } catch (err) {
@@ -159,6 +173,30 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Browser navigation popstate listener for direct job URLs and Back/Forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
+      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
+      const targetId = jobId || pathMatch?.[1];
+
+      if (targetId) {
+        const found = vacancies.find((v) => v.id === targetId);
+        if (found) {
+          setSelectedVacancy(found);
+          document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+        }
+      } else {
+        setSelectedVacancy(null);
+        document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [vacancies]);
 
   // When admin logs in, load ALL vacancies, duplicate reports, and fresh site settings
   useEffect(() => {
@@ -241,6 +279,78 @@ export default function App() {
   const totalActiveVacancies = useMemo(() => {
     return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline)).length;
   }, [vacancies]);
+
+  // Continuous 24/7 Search Bar Activity Tracking
+  useEffect(() => {
+    const q = heroSearch.trim();
+    if (!q || q.length < 2) return;
+
+    const timer = setTimeout(() => {
+      const matches = filteredCategories.length;
+      trackAnalyticsEvent('search', {
+        searchTerm: q,
+        resultsCount: matches,
+        hasResults: matches > 0,
+        category: 'All',
+        path: `/?search=${encodeURIComponent(q)}`,
+        gaMeasurementId: siteSettings.gaMeasurementId,
+      });
+
+      if (matches === 0) {
+        trackAnalyticsEvent('search_no_results', {
+          searchTerm: q,
+          path: `/?search=${encodeURIComponent(q)}`,
+          gaMeasurementId: siteSettings.gaMeasurementId,
+        });
+      } else {
+        trackAnalyticsEvent('view_search_results', {
+          searchTerm: q,
+          resultsCount: matches,
+          path: `/?search=${encodeURIComponent(q)}`,
+          gaMeasurementId: siteSettings.gaMeasurementId,
+        });
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [heroSearch, filteredCategories.length, siteSettings.gaMeasurementId]);
+
+  // Permanent URL and Direct Vacancy Selection
+  const handleSelectVacancy = (v: Vacancy) => {
+    setSelectedVacancy(v);
+    if (typeof window !== 'undefined') {
+      const newUrl = `/?jobId=${encodeURIComponent(v.id)}`;
+      window.history.pushState({ jobId: v.id }, '', newUrl);
+      document.title = `${v.title} at ${v.organization} | HOPELAND JOBS`;
+    }
+    trackAnalyticsEvent('vacancy_view', {
+      jobId: v.id,
+      jobTitle: v.title,
+      organization: v.organization,
+      category: v.category,
+      path: `/?jobId=${v.id}`,
+      gaMeasurementId: siteSettings.gaMeasurementId,
+    });
+    trackAnalyticsEvent('page_view', {
+      path: `/?jobId=${v.id}`,
+      title: `${v.title} at ${v.organization} | HOPELAND JOBS`,
+      gaMeasurementId: siteSettings.gaMeasurementId,
+    });
+  };
+
+  const handleCloseVacancy = () => {
+    setSelectedVacancy(null);
+    if (typeof window !== 'undefined') {
+      const cleanPath = window.location.pathname.startsWith('/jobs') ? '/' : window.location.pathname;
+      window.history.replaceState({}, '', cleanPath);
+      document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
+    }
+    trackAnalyticsEvent('page_view', {
+      path: '/',
+      title: 'HOPELAND JOBS - Homepage',
+      gaMeasurementId: siteSettings.gaMeasurementId,
+    });
+  };
 
   // Handlers for Admin Operations
   const handleSaveVacancy = async (v: Vacancy) => {
@@ -545,7 +655,7 @@ export default function App() {
               setSelectedLocation(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            onSelectVacancy={(v) => setSelectedVacancy(v)}
+            onSelectVacancy={handleSelectVacancy}
             savedJobIds={savedJobIds}
             onToggleSaveJob={handleToggleSaveJob}
             telegramUrl={siteSettings.telegramChannelUrl}
@@ -559,7 +669,7 @@ export default function App() {
               setSelectedCategory(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            onSelectVacancy={(v) => setSelectedVacancy(v)}
+            onSelectVacancy={handleSelectVacancy}
             savedJobIds={savedJobIds}
             onToggleSaveJob={handleToggleSaveJob}
             onSelectLocation={handleSelectLocation}
@@ -714,6 +824,7 @@ export default function App() {
                   href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia'}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => trackAnalyticsEvent('click_telegram_link', { channel: siteSettings.telegramChannelName || '@DreamBigJobsEthiopia' })}
                   aria-label="Join Our Telegram Channel @DreamBigJobsEthiopia"
                   className="px-6 py-3 rounded-xl bg-white text-[#1976D2] hover:bg-slate-50 font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-cyan-900/20 transition-all transform hover:scale-105 shrink-0 flex items-center gap-2 cursor-pointer"
                 >
@@ -920,6 +1031,7 @@ export default function App() {
                       href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopiaBot'}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => trackAnalyticsEvent('click_telegram_link', { channel: '@DreamBigJobsEthiopiaBot' })}
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#229ED9] text-white font-bold text-xs hover:bg-[#1E88E5] transition-colors shadow-sm"
                     >
                       <Send className="w-4 h-4" />
@@ -988,7 +1100,7 @@ export default function App() {
         savedVacancies={vacancies.filter((v) => savedJobIds.has(v.id))}
         onRemoveSaved={handleRemoveSavedJob}
         onClearAll={handleClearAllSaved}
-        onSelectVacancy={(v) => setSelectedVacancy(v)}
+        onSelectVacancy={handleSelectVacancy}
         telegramUrl={siteSettings.telegramChannelUrl}
       />
 
@@ -996,13 +1108,7 @@ export default function App() {
       {selectedVacancy && (
         <VacancyDetailModal
           vacancy={selectedVacancy}
-          onClose={() => {
-            setSelectedVacancy(null);
-            // Clear URL parameter
-            if (typeof window !== 'undefined' && window.history.replaceState) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }}
+          onClose={handleCloseVacancy}
           telegramUrl={siteSettings.telegramChannelUrl}
         />
       )}

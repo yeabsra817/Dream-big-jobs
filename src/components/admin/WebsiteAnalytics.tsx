@@ -41,6 +41,7 @@ import {
   ChevronRight,
   ArrowDownRight,
   Info,
+  X,
 } from 'lucide-react';
 import { SiteSettings } from '../../types/job';
 import {
@@ -116,6 +117,24 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [gaInput, setGaInput] = useState<string>(siteSettings.gaMeasurementId || '');
   const [isSavingGa, setIsSavingGa] = useState<boolean>(false);
   const [gaSuccessMsg, setGaSuccessMsg] = useState<string | null>(null);
+
+  // In-app non-blocking notifications and custom confirmations (replaces window.alert / window.confirm)
+  const [toastFeedback, setToastFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+  } | null>(null);
+
+  const [purgeModal, setPurgeModal] = useState<{
+    isOpen: boolean;
+    internalOnly: boolean;
+  } | null>(null);
+
+  const showToast = (type: 'success' | 'error' | 'info', text: string) => {
+    setToastFeedback({ type, text });
+    setTimeout(() => {
+      setToastFeedback((prev) => (prev?.text === text ? null : prev));
+    }, 4500);
+  };
 
   // Keep gaInput in sync when siteSettings updates from cloud or server
   useEffect(() => {
@@ -212,8 +231,9 @@ export const WebsiteAnalytics: React.FC<Props> = ({
       }
       setAuditMessage(`Audit Completed: ${data.passedCount}/${data.totalChecks} Checks Passed.`);
       setTimeout(() => setAuditMessage(null), 5000);
+      showToast('success', `Health Audit passed: ${data.passedCount}/${data.totalChecks} checks.`);
     } catch (err: any) {
-      alert('Error running audit: ' + err.message);
+      showToast('error', 'Error running audit: ' + err.message);
     } finally {
       setIsRunningAudit(false);
     }
@@ -236,10 +256,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
             searchConsole: data.searchConsole,
           });
         }
-        alert(status === 'CONNECTED' ? 'Search Console verified as CONNECTED!' : 'GSC settings saved.');
+        showToast('success', status === 'CONNECTED' ? 'Search Console verified as CONNECTED!' : 'GSC settings saved.');
       }
     } catch (err: any) {
-      alert('Failed to save GSC settings: ' + err.message);
+      showToast('error', 'Failed to save GSC settings: ' + err.message);
     } finally {
       setIsSavingGsc(false);
     }
@@ -265,10 +285,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
         setInquiryContact('');
         setIsRecordInquiryOpen(false);
         fetchAnalyticsSummary(true);
-        alert('Employer inquiry recorded successfully.');
+        showToast('success', 'Employer inquiry recorded successfully.');
       }
     } catch (err: any) {
-      alert('Error saving inquiry: ' + err.message);
+      showToast('error', 'Error saving inquiry: ' + err.message);
     } finally {
       setIsSubmittingInquiry(false);
     }
@@ -294,10 +314,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
         setRevenuePayer('');
         setIsRecordRevenueOpen(false);
         fetchAnalyticsSummary(true);
-        alert('Transaction recorded successfully. Business Intelligence updated.');
+        showToast('success', 'Transaction recorded successfully. Business Intelligence updated.');
       }
     } catch (err: any) {
-      alert('Error recording transaction: ' + err.message);
+      showToast('error', 'Error recording transaction: ' + err.message);
     } finally {
       setIsSubmittingRevenue(false);
     }
@@ -310,7 +330,7 @@ export const WebsiteAnalytics: React.FC<Props> = ({
     try {
       const cleanId = gaInput.trim().toUpperCase();
       if (cleanId && !cleanId.startsWith('G-')) {
-        alert('Google Analytics 4 Measurement ID must start with "G-" (e.g. G-XXXXXXXXXX).');
+        showToast('error', 'Google Analytics 4 Measurement ID must start with "G-" (e.g. G-XXXXXXXXXX).');
         setIsSavingGa(false);
         return;
       }
@@ -321,21 +341,25 @@ export const WebsiteAnalytics: React.FC<Props> = ({
         updatedAt: new Date().toISOString(),
       });
       setGaSuccessMsg(cleanId ? `Configured GA4: ${cleanId}` : 'GA4 ID cleared');
+      showToast('success', cleanId ? `GA4 Measurement ID saved: ${cleanId}` : 'GA4 ID removed');
       setTimeout(() => setGaSuccessMsg(null), 4000);
       fetchAnalyticsSummary(true);
     } catch (err: any) {
-      alert('Failed to save GA4 settings: ' + err.message);
+      showToast('error', 'Failed to save GA4 settings: ' + err.message);
     } finally {
       setIsSavingGa(false);
     }
   };
 
-  // Purge test data
-  const handlePurgeTestData = async (internalOnly: boolean) => {
-    const confirmText = internalOnly
-      ? 'Remove all recorded internal development/admin test visits from the database?'
-      : 'Reset ALL analytics data to 0? This cannot be undone.';
-    if (!window.confirm(confirmText)) return;
+  // Purge test data (triggers inline confirmation modal, no window.confirm)
+  const handleTriggerPurge = (internalOnly: boolean) => {
+    setPurgeModal({ isOpen: true, internalOnly });
+  };
+
+  const handleExecutePurge = async () => {
+    if (!purgeModal) return;
+    const internalOnly = purgeModal.internalOnly;
+    setPurgeModal(null);
 
     try {
       const res = await fetch('/api/analytics/reset-test', {
@@ -344,12 +368,12 @@ export const WebsiteAnalytics: React.FC<Props> = ({
         body: JSON.stringify({ purgeInternalOnly: internalOnly }),
       });
       if (res.ok) {
-        alert(internalOnly ? 'Internal test events purged.' : 'All analytics reset to zero.');
+        showToast('success', internalOnly ? 'Internal test events purged successfully.' : 'All analytics reset to zero.');
         setAiReport(null);
         fetchAnalyticsSummary(true);
       }
     } catch (err: any) {
-      alert('Error purging data: ' + err.message);
+      showToast('error', 'Error purging data: ' + err.message);
     }
   };
 
@@ -657,6 +681,55 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
                 {summary ? summary.returningVisitors : (loading ? '—' : 0)}
               </div>
               <div className="text-[11px] text-slate-500 mt-1">Repeat audience</div>
+            </div>
+          </div>
+
+          {/* Real-time Interaction & Search Telemetry */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 hover:border-amber-400 transition-colors">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Total Interactions</span>
+                <MousePointerClick className="w-4 h-4 text-amber-500" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                {summary ? (summary.totalInteractions ?? summary.totalPageViews) : (loading ? '—' : 0)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Clicks, views &amp; searches</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 hover:border-sky-400 transition-colors">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Total Searches</span>
+                <Search className="w-4 h-4 text-sky-500" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                {summary ? (summary.totalSearches ?? 0) : (loading ? '—' : 0)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Job search submissions</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 hover:border-cyan-400 transition-colors">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Telegram Referrals</span>
+                <Send className="w-4 h-4 text-[#229ED9]" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                {summary ? (summary.telegramReferralsCount ?? 0) : (loading ? '—' : 0)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Visitors from @DreamBigJobsEthiopia</div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 hover:border-indigo-400 transition-colors">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+                <span>Top Search Queries</span>
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+              </div>
+              <div className="text-xs font-bold text-slate-800 line-clamp-1 mt-1">
+                {summary?.popularSearchTerms && summary.popularSearchTerms.length > 0
+                  ? summary.popularSearchTerms.slice(0, 2).map((s) => `"${s.term}" (${s.count})`).join(', ')
+                  : 'No searches yet'}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Sanitized keyword activity</div>
             </div>
           </div>
 
@@ -1728,16 +1801,16 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handlePurgeTestData(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors border border-slate-200 shadow-xs"
+                onClick={() => handleTriggerPurge(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors border border-slate-200 shadow-xs cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5 text-slate-500" />
                 <span>Purge Internal Test Visits</span>
               </button>
 
               <button
-                onClick={() => handlePurgeTestData(false)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors border border-rose-200"
+                onClick={() => handleTriggerPurge(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-colors border border-rose-200 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-500" />
                 <span>Reset All to 0</span>
@@ -1881,6 +1954,73 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Toast Notification */}
+      {toastFeedback && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-bold border ${
+              toastFeedback.type === 'success'
+                ? 'bg-emerald-950 text-emerald-100 border-emerald-800'
+                : toastFeedback.type === 'error'
+                ? 'bg-rose-950 text-rose-100 border-rose-800'
+                : 'bg-slate-950 text-amber-300 border-slate-800'
+            }`}
+          >
+            {toastFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : toastFeedback.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : (
+              <Info className="w-4 h-4 text-amber-400 shrink-0" />
+            )}
+            <span>{toastFeedback.text}</span>
+            <button
+              onClick={() => setToastFeedback(null)}
+              className="ml-2 p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Purge Confirmation Modal */}
+      {purgeModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-black text-lg text-slate-900">
+                {purgeModal.internalOnly ? 'Purge Internal Test Visits?' : 'Reset All Analytics to Zero?'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                {purgeModal.internalOnly
+                  ? 'This will safely remove internal development and admin sessions from the telemetry store, leaving only authentic public visits.'
+                  : 'This will reset all recorded analytics events and counters to 0. This action is permanent and cannot be undone.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPurgeModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecutePurge}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm"
+              >
+                Confirm &amp; Proceed
+              </button>
+            </div>
           </div>
         </div>
       )}

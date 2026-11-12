@@ -78,29 +78,16 @@ ${currentUrl}`;
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const handleShareTelegram = () => {
-    trackAnalyticsEvent('share_telegram', {
-      jobId: vacancy.id,
-      jobTitle: vacancy.title,
-      organization: vacancy.organization,
-      category: vacancy.category,
-    });
-    const text = encodeURIComponent(
-      `💼 ${vacancy.title} at ${vacancy.organization}\n📍 ${vacancy.location} | ⏳ Deadline: ${vacancy.applicationDeadline}\nCheck details on HOPELAND JOBS:`
-    );
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(currentUrl)}&text=${text}`, '_blank');
-  };
+  const telegramShareText = encodeURIComponent(
+    `💼 ${vacancy.title} at ${vacancy.organization}\n📍 ${vacancy.location} | ⏳ Deadline: ${vacancy.applicationDeadline}\nCheck details on HOPELAND JOBS:`
+  );
+  const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(currentUrl)}&text=${telegramShareText}`;
 
-  const handleShareWhatsApp = () => {
-    const text = encodeURIComponent(
-      `💼 ${vacancy.title} at ${vacancy.organization} (Ethiopia)\nDeadline: ${vacancy.applicationDeadline}\nApply here: ${currentUrl}`
-    );
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-  };
-
-  const handleShareFacebook = () => {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`, '_blank');
-  };
+  const whatsAppShareText = encodeURIComponent(
+    `💼 ${vacancy.title} at ${vacancy.organization} (Ethiopia)\nDeadline: ${vacancy.applicationDeadline}\nApply here: ${currentUrl}`
+  );
+  const whatsAppShareUrl = `https://api.whatsapp.com/send?text=${whatsAppShareText}`;
+  const facebookShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentUrl)}`;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 lg:p-6 animate-in fade-in duration-200">
@@ -398,27 +385,41 @@ ${currentUrl}`;
           <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-500">Share this vacancy:</span>
-              <button
-                onClick={handleShareTelegram}
-                className="p-2 rounded-lg bg-[#229ED9] text-white hover:bg-[#1E88E5] transition-colors"
+              <a
+                href={telegramShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  trackAnalyticsEvent('share_telegram', {
+                    jobId: vacancy.id,
+                    jobTitle: vacancy.title,
+                    organization: vacancy.organization,
+                    category: vacancy.category,
+                  });
+                }}
+                className="p-2 rounded-lg bg-[#229ED9] text-white hover:bg-[#1E88E5] transition-colors inline-flex items-center justify-center cursor-pointer"
                 title="Share to Telegram"
               >
                 <Send className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleShareWhatsApp}
-                className="p-2 rounded-lg bg-[#25D366] text-white hover:bg-[#20BA5A] transition-colors"
+              </a>
+              <a
+                href={whatsAppShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg bg-[#25D366] text-white hover:bg-[#20BA5A] transition-colors inline-flex items-center justify-center cursor-pointer"
                 title="Share to WhatsApp"
               >
                 <Share2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleShareFacebook}
-                className="p-2 rounded-lg bg-[#1877F2] text-white hover:bg-[#166FE5] transition-colors"
+              </a>
+              <a
+                href={facebookShareUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg bg-[#1877F2] text-white hover:bg-[#166FE5] transition-colors inline-flex items-center justify-center cursor-pointer"
                 title="Share to Facebook"
               >
                 <ExternalLink className="w-4 h-4" />
-              </button>
+              </a>
             </div>
 
             <div className="flex items-center gap-2">

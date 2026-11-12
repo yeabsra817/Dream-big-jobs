@@ -307,7 +307,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
     try {
       const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
-      const data = await broadcastJobToTelegram(job, channel, siteSettings.telegramBotToken, forceRetry);
+      const data = await broadcastJobToTelegram(job, channel, siteSettings.telegramBotToken, forceRetry, siteSettings.customDomain);
 
       if (!data.success) {
         const errorMsg = data.error || 'Telegram broadcast failed';

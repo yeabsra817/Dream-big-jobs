@@ -4,6 +4,7 @@
   "telegramGroupUrl": "https://t.me/DreamBigJobsEthiopia",
   "telegramBotUsername": "DreamBigJobsEthiopiaBot",
   "telegramAutoPublish": true,
+  "telegramConnected": true,
   "contactEmail": "nexusitsoultion@gmail.com",
   "contactPhone": "+251 91 123 4567",
   "contactAddress": "Bole Subcity, Addis Ababa, Ethiopia",
