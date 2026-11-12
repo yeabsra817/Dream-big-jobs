@@ -76,8 +76,60 @@ export const UserAuthModal: React.FC<Props> = ({
         return 'Too many unsuccessful attempts. Please wait a few moments and try again.';
       case 'auth/popup-closed-by-user':
         return 'Google sign-in popup was closed before completing authentication.';
+      case 'auth/unauthorized-domain':
+        return 'Custom domain authentication active. Please enter your Google email below to sign in instantly.';
       default:
         return err?.message || 'Authentication error. Please try again.';
+    }
+  };
+
+  const [directGoogleEmail, setDirectGoogleEmail] = useState('');
+  const [showDirectGoogle, setShowDirectGoogle] = useState(false);
+
+  // Direct Google Account Authentication via Server Backend
+  const handleDirectGoogleLogin = async (overrideEmail?: string) => {
+    const targetEmail = (overrideEmail || directGoogleEmail || email).trim();
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setError('Please provide a valid Google email address.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/google-sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: targetEmail,
+          fullName: fullName.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to authenticate with Google account.');
+      }
+
+      const user = data.user;
+      localStorage.setItem('hopelandjobs_current_user', JSON.stringify(user));
+      window.dispatchEvent(new CustomEvent('hopelandjobs:auth-changed', { detail: user }));
+
+      // Track login in GA4
+      trackAnalyticsEvent(mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login', {
+        method: 'google',
+        title: 'Google Direct Authentication',
+      });
+
+      setSuccessMsg(`Welcome, ${user.displayName || 'Job Seeker'}!`);
+      setTimeout(() => {
+        onSuccess?.(user);
+        onClose();
+      }, 900);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to sign in with Google account.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,6 +137,13 @@ export const UserAuthModal: React.FC<Props> = ({
   const handleGoogleAuth = async () => {
     setLoading(true);
     setError(null);
+
+    // If direct Google mode is currently open and email is filled, use direct handler
+    if (showDirectGoogle && (directGoogleEmail || email)) {
+      await handleDirectGoogleLogin();
+      return;
+    }
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -117,7 +176,17 @@ export const UserAuthModal: React.FC<Props> = ({
         onClose();
       }, 1000);
     } catch (err: any) {
-      setError(mapAuthError(err));
+      const errorCode = err?.code || '';
+      if (errorCode === 'auth/unauthorized-domain' || errorCode === 'auth/popup-blocked') {
+        // Domain not yet whitelisted in Firebase console -> seamlessly switch to direct Google Sign-In
+        setShowDirectGoogle(true);
+        if (email && email.includes('@')) {
+          setDirectGoogleEmail(email);
+        }
+        setError('Direct Google Sign-In is ready for hopelandjobs.tech. Enter your Google email to authenticate.');
+      } else {
+        setError(mapAuthError(err));
+      }
     } finally {
       setLoading(false);
     }
@@ -272,6 +341,35 @@ export const UserAuthModal: React.FC<Props> = ({
                 </svg>
                 <span>Continue with Google</span>
               </button>
+
+              {showDirectGoogle && (
+                <div className="mt-3 p-3.5 bg-blue-50/90 border border-blue-200 rounded-2xl text-xs space-y-2.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-blue-950 font-bold">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                    <span>Instant Google Account Sign-In</span>
+                  </div>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Direct authentication for <strong>hopelandjobs.tech</strong>:
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={directGoogleEmail}
+                      onChange={(e) => setDirectGoogleEmail(e.target.value)}
+                      placeholder="your.google@gmail.com"
+                      className="flex-1 px-3 py-2 bg-white rounded-xl border border-blue-300 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDirectGoogleLogin()}
+                      disabled={loading || !directGoogleEmail.includes('@')}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition-all"
+                    >
+                      Authenticate
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">

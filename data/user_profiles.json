@@ -38,5 +38,46 @@
     "storageUsedBytes": 2548200,
     "storageCapacityBytes": 10737418240,
     "updatedAt": "2026-11-12T11:11:17.108Z"
+  },
+  "google_7965616273726134": {
+    "uid": "google_7965616273726134",
+    "fullName": "Yeabsra Tefera",
+    "email": "yeabsra45@gmail.com",
+    "phone": "+251 91 123 4567",
+    "locationCity": "Addis Ababa",
+    "locationRegion": "Addis Ababa",
+    "desiredJobTitle": "Full-Stack Lead Engineer",
+    "skills": [
+      "React",
+      "TypeScript",
+      "Node.js",
+      "PostgreSQL",
+      "Firebase"
+    ],
+    "education": [
+      {
+        "id": "edu_1",
+        "institution": "Addis Ababa University",
+        "qualification": "BSc",
+        "fieldOfStudy": "Computer Science",
+        "graduationYear": "2022"
+      }
+    ],
+    "experience": [
+      {
+        "id": "exp_1",
+        "companyName": "Commercial Bank of Ethiopia",
+        "jobTitle": "Senior Systems Engineer",
+        "startDate": "2022-01",
+        "endDate": "2024-05",
+        "isCurrent": false,
+        "responsibilities": "Core banking API services"
+      }
+    ],
+    "documents": [],
+    "storageUsedBytes": 2548200,
+    "storageCapacityBytes": 10737418240,
+    "updatedAt": "2026-11-12T12:06:54.543Z",
+    "photoUrl": "https://lh3.googleusercontent.com/a/default-user"
   }
 }

@@ -72,7 +72,7 @@ import { JobApplicationModal } from './components/JobApplicationModal';
 import { JobSeekerDashboard } from './components/JobSeekerDashboard';
 import { AllCategoriesView } from './components/AllCategoriesView';
 import { Footer } from './components/Footer';
-import { initGoogleAnalytics4, trackAnalyticsEvent } from './lib/analyticsTracker';
+import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
 import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
 
 const POPULAR_EMPLOYERS = [
@@ -99,6 +99,8 @@ export default function App() {
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
     customDomain: 'hopelandjobs.tech',
+    gaMeasurementId: 'G-KH6X73105S',
+    gaTrackingEnabled: true,
     aboutText:
       'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     updatedAt: new Date().toISOString(),
@@ -204,10 +206,11 @@ export default function App() {
     }
     loadData();
 
-    // Firebase Auth Listener
+    // Firebase Auth Listener & Google Account GA4 User Identification
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
       if (user) {
+        setCurrentUser(user);
+        setAnalyticsUserId(user.uid || user.email || null);
         if (isUserAdmin(user)) {
           setIsOwnerAuthorized(true);
           setAdminEmail(user.email);
@@ -239,12 +242,54 @@ export default function App() {
           console.warn('Profile sync notice:', e);
         }
       } else {
+        // Fallback: Check for custom direct Google authentication session
+        try {
+          const stored = localStorage.getItem('hopelandjobs_current_user');
+          if (stored) {
+            const localUser = JSON.parse(stored);
+            if (localUser && localUser.uid) {
+              setCurrentUser(localUser as any);
+              setAnalyticsUserId(localUser.uid || localUser.email || null);
+              const [profile, apps] = await Promise.all([
+                fetchJobSeekerProfile(localUser.uid),
+                fetchUserApplications(localUser.uid),
+              ]);
+              setUserApplications(apps);
+              if (profile) {
+                setUserProfile(profile);
+              }
+              return;
+            }
+          }
+        } catch {}
+
+        setCurrentUser(null);
         setUserProfile(null);
         setUserApplications([]);
+        setAnalyticsUserId(null);
       }
     });
 
-    return () => unsubscribe();
+    // Custom event listener for instant Google Sign-In across all domains
+    const handleCustomAuthChange = async (e: any) => {
+      const customUser = e.detail;
+      if (customUser && customUser.uid) {
+        setCurrentUser(customUser);
+        setAnalyticsUserId(customUser.uid || customUser.email || null);
+        const [profile, apps] = await Promise.all([
+          fetchJobSeekerProfile(customUser.uid),
+          fetchUserApplications(customUser.uid),
+        ]);
+        setUserApplications(apps);
+        if (profile) setUserProfile(profile);
+      }
+    };
+    window.addEventListener('hopelandjobs:auth-changed', handleCustomAuthChange);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('hopelandjobs:auth-changed', handleCustomAuthChange);
+    };
   }, []);
 
   // Browser navigation popstate listener for direct job URLs and Back/Forward buttons
@@ -371,10 +416,86 @@ export default function App() {
     });
   }, [publishedVacancies, heroSearch, heroLocation, heroSector, heroEmploymentType]);
 
-  // Featured vacancies (top 4 priority or latest)
-  const featuredVacancies = useMemo(() => {
-    return publishedVacancies.slice(0, 4);
-  }, [publishedVacancies]);
+  // Personalized recommendations based on candidate's experience and position
+  const recommendedVacancies = useMemo(() => {
+    if (!userProfile) return [];
+
+    const desiredTitle = (userProfile.desiredJobTitle || '').toLowerCase().trim();
+    const pastTitles = (userProfile.experience || []).map((e) => (e.jobTitle || '').toLowerCase().trim()).filter(Boolean);
+    const allUserTitles = [desiredTitle, ...pastTitles].filter(Boolean);
+    const userExpYears = parseInt(userProfile.yearsOfExperience || '0', 10) || 0;
+    const userExpStr = (userProfile.yearsOfExperience || '').toLowerCase();
+    const userSkills = (userProfile.skills || []).map((s) => s.toLowerCase().trim()).filter(Boolean);
+    const preferredInd = (userProfile.preferredIndustry || '').toLowerCase();
+
+    return publishedVacancies
+      .map((vac) => {
+        let score = 0;
+        const reasons: string[] = [];
+
+        const vacTitle = (vac.title || '').toLowerCase();
+        const vacCat = (vac.category || '').toLowerCase();
+        const vacDesc = (vac.description || '').toLowerCase();
+        const vacReqs = (vac.requiredSkills || []).join(' ').toLowerCase();
+        const vacExp = (vac.experienceYears || '').toLowerCase();
+
+        // 1. Position / Title Match (High Priority)
+        const titleMatch = allUserTitles.some((t) => t && (vacTitle.includes(t) || t.includes(vacTitle)));
+        if (titleMatch) {
+          score += 45;
+          reasons.push('Position Match');
+        } else if (allUserTitles.some((t) => t.split(/\s+/).some((word) => word.length > 3 && vacTitle.includes(word)))) {
+          score += 25;
+          reasons.push('Role Match');
+        }
+
+        // 2. Industry / Category Match
+        if (preferredInd && (vacCat.includes(preferredInd) || preferredInd.includes(vacCat))) {
+          score += 25;
+          reasons.push('Preferred Sector');
+        }
+
+        // 3. Experience Match
+        if (userExpStr.includes('fresh') || userExpStr.includes('entry') || userExpYears <= 1) {
+          if (vacExp.includes('fresh') || vacExp.includes('0') || vacExp.includes('entry') || vacCat.includes('internship')) {
+            score += 20;
+            reasons.push('Entry-Level Match');
+          }
+        } else {
+          const vacExpYears = parseInt(vacExp, 10) || 0;
+          if (vacExpYears > 0 && Math.abs(userExpYears - vacExpYears) <= 2) {
+            score += 20;
+            reasons.push(`Experience (~${userExpYears} yrs)`);
+          } else if (userExpYears >= 3 && (vacExp.includes('senior') || vacExp.includes('lead') || vacExpYears >= 3)) {
+            score += 15;
+            reasons.push('Seniority Level');
+          }
+        }
+
+        // 4. Skills Match
+        const matchedSkills = userSkills.filter((s) => s.length > 2 && (vacDesc.includes(s) || vacReqs.includes(s) || vacTitle.includes(s)));
+        if (matchedSkills.length > 0) {
+          score += Math.min(20, matchedSkills.length * 6);
+          reasons.push(`${matchedSkills.length} Matched Skills`);
+        }
+
+        // Fallback default score if partially aligned with sector
+        if (score === 0 && (vacCat.includes('bank') || vacCat.includes('it') || vacCat.includes('company'))) {
+          score = 15;
+        }
+
+        const matchPercentage = Math.min(99, Math.max(65, score));
+        return {
+          vacancy: vac,
+          score,
+          matchPercentage,
+          reasons: reasons.slice(0, 2),
+        };
+      })
+      .filter((item) => item.score >= 15)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+  }, [publishedVacancies, userProfile]);
 
   // Continuous 24/7 Search Bar Activity Tracking
   useEffect(() => {
@@ -659,8 +780,14 @@ export default function App() {
         }}
         onOpenDashboard={() => setIsJobSeekerDashboardOpen(true)}
         onSignOutUser={async () => {
-          await signOut(auth);
+          try {
+            await signOut(auth);
+          } catch {}
+          localStorage.removeItem('hopelandjobs_current_user');
+          setCurrentUser(null);
           setUserProfile(null);
+          setUserApplications([]);
+          setAnalyticsUserId(null);
         }}
         language={language}
         onToggleLanguage={() => setLanguage(language === 'en' ? 'am' : 'en')}
@@ -818,10 +945,10 @@ export default function App() {
                           </button>
                         )}
                         <a
-                          href="#vacancies-list"
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0"
+                          href={heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? '#search-results' : '#categories-section'}
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
                         >
-                          <span>View {filteredHomepageVacancies.length} Matching Jobs</span>
+                          <span>{heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? `View ${filteredHomepageVacancies.length} Matching Jobs` : 'Explore Job Categories'}</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </a>
                       </div>
@@ -894,123 +1021,22 @@ export default function App() {
               </div>
             </section>
 
-            {/* FEATURED VACANCIES SECTION */}
-            {featuredVacancies.length > 0 && (
-              <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-                <div className="flex items-end justify-between gap-4 mb-6">
+            {/* SEARCH RESULTS SECTION (Shown Only When Visitor Has an Active Search or Filter Query) */}
+            {(heroSearch.trim().length > 0 || heroLocation !== 'All' || heroSector !== 'All') && (
+              <section id="search-results" className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto animate-in fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
                   <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
-                      <span>Priority Opportunities</span>
+                      <Search className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Search Results</span>
                     </div>
                     <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                      Featured Vacancies in Ethiopia
+                      Matching Vacancies ({filteredHomepageVacancies.length})
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      High-impact listings from leading banks, embassies, and multinational organizations.
+                      Showing results for {heroSearch ? `"${heroSearch}"` : 'selected filters'} across Ethiopia.
                     </p>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {featuredVacancies.map((vac) => {
-                    const days = getDaysLeft(vac.applicationDeadline);
-                    const isSaved = savedJobIds.has(vac.id);
-                    return (
-                      <div
-                        key={vac.id}
-                        className="bg-white rounded-2xl p-5 border border-amber-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                                {vac.category}
-                              </span>
-                              <h3
-                                onClick={() => handleSelectVacancy(vac)}
-                                className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer mt-1.5 line-clamp-1"
-                              >
-                                {vac.title}
-                              </h3>
-                              <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1.5">
-                                <Building className="w-3.5 h-3.5 text-slate-400" />
-                                <span>{vac.organization}</span>
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => handleToggleSaveJob(vac.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors"
-                              title={isSaved ? 'Remove from saved' : 'Save vacancy'}
-                            >
-                              <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                            <span className="flex items-center gap-1 truncate">
-                              <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                              <span className="truncate">{vac.location}</span>
-                            </span>
-                            <span className="flex items-center gap-1 truncate">
-                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="truncate">{days.text}</span>
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2 mt-4">
-                          <span className="text-xs font-bold text-emerald-700 truncate max-w-[150px]">
-                            {vac.salary || 'Salary negotiable'}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleSelectVacancy(vac)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                            >
-                              Details
-                            </button>
-                            <button
-                              onClick={() => handleStartApply(vac)}
-                              className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors shadow-xs"
-                            >
-                              Apply Now
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* LATEST VACANCIES LIST & SEARCH RESULTS */}
-            <section id="vacancies-list" className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Live Job Directory</span>
-                  </div>
-                  <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                    {heroSearch || heroLocation !== 'All' || heroSector !== 'All'
-                      ? `Matching Vacancies (${filteredHomepageVacancies.length})`
-                      : `Latest Published Vacancies (${publishedVacancies.length})`}
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Click "Apply Now" to attach your CV and apply with verified Ethiopian records.
-                  </p>
-                </div>
-              </div>
-
-              {filteredHomepageVacancies.length === 0 ? (
-                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
-                  <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
-                  <h4 className="font-bold text-slate-800 text-sm">No vacancies match your search</h4>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Try clearing one or more filters, or view all vacancies by selecting "All" in the location and sector dropdowns.
-                  </p>
                   <button
                     onClick={() => {
                       setHeroSearch('');
@@ -1018,75 +1044,254 @@ export default function App() {
                       setHeroSector('All');
                       setHeroEmploymentType('All');
                     }}
-                    className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+                    className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-all self-start sm:self-auto cursor-pointer"
                   >
-                    Clear All Filters
+                    Clear Search
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredHomepageVacancies.slice(0, 12).map((vac) => {
-                    const days = getDaysLeft(vac.applicationDeadline);
-                    const isSaved = savedJobIds.has(vac.id);
-                    return (
-                      <div
-                        key={vac.id}
-                        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
-                      >
-                        <div className="space-y-2.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full truncate max-w-[200px]">
-                              {vac.category}
+
+                {filteredHomepageVacancies.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 space-y-3">
+                    <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
+                    <h4 className="font-bold text-slate-800 text-sm">No vacancies match this specific filter</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Try searching by category name, or browse one of the 16 official Ethiopian job categories below.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setHeroSearch('');
+                        setHeroLocation('All');
+                        setHeroSector('All');
+                        setHeroEmploymentType('All');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredHomepageVacancies.map((vac) => {
+                      const days = getDaysLeft(vac.applicationDeadline);
+                      const isSaved = savedJobIds.has(vac.id);
+                      return (
+                        <div
+                          key={vac.id}
+                          className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full truncate max-w-[200px]">
+                                {vac.category}
+                              </span>
+                              <button
+                                onClick={() => handleToggleSaveJob(vac.id)}
+                                className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                                title="Bookmark"
+                              >
+                                <Heart className={`w-3.5 h-3.5 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                              </button>
+                            </div>
+
+                            <h3
+                              onClick={() => handleSelectVacancy(vac)}
+                              className="font-bold text-sm text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1"
+                            >
+                              {vac.title}
+                            </h3>
+
+                            <p className="text-xs text-slate-600 font-semibold truncate flex items-center gap-1">
+                              <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{vac.organization}</span>
+                            </p>
+
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 pt-1">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-amber-500" />
+                                {vac.location}
+                              </span>
+                              <span>•</span>
+                              <span className="text-slate-600 font-medium">{vac.employmentType || 'Full-time'}</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {days.text}
                             </span>
                             <button
-                              onClick={() => handleToggleSaveJob(vac.id)}
-                              className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
-                              title="Bookmark"
+                              onClick={() => handleStartApply(vac)}
+                              className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white transition-colors cursor-pointer"
                             >
-                              <Heart className={`w-3.5 h-3.5 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                              Apply Now
                             </button>
                           </div>
-
-                          <h3
-                            onClick={() => handleSelectVacancy(vac)}
-                            className="font-bold text-sm text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1"
-                          >
-                            {vac.title}
-                          </h3>
-
-                          <p className="text-xs text-slate-600 font-semibold truncate flex items-center gap-1">
-                            <Building className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{vac.organization}</span>
-                          </p>
-
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 pt-1">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-amber-500" />
-                              {vac.location}
-                            </span>
-                            <span>•</span>
-                            <span className="text-slate-600 font-medium">{vac.employmentType || 'Full-time'}</span>
-                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
 
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
-                          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            {days.text}
-                          </span>
-                          <button
-                            onClick={() => handleStartApply(vac)}
-                            className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white transition-colors"
-                          >
-                            Apply Now
-                          </button>
-                        </div>
+            {/* PERSONALIZED RECOMMENDATIONS (Based on Candidate's Position & Experience) */}
+            {userProfile ? (
+              <section className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+                <div className="bg-gradient-to-br from-amber-500/10 via-white to-amber-500/5 rounded-3xl p-6 sm:p-8 border border-amber-200/90 shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-800 mb-1">
+                        <Sparkles className="w-4 h-4 text-amber-600 fill-current" />
+                        <span>Personalized Career Matches</span>
                       </div>
-                    );
-                  })}
+                      <h2 className="text-2xl sm:text-3xl font-black text-[#0B132B]">
+                        Recommended For You
+                      </h2>
+                      <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                        Tailored for <strong>{userProfile.fullName || 'You'}</strong> based on your desired position{' '}
+                        <strong className="text-amber-800">"{userProfile.desiredJobTitle || userProfile.preferredIndustry}"</strong> and{' '}
+                        <strong>{userProfile.yearsOfExperience}</strong> of professional experience.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsJobSeekerDashboardOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-900 font-bold text-xs shadow-xs transition-all self-start sm:self-auto shrink-0 cursor-pointer"
+                    >
+                      <span>Update Preferences</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-amber-600" />
+                    </button>
+                  </div>
+
+                  {recommendedVacancies.length === 0 ? (
+                    <div className="bg-white/80 backdrop-blur rounded-2xl p-8 text-center border border-amber-100 space-y-2">
+                      <Briefcase className="w-8 h-8 text-amber-400 mx-auto" />
+                      <p className="text-xs font-bold text-slate-800">
+                        Explore vacancies in your chosen sector below
+                      </p>
+                      <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                        We are continuously analyzing new Ethiopian announcements matching your background.
+                      </p>
+                      <button
+                        onClick={() => setIsJobSeekerDashboardOpen(true)}
+                        className="mt-2 px-4 py-2 bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                      >
+                        Refine Job Title & Skills
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {recommendedVacancies.map(({ vacancy: vac, matchPercentage, reasons }) => {
+                        const days = getDaysLeft(vac.applicationDeadline);
+                        const isSaved = savedJobIds.has(vac.id);
+                        return (
+                          <div
+                            key={vac.id}
+                            className="bg-white rounded-2xl p-5 border border-amber-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-black tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      {matchPercentage}% Match
+                                    </span>
+                                    {reasons.map((r, i) => (
+                                      <span
+                                        key={i}
+                                        className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"
+                                      >
+                                        {r}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <h3
+                                    onClick={() => handleSelectVacancy(vac)}
+                                    className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1 pt-1"
+                                  >
+                                    {vac.title}
+                                  </h3>
+                                  <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                    <Building className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>{vac.organization}</span>
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleToggleSaveJob(vac.id)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
+                                  title={isSaved ? 'Remove' : 'Save'}
+                                >
+                                  <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                <span className="flex items-center gap-1 truncate">
+                                  <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                  <span className="truncate">{vac.location}</span>
+                                </span>
+                                <span className="flex items-center gap-1 truncate">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">{days.text}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                              <span className="text-xs font-bold text-emerald-700 truncate max-w-[150px]">
+                                {vac.salary || 'Salary negotiable'}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleSelectVacancy(vac)}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                                >
+                                  Details
+                                </button>
+                                <button
+                                  onClick={() => handleStartApply(vac)}
+                                  className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors shadow-xs cursor-pointer"
+                                >
+                                  Apply Now
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </section>
+              </section>
+            ) : (
+              /* Logged-Out Recommendation Invitation Banner */
+              <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+                <div className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl border border-slate-800">
+                  <div className="space-y-2 max-w-2xl text-center md:text-left">
+                    <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-400">
+                      <Sparkles className="w-4 h-4 fill-current" />
+                      <span>Personalized Job Recommendations</span>
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-black text-white">
+                      Want Vacancies Recommended for Your Position & Experience?
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">
+                      Sign in with your Google account to receive custom-tailored Ethiopian job opportunities matched directly to your experience level and desired job title.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setUserAuthModalMode('signin');
+                      setIsUserAuthModalOpen(true);
+                    }}
+                    className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all shrink-0 flex items-center gap-2 cursor-pointer hover:scale-105"
+                  >
+                    <span>Sign In for Recommendations</span>
+                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                  </button>
+                </div>
+              </section>
+            )}
 
             {/* POPULAR EMPLOYERS SHOWCASE */}
             <section className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-y border-slate-200">
@@ -1110,7 +1315,7 @@ export default function App() {
                       key={emp.short}
                       onClick={() => {
                         setHeroSearch(emp.name);
-                        const el = document.getElementById('vacancies-list');
+                        const el = document.getElementById('search-results') || document.getElementById('categories-section');
                         el?.scrollIntoView({ behavior: 'smooth' });
                       }}
                       className="bg-white p-4 rounded-xl border border-slate-200/90 hover:border-amber-400 hover:shadow-sm transition-all cursor-pointer group text-center"

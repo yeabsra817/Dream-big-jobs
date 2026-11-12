@@ -171,9 +171,37 @@ export function getInternalTrafficExclusion(): boolean {
   return val === 'true';
 }
 
+export const DEFAULT_GA_MEASUREMENT_ID = 'G-KH6X73105S';
+
 // Initialize official GA4 script tag dynamically for continuous 24/7 tracking
 let isGaInitialized = false;
-let currentGaMeasurementId: string = '';
+let currentGaMeasurementId: string = DEFAULT_GA_MEASUREMENT_ID;
+
+// Track user ID across different Google accounts so each user is counted
+export function setAnalyticsUserId(userId: string | null) {
+  if (typeof window === 'undefined') return;
+  const gaId = currentGaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
+  if (typeof window.gtag === 'function') {
+    try {
+      if (userId) {
+        window.gtag('set', 'user_properties', {
+          user_id: userId,
+          account_linked: 1,
+        });
+        window.gtag('config', gaId, {
+          user_id: userId,
+        });
+      } else {
+        window.gtag('set', 'user_properties', {
+          user_id: null,
+          account_linked: 0,
+        });
+      }
+    } catch (e) {
+      console.warn('[Analytics] Failed to set user_id:', e);
+    }
+  }
+}
 
 export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean = false) {
   if (typeof window === 'undefined') return;
@@ -182,7 +210,7 @@ export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean
     measurementId ||
     (import.meta as any).env?.VITE_GA_MEASUREMENT_ID ||
     (window as any).__GA_MEASUREMENT_ID__ ||
-    '';
+    DEFAULT_GA_MEASUREMENT_ID;
 
   const cleanId = String(idToUse).trim().toUpperCase();
   if (!cleanId.startsWith('G-')) return;

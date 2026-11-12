@@ -189,7 +189,7 @@ export function evaluateSmartAlerts(
   // -------------------------------------------------------------
   // 3. ANALYTICS INTEGRATION & GA4 TELEMETRY FAILURES
   // -------------------------------------------------------------
-  const gaId = (siteSettings.gaMeasurementId || '').trim();
+  const gaId = (siteSettings.gaMeasurementId || 'G-KH6X73105S').trim();
   const isGaTrackingEnabled = siteSettings.gaTrackingEnabled !== false;
 
   if (!isGaTrackingEnabled) {

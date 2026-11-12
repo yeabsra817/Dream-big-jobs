@@ -12,6 +12,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Google tag (gtag.js) - Google Analytics 4 (Continuous 24/7 Active Measurement) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-KH6X73105S"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+      gtag('config', 'G-KH6X73105S', {
+        cookie_domain: 'auto',
+        cookie_flags: 'SameSite=None;Secure',
+        anonymize_ip: true
+      });
+      window.__GA_MEASUREMENT_ID__ = 'G-KH6X73105S';
+    </script>
+
+    <!-- Google Identity Services for one-tap and popups -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body class="bg-[#FBFBFA] text-[#0B132B] font-['Plus_Jakarta_Sans',sans-serif] antialiased min-h-screen selection:bg-amber-400 selection:text-slate-900">
     <div id="root"></div>
