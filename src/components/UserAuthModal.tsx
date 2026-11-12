@@ -51,6 +51,28 @@ export const UserAuthModal: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [directGoogleEmail, setDirectGoogleEmail] = useState('');
+  const [showDirectGoogle, setShowDirectGoogle] = useState(false);
+
+  // Synchronize internal mode with initialMode prop when modal is opened or mode switched
+  React.useEffect(() => {
+    setMode(initialMode);
+    setError(null);
+    setSuccessMsg(null);
+    setShowDirectGoogle(false);
+  }, [initialMode, isOpen]);
+
+  // Lock background scroll when modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -82,9 +104,6 @@ export const UserAuthModal: React.FC<Props> = ({
         return err?.message || 'Authentication error. Please try again.';
     }
   };
-
-  const [directGoogleEmail, setDirectGoogleEmail] = useState('');
-  const [showDirectGoogle, setShowDirectGoogle] = useState(false);
 
   // Direct Google Account Authentication via Server Backend
   const handleDirectGoogleLogin = async (overrideEmail?: string) => {
@@ -271,8 +290,16 @@ export const UserAuthModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden relative">
+    <div
+      className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-950/85 flex min-h-full items-center justify-center p-3 sm:p-6"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden relative my-auto animate-in fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header with Hopeland branding */}
         <div className="bg-[#0B132B] text-white p-6 relative">
           <button

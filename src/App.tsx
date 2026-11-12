@@ -944,13 +944,28 @@ export default function App() {
                             Reset
                           </button>
                         )}
-                        <a
-                          href={heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? '#search-results' : '#categories-section'}
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
-                        >
-                          <span>{heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? `View ${filteredHomepageVacancies.length} Matching Jobs` : 'Explore Job Categories'}</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </a>
+                        {heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? (
+                          <a
+                            href="#search-results"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
+                          >
+                            <span>View {filteredHomepageVacancies.length} Matching Jobs</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAllCategoriesView(true);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
+                          >
+                            <LayoutGrid className="w-3.5 h-3.5 text-slate-950" />
+                            <span>Browse Job Categories</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-950" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1293,100 +1308,32 @@ export default function App() {
               </section>
             )}
 
-            {/* POPULAR EMPLOYERS SHOWCASE */}
-            <section className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-y border-slate-200">
-              <div className="max-w-7xl mx-auto space-y-6">
-                <div className="text-center max-w-2xl mx-auto space-y-1.5">
-                  <div className="inline-flex items-center gap-1 text-xs font-extrabold uppercase tracking-wider text-amber-700">
-                    <Building className="w-3.5 h-3.5" />
-                    <span>Trusted Organizations</span>
-                  </div>
-                  <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                    Popular Employers in Ethiopia
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Explore verified announcements from top domestic banks, telecom leaders, and international development agencies.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {POPULAR_EMPLOYERS.map((emp) => (
-                    <div
-                      key={emp.short}
-                      onClick={() => {
-                        setHeroSearch(emp.name);
-                        const el = document.getElementById('search-results') || document.getElementById('categories-section');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="bg-white p-4 rounded-xl border border-slate-200/90 hover:border-amber-400 hover:shadow-sm transition-all cursor-pointer group text-center"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 font-black text-sm flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform">
-                        {emp.short.slice(0, 3)}
-                      </div>
-                      <h4 className="font-bold text-xs text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">
-                        {emp.name}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{emp.category}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            {/* EXPLORE JOB CATEGORIES SECTION (WITH VIEW ALL BUTTON) */}
-            <section id="categories-section" className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
+            {/* ETHIOPIAN JOB CATEGORIES DISCOVERY BANNER (Opens All Categories Directory) */}
+            <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700">
                     <Briefcase className="w-3.5 h-3.5" />
-                    <span>Categorized Sectors</span>
+                    <span>Official Ethiopian Sectors</span>
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B132B]">
-                    Explore Job Categories
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Browse active vacancies across Ethiopia's principal economic sectors.
+                  <h3 className="text-xl sm:text-2xl font-extrabold text-[#0B132B]">
+                    Browse All 16 Job Categories
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Explore vacancies across Banking, NGOs, Microfinance, IT, Healthcare, Engineering, and Diplomatic missions.
                   </p>
                 </div>
-
                 <button
+                  type="button"
                   onClick={() => {
                     setIsAllCategoriesView(true);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-sm shrink-0"
+                  className="px-6 py-3 rounded-2xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-sm shrink-0 flex items-center gap-2 cursor-pointer"
                 >
                   <LayoutGrid className="w-4 h-4 text-amber-400" />
                   <span>View All 16 Categories</span>
                   <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Top 8 Sector Preview Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {OFFICIAL_CATEGORIES.slice(0, 8).map((category) => {
-                  const count = activeCountMap.get(category.name) || 0;
-                  return (
-                    <CategoryCard
-                      key={category.id}
-                      category={category}
-                      activeCount={count}
-                      onSelect={(catName) => handleSelectCategoryByName(catName)}
-                      language={language}
-                    />
-                  );
-                })}
-              </div>
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={() => {
-                    setIsAllCategoriesView(true);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="inline-flex items-center gap-2 text-xs font-bold text-amber-700 hover:text-amber-800 underline"
-                >
-                  Looking for more sectors? Open the complete Ethiopian Job Categories Directory →
                 </button>
               </div>
             </section>
@@ -1475,59 +1422,6 @@ export default function App() {
                   >
                     Sign In
                   </button>
-                </div>
-              </div>
-            </section>
-
-            {/* POPULAR ETHIOPIAN LOCATIONS SECTION */}
-            <section id="locations-section" className="bg-slate-100/70 py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
-              <div className="max-w-7xl mx-auto space-y-6">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                  <div>
-                    <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 mb-1">
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>Nationwide Coverage</span>
-                    </div>
-                    <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                      Popular Ethiopian Job Locations
-                    </h2>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Explore vacancies in commercial hubs, regional capital cities, and nationwide projects.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {ETHIOPIAN_LOCATIONS.slice(0, 12).map((city) => {
-                    const countInCity = vacancies.filter(
-                      (v) =>
-                        v.status === 'published' &&
-                        v.location.toLowerCase().includes(city.toLowerCase().split(' ')[0])
-                    ).length;
-
-                    return (
-                      <div
-                        key={city}
-                        onClick={() => handleSelectLocation(city)}
-                        className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-sm transition-all cursor-pointer group"
-                        title={`Click to view all jobs in ${city}`}
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800 group-hover:text-amber-600 transition-colors line-clamp-1 flex items-center gap-1">
-                            <MapPin className="w-3 h-3 text-amber-500 shrink-0" />
-                            <span>{city}</span>
-                          </span>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                            countInCity > 0
-                              ? 'bg-amber-100 text-amber-900 font-black'
-                              : 'bg-slate-100 text-slate-400 font-medium'
-                          }`}>
-                            {countInCity}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </section>
@@ -1647,6 +1541,7 @@ export default function App() {
 
       {/* User Auth Modal (Sign In / Register / Google / Forgot Password) */}
       <UserAuthModal
+        key={`user-auth-${userAuthModalMode}-${isUserAuthModalOpen}`}
         isOpen={isUserAuthModalOpen}
         initialMode={userAuthModalMode}
         onClose={() => setIsUserAuthModalOpen(false)}
