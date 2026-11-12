@@ -71,7 +71,28 @@ export async function uploadDocumentToCloud(
       mimeType,
     };
   } catch (err: any) {
-    console.warn('Firebase Storage upload notice (falling back gracefully):', err);
+    console.warn('Firebase Storage direct upload notice, attempting backend upload fallback:', err);
+    try {
+      const formData = new FormData();
+      formData.append('file', file, fileName);
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          success: true,
+          downloadUrl: data.downloadUrl,
+          storagePath: data.downloadUrl,
+          fileSizeBytes: data.fileSizeBytes || file.size,
+          mimeType: data.mimeType || file.type || 'application/pdf',
+        };
+      }
+    } catch (fallbackErr) {
+      console.warn('Server upload fallback failed:', fallbackErr);
+    }
+
     return {
       success: false,
       downloadUrl: '',
@@ -125,7 +146,32 @@ export async function uploadBase64PdfToCloud(
       mimeType: 'application/pdf',
     };
   } catch (err: any) {
-    console.warn('Firebase Storage PDF upload notice:', err);
+    console.warn('Firebase Storage PDF upload notice, attempting backend fallback:', err);
+    try {
+      const approxBytes = Math.round((dataUriOrBase64.length * 3) / 4);
+      const res = await fetch('/api/storage/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName,
+          fileData: dataUriOrBase64,
+          fileType: 'application/pdf',
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          success: true,
+          downloadUrl: data.downloadUrl,
+          storagePath: data.downloadUrl,
+          fileSizeBytes: data.fileSizeBytes || approxBytes,
+          mimeType: 'application/pdf',
+        };
+      }
+    } catch (fallbackErr) {
+      console.warn('Server base64 upload fallback failed:', fallbackErr);
+    }
+
     return {
       success: false,
       downloadUrl: '',

@@ -17,6 +17,16 @@ import {
   Briefcase,
   AlertCircle,
   HelpCircle,
+  Filter,
+  Check,
+  Heart,
+  Clock,
+  Layers,
+  LayoutGrid,
+  ChevronRight,
+  Award,
+  Zap,
+  UserCheck,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -42,11 +52,13 @@ import {
   isUserAdmin,
   auth,
   ADMIN_EMAIL,
+  fetchJobSeekerProfile,
+  saveJobSeekerProfile,
+  fetchUserApplications,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { isExpired, SAMPLE_BULK_PASTE_DATA } from './utils/helpers';
+import { isExpired, getDaysLeft } from './utils/helpers';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
-import { broadcastJobToTelegram } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { CategoryView } from './components/CategoryView';
@@ -55,11 +67,27 @@ import { SavedJobsDrawer } from './components/SavedJobsDrawer';
 import { VacancyDetailModal } from './components/VacancyDetailModal';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AdminAuthModal } from './components/admin/AdminAuthModal';
+import { UserAuthModal } from './components/UserAuthModal';
+import { JobApplicationModal } from './components/JobApplicationModal';
+import { JobSeekerDashboard } from './components/JobSeekerDashboard';
+import { AllCategoriesView } from './components/AllCategoriesView';
 import { Footer } from './components/Footer';
 import { initGoogleAnalytics4, trackAnalyticsEvent } from './lib/analyticsTracker';
+import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
+
+const POPULAR_EMPLOYERS = [
+  { name: 'Commercial Bank of Ethiopia', short: 'CBE', category: 'Commercial Banking & Microfinance', vacancies: 'Official' },
+  { name: 'Awash Bank', short: 'Awash', category: 'Commercial Banking & Microfinance', vacancies: 'Verified' },
+  { name: 'Ethiopian Airlines', short: 'ET Air', category: 'Aviation, Logistics & Freight', vacancies: 'Direct' },
+  { name: 'Safaricom Ethiopia', short: 'Safaricom', category: 'IT, Software & Telecommunications', vacancies: 'Official' },
+  { name: 'UNICEF Ethiopia', short: 'UNICEF', category: 'NGO, UN & Civil Society', vacancies: 'UN Agency' },
+  { name: 'MSF (Doctors Without Borders)', short: 'MSF', category: 'Health, Medical & Pharmaceuticals', vacancies: 'Medical' },
+  { name: 'Ethio Telecom', short: 'EthioTel', category: 'IT, Software & Telecommunications', vacancies: 'Telecom' },
+  { name: 'Dashen Bank', short: 'Dashen', category: 'Commercial Banking & Microfinance', vacancies: 'Private' },
+];
 
 export default function App() {
-  // State
+  // Database State
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({
     telegramChannelName: '@DreamBigJobsEthiopia',
@@ -82,10 +110,22 @@ export default function App() {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(null);
   const [isAdminView, setIsAdminView] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
+
+  // Auth States
+  const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
+  const [isUserAuthModalOpen, setIsUserAuthModalOpen] = useState(false);
+  const [userAuthModalMode, setUserAuthModalMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<JobSeekerProfile | null>(null);
   const [isOwnerAuthorized, setIsOwnerAuthorized] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+
+  // Job Seeker Dashboard & Application Modal States
+  const [isJobSeekerDashboardOpen, setIsJobSeekerDashboardOpen] = useState(false);
+  const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
+  const [applyTargetVacancy, setApplyTargetVacancy] = useState<Vacancy | null>(null);
+  const [userApplications, setUserApplications] = useState<UserJobApplication[]>([]);
 
   // Saved Jobs Bookmarking State
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(() => {
@@ -98,9 +138,11 @@ export default function App() {
   });
   const [isSavedDrawerOpen, setIsSavedDrawerOpen] = useState(false);
 
-  // Search in Hero
+  // Search & Filter in Hero
   const [heroSearch, setHeroSearch] = useState('');
   const [heroLocation, setHeroLocation] = useState('All');
+  const [heroSector, setHeroSector] = useState('All');
+  const [heroEmploymentType, setHeroEmploymentType] = useState('All');
 
   // Language
   const [language, setLanguage] = useState<'en' | 'am'>('en');
@@ -163,11 +205,42 @@ export default function App() {
     loadData();
 
     // Firebase Auth Listener
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      if (user && isUserAdmin(user)) {
-        setIsOwnerAuthorized(true);
-        setAdminEmail(user.email);
+      if (user) {
+        if (isUserAdmin(user)) {
+          setIsOwnerAuthorized(true);
+          setAdminEmail(user.email);
+        }
+        // Load Job Seeker Profile & Applications
+        try {
+          const [profile, apps] = await Promise.all([
+            fetchJobSeekerProfile(user.uid),
+            fetchUserApplications(user.uid),
+          ]);
+          setUserApplications(apps);
+          if (profile) {
+            setUserProfile(profile);
+          } else {
+            // Create default profile on first sign-in
+            const newProfile: JobSeekerProfile = {
+              ...DEFAULT_JOB_SEEKER_PROFILE,
+              uid: user.uid,
+              fullName: user.displayName || user.email?.split('@')[0] || 'Job Seeker',
+              email: user.email || '',
+              photoUrl: user.photoURL || undefined,
+              authProvider: user.providerData?.[0]?.providerId?.includes('google') ? 'google' : 'email',
+              emailVerified: user.emailVerified,
+            };
+            await saveJobSeekerProfile(newProfile);
+            setUserProfile(newProfile);
+          }
+        } catch (e) {
+          console.warn('Profile sync notice:', e);
+        }
+      } else {
+        setUserProfile(null);
+        setUserApplications([]);
       }
     });
 
@@ -262,23 +335,46 @@ export default function App() {
     return map;
   }, [vacancies]);
 
-  // Filter categories by hero search
-  const filteredCategories = useMemo(() => {
-    if (!heroSearch.trim()) return OFFICIAL_CATEGORIES;
-    const query = heroSearch.toLowerCase().trim();
-    return OFFICIAL_CATEGORIES.filter(
-      (c) =>
-        c.name.toLowerCase().includes(query) ||
-        c.amharicName.toLowerCase().includes(query) ||
-        c.description.toLowerCase().includes(query) ||
-        c.featuredEmployers.some((e) => e.toLowerCase().includes(query))
-    );
-  }, [heroSearch]);
-
   // Total active vacancies count across all sectors
   const totalActiveVacancies = useMemo(() => {
     return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline)).length;
   }, [vacancies]);
+
+  // Active published vacancies list
+  const publishedVacancies = useMemo(() => {
+    return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline));
+  }, [vacancies]);
+
+  // Filtered vacancies for the homepage list
+  const filteredHomepageVacancies = useMemo(() => {
+    return publishedVacancies.filter((v) => {
+      const q = heroSearch.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        v.title.toLowerCase().includes(q) ||
+        v.organization.toLowerCase().includes(q) ||
+        v.category.toLowerCase().includes(q) ||
+        v.location.toLowerCase().includes(q) ||
+        (v.requiredSkills && v.requiredSkills.some((s) => s.toLowerCase().includes(q)));
+
+      const matchesLocation =
+        heroLocation === 'All' ||
+        v.location.toLowerCase().includes(heroLocation.toLowerCase().split(' ')[0]);
+
+      const matchesSector = heroSector === 'All' || v.category === heroSector;
+
+      const matchesType =
+        heroEmploymentType === 'All' ||
+        (v.employmentType && v.employmentType.toLowerCase().includes(heroEmploymentType.toLowerCase()));
+
+      return matchesSearch && matchesLocation && matchesSector && matchesType;
+    });
+  }, [publishedVacancies, heroSearch, heroLocation, heroSector, heroEmploymentType]);
+
+  // Featured vacancies (top 4 priority or latest)
+  const featuredVacancies = useMemo(() => {
+    return publishedVacancies.slice(0, 4);
+  }, [publishedVacancies]);
 
   // Continuous 24/7 Search Bar Activity Tracking
   useEffect(() => {
@@ -286,174 +382,70 @@ export default function App() {
     if (!q || q.length < 2) return;
 
     const timer = setTimeout(() => {
-      const matches = filteredCategories.length;
+      const matches = filteredHomepageVacancies.length;
       trackAnalyticsEvent('search', {
         searchTerm: q,
         resultsCount: matches,
         hasResults: matches > 0,
-        category: 'All',
+        category: heroSector,
         path: `/?search=${encodeURIComponent(q)}`,
         gaMeasurementId: siteSettings.gaMeasurementId,
       });
-
-      if (matches === 0) {
-        trackAnalyticsEvent('search_no_results', {
-          searchTerm: q,
-          path: `/?search=${encodeURIComponent(q)}`,
-          gaMeasurementId: siteSettings.gaMeasurementId,
-        });
-      } else {
-        trackAnalyticsEvent('view_search_results', {
-          searchTerm: q,
-          resultsCount: matches,
-          path: `/?search=${encodeURIComponent(q)}`,
-          gaMeasurementId: siteSettings.gaMeasurementId,
-        });
-      }
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [heroSearch, filteredCategories.length, siteSettings.gaMeasurementId]);
+  }, [heroSearch, filteredHomepageVacancies.length, heroSector, siteSettings.gaMeasurementId]);
 
   // Permanent URL and Direct Vacancy Selection
   const handleSelectVacancy = (v: Vacancy) => {
     setSelectedVacancy(v);
     if (typeof window !== 'undefined') {
-      const newUrl = `/?jobId=${encodeURIComponent(v.id)}`;
-      window.history.pushState({ jobId: v.id }, '', newUrl);
+      const newUrl = `${window.location.origin}/?jobId=${v.id}`;
+      window.history.pushState({ jobId: v.id }, `${v.title} | HOPELAND JOBS`, newUrl);
       document.title = `${v.title} at ${v.organization} | HOPELAND JOBS`;
     }
-    trackAnalyticsEvent('vacancy_view', {
-      jobId: v.id,
-      jobTitle: v.title,
-      organization: v.organization,
-      category: v.category,
-      path: `/?jobId=${v.id}`,
-      gaMeasurementId: siteSettings.gaMeasurementId,
-    });
-    trackAnalyticsEvent('page_view', {
-      path: `/?jobId=${v.id}`,
-      title: `${v.title} at ${v.organization} | HOPELAND JOBS`,
-      gaMeasurementId: siteSettings.gaMeasurementId,
-    });
   };
 
   const handleCloseVacancy = () => {
     setSelectedVacancy(null);
     if (typeof window !== 'undefined') {
-      const cleanPath = window.location.pathname.startsWith('/jobs') ? '/' : window.location.pathname;
-      window.history.replaceState({}, '', cleanPath);
+      window.history.pushState({}, 'HOPELAND JOBS', window.location.pathname);
       document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
     }
-    trackAnalyticsEvent('page_view', {
-      path: '/',
-      title: 'HOPELAND JOBS - Homepage',
-      gaMeasurementId: siteSettings.gaMeasurementId,
-    });
   };
 
-  // Handlers for Admin Operations
-  const handleSaveVacancy = async (v: Vacancy) => {
-    let finalVacancy = { ...v };
-
-    // Auto-broadcast to Telegram channel if published and enabled
-    if (v.status === 'published' && siteSettings.telegramAutoPublish && !v.telegramPublished) {
-      try {
-        const tgRes = await broadcastJobToTelegram(
-          v,
-          siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          siteSettings.telegramBotToken,
-          false,
-          siteSettings.customDomain
-        );
-        if (tgRes.success) {
-          finalVacancy.telegramPublished = true;
-          finalVacancy.telegramMessageId = tgRes.telegramMessageId;
-          finalVacancy.telegramPublishedAt = tgRes.telegramPublishedAt;
-          finalVacancy.telegramPublishError = '';
-        } else if (tgRes.error) {
-          finalVacancy.telegramPublishError = tgRes.error;
-        }
-      } catch (err: any) {
-        console.warn('Auto Telegram publish failed:', err);
-      }
-    }
-
-    // 1. Update React state immediately
-    setVacancies((prev) => {
-      const idx = prev.findIndex((item) => item.id === finalVacancy.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = finalVacancy;
-        return next;
-      }
-      return [finalVacancy, ...prev];
-    });
-
-    // 2. Persist to storage safely
-    try {
-      await saveVacancy(finalVacancy);
-    } catch (err) {
-      console.warn('Save vacancy persistence note:', err);
-    }
-  };
-
-  const handleBatchSaveVacancies = async (newVacancies: Vacancy[]) => {
-    // 1. Immediately update React state so the UI reflects changes without waiting for network
-    setVacancies((prev) => {
-      const updateMap = new Map<string, Vacancy>();
-      prev.forEach((v) => updateMap.set(v.id, v));
-      newVacancies.forEach((nv) => updateMap.set(nv.id, nv));
-      return Array.from(updateMap.values());
-    });
-
-    // 2. Persist to storage safely
-    try {
-      await saveBatchVacancies(newVacancies);
-    } catch (err) {
-      console.warn('Batch vacancy persistence note:', err);
-    }
-  };
-
-  const handleDeleteVacancy = async (id: string) => {
-    await deleteVacancy(id);
-    setVacancies((prev) => prev.filter((v) => v.id !== id));
-  };
-
-  const handleBatchDeleteVacancies = async (ids: string[]) => {
-    await deleteBatchVacancies(ids);
-    const idSet = new Set(ids);
-    setVacancies((prev) => prev.filter((v) => !idSet.has(v.id)));
-  };
-
-  const handleSelectLocation = (city: string) => {
-    setSelectedLocation(city);
+  // Dedicated Location Selection
+  const handleSelectLocation = (loc: string) => {
+    setSelectedLocation(loc);
     setSelectedCategory(null);
+    setIsAllCategoriesView(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleToggleSaveJob = (jobId: string) => {
+  // Bookmarking / Saved Jobs
+  const handleToggleSaveJob = (id: string) => {
     setSavedJobIds((prev) => {
       const next = new Set(prev);
-      if (next.has(jobId)) {
-        next.delete(jobId);
-      } else {
-        next.add(jobId);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       try {
         localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(Array.from(next)));
-      } catch {}
+      } catch (e) {
+        console.warn('Local storage error:', e);
+      }
       return next;
     });
   };
 
-  const handleRemoveSavedJob = (jobId: string) => {
+  const handleRemoveSavedJob = (id: string) => {
     setSavedJobIds((prev) => {
       const next = new Set(prev);
-      next.delete(jobId);
+      next.delete(id);
       try {
         localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(Array.from(next)));
-      } catch {}
+      } catch (e) {
+        console.warn('Local storage error:', e);
+      }
       return next;
     });
   };
@@ -462,50 +454,62 @@ export default function App() {
     setSavedJobIds(new Set());
     try {
       localStorage.removeItem('dreambigjobs_saved_jobs');
-    } catch {}
+    } catch (e) {
+      console.warn('Local storage error:', e);
+    }
+  };
+
+  // Application Trigger
+  const handleStartApply = (vac: Vacancy) => {
+    setApplyTargetVacancy(vac);
+    setIsApplicationModalOpen(true);
+  };
+
+  // Admin Actions
+  const handleSaveVacancy = async (updated: Vacancy) => {
+    setVacancies((prev) => {
+      const exists = prev.some((v) => v.id === updated.id);
+      if (exists) return prev.map((v) => (v.id === updated.id ? updated : v));
+      return [updated, ...prev];
+    });
+    await saveVacancy(updated);
+  };
+
+  const handleBatchSaveVacancies = async (newVacancies: Vacancy[]) => {
+    setVacancies((prev) => {
+      const map = new Map(prev.map((v) => [v.id, v]));
+      newVacancies.forEach((v) => map.set(v.id, v));
+      return Array.from(map.values());
+    });
+    await saveBatchVacancies(newVacancies);
+  };
+
+  const handleDeleteVacancy = async (id: string) => {
+    setVacancies((prev) => prev.filter((v) => v.id !== id));
+    await deleteVacancy(id);
+  };
+
+  const handleBatchDeleteVacancies = async (ids: string[]) => {
+    setVacancies((prev) => prev.filter((v) => !ids.includes(v.id)));
+    await deleteBatchVacancies(ids);
   };
 
   const handleUpdateVacancyStatus = async (
     id: string,
     status: Vacancy['status'],
-    newDeadline?: string
+    deadline?: string
   ) => {
     const target = vacancies.find((v) => v.id === id);
     if (!target) return;
-    let updated: Vacancy = {
+
+    const updated: Vacancy = {
       ...target,
       status,
-      applicationDeadline: newDeadline || target.applicationDeadline,
+      applicationDeadline: deadline || target.applicationDeadline,
       updatedAt: new Date().toISOString(),
     };
 
-    // Auto-broadcast to Telegram if transitioning to published
-    if (status === 'published' && siteSettings.telegramAutoPublish && !updated.telegramPublished) {
-      try {
-        const tgRes = await broadcastJobToTelegram(
-          updated,
-          siteSettings.telegramChannelName || '@DreamBigJobsEthiopia',
-          siteSettings.telegramBotToken,
-          false,
-          siteSettings.customDomain
-        );
-        if (tgRes.success) {
-          updated.telegramPublished = true;
-          updated.telegramMessageId = tgRes.telegramMessageId;
-          updated.telegramPublishedAt = tgRes.telegramPublishedAt;
-          updated.telegramPublishError = undefined;
-        } else if (tgRes.error) {
-          updated.telegramPublishError = tgRes.error;
-        }
-      } catch (err: any) {
-        console.warn('Auto Telegram publish error on status change:', err);
-      }
-    }
-
-    // 1. Immediately update React state
     setVacancies((prev) => prev.map((v) => (v.id === id ? updated : v)));
-
-    // 2. Persist safely
     try {
       await saveVacancy(updated);
     } catch (err) {
@@ -531,7 +535,6 @@ export default function App() {
   };
 
   const handleRestoreDuplicate = async (report: DuplicateReportItem) => {
-    // Restore as a valid vacancy in draft / pending review
     const restoredVacancy: Vacancy = {
       id: `restored_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       title: report.candidateTitle,
@@ -539,11 +542,11 @@ export default function App() {
       category: report.candidateData.category || 'Private Companies',
       location: report.candidateData.location || 'Addis Ababa',
       employmentType: report.candidateData.employmentType || 'Full-time',
-      vacanciesCount: report.candidateData.vacanciesCount || 'Not specified in the original vacancy',
-      salary: report.candidateData.salary || 'Not specified in the original vacancy',
-      educationQualification: report.candidateData.educationQualification || 'Not specified in the original vacancy',
-      requiredFieldOfStudy: report.candidateData.requiredFieldOfStudy || 'Not specified in the original vacancy',
-      experienceYears: report.candidateData.experienceYears || 'Not specified in the original vacancy',
+      vacanciesCount: report.candidateData.vacanciesCount || 'Not specified',
+      salary: report.candidateData.salary || 'Not specified',
+      educationQualification: report.candidateData.educationQualification || 'Not specified',
+      requiredFieldOfStudy: report.candidateData.requiredFieldOfStudy || 'Not specified',
+      experienceYears: report.candidateData.experienceYears || 'Not specified',
       requiredSkills: report.candidateData.requiredSkills || [],
       description: report.candidateData.description || 'Restored duplicate entry.',
       responsibilities: report.candidateData.responsibilities || [],
@@ -553,7 +556,7 @@ export default function App() {
       applicationEmail: report.candidateData.applicationEmail || '',
       applicationInstructions: report.candidateData.applicationInstructions || 'Apply directly.',
       applicationDeadline: report.candidateData.applicationDeadline || '2026-11-30',
-      contactInfo: report.candidateData.contactInfo || 'Not specified in the original vacancy',
+      contactInfo: report.candidateData.contactInfo || 'Not specified',
       status: 'pending_review',
       viewsCount: 0,
       sharesCount: 0,
@@ -565,7 +568,6 @@ export default function App() {
     await updateDuplicateReportStatus(report.id, 'restored');
     setVacancies((prev) => [restoredVacancy, ...prev]);
     setDuplicateReports((prev) => prev.filter((r) => r.id !== report.id));
-    alert(`Successfully restored "${restoredVacancy.title}" to the Vacancy Review queue!`);
   };
 
   const handleRestoreFullBackup = async (data: {
@@ -584,6 +586,7 @@ export default function App() {
     const meta = OFFICIAL_CATEGORIES.find((c) => c.name === categoryName);
     if (meta) {
       setSelectedCategory(meta);
+      setIsAllCategoriesView(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -623,12 +626,22 @@ export default function App() {
         siteSettings={siteSettings}
         isAdmin={isOwnerAuthorized}
         adminEmail={adminEmail}
+        userProfile={userProfile}
+        currentUserEmail={currentUser?.email}
         onOpenAdmin={() => {
           if (isOwnerAuthorized) setIsAdminView(true);
-          else setIsAuthModalOpen(true);
+          else setIsAdminAuthModalOpen(true);
         }}
         onSelectCategory={handleSelectCategoryByName}
         onHomeClick={() => {
+          setSelectedCategory(null);
+          setSelectedLocation(null);
+          setIsAllCategoriesView(false);
+          setIsJobSeekerDashboardOpen(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onOpenAllCategories={() => {
+          setIsAllCategoriesView(true);
           setSelectedCategory(null);
           setSelectedLocation(null);
           window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -640,14 +653,35 @@ export default function App() {
           const el = document.getElementById('cv-assistance-section');
           if (el) el.scrollIntoView({ behavior: 'smooth' });
         }}
+        onOpenAuth={(mode) => {
+          setUserAuthModalMode(mode);
+          setIsUserAuthModalOpen(true);
+        }}
+        onOpenDashboard={() => setIsJobSeekerDashboardOpen(true)}
+        onSignOutUser={async () => {
+          await signOut(auth);
+          setUserProfile(null);
+        }}
         language={language}
         onToggleLanguage={() => setLanguage(language === 'en' ? 'am' : 'en')}
       />
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {selectedLocation ? (
-          /* DEDICATED LOCATION VACANCY PAGE (Shows jobs when user clicks job by location) */
+        {isAllCategoriesView ? (
+          /* DEDICATED FULL CATEGORIES DIRECTORY */
+          <AllCategoriesView
+            categories={OFFICIAL_CATEGORIES}
+            vacancies={vacancies}
+            onBack={() => setIsAllCategoriesView(false)}
+            onSelectCategory={(cat) => {
+              setIsAllCategoriesView(false);
+              setSelectedCategory(cat);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        ) : selectedLocation ? (
+          /* DEDICATED LOCATION VACANCY PAGE */
           <LocationJobsView
             initialLocation={selectedLocation}
             vacancies={vacancies}
@@ -676,147 +710,175 @@ export default function App() {
             telegramUrl={siteSettings.telegramChannelUrl}
           />
         ) : (
-          /* HOMEPAGE (Displays Job Categories, Search, Key Stats, Locations, About) */
+          /* HOMEPAGE */
           <>
             {/* HERO SECTION */}
-            <section className="relative bg-[#0B132B] text-white overflow-hidden py-16 sm:py-24 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
-              {/* Background radial glow */}
+            <section className="relative bg-[#0B132B] text-white overflow-hidden py-14 sm:py-20 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-amber-500/10 blur-[120px] rounded-full pointer-events-none" />
 
-              <div className="relative max-w-7xl mx-auto text-center space-y-6">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-800/90 text-amber-400 text-xs font-bold border border-slate-700/80 shadow-sm animate-in fade-in">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <div className="relative max-w-6xl mx-auto text-center space-y-6">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 text-amber-400 text-xs font-bold border border-slate-700/80 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                   <span>100% Verified Ethiopian Career Opportunities</span>
                 </div>
 
                 <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
                   HOPELAND <span className="text-amber-400">JOBS</span>
-                  <span className="block text-xl sm:text-2xl lg:text-3xl font-medium text-slate-300 mt-3">
+                  <span className="block text-lg sm:text-2xl font-medium text-slate-300 mt-2.5">
                     Hopeland Jobs. Find Your Opportunity.
                   </span>
                 </h1>
 
                 <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed">
-                  Your trusted destination for banking, embassy, NGO, hospitality, tourism, and corporate career opportunities across Addis Ababa and all Ethiopian regions.
+                  Your trusted destination for banking, embassy, NGO, hospitality, corporate, and international career opportunities across Addis Ababa and all Ethiopian regions.
                 </p>
 
-                {/* Hero Search Box */}
-                <div className="max-w-3xl mx-auto pt-4">
-                  <div className="bg-white rounded-2xl p-2.5 sm:p-3 shadow-2xl border border-slate-200/90 flex flex-col sm:flex-row items-center gap-2 text-slate-900">
-                    <div className="relative flex-1 w-full">
-                      <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        value={heroSearch}
-                        onChange={(e) => setHeroSearch(e.target.value)}
-                        placeholder="Search category, bank, NGO, or role..."
-                        className="w-full pl-11 pr-4 py-3 rounded-xl text-sm outline-none font-medium placeholder:text-slate-400"
-                      />
+                {/* Comprehensive Multi-Field Search Form */}
+                <div className="max-w-4xl mx-auto pt-2">
+                  <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-2xl border border-slate-200/90 text-slate-900 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                      {/* Keyword search input */}
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={heroSearch}
+                          onChange={(e) => setHeroSearch(e.target.value)}
+                          placeholder="Job title, skills, or company..."
+                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                        />
+                      </div>
+
+                      {/* Location Filter */}
+                      <div className="relative">
+                        <MapPin className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <select
+                          value={heroLocation}
+                          onChange={(e) => setHeroLocation(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium bg-white text-slate-700 focus:ring-2 focus:ring-amber-400"
+                        >
+                          <option value="All">All Locations (Ethiopia & Remote)</option>
+                          {ETHIOPIAN_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Sector Filter */}
+                      <div className="relative">
+                        <Briefcase className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <select
+                          value={heroSector}
+                          onChange={(e) => setHeroSector(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium bg-white text-slate-700 focus:ring-2 focus:ring-amber-400"
+                        >
+                          <option value="All">All Professional Sectors</option>
+                          {OFFICIAL_CATEGORIES.map((cat) => (
+                            <option key={cat.id} value={cat.name}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
-                    <a
-                      href="#categories-section"
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm transition-all shadow-md shrink-0"
-                    >
-                      <span>Explore Categories</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </a>
-                  </div>
+                    {/* Secondary filters row */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                        <span className="text-slate-500 font-semibold shrink-0">Type:</span>
+                        {['All', 'Full-time', 'Contract', 'Remote', 'Internship'].map((tp) => (
+                          <button
+                            key={tp}
+                            onClick={() => setHeroEmploymentType(tp)}
+                            className={`px-2.5 py-1 rounded-lg font-semibold transition-colors shrink-0 ${
+                              heroEmploymentType === tp
+                                ? 'bg-amber-400 text-slate-950 font-bold'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {tp}
+                          </button>
+                        ))}
+                      </div>
 
-                  {/* Quick sector tags */}
-                  <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs text-slate-400">
-                    <span>Popular Sectors:</span>
-                    {['Banking', 'NGO & UN', 'Embassies', 'Hotels', 'IT & Telecom'].map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          setHeroSearch(tag);
-                          const el = document.getElementById('categories-section');
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-medium transition-colors"
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Smart Quick Cities Row */}
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 text-xs">
-                    <span className="text-amber-400 font-bold flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>Jobs by Location:</span>
-                    </span>
-                    {['Addis Ababa', 'Hawassa', 'Adama', 'Dire Dawa', 'Bahir Dar', 'Mekelle'].map((city) => (
-                      <button
-                        key={city}
-                        onClick={() => handleSelectLocation(city)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-amber-400 hover:text-slate-950 text-slate-300 font-semibold transition-all border border-slate-700/60"
-                      >
-                        {city}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => handleSelectLocation('All')}
-                      className="px-2.5 py-1 rounded-lg bg-amber-400/20 text-amber-300 hover:bg-amber-400 hover:text-slate-950 font-extrabold transition-all border border-amber-400/40"
-                    >
-                      All Cities →
-                    </button>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        {(heroSearch || heroLocation !== 'All' || heroSector !== 'All' || heroEmploymentType !== 'All') && (
+                          <button
+                            onClick={() => {
+                              setHeroSearch('');
+                              setHeroLocation('All');
+                              setHeroSector('All');
+                              setHeroEmploymentType('All');
+                            }}
+                            className="text-xs text-slate-500 hover:text-slate-800 underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                        <a
+                          href="#vacancies-list"
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0"
+                        >
+                          <span>View {filteredHomepageVacancies.length} Matching Jobs</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Live Statistics Banner */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8 border-t border-slate-800/80 text-left">
-                  <div className="bg-slate-900/60 backdrop-blur p-4 rounded-2xl border border-slate-800">
-                    <div className="text-2xl sm:text-3xl font-black text-amber-400">
-                      {totalActiveVacancies}
-                    </div>
+                {/* Statistics Row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto pt-6 text-left">
+                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-2xl font-black text-amber-400">{totalActiveVacancies}</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Active Vacancies
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">Real database count</div>
+                    <div className="text-[10px] text-slate-500">Live verified database</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-4 rounded-2xl border border-slate-800">
-                    <div className="text-2xl sm:text-3xl font-black text-white">16</div>
+                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-2xl font-black text-white">16</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Job Sectors
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">Banking to Diplomatic</div>
+                    <div className="text-[10px] text-slate-500">Banking to Embassy</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-4 rounded-2xl border border-slate-800">
-                    <div className="text-2xl sm:text-3xl font-black text-white">25+</div>
+                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-2xl font-black text-white">25+</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Ethiopian Cities
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">Addis & All Regions</div>
+                    <div className="text-[10px] text-slate-500">Addis & All Regions</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-4 rounded-2xl border border-slate-800">
-                    <div className="text-2xl sm:text-3xl font-black text-emerald-400">100%</div>
+                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                    <div className="text-2xl font-black text-emerald-400">100%</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                      Admin Verified
+                      Verified Jobs
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">Zero fake vacancies</div>
+                    <div className="text-[10px] text-slate-500">Zero fake listings</div>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* TELEGRAM COMMUNITY STRIP */}
-            <section className="bg-gradient-to-r from-[#229ED9] via-[#1E88E5] to-[#0288D1] text-white py-5 px-4 sm:px-6 shadow-inner">
-              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 shadow-sm">
-                    <Send className="w-6 h-6 fill-white" />
+            {/* TELEGRAM CHANNEL STRIP */}
+            <section className="bg-gradient-to-r from-[#229ED9] via-[#1E88E5] to-[#0288D1] text-white py-4 px-4 sm:px-6 shadow-inner">
+              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                    <Send className="w-5 h-5 fill-white" />
                   </div>
                   <div>
-                    <h3 className="text-sm sm:text-base font-extrabold tracking-tight">
-                      Never Miss a Job Opportunity! Get Ethiopian Vacancies on Telegram
+                    <h3 className="text-sm font-extrabold tracking-tight">
+                      Instant Vacancy Alerts on Telegram
                     </h3>
                     <p className="text-xs text-white/90 font-medium">
-                      Join <strong className="text-white underline">@DreamBigJobsEthiopia</strong> for verified banking, embassy, NGO, and corporate vacancy broadcasts.
+                      Join <strong className="text-white underline">@DreamBigJobsEthiopia</strong> for real-time announcements.
                     </p>
                   </div>
                 </div>
@@ -824,34 +886,280 @@ export default function App() {
                   href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia'}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => trackAnalyticsEvent('click_telegram_link', { channel: siteSettings.telegramChannelName || '@DreamBigJobsEthiopia' })}
-                  aria-label="Join Our Telegram Channel @DreamBigJobsEthiopia"
-                  className="px-6 py-3 rounded-xl bg-white text-[#1976D2] hover:bg-slate-50 font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-cyan-900/20 transition-all transform hover:scale-105 shrink-0 flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-white text-[#1976D2] hover:bg-slate-50 font-black text-xs uppercase tracking-wider shadow-md transition-all shrink-0 flex items-center gap-2 cursor-pointer"
                 >
-                  <Send className="w-4 h-4 fill-[#1976D2]" />
+                  <Send className="w-3.5 h-3.5 fill-[#1976D2]" />
                   <span>Join Our Telegram Channel</span>
                 </a>
               </div>
             </section>
 
-            {/* JOB CATEGORIES SECTION (THE CORE REQUIREMENT) */}
-            <section id="categories-section" className="py-16 sm:py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="text-center max-w-3xl mx-auto mb-12 space-y-3">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900">
-                  <Briefcase className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Explore by Professional Sector</span>
+            {/* FEATURED VACANCIES SECTION */}
+            {featuredVacancies.length > 0 && (
+              <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+                <div className="flex items-end justify-between gap-4 mb-6">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
+                      <span>Priority Opportunities</span>
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-[#0B132B]">
+                      Featured Vacancies in Ethiopia
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      High-impact listings from leading banks, embassies, and multinational organizations.
+                    </p>
+                  </div>
                 </div>
-                <h2 className="text-2xl sm:text-4xl font-extrabold text-[#0B132B]">
-                  Official Ethiopian Job Categories
-                </h2>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Click on any category to view all active, verified vacancies in that sector. Vacancy numbers reflect real published announcements in our database.
-                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {featuredVacancies.map((vac) => {
+                    const days = getDaysLeft(vac.applicationDeadline);
+                    const isSaved = savedJobIds.has(vac.id);
+                    return (
+                      <div
+                        key={vac.id}
+                        className="bg-white rounded-2xl p-5 border border-amber-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                                {vac.category}
+                              </span>
+                              <h3
+                                onClick={() => handleSelectVacancy(vac)}
+                                className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer mt-1.5 line-clamp-1"
+                              >
+                                {vac.title}
+                              </h3>
+                              <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1.5">
+                                <Building className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{vac.organization}</span>
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleToggleSaveJob(vac.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors"
+                              title={isSaved ? 'Remove from saved' : 'Save vacancy'}
+                            >
+                              <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <span className="flex items-center gap-1 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                              <span className="truncate">{vac.location}</span>
+                            </span>
+                            <span className="flex items-center gap-1 truncate">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{days.text}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2 mt-4">
+                          <span className="text-xs font-bold text-emerald-700 truncate max-w-[150px]">
+                            {vac.salary || 'Salary negotiable'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSelectVacancy(vac)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                            >
+                              Details
+                            </button>
+                            <button
+                              onClick={() => handleStartApply(vac)}
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors shadow-xs"
+                            >
+                              Apply Now
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* LATEST VACANCIES LIST & SEARCH RESULTS */}
+            <section id="vacancies-list" className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-1">
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Live Job Directory</span>
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-[#0B132B]">
+                    {heroSearch || heroLocation !== 'All' || heroSector !== 'All'
+                      ? `Matching Vacancies (${filteredHomepageVacancies.length})`
+                      : `Latest Published Vacancies (${publishedVacancies.length})`}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Click "Apply Now" to attach your CV and apply with verified Ethiopian records.
+                  </p>
+                </div>
               </div>
 
-              {/* 16 Category Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {filteredCategories.map((category) => {
+              {filteredHomepageVacancies.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
+                  <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
+                  <h4 className="font-bold text-slate-800 text-sm">No vacancies match your search</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Try clearing one or more filters, or view all vacancies by selecting "All" in the location and sector dropdowns.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setHeroSearch('');
+                      setHeroLocation('All');
+                      setHeroSector('All');
+                      setHeroEmploymentType('All');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+                  >
+                    Clear All Filters
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredHomepageVacancies.slice(0, 12).map((vac) => {
+                    const days = getDaysLeft(vac.applicationDeadline);
+                    const isSaved = savedJobIds.has(vac.id);
+                    return (
+                      <div
+                        key={vac.id}
+                        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full truncate max-w-[200px]">
+                              {vac.category}
+                            </span>
+                            <button
+                              onClick={() => handleToggleSaveJob(vac.id)}
+                              className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                              title="Bookmark"
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                            </button>
+                          </div>
+
+                          <h3
+                            onClick={() => handleSelectVacancy(vac)}
+                            className="font-bold text-sm text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1"
+                          >
+                            {vac.title}
+                          </h3>
+
+                          <p className="text-xs text-slate-600 font-semibold truncate flex items-center gap-1">
+                            <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{vac.organization}</span>
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 pt-1">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-amber-500" />
+                              {vac.location}
+                            </span>
+                            <span>•</span>
+                            <span className="text-slate-600 font-medium">{vac.employmentType || 'Full-time'}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            {days.text}
+                          </span>
+                          <button
+                            onClick={() => handleStartApply(vac)}
+                            className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white transition-colors"
+                          >
+                            Apply Now
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* POPULAR EMPLOYERS SHOWCASE */}
+            <section className="bg-slate-50 py-12 px-4 sm:px-6 lg:px-8 border-y border-slate-200">
+              <div className="max-w-7xl mx-auto space-y-6">
+                <div className="text-center max-w-2xl mx-auto space-y-1.5">
+                  <div className="inline-flex items-center gap-1 text-xs font-extrabold uppercase tracking-wider text-amber-700">
+                    <Building className="w-3.5 h-3.5" />
+                    <span>Trusted Organizations</span>
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-[#0B132B]">
+                    Popular Employers in Ethiopia
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Explore verified announcements from top domestic banks, telecom leaders, and international development agencies.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {POPULAR_EMPLOYERS.map((emp) => (
+                    <div
+                      key={emp.short}
+                      onClick={() => {
+                        setHeroSearch(emp.name);
+                        const el = document.getElementById('vacancies-list');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="bg-white p-4 rounded-xl border border-slate-200/90 hover:border-amber-400 hover:shadow-sm transition-all cursor-pointer group text-center"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-800 font-black text-sm flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition-transform">
+                        {emp.short.slice(0, 3)}
+                      </div>
+                      <h4 className="font-bold text-xs text-slate-900 group-hover:text-amber-600 transition-colors line-clamp-1">
+                        {emp.name}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{emp.category}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* EXPLORE JOB CATEGORIES SECTION (WITH VIEW ALL BUTTON) */}
+            <section id="categories-section" className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
+                    <Briefcase className="w-3.5 h-3.5" />
+                    <span>Categorized Sectors</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B132B]">
+                    Explore Job Categories
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Browse active vacancies across Ethiopia's principal economic sectors.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsAllCategoriesView(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-sm shrink-0"
+                >
+                  <LayoutGrid className="w-4 h-4 text-amber-400" />
+                  <span>View All 16 Categories</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Top 8 Sector Preview Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {OFFICIAL_CATEGORIES.slice(0, 8).map((category) => {
                   const count = activeCountMap.get(category.name) || 0;
                   return (
                     <CategoryCard
@@ -865,42 +1173,117 @@ export default function App() {
                 })}
               </div>
 
-              {/* Empty state hint if database has 0 vacancies */}
-              {totalActiveVacancies === 0 && (
-                <div className="mt-12 p-6 rounded-3xl bg-amber-50 border border-amber-300 max-w-2xl mx-auto text-center space-y-3">
-                  <div className="w-10 h-10 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center mx-auto">
-                    <Sparkles className="w-5 h-5" />
+              <div className="text-center pt-2">
+                <button
+                  onClick={() => {
+                    setIsAllCategoriesView(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-amber-700 hover:text-amber-800 underline"
+                >
+                  Looking for more sectors? Open the complete Ethiopian Job Categories Directory →
+                </button>
+              </div>
+            </section>
+
+            {/* HOW IT WORKS SECTION */}
+            <section className="bg-[#0B132B] text-white py-16 px-4 sm:px-6 lg:px-8 border-y border-slate-800">
+              <div className="max-w-7xl mx-auto space-y-10">
+                <div className="text-center max-w-2xl mx-auto space-y-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400">
+                    <Sparkles className="w-3.5 h-3.5 fill-current" />
+                    <span>Simple & Transparent</span>
                   </div>
-                  <h4 className="text-base font-bold text-amber-950">
-                    Administrator Setup Note
-                  </h4>
-                  <p className="text-xs text-amber-900 leading-relaxed">
-                    You are logged in or ready to publish vacancies. Click below to open the Admin Portal, where you can paste or upload up to 50 real vacancies in one bulk import!
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+                    How Hopeland Jobs Works for Ethiopian Job Seekers
+                  </h2>
+                  <p className="text-xs text-slate-300">
+                    Designed from the ground up for simplicity, security, and real career results.
                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
+                      1
+                    </div>
+                    <h3 className="font-extrabold text-base text-white">Discover Verified Vacancies</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Every position on Hopeland Jobs is reviewed for verified employers, official deadlines, and authentic job requirements.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
+                      2
+                    </div>
+                    <h3 className="font-extrabold text-base text-white">Build Your Vault (10 GB Cloud)</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Securely store your CVs, degree certificates, Kebele IDs, and experience letters in persistent cloud storage, ready for any application.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
+                      3
+                    </div>
+                    <h3 className="font-extrabold text-base text-white">Apply & Track Status</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Submit applications in 1-click without duplicate submissions. Monitor milestone updates in real-time from your personal dashboard.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* JOB SEEKER REGISTRATION CTA BANNER */}
+            <section className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+              <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 rounded-3xl p-8 sm:p-12 shadow-lg text-slate-950 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="space-y-2 max-w-xl text-center md:text-left">
+                  <span className="text-xs font-black uppercase tracking-wider bg-slate-950 text-amber-400 px-3 py-1 rounded-full">
+                    Free Account for Job Seekers
+                  </span>
+                  <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                    Ready to Accelerate Your Career in Ethiopia?
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-950/90 font-medium">
+                    Create your candidate account to unlock the 10GB Document Vault, track application progression, and receive tailored vacancy alerts.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
                   <button
                     onClick={() => {
-                      if (isOwnerAuthorized) setIsAdminView(true);
-                      else setIsAuthModalOpen(true);
+                      setUserAuthModalMode('signup');
+                      setIsUserAuthModalOpen(true);
                     }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-500 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-md"
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs transition-all shadow-md"
                   >
-                    <span>Open Admin Bulk Import Tool</span>
-                    <ArrowRight className="w-4 h-4" />
+                    Create Free Account
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUserAuthModalMode('signin');
+                      setIsUserAuthModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs transition-all border border-slate-950/20"
+                  >
+                    Sign In
                   </button>
                 </div>
-              )}
+              </div>
             </section>
 
             {/* POPULAR ETHIOPIAN LOCATIONS SECTION */}
-            <section id="locations-section" className="bg-slate-100/70 py-16 px-4 sm:px-6 lg:px-8 border-y border-slate-200">
-              <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <section id="locations-section" className="bg-slate-100/70 py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
+              <div className="max-w-7xl mx-auto space-y-6">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                   <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700 mb-1">
                       <MapPin className="w-3.5 h-3.5" />
                       <span>Nationwide Coverage</span>
                     </div>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B132B]">
+                    <h2 className="text-2xl font-extrabold text-[#0B132B]">
                       Popular Ethiopian Job Locations
                     </h2>
                     <p className="text-xs text-slate-600 mt-1">
@@ -921,11 +1304,11 @@ export default function App() {
                       <div
                         key={city}
                         onClick={() => handleSelectLocation(city)}
-                        className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-lg transition-all cursor-pointer group hover:-translate-y-0.5 duration-200"
+                        className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-amber-500 hover:shadow-sm transition-all cursor-pointer group"
                         title={`Click to view all jobs in ${city}`}
                       >
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-extrabold text-slate-800 group-hover:text-amber-600 transition-colors line-clamp-1 flex items-center gap-1">
+                          <span className="font-bold text-slate-800 group-hover:text-amber-600 transition-colors line-clamp-1 flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-amber-500 shrink-0" />
                             <span>{city}</span>
                           </span>
@@ -945,7 +1328,7 @@ export default function App() {
             </section>
 
             {/* CV & COVER LETTER ASSISTANCE SECTION */}
-            <section id="cv-assistance-section" className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+            <section id="cv-assistance-section" className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
               <div className="bg-[#FFFBEB] rounded-3xl p-8 sm:p-12 border-2 border-amber-300 relative overflow-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                   <div className="space-y-4">
@@ -953,21 +1336,21 @@ export default function App() {
                       <Sparkles className="w-3.5 h-3.5 fill-current" />
                       <span>Career Guidance Service</span>
                     </div>
-                    <h2 className="text-2xl sm:text-4xl font-extrabold text-amber-950">
-                      CV & Cover Letter Assistance for Ethiopian Job Seekers
+                    <h2 className="text-2xl sm:text-3xl font-extrabold text-amber-950">
+                      CV & Application Assistance for Ethiopian Job Seekers
                     </h2>
-                    <p className="text-sm text-amber-900/90 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-amber-900/90 leading-relaxed">
                       Applying for banking positions at CBE or Awash? Diplomatic missions at AU or embassies? UN agencies like UNICEF? Each sector requires tailored application standards.
                     </p>
 
                     <div className="space-y-2 text-xs text-amber-900 font-medium">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Every vacancy page includes a 1-click tailored cover letter generator.</span>
+                        <span>Tailored cover letter generator available on every vacancy.</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Accurate checklists of required documents (Kebele ID, Degree, Experience).</span>
+                        <span>Checklists of required Ethiopian documents (Kebele ID, Degree, Experience).</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -976,17 +1359,17 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-amber-200 shadow-md space-y-4">
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Sample Application Checklist (Ethiopian Standards)
+                  <div className="bg-white p-6 rounded-2xl border border-amber-200 shadow-sm space-y-3">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Standard Ethiopian Application Checklist
                     </h3>
                     <div className="space-y-2 text-xs text-slate-700">
                       <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>1. Professional CV (Max 2-3 pages, Chronological)</span>
+                        <span>1. Professional CV (Chronological format)</span>
                         <span className="text-emerald-600 font-bold">Standard</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>2. Tailored Application Letter referencing vacancy Ref #</span>
+                        <span>2. Tailored Application Letter referencing Ref #</span>
                         <span className="text-emerald-600 font-bold">Essential</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
@@ -994,11 +1377,7 @@ export default function App() {
                         <span className="text-emerald-600 font-bold">Required</span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>4. Work Experience letters stating job title & dates</span>
-                        <span className="text-emerald-600 font-bold">Verified</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>5. Renewed National ID (Fayda / Kebele ID)</span>
+                        <span>4. Renewed National ID (Fayda / Kebele ID)</span>
                         <span className="text-emerald-600 font-bold">Government</span>
                       </div>
                     </div>
@@ -1008,71 +1387,39 @@ export default function App() {
             </section>
 
             {/* ABOUT US SECTION */}
-            <section id="about-section" className="bg-white py-16 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
-              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-                <div className="space-y-4">
+            <section id="about-section" className="bg-white py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div className="space-y-3">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-600">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
                     <span>Our Quality Promise</span>
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0B132B]">
-                    About HOPELAND JOBS
-                  </h2>
-                  <p className="text-sm text-slate-600 leading-relaxed">
+                  <h2 className="text-2xl font-extrabold text-[#0B132B]">About HOPELAND JOBS</h2>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                     {siteSettings.aboutText ||
                       'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.'}
                   </p>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Unlike unregulated job scrapers, every vacancy on HOPELAND JOBS is collected, checked, and approved personally by the website owner. We never generate fake vacancies or invent employer information.
+                    Every vacancy is verified with confirmed application deadlines and official employer channels.
                   </p>
-
-                  <div className="pt-2 flex items-center gap-4">
-                    <a
-                      href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopiaBot'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => trackAnalyticsEvent('click_telegram_link', { channel: '@DreamBigJobsEthiopiaBot' })}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#229ED9] text-white font-bold text-xs hover:bg-[#1E88E5] transition-colors shadow-sm"
-                    >
-                      <Send className="w-4 h-4" />
-                      <span>Open Our Telegram Bot</span>
-                    </a>
-                  </div>
                 </div>
 
-                <div className="bg-slate-50 p-8 rounded-3xl border border-slate-200 space-y-4">
-                  <h3 className="text-base font-bold text-[#0B132B]">
-                    Why Ethiopian Job Seekers Choose HOPELAND JOBS:
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
+                  <h3 className="text-sm font-bold text-[#0B132B]">
+                    Why Ethiopian Candidates Choose HOPELAND JOBS:
                   </h3>
-                  <div className="space-y-3 text-xs text-slate-700">
-                    <div className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold">
-                        1
-                      </div>
-                      <div>
-                        <strong className="text-slate-900 block font-bold">Verified Announcements Only</strong>
-                        Every job has a confirmed deadline, verified employer, and official application method.
-                      </div>
+                  <div className="space-y-2 text-xs text-slate-700">
+                    <div className="flex items-start gap-2.5">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Verified Announcements Only:</strong> Every job has a confirmed deadline and employer.</span>
                     </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold">
-                        2
-                      </div>
-                      <div>
-                        <strong className="text-slate-900 block font-bold">Smart Sector Categorization</strong>
-                        Explore by sector so you quickly find jobs matching your exact profession and degree.
-                      </div>
+                    <div className="flex items-start gap-2.5">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>10 GB Cloud Vault:</strong> Store and manage credentials persistently.</span>
                     </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-bold">
-                        3
-                      </div>
-                      <div>
-                        <strong className="text-slate-900 block font-bold">No Application Fees / Direct Links</strong>
-                        We link directly to official employer career sites or official recruitment emails.
-                      </div>
+                    <div className="flex items-start gap-2.5">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Zero Application Fees:</strong> Direct connections to employer portals.</span>
                     </div>
                   </div>
                 </div>
@@ -1089,9 +1436,68 @@ export default function App() {
         onSelectLocation={handleSelectLocation}
         onOpenAdmin={() => {
           if (isOwnerAuthorized) setIsAdminView(true);
-          else setIsAuthModalOpen(true);
+          else setIsAdminAuthModalOpen(true);
         }}
       />
+
+      {/* User Auth Modal (Sign In / Register / Google / Forgot Password) */}
+      <UserAuthModal
+        isOpen={isUserAuthModalOpen}
+        initialMode={userAuthModalMode}
+        onClose={() => setIsUserAuthModalOpen(false)}
+        onSuccess={async (user) => {
+          setIsUserAuthModalOpen(false);
+          if (user?.uid) {
+            try {
+              const [p, apps] = await Promise.all([
+                fetchJobSeekerProfile(user.uid),
+                fetchUserApplications(user.uid),
+              ]);
+              if (p) setUserProfile(p);
+              setUserApplications(apps);
+            } catch {}
+          }
+          if (applyTargetVacancy) {
+            setIsApplicationModalOpen(true);
+          }
+        }}
+      />
+
+      {/* Job Seeker Profile & Dashboard Modal */}
+      {isJobSeekerDashboardOpen && userProfile && (
+        <JobSeekerDashboard
+          profile={userProfile}
+          applications={userApplications}
+          savedVacancies={vacancies.filter((v) => savedJobIds.has(v.id))}
+          onClose={() => setIsJobSeekerDashboardOpen(false)}
+          onUpdateProfile={async (updated) => {
+            await saveJobSeekerProfile(updated);
+            setUserProfile(updated);
+          }}
+          onSelectVacancy={handleSelectVacancy}
+        />
+      )}
+
+      {/* Job Application Modal (Direct Apply with CV & Cover Note) */}
+      {isApplicationModalOpen && applyTargetVacancy && (
+        <JobApplicationModal
+          isOpen={isApplicationModalOpen}
+          vacancy={applyTargetVacancy}
+          userProfile={userProfile}
+          currentUser={currentUser}
+          onClose={() => {
+            setIsApplicationModalOpen(false);
+            setApplyTargetVacancy(null);
+          }}
+          onNeedAuth={() => {
+            setUserAuthModalMode('signin');
+            setIsUserAuthModalOpen(true);
+          }}
+          onApplicationSubmitted={(newApp) => {
+            setUserApplications((prev) => [newApp, ...prev]);
+          }}
+        />
+      )}
 
       {/* Saved Vacancies Drawer */}
       <SavedJobsDrawer
@@ -1110,13 +1516,14 @@ export default function App() {
           vacancy={selectedVacancy}
           onClose={handleCloseVacancy}
           telegramUrl={siteSettings.telegramChannelUrl}
+          onApply={(v) => handleStartApply(v)}
         />
       )}
 
       {/* Admin Login Modal */}
       <AdminAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        isOpen={isAdminAuthModalOpen}
+        onClose={() => setIsAdminAuthModalOpen(false)}
         onLoginSuccess={(email) => {
           setIsOwnerAuthorized(true);
           setAdminEmail(email);

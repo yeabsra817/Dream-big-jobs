@@ -1,0 +1,32 @@
+[
+  {
+    "id": "app_sample_1",
+    "userId": "user_yeabsra_test",
+    "userEmail": "yeabsra45@gmail.com",
+    "userName": "Yeabsra Tefera",
+    "userPhone": "+251 91 123 4567",
+    "vacancyId": "cbe_lead_dev_01",
+    "vacancyTitle": "Lead Banking Systems Engineer",
+    "organization": "Commercial Bank of Ethiopia",
+    "location": "Addis Ababa",
+    "category": "Commercial Banking & Microfinance",
+    "resumeUrl": "https://hopelandjobs.tech/uploads/Yeabsra_Tefera_CV.pdf",
+    "resumeName": "Yeabsra_Tefera_CV.pdf",
+    "coverLetter": "Dear CBE Recruitment Committee, I am pleased to submit my verified application.",
+    "status": "shortlisted",
+    "statusTimeline": [
+      {
+        "status": "submitted",
+        "timestamp": "2026-11-12T11:11:17.116Z",
+        "note": "Application submitted successfully via Hopeland Jobs portal"
+      },
+      {
+        "status": "shortlisted",
+        "timestamp": "2026-11-12T11:11:17.140Z",
+        "note": "Application status updated to shortlisted"
+      }
+    ],
+    "appliedAt": "2026-11-12T11:11:17.116Z",
+    "updatedAt": "2026-11-12T11:11:17.140Z"
+  }
+]

@@ -3,6 +3,11 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   User,
@@ -30,6 +35,7 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
+import { JobSeekerProfile, UserJobApplication, ApplicationStatus } from '../types/jobSeeker';
 
 // Initialize Firebase SDK with long polling auto-detection for reliable iframe/proxy connectivity
 const app = initializeApp(firebaseConfig);
@@ -1156,6 +1162,234 @@ export async function generateFullSystemBackupSnapshot(
   }
 
   return snapshot;
+}
+
+// Re-export core auth methods for clean component imports
+export {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  updateProfile,
+};
+
+/* =========================================================================
+ * 10. JOB SEEKER PROFILES & DASHBOARD PERSISTENCE
+ * ========================================================================= */
+
+export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfile | null> {
+  if (!uid) return null;
+
+  // 1. Try Firestore
+  try {
+    const docRef = doc(db, 'job_seeker_profiles', uid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as JobSeekerProfile;
+      try {
+        localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(data));
+      } catch {}
+      return data;
+    }
+  } catch (err) {
+    console.warn('Firestore profile fetch notice:', err);
+  }
+
+  // 2. Try server backend
+  try {
+    const res = await fetch(`/api/user-profile/${encodeURIComponent(uid)}`);
+    if (res.ok) {
+      const serverProfile = await res.json();
+      if (serverProfile && serverProfile.uid) {
+        try {
+          localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(serverProfile));
+        } catch {}
+        return serverProfile;
+      }
+    }
+  } catch {}
+
+  // 3. Fallback to localStorage
+  try {
+    const saved = localStorage.getItem(`hopelandjobs_profile_${uid}`);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+
+  return null;
+}
+
+export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<void> {
+  if (!profile.uid) return;
+
+  // 1. Cache immediately in localStorage
+  try {
+    localStorage.setItem(`hopelandjobs_profile_${profile.uid}`, JSON.stringify(profile));
+  } catch {}
+
+  // 2. Persist to Firestore
+  try {
+    const docRef = doc(db, 'job_seeker_profiles', profile.uid);
+    await setDoc(docRef, { ...profile, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore profile save notice:', err);
+  }
+
+  // 3. Sync to server database
+  try {
+    await fetch('/api/user-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+  } catch {}
+}
+
+/* =========================================================================
+ * 11. JOB APPLICATIONS (SUBMISSIONS & REVIEW TRACKING)
+ * ========================================================================= */
+
+export async function fetchUserApplications(userId: string): Promise<UserJobApplication[]> {
+  if (!userId) return [];
+
+  // 1. Try Firestore
+  try {
+    const q = query(collection(db, 'job_applications'), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const list = snap.docs.map((d) => d.data() as UserJobApplication);
+      list.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+      try {
+        localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(list));
+      } catch {}
+      return list;
+    }
+  } catch (err) {
+    console.warn('Firestore applications fetch notice:', err);
+  }
+
+  // 2. Try server backend
+  try {
+    const res = await fetch(`/api/applications?userId=${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const serverApps = await res.json();
+      if (Array.isArray(serverApps)) {
+        try {
+          localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(serverApps));
+        } catch {}
+        return serverApps;
+      }
+    }
+  } catch {}
+
+  // 3. Fallback to localStorage
+  try {
+    const saved = localStorage.getItem(`hopelandjobs_apps_${userId}`);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+
+  return [];
+}
+
+export async function fetchAllApplicationsAdmin(): Promise<UserJobApplication[]> {
+  // 1. Try Firestore
+  try {
+    const snap = await getDocs(collection(db, 'job_applications'));
+    if (!snap.empty) {
+      const list = snap.docs.map((d) => d.data() as UserJobApplication);
+      list.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+      return list;
+    }
+  } catch (err) {
+    console.warn('Firestore all applications fetch notice:', err);
+  }
+
+  // 2. Try server backend
+  try {
+    const res = await fetch('/api/applications/all');
+    if (res.ok) {
+      const serverApps = await res.json();
+      if (Array.isArray(serverApps)) return serverApps;
+    }
+  } catch {}
+
+  return [];
+}
+
+export async function submitJobApplication(
+  application: UserJobApplication
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Save to Firestore
+  try {
+    const docRef = doc(db, 'job_applications', application.id);
+    await setDoc(docRef, application);
+  } catch (err: any) {
+    console.warn('Firestore application submit notice:', err);
+  }
+
+  // 2. Save to server backend
+  try {
+    const res = await fetch('/api/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(application),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      if (data.error && data.isDuplicate) {
+        return { success: false, error: data.error };
+      }
+    }
+  } catch {}
+
+  // 3. Update local cache
+  try {
+    const key = `hopelandjobs_apps_${application.userId}`;
+    const saved = localStorage.getItem(key);
+    const existing: UserJobApplication[] = saved ? JSON.parse(saved) : [];
+    const updated = [application, ...existing.filter((a) => a.id !== application.id)];
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch {}
+
+  return { success: true };
+}
+
+export async function updateApplicationStatus(
+  applicationId: string,
+  status: ApplicationStatus,
+  note?: string
+): Promise<void> {
+  const timestamp = new Date().toISOString();
+
+  // 1. Update Firestore
+  try {
+    const docRef = doc(db, 'job_applications', applicationId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as UserJobApplication;
+      const newTimeline = [
+        ...(data.statusTimeline || []),
+        { status, timestamp, note: note || `Status updated to ${status}` },
+      ];
+      await updateDoc(docRef, {
+        status,
+        statusNotes: note || data.statusNotes,
+        statusTimeline: newTimeline,
+        updatedAt: timestamp,
+      });
+    }
+  } catch (err) {
+    console.warn('Firestore status update notice:', err);
+  }
+
+  // 2. Update server backend
+  try {
+    await fetch(`/api/applications/${encodeURIComponent(applicationId)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, note, timestamp }),
+    });
+  } catch {}
 }
 
 

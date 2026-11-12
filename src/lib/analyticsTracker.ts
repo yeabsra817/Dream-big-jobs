@@ -241,6 +241,7 @@ export interface TrackEventDetails {
   filterValue?: string;
   sortBy?: string;
   channel?: string;
+  method?: string;
   isAdminLoggedIn?: boolean;
   gaMeasurementId?: string;
 }
@@ -415,21 +416,92 @@ export async function trackAnalyticsEvent(
     isInternal,
   };
 
+  // If currently offline, queue event in persistent storage for automatic replay when back online
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    queueOfflineEvent(eventPayload, details);
+    return;
+  }
+
   try {
     const bodyStr = JSON.stringify(eventPayload);
     if (navigator.sendBeacon) {
       const blob = new Blob([bodyStr], { type: 'application/json' });
-      navigator.sendBeacon('/api/analytics/track', blob);
+      const sent = navigator.sendBeacon('/api/analytics/track', blob);
+      if (!sent) queueOfflineEvent(eventPayload, details);
     } else {
       fetch('/api/analytics/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: bodyStr,
         keepalive: true,
-      }).catch(() => {});
+      }).catch(() => {
+        queueOfflineEvent(eventPayload, details);
+      });
     }
   } catch {
-    // Non-blocking telemetry
+    queueOfflineEvent(eventPayload, details);
   }
+}
+
+const OFFLINE_QUEUE_KEY = 'hopelandjobs_offline_analytics_queue';
+
+function queueOfflineEvent(payload: AnalyticsEvent, details: TrackEventDetails) {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    const queue = raw ? JSON.parse(raw) : [];
+    queue.push({ payload, details, queuedAt: Date.now() });
+    if (queue.length > 100) queue.shift();
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  } catch {}
+}
+
+export function flushOfflineAnalyticsQueue() {
+  if (typeof window === 'undefined' || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    if (!raw) return;
+    const queue = JSON.parse(raw);
+    if (!Array.isArray(queue) || queue.length === 0) return;
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+
+    queue.forEach(({ payload, details }) => {
+      // Replay to GA4 if window.gtag is available
+      if (typeof window.gtag === 'function') {
+        try {
+          window.gtag('event', payload.eventType, {
+            ...details,
+            offline_replayed: 1,
+            replayed_at: new Date().toISOString(),
+          });
+        } catch {}
+      }
+
+      // Replay to First-Party Database
+      try {
+        const bodyStr = JSON.stringify(payload);
+        if (navigator.sendBeacon) {
+          const blob = new Blob([bodyStr], { type: 'application/json' });
+          navigator.sendBeacon('/api/analytics/track', blob);
+        } else {
+          fetch('/api/analytics/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: bodyStr,
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch {}
+    });
+  } catch {}
+}
+
+// Automatically listen for reconnect events to sync all offline analytics
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    flushOfflineAnalyticsQueue();
+  });
+  // Also attempt flush on startup
+  setTimeout(() => flushOfflineAnalyticsQueue(), 2000);
 }
 

@@ -17,7 +17,12 @@ export interface AnalyticsEvent {
     | 'select_search_result'
     | 'search_no_results'
     | 'filter_change'
-    | 'sort_change';
+    | 'sort_change'
+    | 'job_application'
+    | 'job_seeker_login'
+    | 'job_seeker_register'
+    | 'profile_update'
+    | 'cv_upload';
   path: string;
   title?: string;
   jobId?: string;

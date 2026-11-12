@@ -21,6 +21,12 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
@@ -1049,6 +1055,216 @@ app.post('/api/auth/admin-verify', (req: Request, res: Response): void => {
     }
   } catch (err: any) {
     res.status(500).json({ success: false, error: 'Authentication service error' });
+  }
+});
+
+// =========================================================================
+// Job Seeker Profiles & Document Vault Persistence
+// =========================================================================
+const USER_PROFILES_FILE = path.join(__dirname, 'data', 'user_profiles.json');
+const JOB_APPLICATIONS_FILE = path.join(__dirname, 'data', 'job_applications.json');
+
+function loadUserProfiles(): Record<string, any> {
+  try {
+    if (fs.existsSync(USER_PROFILES_FILE)) {
+      const raw = fs.readFileSync(USER_PROFILES_FILE, 'utf-8');
+      return JSON.parse(raw) || {};
+    }
+  } catch {}
+  return {};
+}
+
+function saveUserProfile(profile: any): void {
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    const all = loadUserProfiles();
+    all[profile.uid] = { ...all[profile.uid], ...profile, updatedAt: new Date().toISOString() };
+    fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(all, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Failed to save user profile to disk:', e);
+  }
+}
+
+function loadJobApplications(): any[] {
+  try {
+    if (fs.existsSync(JOB_APPLICATIONS_FILE)) {
+      const raw = fs.readFileSync(JOB_APPLICATIONS_FILE, 'utf-8');
+      return JSON.parse(raw) || [];
+    }
+  } catch {}
+  return [];
+}
+
+function saveJobApplications(apps: any[]): void {
+  try {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(JOB_APPLICATIONS_FILE, JSON.stringify(apps, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Failed to save job applications to disk:', e);
+  }
+}
+
+// User Profile Endpoints
+app.get('/api/user-profile/:uid', (req: Request, res: Response): void => {
+  const { uid } = req.params;
+  const all = loadUserProfiles();
+  const profile = all[uid];
+  if (profile) {
+    res.json(profile);
+  } else {
+    res.status(404).json({ error: 'Profile not found' });
+  }
+});
+
+app.post('/api/user-profile', (req: Request, res: Response): void => {
+  try {
+    const profile = req.body;
+    if (!profile || !profile.uid) {
+      res.status(400).json({ error: 'Valid uid is required' });
+      return;
+    }
+    saveUserProfile(profile);
+    res.json({ success: true, profile });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save profile' });
+  }
+});
+
+// Job Application Endpoints
+app.get('/api/applications', (req: Request, res: Response): void => {
+  const { userId } = req.query;
+  const all = loadJobApplications();
+  if (userId && typeof userId === 'string') {
+    const userApps = all.filter((a) => a.userId === userId);
+    res.json(userApps);
+  } else {
+    res.json(all);
+  }
+});
+
+app.get('/api/applications/all', (req: Request, res: Response): void => {
+  const all = loadJobApplications();
+  res.json(all);
+});
+
+app.post('/api/applications', (req: Request, res: Response): void => {
+  try {
+    const appData = req.body;
+    if (!appData || !appData.userId || !appData.vacancyId) {
+      res.status(400).json({ error: 'userId and vacancyId are required.' });
+      return;
+    }
+
+    const all = loadJobApplications();
+    const existing = all.find((a) => a.userId === appData.userId && a.vacancyId === appData.vacancyId);
+    if (existing) {
+      res.status(409).json({
+        success: false,
+        isDuplicate: true,
+        error: 'You have already submitted an application for this vacancy.',
+        existingApplication: existing,
+      });
+      return;
+    }
+
+    const newApp = {
+      ...appData,
+      id: appData.id || `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      status: appData.status || 'submitted',
+      appliedAt: appData.appliedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      statusTimeline: appData.statusTimeline || [
+        { status: 'submitted', timestamp: new Date().toISOString(), note: 'Application received and confirmed.' },
+      ],
+    };
+
+    all.unshift(newApp);
+    saveJobApplications(all);
+    res.status(201).json({ success: true, application: newApp });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to submit application.' });
+  }
+});
+
+app.patch('/api/applications/:id/status', (req: Request, res: Response): void => {
+  try {
+    const { id } = req.params;
+    const { status, note, timestamp } = req.body;
+    if (!status) {
+      res.status(400).json({ error: 'Status is required' });
+      return;
+    }
+
+    const all = loadJobApplications();
+    const target = all.find((a) => a.id === id);
+    if (!target) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    const eventTime = timestamp || new Date().toISOString();
+    target.status = status;
+    target.statusNotes = note || target.statusNotes;
+    target.updatedAt = eventTime;
+    if (!target.statusTimeline) target.statusTimeline = [];
+    target.statusTimeline.push({
+      status,
+      timestamp: eventTime,
+      note: note || `Application status updated to ${status}`,
+    });
+
+    saveJobApplications(all);
+    res.json({ success: true, application: target });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update application status.' });
+  }
+});
+
+// Storage File Upload & 10GB Quota Calculation Endpoint
+app.post('/api/storage/upload', upload.single('file'), (req: Request, res: Response): void => {
+  try {
+    let fileName = '';
+    let buffer: Buffer | null = null;
+    let mimeType = 'application/octet-stream';
+
+    if (req.file) {
+      fileName = req.file.originalname;
+      buffer = req.file.buffer;
+      mimeType = req.file.mimetype;
+    } else if (req.body?.fileData || req.body?.fileBase64) {
+      const rawData = String(req.body.fileData || req.body.fileBase64);
+      fileName = req.body.fileName || req.body.filename || `document_${Date.now()}.pdf`;
+      const matches = rawData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        mimeType = matches[1];
+        buffer = Buffer.from(matches[2], 'base64');
+      } else {
+        buffer = Buffer.from(rawData, 'base64');
+      }
+    }
+
+    if (!buffer) {
+      res.status(400).json({ error: 'No file data received.' });
+      return;
+    }
+
+    const safeName = `${Date.now()}_${path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = path.join(UPLOADS_DIR, safeName);
+    fs.writeFileSync(filePath, buffer);
+
+    const downloadUrl = `/uploads/${safeName}`;
+    res.json({
+      success: true,
+      downloadUrl,
+      fileName,
+      fileSizeBytes: buffer.length,
+      mimeType,
+      uploadedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to upload document.' });
   }
 });
 

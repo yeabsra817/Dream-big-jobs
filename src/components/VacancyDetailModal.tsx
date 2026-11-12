@@ -30,12 +30,14 @@ interface Props {
   vacancy: Vacancy;
   onClose: () => void;
   telegramUrl: string;
+  onApply?: (vacancy: Vacancy) => void;
 }
 
 export const VacancyDetailModal: React.FC<Props> = ({
   vacancy,
   onClose,
   telegramUrl,
+  onApply,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showCoverLetterHelper, setShowCoverLetterHelper] = useState(false);
@@ -316,6 +318,16 @@ ${currentUrl}`;
 
             {/* Direct Apply Buttons */}
             <div className="flex flex-wrap items-center gap-3">
+              {onApply && (
+                <button
+                  onClick={() => onApply(vacancy)}
+                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm px-6 py-3.5 rounded-xl shadow-lg hover:shadow-amber-500/25 transition-all transform hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 fill-current" />
+                  <span>APPLY WITH HOPELAND ACCOUNT</span>
+                </button>
+              )}
+
               {vacancy.applicationUrl && vacancy.applicationUrl.startsWith('http') && (
                 <a
                   href={vacancy.applicationUrl}

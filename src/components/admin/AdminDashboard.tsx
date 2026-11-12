@@ -22,6 +22,7 @@ import {
   HardDrive,
   Check,
   RefreshCw,
+  Users,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -40,6 +41,7 @@ import { WebsiteAnalytics } from './WebsiteAnalytics';
 import { SystemHealth } from './SystemHealth';
 import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './SmartAlerts';
 import { PersonalAutoApply } from './PersonalAutoApply';
+import { ApplicantManager } from './ApplicantManager';
 import { auth, googleProvider, ADMIN_EMAIL } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
@@ -86,7 +88,7 @@ export const AdminDashboard: React.FC<Props> = ({
   onRestoreFullBackup,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'bulk' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
+    'bulk' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'applications' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
   >('bulk');
 
   const [queueSelectedJobIds, setQueueSelectedJobIds] = useState<string[]>([]);
@@ -346,6 +348,18 @@ export const AdminDashboard: React.FC<Props> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('applications')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                activeTab === 'applications'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Users className="w-4 h-4 text-amber-300" />
+              <span>Candidate Applications</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('duplicates')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
                 activeTab === 'duplicates'
@@ -488,6 +502,9 @@ export const AdminDashboard: React.FC<Props> = ({
           />
         )}
 
+        {activeTab === 'applications' && (
+          <ApplicantManager />
+        )}
 
         {activeTab === 'duplicates' && (
           <DuplicateCenter
