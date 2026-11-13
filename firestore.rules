@@ -13,16 +13,39 @@ service cloud.firestore {
 
     function isOwnerAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'nexusitsoultion@gmail.com' ||
-        (request.auth.token.email != null && request.auth.token.email.matches('(?i)^nexusitsoultion@gmail\\.com$')) ||
-        request.auth.token.email == 'yeabsra45@gmail.com' ||
-        (request.auth.token.email != null && request.auth.token.email.matches('(?i)^yeabsra45@gmail\\.com$')) ||
+        (
+          request.auth.token.email_verified == true &&
+          request.auth.token.email != null && (
+            request.auth.token.email.matches('(?i)^nexusitsoultion@gmail\\.com$') ||
+            request.auth.token.email.matches('(?i)^yeabsra45@gmail\\.com$')
+          )
+        ) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidProfileWrite(data, userId) {
+      return data.uid is string
+        && data.uid == userId
+        && data.email is string && data.email.size() <= 200
+        && data.fullName is string && data.fullName.size() <= 200
+        && (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 1000))
+        && (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 50))
+        && !('isAdmin' in data)
+        && !('role' in data);
+    }
+
+    function isValidApplicationCreate(data, appId) {
+      return data.id is string
+        && data.id == appId
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.vacancyId is string && data.vacancyId.size() <= 128
+        && data.status == 'submitted';
     }
 
     // Vacancies Collection
@@ -58,6 +81,30 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read: if isOwnerAdmin();
       allow write: if isOwnerAdmin();
+    }
+
+    // Job Seeker Profiles Collection (Owner-scoped PII protection)
+    match /job_seeker_profiles/{userId} {
+      allow get: if (isSignedIn() && isValidId(userId) && request.auth.uid == userId) || isOwnerAdmin();
+      allow list: if isOwnerAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId
+        && isValidProfileWrite(request.resource.data, userId);
+      allow update: if (
+        isSignedIn() && isValidId(userId) && request.auth.uid == userId
+        && isValidProfileWrite(request.resource.data, userId)
+        && request.resource.data.uid == resource.data.uid
+      ) || isOwnerAdmin();
+      allow delete: if isOwnerAdmin();
+    }
+
+    // Job Applications Collection (Owner-scoped read/create, Admin review)
+    match /job_applications/{applicationId} {
+      allow get: if isSignedIn() && isValidId(applicationId) && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow create: if isSignedIn() && isValidId(applicationId)
+        && isValidApplicationCreate(request.resource.data, applicationId);
+      allow update: if isOwnerAdmin();
+      allow delete: if isOwnerAdmin();
     }
 
     // Personal AI Auto Apply Collections (Strictly Private to Owner Admin)

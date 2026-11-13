@@ -12,6 +12,7 @@ import {
   DollarSign,
   Briefcase,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -20,6 +21,7 @@ import {
   JobCategoryName,
 } from '../../types/job';
 import { checkDuplicateVacancy } from '../../utils/duplicateDetector';
+import { generateAdminVacancyDraft } from '../../lib/aiService';
 
 interface Props {
   existingVacancies: Vacancy[];
@@ -92,6 +94,49 @@ export const ManualPostModal: React.FC<Props> = ({
   const [featured, setFeatured] = useState<boolean>(initialData?.featured || false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allowDuplicateOverride, setAllowDuplicateOverride] = useState(false);
+  const [isAiDrafting, setIsAiDrafting] = useState(false);
+  const [aiDraftMessage, setAiDraftMessage] = useState<string | null>(null);
+  const [aiTelegramCaption, setAiTelegramCaption] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const handleAiDraftVacancy = async () => {
+    if (!title.trim() || !organization.trim()) {
+      setFormError('Enter both Job Title and Organization before drafting with AI.');
+      return;
+    }
+    setFormError(null);
+    setAiDraftMessage(null);
+    setIsAiDrafting(true);
+    try {
+      const res = await generateAdminVacancyDraft({
+        title: title.trim(),
+        organization: organization.trim(),
+        category,
+        location,
+        experienceYears,
+        educationQualification,
+        notes: description.trim(),
+      });
+      setDescription(res.description);
+      if (res.responsibilities?.length) {
+        setResponsibilitiesText(res.responsibilities.join('\n'));
+      }
+      if (res.requiredSkills?.length) {
+        setSkillsText(res.requiredSkills.join(', '));
+      }
+      if (res.applicationInstructions) {
+        setApplicationInstructions(res.applicationInstructions);
+      }
+      if (res.telegramCaption) {
+        setAiTelegramCaption(res.telegramCaption);
+      }
+      setAiDraftMessage('AI drafted job overview, responsibilities, skills, and instructions. Please review before publishing.');
+    } catch (err: any) {
+      setFormError(err.message || 'AI drafting assistant is temporarily unavailable.');
+    } finally {
+      setIsAiDrafting(false);
+    }
+  };
 
   // Strict live duplicate screening check
   const duplicateCheck = useMemo(() => {
@@ -121,8 +166,9 @@ export const ManualPostModal: React.FC<Props> = ({
   ]);
 
   const handleSubmit = async (targetStatus: 'published' | 'draft') => {
+    setFormError(null);
     if (!title.trim() || !organization.trim()) {
-      alert('Please fill in Job Title and Organization name.');
+      setFormError('Please fill in Job Title and Organization name.');
       return;
     }
 
@@ -131,8 +177,8 @@ export const ManualPostModal: React.FC<Props> = ({
       duplicateCheck.similarityScore >= 0.95 &&
       !allowDuplicateOverride
     ) {
-      alert(
-        `Strict Duplicate Warning: This vacancy matches an existing job:\n${duplicateCheck.reason}\n\nTo save anyway, check "I confirm this is a separate, distinct vacancy" below.`
+      setFormError(
+        `Strict Duplicate Warning: ${duplicateCheck.reason} Check "I confirm this is a separate, distinct vacancy" to override.`
       );
       return;
     }
@@ -191,7 +237,7 @@ export const ManualPostModal: React.FC<Props> = ({
       await onSaveVacancy(vacancy);
       onClose();
     } catch (err: any) {
-      alert('Error saving vacancy: ' + err.message);
+      setFormError('Error saving vacancy: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -262,6 +308,28 @@ export const ManualPostModal: React.FC<Props> = ({
             </div>
           )}
 
+          {formError && (
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
+          {aiDraftMessage && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold space-y-2">
+              <div className="flex items-center gap-2 font-bold">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{aiDraftMessage}</span>
+              </div>
+              {aiTelegramCaption && (
+                <div className="bg-white p-2.5 rounded-xl border border-emerald-200 text-[11px] text-slate-700">
+                  <strong className="text-emerald-800 block mb-0.5">Suggested Telegram Caption:</strong>
+                  <span className="whitespace-pre-line">{aiTelegramCaption}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Core Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -291,6 +359,21 @@ export const ManualPostModal: React.FC<Props> = ({
                 required
               />
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+            <span className="text-xs text-slate-600 font-medium">
+              Need help structuring the description, responsibilities, and required skills?
+            </span>
+            <button
+              type="button"
+              onClick={handleAiDraftVacancy}
+              disabled={isAiDrafting}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-amber-400 font-extrabold text-xs transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isAiDrafting ? 'animate-spin' : ''}`} />
+              <span>{isAiDrafting ? 'Drafting with Gemini AI...' : 'AI Draft Job Details'}</span>
+            </button>
           </div>
 
           {/* Category & Location */}

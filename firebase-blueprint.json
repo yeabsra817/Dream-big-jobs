@@ -122,6 +122,48 @@
         "status": { "type": "string" },
         "gmailMessageId": { "type": "string" }
       }
+    },
+    "JobSeekerProfile": {
+      "title": "Job Seeker Profile",
+      "description": "Authenticated job seeker profile synchronized from Firebase Auth (Google or Email) and user dashboard.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "description": "Firebase Auth UID" },
+        "email": { "type": "string", "maxLength": 200, "description": "User email address" },
+        "fullName": { "type": "string", "maxLength": 200, "description": "Display name or full name" },
+        "phone": { "type": "string", "maxLength": 50, "description": "Contact phone number" },
+        "photoUrl": { "type": "string", "maxLength": 1000, "description": "Google or uploaded profile photo URL" },
+        "locationCity": { "type": "string", "maxLength": 100 },
+        "locationRegion": { "type": "string", "maxLength": 100 },
+        "authProvider": { "type": "string", "maxLength": 50 },
+        "emailVerified": { "type": "boolean" },
+        "desiredJobTitle": { "type": "string", "maxLength": 200 },
+        "preferredIndustry": { "type": "string", "maxLength": 200 },
+        "yearsOfExperience": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["uid", "email", "fullName"]
+    },
+    "UserJobApplication": {
+      "title": "Job Application",
+      "description": "Direct job application submitted by an authenticated job seeker.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 200 },
+        "userName": { "type": "string", "maxLength": 200 },
+        "vacancyId": { "type": "string", "maxLength": 128 },
+        "vacancyTitle": { "type": "string", "maxLength": 200 },
+        "organization": { "type": "string", "maxLength": 200 },
+        "status": {
+          "type": "string",
+          "enum": ["submitted", "under_review", "shortlisted", "interview", "rejected", "accepted"]
+        },
+        "appliedAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "vacancyId", "status"]
     }
   },
   "firestore": {
@@ -154,6 +196,14 @@
     },
     "/autoApplyDocuments/{docId}": {
       "description": "Uploaded personal CV and credential files"
+    },
+    "/job_seeker_profiles/{userId}": {
+      "schema": "JobSeekerProfile",
+      "description": "Job seeker profiles keyed by Firebase Auth UID"
+    },
+    "/job_applications/{applicationId}": {
+      "schema": "UserJobApplication",
+      "description": "Submitted job seeker applications"
     }
   }
 }

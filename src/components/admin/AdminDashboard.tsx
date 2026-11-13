@@ -42,7 +42,7 @@ import { SystemHealth } from './SystemHealth';
 import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './SmartAlerts';
 import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
-import { auth, googleProvider, ADMIN_EMAIL } from '../../lib/firebase';
+import { auth, googleProvider, ADMIN_EMAIL, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
 
@@ -136,8 +136,8 @@ export const AdminDashboard: React.FC<Props> = ({
       });
       const res = await fetch(`/api/analytics/summary?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
-        setAnalyticsSummary(data);
+        const data = await safeResponseJson<AnalyticsSummary>(res);
+        if (data) setAnalyticsSummary(data);
       }
     } catch (e) {
       console.warn('Analytics summary fetch for smart alerts:', e);
@@ -789,8 +789,8 @@ export const AdminDashboard: React.FC<Props> = ({
                   setIsSyncingCloud(true);
                   try {
                     const res = await fetch('/api/cloud-sync/status');
-                    const data = await res.json();
-                    setCloudSyncFeedback(`Cloud status verified! Project: ${data.projectId || 'gen-lang-client-0056760370'} • Storage: 10 GB • Cross-device sync active.`);
+                    const data = await safeResponseJson<{ projectId?: string }>(res);
+                    setCloudSyncFeedback(`Cloud status verified! Project: ${data?.projectId || 'gen-lang-client-0056760370'} • Storage: 10 GB • Cross-device sync active.`);
                   } catch (e: any) {
                     setCloudSyncFeedback('Cloud sync refreshed successfully across all active sessions.');
                   } finally {

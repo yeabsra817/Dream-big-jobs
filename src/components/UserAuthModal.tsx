@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Sparkles,
   Phone,
-  Shield,
   Eye,
   EyeOff,
 } from 'lucide-react';
@@ -21,6 +20,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   updateProfile,
+  getAdditionalUserInfo,
   fetchJobSeekerProfile,
   saveJobSeekerProfile,
 } from '../lib/firebase';
@@ -31,7 +31,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'signin' | 'signup' | 'forgot';
-  onSuccess?: (user: any) => void;
+  onSuccess?: (user: any, profile?: JobSeekerProfile) => void;
   message?: string;
 }
 
@@ -51,15 +51,12 @@ export const UserAuthModal: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [directGoogleEmail, setDirectGoogleEmail] = useState('');
-  const [showDirectGoogle, setShowDirectGoogle] = useState(false);
 
   // Synchronize internal mode with initialMode prop when modal is opened or mode switched
   React.useEffect(() => {
     setMode(initialMode);
     setError(null);
     setSuccessMsg(null);
-    setShowDirectGoogle(false);
   }, [initialMode, isOpen]);
 
   // Lock background scroll when modal is open
@@ -83,6 +80,7 @@ export const UserAuthModal: React.FC<Props> = ({
 
   const mapAuthError = (err: any): string => {
     const code = err?.code || '';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
     switch (code) {
       case 'auth/email-already-in-use':
         return 'An account already exists with this email address. Please sign in instead.';
@@ -97,115 +95,97 @@ export const UserAuthModal: React.FC<Props> = ({
       case 'auth/too-many-requests':
         return 'Too many unsuccessful attempts. Please wait a few moments and try again.';
       case 'auth/popup-closed-by-user':
-        return 'Google sign-in popup was closed before completing authentication.';
+        return 'Google sign-in popup was closed before completing authentication. Please try again.';
+      case 'auth/cancelled-popup-request':
+        return 'Another sign-in window is already open or was interrupted. Please click Continue with Google again.';
+      case 'auth/popup-blocked':
+        return 'Your browser blocked the Google sign-in popup. Please allow popups for this site and try again.';
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with this email using email & password. Please sign in with your email and password below.';
+      case 'auth/network-request-failed':
+        return 'Network error while connecting to Google Authentication. Please check your internet connection and try again.';
+      case 'auth/operation-not-allowed':
+        return 'Google Sign-In is not currently enabled in Firebase Authentication providers.';
       case 'auth/unauthorized-domain':
-        return 'Custom domain authentication active. Please enter your Google email below to sign in instantly.';
+        return `Google Sign-In is not authorized yet for "${hostname}". Add "${hostname}" under Firebase Console → Authentication → Settings → Authorized domains (Project: gen-lang-client-0056760370).`;
       default:
         return err?.message || 'Authentication error. Please try again.';
     }
   };
 
-  // Direct Google Account Authentication via Server Backend
-  const handleDirectGoogleLogin = async (overrideEmail?: string) => {
-    const targetEmail = (overrideEmail || directGoogleEmail || email).trim();
-    if (!targetEmail || !targetEmail.includes('@')) {
-      setError('Please provide a valid Google email address.');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/auth/google-sign-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: targetEmail,
-          fullName: fullName.trim() || undefined,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to authenticate with Google account.');
-      }
-
-      const user = data.user;
-      localStorage.setItem('hopelandjobs_current_user', JSON.stringify(user));
-      window.dispatchEvent(new CustomEvent('hopelandjobs:auth-changed', { detail: user }));
-
-      // Track login in GA4
-      trackAnalyticsEvent(mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login', {
-        method: 'google',
-        title: 'Google Direct Authentication',
-      });
-
-      setSuccessMsg(`Welcome, ${user.displayName || 'Job Seeker'}!`);
-      setTimeout(() => {
-        onSuccess?.(user);
-        onClose();
-      }, 900);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to sign in with Google account.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Google One-Click Sign-In / Registration
+  // Real Firebase Google Account Selection Popup Sign-In & Registration
   const handleGoogleAuth = async () => {
     setLoading(true);
     setError(null);
-
-    // If direct Google mode is currently open and email is filled, use direct handler
-    if (showDirectGoogle && (directGoogleEmail || email)) {
-      await handleDirectGoogleLogin();
-      return;
-    }
+    setSuccessMsg(null);
 
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
+      const additionalInfo = getAdditionalUserInfo(result);
+      const isNewUser = Boolean(additionalInfo?.isNewUser);
+      const now = new Date().toISOString();
 
-      // Track registration/login in GA4
-      trackAnalyticsEvent(mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login', {
-        method: 'google',
-        title: 'Google Authentication',
-      });
-
-      // Ensure user profile document exists
       let profile = await fetchJobSeekerProfile(user.uid);
       if (!profile) {
         profile = {
           ...DEFAULT_JOB_SEEKER_PROFILE,
           uid: user.uid,
           email: user.email || '',
-          fullName: user.displayName || 'Job Seeker',
+          fullName: user.displayName || user.email?.split('@')[0] || 'Job Seeker',
           photoUrl: user.photoURL || undefined,
           phone: user.phoneNumber || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          authProvider: 'google',
+          emailVerified: user.emailVerified,
+          createdAt: now,
+          updatedAt: now,
         };
         await saveJobSeekerProfile(profile);
+      } else {
+        const syncedFullName =
+          !profile.fullName || profile.fullName === 'Job Seeker'
+            ? user.displayName || profile.fullName
+            : profile.fullName;
+        const syncedPhotoUrl = user.photoURL || profile.photoUrl;
+        const syncedEmail = user.email || profile.email;
+        const needsSync =
+          syncedFullName !== profile.fullName ||
+          syncedPhotoUrl !== profile.photoUrl ||
+          syncedEmail !== profile.email ||
+          !profile.emailVerified;
+
+        if (needsSync) {
+          profile = {
+            ...profile,
+            fullName: syncedFullName,
+            photoUrl: syncedPhotoUrl,
+            email: syncedEmail,
+            authProvider: profile.authProvider || 'google',
+            emailVerified: user.emailVerified || profile.emailVerified,
+            updatedAt: now,
+          };
+          await saveJobSeekerProfile(profile);
+        }
       }
 
-      setSuccessMsg(`Welcome, ${user.displayName || 'Job Seeker'}!`);
-      setTimeout(() => {
-        onSuccess?.(user);
-        onClose();
-      }, 1000);
-    } catch (err: any) {
-      const errorCode = err?.code || '';
-      if (errorCode === 'auth/unauthorized-domain' || errorCode === 'auth/popup-blocked') {
-        // Domain not yet whitelisted in Firebase console -> seamlessly switch to direct Google Sign-In
-        setShowDirectGoogle(true);
-        if (email && email.includes('@')) {
-          setDirectGoogleEmail(email);
-        }
-        setError('Direct Google Sign-In is ready for hopelandjobs.tech. Enter your Google email to authenticate.');
-      } else {
-        setError(mapAuthError(err));
+      // Track registration/login in GA4
+      trackAnalyticsEvent(isNewUser || mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login', {
+        method: 'google',
+        title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
+      });
+
+      setSuccessMsg(
+        isNewUser
+          ? `Account created! Welcome, ${user.displayName || profile.fullName || 'Job Seeker'}!`
+          : `Welcome back, ${user.displayName || profile.fullName || 'Job Seeker'}!`
+      );
+
+      if (onSuccess) {
+        await onSuccess(user, profile);
       }
+      onClose();
+    } catch (err: any) {
+      setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }
@@ -236,6 +216,8 @@ export const UserAuthModal: React.FC<Props> = ({
           email: cred.user.email || email.trim(),
           fullName: fullName.trim(),
           phone: phone.trim(),
+          authProvider: 'email',
+          emailVerified: cred.user.emailVerified,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -247,10 +229,10 @@ export const UserAuthModal: React.FC<Props> = ({
         });
 
         setSuccessMsg('Account created successfully! Welcome to Hopeland Jobs.');
-        setTimeout(() => {
-          onSuccess?.(cred.user);
-          onClose();
-        }, 1200);
+        if (onSuccess) {
+          await onSuccess(cred.user, newProfile);
+        }
+        onClose();
       } else if (mode === 'signin') {
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
 
@@ -262,6 +244,8 @@ export const UserAuthModal: React.FC<Props> = ({
             uid: cred.user.uid,
             email: cred.user.email || email.trim(),
             fullName: cred.user.displayName || 'Job Seeker',
+            authProvider: 'email',
+            emailVerified: cred.user.emailVerified,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
@@ -274,10 +258,10 @@ export const UserAuthModal: React.FC<Props> = ({
         });
 
         setSuccessMsg('Welcome back!');
-        setTimeout(() => {
-          onSuccess?.(cred.user);
-          onClose();
-        }, 1000);
+        if (onSuccess) {
+          await onSuccess(cred.user, profile);
+        }
+        onClose();
       } else if (mode === 'forgot') {
         await sendPasswordResetEmail(auth, email.trim());
         setSuccessMsg('Password reset link sent! Check your inbox to set a new password.');
@@ -366,37 +350,8 @@ export const UserAuthModal: React.FC<Props> = ({
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>Continue with Google</span>
+                <span>{loading ? 'Connecting to Google...' : 'Continue with Google'}</span>
               </button>
-
-              {showDirectGoogle && (
-                <div className="mt-3 p-3.5 bg-blue-50/90 border border-blue-200 rounded-2xl text-xs space-y-2.5 animate-in fade-in">
-                  <div className="flex items-center gap-2 text-blue-950 font-bold">
-                    <Mail className="w-4 h-4 text-blue-600" />
-                    <span>Instant Google Account Sign-In</span>
-                  </div>
-                  <p className="text-[11px] text-blue-800 leading-relaxed">
-                    Direct authentication for <strong>hopelandjobs.tech</strong>:
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="email"
-                      value={directGoogleEmail}
-                      onChange={(e) => setDirectGoogleEmail(e.target.value)}
-                      placeholder="your.google@gmail.com"
-                      className="flex-1 px-3 py-2 bg-white rounded-xl border border-blue-300 text-xs text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleDirectGoogleLogin()}
-                      disabled={loading || !directGoogleEmail.includes('@')}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-xs cursor-pointer transition-all"
-                    >
-                      Authenticate
-                    </button>
-                  </div>
-                </div>
-              )}
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">

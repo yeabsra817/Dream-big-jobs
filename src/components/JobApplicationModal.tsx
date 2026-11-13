@@ -22,6 +22,7 @@ import { JobSeekerProfile, UserJobApplication } from '../types/jobSeeker';
 import { submitJobApplication, fetchUserApplications } from '../lib/firebase';
 import { uploadDocumentToCloud } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
+import { generateAiCoverLetter } from '../lib/aiService';
 
 interface Props {
   vacancy: Vacancy | null;
@@ -53,6 +54,28 @@ export const JobApplicationModal: React.FC<Props> = ({
   const [existingApp, setExistingApp] = useState<UserJobApplication | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isDraftingAiNote, setIsDraftingAiNote] = useState(false);
+
+  const handleAiDraftCoverNote = async () => {
+    if (!vacancy) return;
+    setIsDraftingAiNote(true);
+    setError(null);
+    try {
+      const res = await generateAiCoverLetter({
+        vacancy,
+        applicantName: fullName || currentUser?.displayName || 'Applicant',
+        applicantPhone: phone || userProfile?.phone || '',
+        applicantEmail: currentUser?.email || userProfile?.email || '',
+        userProfile,
+        tone: 'concise',
+      });
+      setCoverLetter(res.coverLetterText);
+    } catch (err: any) {
+      setError(err.message || 'Unable to generate AI cover note right now.');
+    } finally {
+      setIsDraftingAiNote(false);
+    }
+  };
 
   // Initialize form from user profile & check for duplicate applications
   useEffect(() => {
@@ -450,14 +473,25 @@ export const JobApplicationModal: React.FC<Props> = ({
 
               {/* Cover Letter / Note to Employer */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Cover Letter / Note to Employer (Optional)
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Cover Letter / Note to Employer (Optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAiDraftCoverNote}
+                    disabled={isDraftingAiNote}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#0B132B] hover:bg-slate-800 text-amber-400 font-bold text-[11px] transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles className={`w-3 h-3 ${isDraftingAiNote ? 'animate-spin' : ''}`} />
+                    <span>{isDraftingAiNote ? 'Drafting with AI...' : 'AI Draft Cover Note'}</span>
+                  </button>
+                </div>
                 <textarea
-                  rows={4}
+                  rows={5}
                   value={coverLetter}
                   onChange={(e) => setCoverLetter(e.target.value)}
-                  placeholder="Introduce yourself and explain why your qualifications make you an ideal candidate for this role..."
+                  placeholder="Introduce yourself and explain why your qualifications make you an ideal candidate for this role — or click AI Draft Cover Note above..."
                   className="w-full p-3 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none resize-none"
                 />
               </div>

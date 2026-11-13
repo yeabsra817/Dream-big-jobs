@@ -176,20 +176,31 @@ export const DEFAULT_GA_MEASUREMENT_ID = 'G-KH6X73105S';
 // Initialize official GA4 script tag dynamically for continuous 24/7 tracking
 let isGaInitialized = false;
 let currentGaMeasurementId: string = DEFAULT_GA_MEASUREMENT_ID;
+let currentAnalyticsUserId: string | null = null;
+
+// Sanitize non-PII Firebase UID so no email address or phone ever leaks into analytics
+function normalizeNonPiiUserId(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.includes('@')) return null;
+  return trimmed.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || null;
+}
 
 // Track user ID across different Google accounts so each user is counted
 export function setAnalyticsUserId(userId: string | null) {
   if (typeof window === 'undefined') return;
+  const safeUid = normalizeNonPiiUserId(userId);
+  currentAnalyticsUserId = safeUid;
   const gaId = currentGaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
   if (typeof window.gtag === 'function') {
     try {
-      if (userId) {
+      if (safeUid) {
         window.gtag('set', 'user_properties', {
-          user_id: userId,
+          user_id: safeUid,
           account_linked: 1,
         });
         window.gtag('config', gaId, {
-          user_id: userId,
+          user_id: safeUid,
         });
       } else {
         window.gtag('set', 'user_properties', {
@@ -405,6 +416,14 @@ export async function trackAnalyticsEvent(
           });
           break;
 
+        case 'ai_assist':
+          window.gtag('event', 'ai_assist', {
+            ai_task: details.filterType || 'general',
+            job_id: details.jobId,
+            search_category: details.category,
+          });
+          break;
+
         default:
           break;
       }
@@ -417,6 +436,7 @@ export async function trackAnalyticsEvent(
   const eventPayload: AnalyticsEvent = {
     id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     visitorId,
+    ...(currentAnalyticsUserId ? { userId: currentAnalyticsUserId } : {}),
     sessionId,
     eventType,
     path: safePath,

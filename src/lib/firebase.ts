@@ -10,6 +10,7 @@ import {
   updateProfile,
   signOut,
   onAuthStateChanged,
+  getAdditionalUserInfo,
   User,
 } from 'firebase/auth';
 import {
@@ -57,6 +58,26 @@ export const db = firestoreInstance;
 export const auth = getAuth(app);
 export const storage = getStorage(app, (firebaseConfig as any).storageBucket || 'gen-lang-client-0056760370.firebasestorage.app');
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('profile');
+googleProvider.addScope('email');
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
+
+export async function safeResponseJson<T = any>(res: Response): Promise<T | null> {
+  try {
+    const text = await res.text();
+    if (!text) return null;
+    const trimmed = text.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      return null;
+    }
+    return JSON.parse(trimmed) as T;
+  } catch {
+    return null;
+  }
+}
+
 export const ADMIN_EMAIL = 'nexusitsoultion@gmail.com';
 export const PERSONAL_AUTO_APPLY_EMAIL = 'yeabsra45@gmail.com';
 
@@ -445,7 +466,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   try {
     const sRes = await fetch('/api/settings');
     if (sRes.ok) {
-      const sData = await sRes.json();
+      const sData = await safeResponseJson<Partial<SiteSettings>>(sRes);
       if (sData && typeof sData === 'object') {
         serverSettings = sData;
       }
@@ -839,8 +860,8 @@ export async function fetchAutoApplyProfile(): Promise<PersonalProfile | null> {
   try {
     const res = await fetch('/api/auto-apply/state');
     if (res.ok) {
-      const data = await res.json();
-      if (data.profile) {
+      const data = await safeResponseJson<{ profile?: PersonalProfile }>(res);
+      if (data?.profile) {
         try {
           localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_PROFILE_KEY, JSON.stringify(data.profile));
         } catch {}
@@ -921,8 +942,8 @@ export async function fetchAutoApplyDocuments(): Promise<PersonalDocument[]> {
   try {
     const res = await fetch('/api/auto-apply/state');
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.documents) && data.documents.length > 0) {
+      const data = await safeResponseJson<{ documents?: PersonalDocument[] }>(res);
+      if (data && Array.isArray(data.documents) && data.documents.length > 0) {
         try {
           localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_DOCS_KEY, JSON.stringify(data.documents));
         } catch {}
@@ -1028,8 +1049,8 @@ export async function fetchAutoApplyApplications(): Promise<ApplicationRecord[]>
   try {
     const res = await fetch('/api/auto-apply/state');
     if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.applications) && data.applications.length > 0) {
+      const data = await safeResponseJson<{ applications?: ApplicationRecord[] }>(res);
+      if (data && Array.isArray(data.applications) && data.applications.length > 0) {
         try {
           localStorage.setItem(LOCAL_STORAGE_AUTO_APPLY_APPS_KEY, JSON.stringify(data.applications));
         } catch {}
@@ -1172,6 +1193,7 @@ export {
   sendPasswordResetEmail,
   sendEmailVerification,
   updateProfile,
+  getAdditionalUserInfo,
 };
 
 /* =========================================================================
@@ -1200,7 +1222,7 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
   try {
     const res = await fetch(`/api/user-profile/${encodeURIComponent(uid)}`);
     if (res.ok) {
-      const serverProfile = await res.json();
+      const serverProfile = await safeResponseJson<JobSeekerProfile>(res);
       if (serverProfile && serverProfile.uid) {
         try {
           localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(serverProfile));
@@ -1222,15 +1244,20 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
 export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<void> {
   if (!profile.uid) return;
 
+  const cleanProfile = sanitizeForFirestore({
+    ...profile,
+    updatedAt: new Date().toISOString(),
+  });
+
   // 1. Cache immediately in localStorage
   try {
-    localStorage.setItem(`hopelandjobs_profile_${profile.uid}`, JSON.stringify(profile));
+    localStorage.setItem(`hopelandjobs_profile_${profile.uid}`, JSON.stringify(cleanProfile));
   } catch {}
 
   // 2. Persist to Firestore
   try {
     const docRef = doc(db, 'job_seeker_profiles', profile.uid);
-    await setDoc(docRef, { ...profile, updatedAt: new Date().toISOString() }, { merge: true });
+    await setDoc(docRef, cleanProfile, { merge: true });
   } catch (err) {
     console.warn('Firestore profile save notice:', err);
   }
@@ -1240,7 +1267,7 @@ export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<v
     await fetch('/api/user-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profile),
+      body: JSON.stringify(cleanProfile),
     });
   } catch {}
 }
@@ -1272,7 +1299,7 @@ export async function fetchUserApplications(userId: string): Promise<UserJobAppl
   try {
     const res = await fetch(`/api/applications?userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
-      const serverApps = await res.json();
+      const serverApps = await safeResponseJson<UserJobApplication[]>(res);
       if (Array.isArray(serverApps)) {
         try {
           localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(serverApps));
@@ -1308,7 +1335,7 @@ export async function fetchAllApplicationsAdmin(): Promise<UserJobApplication[]>
   try {
     const res = await fetch('/api/applications/all');
     if (res.ok) {
-      const serverApps = await res.json();
+      const serverApps = await safeResponseJson<UserJobApplication[]>(res);
       if (Array.isArray(serverApps)) return serverApps;
     }
   } catch {}
@@ -1319,10 +1346,12 @@ export async function fetchAllApplicationsAdmin(): Promise<UserJobApplication[]>
 export async function submitJobApplication(
   application: UserJobApplication
 ): Promise<{ success: boolean; error?: string }> {
+  const cleanApplication = sanitizeForFirestore(application);
+
   // 1. Save to Firestore
   try {
     const docRef = doc(db, 'job_applications', application.id);
-    await setDoc(docRef, application);
+    await setDoc(docRef, cleanApplication);
   } catch (err: any) {
     console.warn('Firestore application submit notice:', err);
   }
@@ -1332,11 +1361,11 @@ export async function submitJobApplication(
     const res = await fetch('/api/applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(application),
+      body: JSON.stringify(cleanApplication),
     });
     if (!res.ok) {
-      const data = await res.json();
-      if (data.error && data.isDuplicate) {
+      const data = await safeResponseJson<{ error?: string; isDuplicate?: boolean }>(res);
+      if (data?.error && data?.isDuplicate) {
         return { success: false, error: data.error };
       }
     }

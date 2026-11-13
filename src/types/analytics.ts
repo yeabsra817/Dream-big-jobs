@@ -3,6 +3,7 @@ export type AnalyticsPeriod = 'today' | 'yesterday' | 'last7' | 'last30' | 'last
 export interface AnalyticsEvent {
   id: string;
   visitorId: string;
+  userId?: string;
   sessionId: string;
   eventType:
     | 'page_view'
@@ -22,7 +23,8 @@ export interface AnalyticsEvent {
     | 'job_seeker_login'
     | 'job_seeker_register'
     | 'profile_update'
-    | 'cv_upload';
+    | 'cv_upload'
+    | 'ai_assist';
   path: string;
   title?: string;
   jobId?: string;
@@ -49,6 +51,30 @@ export interface AnalyticsEvent {
   city?: string;
   timestamp: string; // ISO format
   isInternal: boolean;
+}
+
+export interface CustomerVisitCountSummary {
+  visitorsToday: number;
+  visitorsYesterday: number;
+  visitorsLast7: number;
+  visitorsLast30: number;
+  activeNow: number;
+  totalUniqueVisits: number;
+  totalPageViews: number;
+  signedInCustomerVisits: number;
+  telegramReferrals: number;
+  aiInteractionsCount: number;
+  lastUpdated: string;
+}
+
+export interface CustomerVisitAiInsight {
+  headline: string;
+  visitTrendSummary: string;
+  audienceBehavior: string;
+  conversionOpportunity: string;
+  recommendedActions: string[];
+  modelUsed: string;
+  generatedAt: string;
 }
 
 export interface ConversionFunnelStage {

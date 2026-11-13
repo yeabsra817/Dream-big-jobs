@@ -27,6 +27,8 @@ import {
   Award,
   Zap,
   UserCheck,
+  Loader2,
+  BarChart3,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -74,6 +76,15 @@ import { AllCategoriesView } from './components/AllCategoriesView';
 import { Footer } from './components/Footer';
 import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
 import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
+import {
+  fetchCustomerVisitCount,
+  generateVisitCountAiInsights,
+  runAiSmartSearch,
+  askAiCareerCoach,
+  SmartSearchAiResponse,
+  CareerCoachAiResponse,
+} from './lib/aiService';
+import { CustomerVisitCountSummary, CustomerVisitAiInsight } from './types/analytics';
 
 const POPULAR_EMPLOYERS = [
   { name: 'Commercial Bank of Ethiopia', short: 'CBE', category: 'Commercial Banking & Microfinance', vacancies: 'Official' },
@@ -152,6 +163,22 @@ export default function App() {
   // Loading
   const [loading, setLoading] = useState(true);
 
+  // Customer Visit Count & AI Features State
+  const [visitStats, setVisitStats] = useState<CustomerVisitCountSummary | null>(null);
+  const [heroVisitInsight, setHeroVisitInsight] = useState<CustomerVisitAiInsight | null>(null);
+  const [isHeroVisitInsightLoading, setIsHeroVisitInsightLoading] = useState(false);
+  const [heroVisitInsightError, setHeroVisitInsightError] = useState<string | null>(null);
+  const [showHeroVisitPanel, setShowHeroVisitPanel] = useState(false);
+
+  const [aiSearchResult, setAiSearchResult] = useState<SmartSearchAiResponse | null>(null);
+  const [isAiSearching, setIsAiSearching] = useState(false);
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+
+  const [careerQuestion, setCareerQuestion] = useState('');
+  const [careerCoachAdvice, setCareerCoachAdvice] = useState<CareerCoachAiResponse | null>(null);
+  const [isCareerCoachLoading, setIsCareerCoachLoading] = useState(false);
+  const [careerCoachError, setCareerCoachError] = useState<string | null>(null);
+
   // Load Initial Data (Public data: site settings & published vacancies)
   useEffect(() => {
     async function loadData() {
@@ -210,20 +237,57 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
-        setAnalyticsUserId(user.uid || user.email || null);
+        setAnalyticsUserId(user.uid || null);
+        fetchCustomerVisitCount(true).then((stats) => {
+          if (stats) setVisitStats(stats);
+        });
         if (isUserAdmin(user)) {
           setIsOwnerAuthorized(true);
           setAdminEmail(user.email);
+        } else {
+          setIsOwnerAuthorized(false);
+          setAdminEmail(null);
         }
+
         // Load Job Seeker Profile & Applications
         try {
-          const [profile, apps] = await Promise.all([
+          const [existingProfile, apps] = await Promise.all([
             fetchJobSeekerProfile(user.uid),
             fetchUserApplications(user.uid),
           ]);
           setUserApplications(apps);
-          if (profile) {
-            setUserProfile(profile);
+
+          const isGoogleUser = user.providerData?.some((p) => p.providerId === 'google.com');
+          const now = new Date().toISOString();
+
+          if (existingProfile) {
+            let syncedProfile = existingProfile;
+            if (isGoogleUser) {
+              const nextFullName =
+                !existingProfile.fullName || existingProfile.fullName === 'Job Seeker'
+                  ? user.displayName || existingProfile.fullName
+                  : existingProfile.fullName;
+              const nextPhotoUrl = user.photoURL || existingProfile.photoUrl;
+              const nextEmail = user.email || existingProfile.email;
+              if (
+                nextFullName !== existingProfile.fullName ||
+                nextPhotoUrl !== existingProfile.photoUrl ||
+                nextEmail !== existingProfile.email ||
+                !existingProfile.emailVerified
+              ) {
+                syncedProfile = {
+                  ...existingProfile,
+                  fullName: nextFullName,
+                  photoUrl: nextPhotoUrl,
+                  email: nextEmail,
+                  authProvider: existingProfile.authProvider || 'google',
+                  emailVerified: user.emailVerified || existingProfile.emailVerified,
+                  updatedAt: now,
+                };
+                await saveJobSeekerProfile(syncedProfile);
+              }
+            }
+            setUserProfile(syncedProfile);
           } else {
             // Create default profile on first sign-in
             const newProfile: JobSeekerProfile = {
@@ -232,8 +296,11 @@ export default function App() {
               fullName: user.displayName || user.email?.split('@')[0] || 'Job Seeker',
               email: user.email || '',
               photoUrl: user.photoURL || undefined,
-              authProvider: user.providerData?.[0]?.providerId?.includes('google') ? 'google' : 'email',
+              phone: user.phoneNumber || '',
+              authProvider: isGoogleUser ? 'google' : 'email',
               emailVerified: user.emailVerified,
+              createdAt: now,
+              updatedAt: now,
             };
             await saveJobSeekerProfile(newProfile);
             setUserProfile(newProfile);
@@ -242,53 +309,28 @@ export default function App() {
           console.warn('Profile sync notice:', e);
         }
       } else {
-        // Fallback: Check for custom direct Google authentication session
-        try {
-          const stored = localStorage.getItem('hopelandjobs_current_user');
-          if (stored) {
-            const localUser = JSON.parse(stored);
-            if (localUser && localUser.uid) {
-              setCurrentUser(localUser as any);
-              setAnalyticsUserId(localUser.uid || localUser.email || null);
-              const [profile, apps] = await Promise.all([
-                fetchJobSeekerProfile(localUser.uid),
-                fetchUserApplications(localUser.uid),
-              ]);
-              setUserApplications(apps);
-              if (profile) {
-                setUserProfile(profile);
-              }
-              return;
-            }
-          }
-        } catch {}
-
         setCurrentUser(null);
         setUserProfile(null);
         setUserApplications([]);
+        setIsOwnerAuthorized(false);
+        setAdminEmail(null);
         setAnalyticsUserId(null);
       }
     });
 
-    // Custom event listener for instant Google Sign-In across all domains
-    const handleCustomAuthChange = async (e: any) => {
-      const customUser = e.detail;
-      if (customUser && customUser.uid) {
-        setCurrentUser(customUser);
-        setAnalyticsUserId(customUser.uid || customUser.email || null);
-        const [profile, apps] = await Promise.all([
-          fetchJobSeekerProfile(customUser.uid),
-          fetchUserApplications(customUser.uid),
-        ]);
-        setUserApplications(apps);
-        if (profile) setUserProfile(profile);
-      }
-    };
-    window.addEventListener('hopelandjobs:auth-changed', handleCustomAuthChange);
+    // Load & refresh live customer visit count
+    fetchCustomerVisitCount(true).then((stats) => {
+      if (stats) setVisitStats(stats);
+    });
+    const visitInterval = setInterval(() => {
+      fetchCustomerVisitCount(true).then((stats) => {
+        if (stats) setVisitStats(stats);
+      });
+    }, 60000);
 
     return () => {
       unsubscribe();
-      window.removeEventListener('hopelandjobs:auth-changed', handleCustomAuthChange);
+      clearInterval(visitInterval);
     };
   }, []);
 
@@ -415,6 +457,79 @@ export default function App() {
       return matchesSearch && matchesLocation && matchesSector && matchesType;
     });
   }, [publishedVacancies, heroSearch, heroLocation, heroSector, heroEmploymentType]);
+
+  // Combined displayed search results (AI-ranked when AI Smart Search is active, otherwise standard filter)
+  const displayedHomepageVacancies = useMemo(() => {
+    if (aiSearchResult && aiSearchResult.matchedVacancyIds && aiSearchResult.matchedVacancyIds.length > 0) {
+      const idRank = new Map<string, number>();
+      aiSearchResult.matchedVacancyIds.forEach((id, idx) => idRank.set(id, idx));
+      const matched = publishedVacancies
+        .filter((v) => idRank.has(v.id))
+        .sort((a, b) => (idRank.get(a.id) ?? 999) - (idRank.get(b.id) ?? 999));
+      if (matched.length > 0) return matched;
+    }
+    return filteredHomepageVacancies;
+  }, [aiSearchResult, publishedVacancies, filteredHomepageVacancies]);
+
+  const handleAiSmartSearch = async () => {
+    const q = heroSearch.trim();
+    if (!q) return;
+    setIsAiSearching(true);
+    setAiSearchError(null);
+    try {
+      const result = await runAiSmartSearch({
+        query: q,
+        vacancies: publishedVacancies,
+        userProfile,
+      });
+      setAiSearchResult(result);
+      setTimeout(() => {
+        const el = document.getElementById('search-results');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    } catch (err: any) {
+      setAiSearchError(err?.message || 'AI Smart Search could not complete. Showing standard matches.');
+    } finally {
+      setIsAiSearching(false);
+    }
+  };
+
+  const handleToggleHeroVisitInsight = async () => {
+    const nextOpen = !showHeroVisitPanel;
+    setShowHeroVisitPanel(nextOpen);
+    if (nextOpen && !heroVisitInsight && !isHeroVisitInsightLoading) {
+      setIsHeroVisitInsightLoading(true);
+      setHeroVisitInsightError(null);
+      try {
+        const insight = await generateVisitCountAiInsights(true);
+        setHeroVisitInsight(insight);
+      } catch (err: any) {
+        setHeroVisitInsightError(err?.message || 'Unable to load AI customer visit insight.');
+      } finally {
+        setIsHeroVisitInsightLoading(false);
+      }
+    }
+  };
+
+  const handleAskCareerCoach = async (promptOverride?: string) => {
+    const q = (promptOverride ?? careerQuestion).trim();
+    if (!q) return;
+    if (promptOverride) setCareerQuestion(promptOverride);
+    setIsCareerCoachLoading(true);
+    setCareerCoachError(null);
+    try {
+      const res = await askAiCareerCoach({
+        userProfile,
+        question: q,
+        mode: 'advisor',
+      });
+      setCareerCoachAdvice(res);
+    } catch (err: any) {
+      setCareerCoachError(err?.message || 'AI Career Advisor is temporarily unavailable.');
+    } finally {
+      setIsCareerCoachLoading(false);
+    }
+  };
 
   // Personalized recommendations based on candidate's experience and position
   const recommendedVacancies = useMemo(() => {
@@ -783,10 +898,13 @@ export default function App() {
           try {
             await signOut(auth);
           } catch {}
-          localStorage.removeItem('hopelandjobs_current_user');
+          try {
+            localStorage.removeItem('hopelandjobs_current_user');
+          } catch {}
           setCurrentUser(null);
           setUserProfile(null);
           setUserApplications([]);
+          setIsJobSeekerDashboardOpen(false);
           setAnalyticsUserId(null);
         }}
         language={language}
@@ -870,8 +988,18 @@ export default function App() {
                         <input
                           type="text"
                           value={heroSearch}
-                          onChange={(e) => setHeroSearch(e.target.value)}
-                          placeholder="Job title, skills, or company..."
+                          onChange={(e) => {
+                            setHeroSearch(e.target.value);
+                            if (aiSearchResult) setAiSearchResult(null);
+                            if (aiSearchError) setAiSearchError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && heroSearch.trim()) {
+                              e.preventDefault();
+                              handleAiSmartSearch();
+                            }
+                          }}
+                          placeholder="Job title, skills, or ask AI (e.g. banking Addis)..."
                           className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
                         />
                       </div>
@@ -930,26 +1058,43 @@ export default function App() {
                         ))}
                       </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        {(heroSearch || heroLocation !== 'All' || heroSector !== 'All' || heroEmploymentType !== 'All') && (
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        {(heroSearch || heroLocation !== 'All' || heroSector !== 'All' || heroEmploymentType !== 'All' || aiSearchResult) && (
                           <button
                             onClick={() => {
                               setHeroSearch('');
                               setHeroLocation('All');
                               setHeroSector('All');
                               setHeroEmploymentType('All');
+                              setAiSearchResult(null);
+                              setAiSearchError(null);
                             }}
-                            className="text-xs text-slate-500 hover:text-slate-800 underline"
+                            className="text-xs text-slate-500 hover:text-slate-800 underline cursor-pointer"
                           >
                             Reset
                           </button>
                         )}
-                        {heroSearch || heroLocation !== 'All' || heroSector !== 'All' ? (
+                        {heroSearch.trim().length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleAiSmartSearch}
+                            disabled={isAiSearching}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-60 text-amber-400 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
+                          >
+                            {isAiSearching ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 fill-current" />
+                            )}
+                            <span>{isAiSearching ? 'AI Matching...' : 'AI Smart Search'}</span>
+                          </button>
+                        )}
+                        {heroSearch || heroLocation !== 'All' || heroSector !== 'All' || aiSearchResult ? (
                           <a
                             href="#search-results"
                             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
                           >
-                            <span>View {filteredHomepageVacancies.length} Matching Jobs</span>
+                            <span>View {displayedHomepageVacancies.length} Matching Jobs</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </a>
                         ) : (
@@ -972,7 +1117,7 @@ export default function App() {
                 </div>
 
                 {/* Statistics Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-4xl mx-auto pt-6 text-left">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-5xl mx-auto pt-6 text-left">
                   <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
                     <div className="text-2xl font-black text-amber-400">{totalActiveVacancies}</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
@@ -1004,7 +1149,104 @@ export default function App() {
                     </div>
                     <div className="text-[10px] text-slate-500">Zero fake listings</div>
                   </div>
+
+                  <div className="col-span-2 sm:col-span-1 bg-slate-900/80 backdrop-blur p-3.5 rounded-xl border border-amber-500/30 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="text-2xl font-black text-sky-400">
+                          {visitStats ? visitStats.totalUniqueVisits : 0}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleToggleHeroVisitInsight}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[10px] font-bold transition-colors cursor-pointer"
+                          title="AI Customer Visit Count Insight"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>AI</span>
+                        </button>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
+                        Customer Visits
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {visitStats?.visitorsToday ?? 0} today • {visitStats?.activeNow ?? 0} live
+                    </div>
+                  </div>
                 </div>
+
+                {/* Expandable AI Customer Visit Count Insight Panel */}
+                {showHeroVisitPanel && (
+                  <div className="max-w-5xl mx-auto mt-3 bg-slate-900/90 backdrop-blur border border-amber-400/40 rounded-2xl p-4 sm:p-5 text-left space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-extrabold text-amber-400 uppercase tracking-wider">
+                        <BarChart3 className="w-4 h-4" />
+                        <span>AI Customer Visit Count Intelligence</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setIsHeroVisitInsightLoading(true);
+                            setHeroVisitInsightError(null);
+                            try {
+                              const [freshStats, freshInsight] = await Promise.all([
+                                fetchCustomerVisitCount(true),
+                                generateVisitCountAiInsights(true),
+                              ]);
+                              if (freshStats) setVisitStats(freshStats);
+                              setHeroVisitInsight(freshInsight);
+                            } catch (err: any) {
+                              setHeroVisitInsightError(err?.message || 'Unable to refresh AI visit insights.');
+                            } finally {
+                              setIsHeroVisitInsightLoading(false);
+                            }
+                          }}
+                          disabled={isHeroVisitInsightLoading}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold cursor-pointer"
+                        >
+                          {isHeroVisitInsightLoading ? 'Analyzing...' : 'Refresh AI'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowHeroVisitPanel(false)}
+                          className="text-xs text-slate-400 hover:text-white px-2 py-1 cursor-pointer"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+
+                    {isHeroVisitInsightLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-300 py-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                        <span>Gemini AI is analyzing live Hopeland Jobs customer visit counts...</span>
+                      </div>
+                    ) : heroVisitInsightError ? (
+                      <p className="text-xs text-rose-300">{heroVisitInsightError}</p>
+                    ) : heroVisitInsight ? (
+                      <div className="space-y-2 text-xs">
+                        <p className="font-bold text-white">{heroVisitInsight.headline}</p>
+                        <p className="text-slate-300 leading-relaxed">{heroVisitInsight.visitTrendSummary}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                            <div className="text-[10px] font-bold uppercase text-amber-400 mb-1">
+                              Audience Behavior
+                            </div>
+                            <p className="text-slate-300 leading-relaxed">{heroVisitInsight.audienceBehavior}</p>
+                          </div>
+                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                            <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">
+                              Conversion Opportunity
+                            </div>
+                            <p className="text-slate-300 leading-relaxed">{heroVisitInsight.conversionOpportunity}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </section>
 
@@ -1037,16 +1279,20 @@ export default function App() {
             </section>
 
             {/* SEARCH RESULTS SECTION (Shown Only When Visitor Has an Active Search or Filter Query) */}
-            {(heroSearch.trim().length > 0 || heroLocation !== 'All' || heroSector !== 'All') && (
+            {(heroSearch.trim().length > 0 || heroLocation !== 'All' || heroSector !== 'All' || aiSearchResult !== null) && (
               <section id="search-results" className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto animate-in fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
                   <div>
                     <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
-                      <Search className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Search Results</span>
+                      {aiSearchResult ? (
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
+                      ) : (
+                        <Search className="w-3.5 h-3.5 text-amber-600" />
+                      )}
+                      <span>{aiSearchResult ? 'Gemini AI Smart Search Results' : 'Search Results'}</span>
                     </div>
                     <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                      Matching Vacancies ({filteredHomepageVacancies.length})
+                      Matching Vacancies ({displayedHomepageVacancies.length})
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Showing results for {heroSearch ? `"${heroSearch}"` : 'selected filters'} across Ethiopia.
@@ -1058,6 +1304,8 @@ export default function App() {
                       setHeroLocation('All');
                       setHeroSector('All');
                       setHeroEmploymentType('All');
+                      setAiSearchResult(null);
+                      setAiSearchError(null);
                     }}
                     className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-all self-start sm:self-auto cursor-pointer"
                   >
@@ -1065,12 +1313,42 @@ export default function App() {
                   </button>
                 </div>
 
-                {filteredHomepageVacancies.length === 0 ? (
+                {aiSearchError && (
+                  <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                    {aiSearchError}
+                  </div>
+                )}
+
+                {aiSearchResult && (
+                  <div className="mb-6 p-4 rounded-2xl bg-[#0B132B] text-white border border-slate-800 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-extrabold text-amber-400">
+                        <Sparkles className="w-4 h-4 fill-current" />
+                        <span>AI Interpretation: {aiSearchResult.interpretedQuery}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiSearchResult(null)}
+                        className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+                      >
+                        Switch to standard filter
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed">{aiSearchResult.explanation}</p>
+                    {aiSearchResult.searchTip && (
+                      <p className="text-[11px] text-amber-300 font-medium">
+                        Tip: {aiSearchResult.searchTip}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {displayedHomepageVacancies.length === 0 ? (
                   <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 space-y-3">
                     <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
                     <h4 className="font-bold text-slate-800 text-sm">No vacancies match this specific filter</h4>
                     <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      Try searching by category name, or browse one of the 16 official Ethiopian job categories below.
+                      Try searching by category name, click AI Smart Search for semantic matching, or browse the 16 official Ethiopian job categories.
                     </p>
                     <button
                       onClick={() => {
@@ -1078,6 +1356,7 @@ export default function App() {
                         setHeroLocation('All');
                         setHeroSector('All');
                         setHeroEmploymentType('All');
+                        setAiSearchResult(null);
                       }}
                       className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
                     >
@@ -1086,7 +1365,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredHomepageVacancies.map((vac) => {
+                    {displayedHomepageVacancies.map((vac) => {
                       const days = getDaysLeft(vac.applicationDeadline);
                       const isSaved = savedJobIds.has(vac.id);
                       return (
@@ -1426,14 +1705,14 @@ export default function App() {
               </div>
             </section>
 
-            {/* CV & COVER LETTER ASSISTANCE SECTION */}
+            {/* CV & COVER LETTER ASSISTANCE SECTION + INTERACTIVE AI CAREER ADVISOR */}
             <section id="cv-assistance-section" className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="bg-[#FFFBEB] rounded-3xl p-8 sm:p-12 border-2 border-amber-300 relative overflow-hidden">
+              <div className="bg-[#FFFBEB] rounded-3xl p-8 sm:p-12 border-2 border-amber-300 relative overflow-hidden space-y-8">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                   <div className="space-y-4">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
                       <Sparkles className="w-3.5 h-3.5 fill-current" />
-                      <span>Career Guidance Service</span>
+                      <span>AI Career Guidance Service</span>
                     </div>
                     <h2 className="text-2xl sm:text-3xl font-extrabold text-amber-950">
                       CV & Application Assistance for Ethiopian Job Seekers
@@ -1445,7 +1724,7 @@ export default function App() {
                     <div className="space-y-2 text-xs text-amber-900 font-medium">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Tailored cover letter generator available on every vacancy.</span>
+                        <span>AI-powered cover letter & interview preparation on every vacancy.</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1481,6 +1760,97 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Interactive Ask Hopeland AI Career & CV Advisor */}
+                <div className="bg-white rounded-2xl p-5 sm:p-6 border border-amber-200 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-[#0B132B] text-amber-400 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 fill-current" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900">
+                          Ask Hopeland AI Career & CV Advisor
+                        </h3>
+                        <p className="text-[11px] text-slate-500">
+                          Instant Gemini AI guidance tailored for Ethiopian banks, NGOs, and corporate employers.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      'Banking CV tips for CBE & Awash',
+                      'NGO cover letter checklist',
+                      'Fresh graduate interview prep',
+                    ].map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        onClick={() => handleAskCareerCoach(prompt)}
+                        disabled={isCareerCoachLoading}
+                        className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-bold text-[11px] transition-colors cursor-pointer"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={careerQuestion}
+                      onChange={(e) => setCareerQuestion(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && careerQuestion.trim()) {
+                          e.preventDefault();
+                          handleAskCareerCoach();
+                        }
+                      }}
+                      placeholder="Ask any CV, interview, or Ethiopian job search question..."
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAskCareerCoach()}
+                      disabled={isCareerCoachLoading || !careerQuestion.trim()}
+                      className="px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-50 text-amber-400 font-extrabold text-xs inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+                    >
+                      {isCareerCoachLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 fill-current" />
+                      )}
+                      <span>{isCareerCoachLoading ? 'Thinking...' : 'Ask AI Advisor'}</span>
+                    </button>
+                  </div>
+
+                  {careerCoachError && (
+                    <p className="text-xs text-rose-600 font-medium">{careerCoachError}</p>
+                  )}
+
+                  {careerCoachAdvice && (
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
+                      <div className="font-bold text-slate-900">AI Career Guidance</div>
+                      <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                        {careerCoachAdvice.adviceAnswer}
+                      </p>
+                      {careerCoachAdvice.profileStrengthTips?.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          <div className="text-[11px] font-bold uppercase text-amber-700">
+                            Actionable Tips
+                          </div>
+                          <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                            {careerCoachAdvice.profileStrengthTips.map((tip, i) => (
+                              <li key={i}>{tip}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
@@ -1545,12 +1915,22 @@ export default function App() {
         isOpen={isUserAuthModalOpen}
         initialMode={userAuthModalMode}
         onClose={() => setIsUserAuthModalOpen(false)}
-        onSuccess={async (user) => {
+        onSuccess={async (user, profile) => {
+          if (user) {
+            setCurrentUser(user);
+            setAnalyticsUserId(user.uid || null);
+            fetchCustomerVisitCount(true).then((stats) => {
+              if (stats) setVisitStats(stats);
+            });
+          }
+          if (profile) {
+            setUserProfile(profile);
+          }
           setIsUserAuthModalOpen(false);
           if (user?.uid) {
             try {
               const [p, apps] = await Promise.all([
-                fetchJobSeekerProfile(user.uid),
+                profile ? Promise.resolve(profile) : fetchJobSeekerProfile(user.uid),
                 fetchUserApplications(user.uid),
               ]);
               if (p) setUserProfile(p);
@@ -1614,6 +1994,7 @@ export default function App() {
       {selectedVacancy && (
         <VacancyDetailModal
           vacancy={selectedVacancy}
+          userProfile={userProfile}
           onClose={handleCloseVacancy}
           telegramUrl={siteSettings.telegramChannelUrl}
           onApply={(v) => handleStartApply(v)}

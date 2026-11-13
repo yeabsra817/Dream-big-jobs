@@ -32,7 +32,7 @@ import {
   FileCheck,
 } from 'lucide-react';
 import { Vacancy, SiteSettings, DuplicateReportItem } from '../../types/job';
-import { checkFirebaseHealth, fetchAutoApplyDocuments, generateFullSystemBackupSnapshot, auth } from '../../lib/firebase';
+import { checkFirebaseHealth, fetchAutoApplyDocuments, generateFullSystemBackupSnapshot, auth, safeResponseJson } from '../../lib/firebase';
 import { calculateStorageMetrics, TARGET_STORAGE_CAPACITY_GB, StorageMetrics } from '../../lib/storageService';
 import { isExpired } from '../../utils/helpers';
 import {
@@ -190,8 +190,8 @@ export const SystemHealth: React.FC<Props> = ({
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setLinkResults(data.results || []);
+        const data = await safeResponseJson<{ results?: any[] }>(res);
+        if (data?.results) setLinkResults(data.results);
       }
     } catch (err) {
       console.warn('Failed to audit links:', err);

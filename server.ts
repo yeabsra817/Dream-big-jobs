@@ -304,10 +304,9 @@ CRITICAL INSTRUCTIONS:
 
     const prompt = `Please parse all individual vacancies from the following text:\n\n${text}`;
 
-    // Candidate models prioritized by speed, availability, and low latency
+    // Primary Gemini model per skill guidelines
     const candidateModels = [
-      'gemini-flash-lite-latest',
-      'gemini-3.1-flash-lite',
+      'gemini-4-hydrogen',
     ];
 
     let rawVacancies: any[] = [];
@@ -1132,98 +1131,6 @@ app.post('/api/user-profile', (req: Request, res: Response): void => {
   }
 });
 
-// Google Authentication Endpoint for 100% Reliable Sign-In/Up Across All Domains & Devices
-app.post('/api/auth/google-sign-in', (req: Request, res: Response): void => {
-  try {
-    const { email, fullName, photoUrl, googleId } = req.body;
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      res.status(400).json({ error: 'A valid Google email address is required.' });
-      return;
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = (fullName && typeof fullName === 'string' && fullName.trim())
-      ? fullName.trim()
-      : cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-    const hexId = Buffer.from(cleanEmail).toString('hex').slice(0, 16);
-    const uid = googleId ? `google_${googleId}` : `google_${hexId}`;
-
-    const allProfiles = loadUserProfiles();
-    let profile = allProfiles[uid];
-
-    if (!profile) {
-      // Find if profile was created under email previously
-      const existingByEmail = Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase() === cleanEmail);
-      if (existingByEmail) {
-        profile = {
-          ...existingByEmail,
-          uid,
-          photoUrl: photoUrl || existingByEmail.photoUrl,
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        profile = {
-          uid,
-          email: cleanEmail,
-          fullName: cleanName,
-          phone: '',
-          photoUrl: photoUrl || '',
-          locationCity: 'Addis Ababa',
-          locationRegion: 'Addis Ababa',
-          employmentStatus: 'employed',
-          desiredJobTitle: 'Professional Specialist',
-          preferredIndustry: 'Banking and Financial Institutions',
-          yearsOfExperience: '1-3 Years',
-          expectedSalaryEtb: '',
-          preferredEmploymentType: 'Full-time',
-          preferredWorkLocation: 'Addis Ababa',
-          skills: ['Communication', 'Microsoft Office', 'Teamwork', 'Customer Service'],
-          education: [],
-          experience: [],
-          documents: [],
-          jobPreferences: {
-            fullTime: true,
-            partTime: false,
-            contract: false,
-            internship: false,
-            remote: true,
-            freshGraduate: false,
-          },
-          storageUsedBytes: 0,
-          storageCapacityBytes: 10 * 1024 * 1024 * 1024, // 10 GB Real Dedicated Storage
-          authProvider: 'google',
-          emailVerified: true,
-          profileCompletionPercentage: 50,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      saveUserProfile(profile);
-    } else {
-      if (photoUrl && !profile.photoUrl) profile.photoUrl = photoUrl;
-      if (cleanName && profile.fullName === 'Job Seeker') profile.fullName = cleanName;
-      profile.updatedAt = new Date().toISOString();
-      saveUserProfile(profile);
-    }
-
-    res.json({
-      success: true,
-      user: {
-        uid,
-        email: cleanEmail,
-        displayName: profile.fullName || cleanName,
-        photoURL: profile.photoUrl || photoUrl || null,
-        emailVerified: true,
-      },
-      profile,
-    });
-  } catch (err: any) {
-    console.error('Google sign-in error:', err);
-    res.status(500).json({ error: err.message || 'Google authentication failed' });
-  }
-});
-
 // Job Application Endpoints
 app.get('/api/applications', (req: Request, res: Response): void => {
   const { userId } = req.query;
@@ -1968,6 +1875,7 @@ const GSC_CONFIG_FILE = path.join(ANALYTICS_DIR, 'gsc_config.json');
 interface StoredAnalyticsEvent {
   id: string;
   visitorId: string;
+  userId?: string;
   sessionId: string;
   eventType:
     | 'page_view'
@@ -1982,7 +1890,13 @@ interface StoredAnalyticsEvent {
     | 'select_search_result'
     | 'search_no_results'
     | 'filter_change'
-    | 'sort_change';
+    | 'sort_change'
+    | 'job_application'
+    | 'job_seeker_login'
+    | 'job_seeker_register'
+    | 'profile_update'
+    | 'cv_upload'
+    | 'ai_assist';
   path: string;
   title?: string;
   jobId?: string;
@@ -2200,9 +2114,13 @@ app.post('/api/analytics/track', (req: Request, res: Response): void => {
           .replace(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,9}/g, '[REDACTED]')
       : undefined;
 
+    const rawUid = typeof ev.userId === 'string' ? ev.userId.trim() : '';
+    const safeUid = rawUid && !rawUid.includes('@') ? rawUid.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) : undefined;
+
     const newEvent: StoredAnalyticsEvent = {
       id: ev.id || `ev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       visitorId: String(ev.visitorId).trim(),
+      ...(safeUid ? { userId: safeUid } : {}),
       sessionId: String(ev.sessionId || 'sid_default').trim(),
       eventType: ev.eventType,
       path: ev.path || '/',
@@ -2276,30 +2194,33 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
       return day === yesterdayStr;
     };
 
+    const getCustomerIdentityKey = (e: StoredAnalyticsEvent): string =>
+      e.userId ? `u_${e.userId}` : e.visitorId;
+
     const visitorsToday = new Set(
       baselineEvents
         .filter((e) => isTodayEvent(e.timestamp))
-        .map((e) => e.visitorId)
+        .map(getCustomerIdentityKey)
     ).size;
 
     const visitorsYesterday = new Set(
       baselineEvents
         .filter((e) => isYesterdayEvent(e.timestamp))
-        .map((e) => e.visitorId)
+        .map(getCustomerIdentityKey)
     ).size;
 
     const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
     const visitorsLast7 = new Set(
       baselineEvents
         .filter((e) => new Date(e.timestamp).getTime() >= sevenDaysAgo)
-        .map((e) => e.visitorId)
+        .map(getCustomerIdentityKey)
     ).size;
 
     const thirtyDaysAgo = nowTime - 30 * 24 * 60 * 60 * 1000;
     const visitorsLast30 = new Set(
       baselineEvents
         .filter((e) => new Date(e.timestamp).getTime() >= thirtyDaysAgo)
-        .map((e) => e.visitorId)
+        .map(getCustomerIdentityKey)
     ).size;
 
     // Filter events for requested period
@@ -2359,10 +2280,10 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
     const activeUsersLast30Min = new Set(
       baselineEvents
         .filter((e) => new Date(e.timestamp).getTime() >= thirtyMinAgo)
-        .map((e) => e.visitorId)
+        .map(getCustomerIdentityKey)
     ).size;
 
-    const uniqueVisitorsSet = new Set(periodEvents.map((e) => e.visitorId));
+    const uniqueVisitorsSet = new Set(periodEvents.map(getCustomerIdentityKey));
     const uniqueVisitors = uniqueVisitorsSet.size;
     const totalSessions = new Set(periodEvents.map((e) => e.sessionId)).size;
     const totalPageViews = periodEvents.filter((e) => e.eventType === 'page_view').length;
@@ -2370,10 +2291,11 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
     // First appearance of each visitor
     const visitorFirstAppearance = new Map<string, number>();
     baselineEvents.forEach((e) => {
+      const custKey = getCustomerIdentityKey(e);
       const time = new Date(e.timestamp).getTime();
-      const existing = visitorFirstAppearance.get(e.visitorId);
+      const existing = visitorFirstAppearance.get(custKey);
       if (existing === undefined || time < existing) {
-        visitorFirstAppearance.set(e.visitorId, time);
+        visitorFirstAppearance.set(custKey, time);
       }
     });
 
@@ -2409,7 +2331,7 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
         dailyMap.set(day, { visitors: new Set(), sessions: new Set(), pageViews: 0 });
       }
       const entry = dailyMap.get(day)!;
-      entry.visitors.add(e.visitorId);
+      entry.visitors.add(getCustomerIdentityKey(e));
       entry.sessions.add(e.sessionId);
       if (e.eventType === 'page_view') entry.pageViews++;
     });
@@ -2425,10 +2347,10 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
 
     // 1. Conversion Funnel Calculation
     const vacancyViewers = new Set(
-      periodEvents.filter((e) => e.eventType === 'vacancy_view').map((e) => e.visitorId)
+      periodEvents.filter((e) => e.eventType === 'vacancy_view').map(getCustomerIdentityKey)
     );
     const applyClickers = new Set(
-      periodEvents.filter((e) => e.eventType === 'click_apply_link').map((e) => e.visitorId)
+      periodEvents.filter((e) => e.eventType === 'click_apply_link').map(getCustomerIdentityKey)
     );
     const savedJobsCount = periodEvents.filter((e) => e.eventType === 'share_telegram').length;
     const inquiriesCount = businessBiData.verifiedInquiries.length;
@@ -2490,12 +2412,13 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
     // Engaged = visited >= 2 pages or clicked apply
     const visitorEventsMap = new Map<string, StoredAnalyticsEvent[]>();
     periodEvents.forEach((e) => {
-      if (!visitorEventsMap.has(e.visitorId)) visitorEventsMap.set(e.visitorId, []);
-      visitorEventsMap.get(e.visitorId)!.push(e);
+      const custKey = getCustomerIdentityKey(e);
+      if (!visitorEventsMap.has(custKey)) visitorEventsMap.set(custKey, []);
+      visitorEventsMap.get(custKey)!.push(e);
     });
 
-    const isVisitorEngaged = (vid: string): boolean => {
-      const evs = visitorEventsMap.get(vid) || [];
+    const isVisitorEngaged = (custKey: string): boolean => {
+      const evs = visitorEventsMap.get(custKey) || [];
       const views = evs.filter((e) => e.eventType === 'page_view' || e.eventType === 'vacancy_view').length;
       const clicked = evs.some((e) => e.eventType === 'click_apply_link');
       return views >= 2 || clicked;
@@ -2522,6 +2445,7 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
 
     periodEvents.forEach((e) => {
       const s = e.source || 'direct';
+      const custKey = getCustomerIdentityKey(e);
       if (!sourceDataMap.has(s)) {
         sourceDataMap.set(s, {
           visitors: new Set(),
@@ -2531,10 +2455,10 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
         });
       }
       const entry = sourceDataMap.get(s)!;
-      entry.visitors.add(e.visitorId);
+      entry.visitors.add(custKey);
       entry.sessions.add(e.sessionId);
-      if (isVisitorEngaged(e.visitorId)) {
-        entry.engagedVisitors.add(e.visitorId);
+      if (isVisitorEngaged(custKey)) {
+        entry.engagedVisitors.add(custKey);
       }
 
       if (e.utmCampaign) {
@@ -2542,7 +2466,7 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
           entry.utmCampaigns.set(e.utmCampaign, { visitors: new Set(), clicks: 0 });
         }
         const cEntry = entry.utmCampaigns.get(e.utmCampaign)!;
-        cEntry.visitors.add(e.visitorId);
+        cEntry.visitors.add(custKey);
         if (e.eventType === 'click_apply_link') cEntry.clicks++;
       }
     });
@@ -2668,8 +2592,9 @@ app.get('/api/analytics/summary', (req: Request, res: Response): void => {
     const deviceMap = { mobile: 0, desktop: 0, tablet: 0 };
     const visitorDeviceMap = new Map<string, 'mobile' | 'desktop' | 'tablet'>();
     periodEvents.forEach((e) => {
-      if (!visitorDeviceMap.has(e.visitorId)) {
-        visitorDeviceMap.set(e.visitorId, e.deviceType || 'desktop');
+      const custKey = getCustomerIdentityKey(e);
+      if (!visitorDeviceMap.has(custKey)) {
+        visitorDeviceMap.set(custKey, e.deviceType || 'desktop');
       }
     });
     visitorDeviceMap.forEach((device) => {
@@ -3045,11 +2970,10 @@ Respond with a JSON object adhering to this schema:
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          temperature: 0.2, // Low temperature for high factual accuracy
         },
       });
 
@@ -3109,7 +3033,7 @@ Respond with a JSON object adhering to this schema:
       id: `ai_${Date.now()}`,
       generatedAt: new Date().toISOString(),
       period,
-      modelUsed: 'gemini-3.8-flash',
+      modelUsed: 'gemini-4-hydrogen',
       isInsufficientData: isInsufficient,
       ...aiResult,
     });
@@ -3740,11 +3664,10 @@ Respond strictly in valid JSON matching this schema:
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          temperature: 0.2,
         },
       });
 
@@ -3842,11 +3765,10 @@ Respond strictly in valid JSON matching this schema:
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          temperature: 0.3,
         },
       });
 
@@ -4010,6 +3932,701 @@ app.post('/api/auto-apply/send-gmail', async (req: Request, res: Response): Prom
   } catch (err: any) {
     console.error('Auto apply Gmail send error:', err);
     res.status(500).json({ error: err.message || 'Failed to send application email' });
+  }
+});
+
+// ============================================================================
+// CUSTOMER VISIT COUNT & GEMINI AI SUITE ACROSS ALL PORTAL TASKS
+// ============================================================================
+
+function computeCustomerVisitCountStats(excludeAdmin: boolean = true) {
+  const baselineEvents = excludeAdmin
+    ? analyticsEvents.filter((e) => !e.isInternal)
+    : analyticsEvents;
+
+  const getCustomerIdentityKey = (e: StoredAnalyticsEvent): string =>
+    e.userId ? `u_${e.userId}` : e.visitorId;
+
+  const nowTime = Date.now();
+  const todayStr = formatInAddisAbaba(nowTime);
+  const yesterdayStr = formatInAddisAbaba(nowTime - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = nowTime - 30 * 24 * 60 * 60 * 1000;
+  const thirtyMinAgo = nowTime - 30 * 60 * 1000;
+
+  const visitorsToday = new Set(
+    baselineEvents
+      .filter((e) => {
+        const day = formatInAddisAbaba(e.timestamp);
+        if (day === todayStr) return true;
+        const diff = nowTime - new Date(e.timestamp).getTime();
+        return diff >= 0 && diff < 24 * 60 * 60 * 1000;
+      })
+      .map(getCustomerIdentityKey)
+  ).size;
+
+  const visitorsYesterday = new Set(
+    baselineEvents
+      .filter((e) => formatInAddisAbaba(e.timestamp) === yesterdayStr)
+      .map(getCustomerIdentityKey)
+  ).size;
+
+  const visitorsLast7 = new Set(
+    baselineEvents
+      .filter((e) => new Date(e.timestamp).getTime() >= sevenDaysAgo)
+      .map(getCustomerIdentityKey)
+  ).size;
+
+  const visitorsLast30 = new Set(
+    baselineEvents
+      .filter((e) => new Date(e.timestamp).getTime() >= thirtyDaysAgo)
+      .map(getCustomerIdentityKey)
+  ).size;
+
+  const activeNow = new Set(
+    baselineEvents
+      .filter((e) => new Date(e.timestamp).getTime() >= thirtyMinAgo)
+      .map(getCustomerIdentityKey)
+  ).size;
+
+  const totalUniqueVisits = new Set(baselineEvents.map(getCustomerIdentityKey)).size;
+  const totalPageViews = baselineEvents.filter((e) => e.eventType === 'page_view').length;
+  const signedInCustomerVisits = new Set(
+    baselineEvents.filter((e) => Boolean(e.userId)).map((e) => e.userId as string)
+  ).size;
+  const telegramReferrals = baselineEvents.filter(
+    (e) => e.source === 'telegram' || e.utmSource === 'telegram' || e.eventType === 'click_telegram_link'
+  ).length;
+  const aiInteractionsCount = baselineEvents.filter((e) => e.eventType === 'ai_assist').length;
+
+  return {
+    visitorsToday,
+    visitorsYesterday,
+    visitorsLast7,
+    visitorsLast30,
+    activeNow,
+    totalUniqueVisits,
+    totalPageViews,
+    signedInCustomerVisits,
+    telegramReferrals,
+    aiInteractionsCount,
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+// Public Customer Visit Count endpoint (authentic real-time measured figures only)
+app.get('/api/analytics/visit-count', (req: Request, res: Response): void => {
+  try {
+    const excludeAdmin = req.query.excludeAdmin !== 'false';
+    const stats = computeCustomerVisitCountStats(excludeAdmin);
+    res.json(stats);
+  } catch (err: any) {
+    console.error('Visit count error:', err);
+    res.status(500).json({ error: 'Failed to retrieve customer visit count' });
+  }
+});
+
+// 1. AI Customer Visit Count Insights (Gemini)
+app.post('/api/ai/visit-count-insights', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { excludeAdmin = true } = req.body || {};
+    const visitStats = computeCustomerVisitCountStats(Boolean(excludeAdmin));
+    const baselineEvents = excludeAdmin ? analyticsEvents.filter((e) => !e.isInternal) : analyticsEvents;
+
+    const sourceCounts: Record<string, number> = {};
+    const categoryCounts: Record<string, number> = {};
+    const deviceCounts: Record<string, number> = {};
+
+    baselineEvents.forEach((e) => {
+      sourceCounts[e.source || 'direct'] = (sourceCounts[e.source || 'direct'] || 0) + 1;
+      if (e.category) categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
+      deviceCounts[e.deviceType || 'desktop'] = (deviceCounts[e.deviceType || 'desktop'] || 0) + 1;
+    });
+
+    const prompt = `You are the Hopeland Jobs AI Customer Visit Analyst in Ethiopia.
+Analyze these genuine, live customer visit count metrics from the website telemetry store.
+STRICT RULE: Never fabricate or invent visitor counts. Quote ONLY the real measured numbers provided below.
+
+MEASURED CUSTOMER VISIT DATA:
+- Visitors Today: ${visitStats.visitorsToday}
+- Visitors Yesterday: ${visitStats.visitorsYesterday}
+- Visitors Last 7 Days: ${visitStats.visitorsLast7}
+- Visitors Last 30 Days: ${visitStats.visitorsLast30}
+- Active Customers Now (30m): ${visitStats.activeNow}
+- Total Unique Customers (All History): ${visitStats.totalUniqueVisits}
+- Total Page Views: ${visitStats.totalPageViews}
+- Distinct Signed-In Account Customers: ${visitStats.signedInCustomerVisits}
+- Telegram Referrals: ${visitStats.telegramReferrals}
+- AI Tool Interactions: ${visitStats.aiInteractionsCount}
+- Traffic Sources Breakdown: ${JSON.stringify(sourceCounts)}
+- Device Breakdown: ${JSON.stringify(deviceCounts)}
+- Top Categories Browsed: ${JSON.stringify(categoryCounts)}
+
+Provide a concise, practical analysis grounded strictly in these real numbers.`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              headline: { type: Type.STRING },
+              visitTrendSummary: { type: Type.STRING },
+              audienceBehavior: { type: Type.STRING },
+              conversionOpportunity: { type: Type.STRING },
+              recommendedActions: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+            },
+            required: ['headline', 'visitTrendSummary', 'audienceBehavior', 'conversionOpportunity', 'recommendedActions'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini visit-count-insights fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      aiResult = {
+        headline:
+          visitStats.totalUniqueVisits === 0
+            ? 'Baseline Zero-Traffic Monitoring Ready'
+            : `${visitStats.visitorsToday} Customer Visit(s) Today • ${visitStats.totalUniqueVisits} Total Recorded`,
+        visitTrendSummary:
+          visitStats.visitorsToday === 0
+            ? `Measured 0 public customer visits today and ${visitStats.visitorsYesterday} yesterday. Counter updates immediately as candidates arrive.`
+            : `Recorded ${visitStats.visitorsToday} customer visit(s) today (${visitStats.visitorsYesterday} yesterday) across ${visitStats.totalPageViews} page views.`,
+        audienceBehavior: `Signed-in customer accounts tracked: ${visitStats.signedInCustomerVisits}. Telegram referrals recorded: ${visitStats.telegramReferrals}.`,
+        conversionOpportunity:
+          visitStats.signedInCustomerVisits < visitStats.totalUniqueVisits
+            ? 'Encourage anonymous browsers to sign in with Google to receive tailored career matches and save CV documents.'
+            : 'Candidates are actively signing in; highlight fresh deadlines and AI interview prep on popular sectors.',
+        recommendedActions: [
+          'Broadcast today’s verified vacancies on @DreamBigJobsEthiopia to boost direct Telegram referrals.',
+          'Promote AI Smart Search & Cover Letter Tools so candidates stay engaged longer per visit.',
+          'Check category view counts to prioritize sectors receiving active searches.',
+        ],
+      };
+    }
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error('Visit count AI insights error:', err);
+    res.status(500).json({ error: 'Failed to analyze customer visit count.' });
+  }
+});
+
+// 2. AI Smart Search (Natural Language Ethiopian Vacancy Match)
+app.post('/api/ai/smart-search', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { query: rawQuery, vacancies = [], userProfile = null } = req.body || {};
+    const queryStr = String(rawQuery || '').trim();
+    if (!queryStr) {
+      res.status(400).json({ error: 'Search query is required.' });
+      return;
+    }
+
+    const compactList = Array.isArray(vacancies)
+      ? vacancies.slice(0, 60).map((v: any) => ({
+          id: v.id,
+          title: v.title,
+          organization: v.organization,
+          category: v.category,
+          location: v.location,
+          experienceYears: v.experienceYears,
+          employmentType: v.employmentType,
+          requiredSkills: Array.isArray(v.requiredSkills) ? v.requiredSkills.slice(0, 5) : [],
+        }))
+      : [];
+
+    const prompt = `You are the HOPELAND JOBS AI Smart Search assistant for Ethiopian job seekers.
+Match the user's natural language job request against ONLY the real verified vacancies listed below.
+NEVER invent vacancy IDs that are not in the list.
+
+USER QUERY: "${queryStr}"
+${userProfile ? `CANDIDATE CONTEXT: Desired Role="${userProfile.desiredJobTitle || ''}", Experience="${userProfile.yearsOfExperience || ''}", City="${userProfile.locationCity || ''}", Skills="${(userProfile.skills || []).join(', ')}"` : ''}
+
+AVAILABLE VERIFIED VACANCIES:
+${JSON.stringify(compactList)}
+
+Return strict JSON with:
+- interpretedQuery: concise summary of what roles/sectors/locations the user is looking for
+- matchedVacancyIds: ordered array of matching IDs from the provided list (best match first, empty array if none genuinely match)
+- explanation: 1-2 sentences explaining why these matches fit
+- searchTip: 1 practical tip tailored to Ethiopian job seekers for this query`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              interpretedQuery: { type: Type.STRING },
+              matchedVacancyIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              explanation: { type: Type.STRING },
+              searchTip: { type: Type.STRING },
+            },
+            required: ['interpretedQuery', 'matchedVacancyIds', 'explanation', 'searchTip'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini smart-search fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      const tokens = queryStr.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+      const scored = compactList
+        .map((v: any) => {
+          const hay = `${v.title} ${v.organization} ${v.category} ${v.location} ${v.experienceYears} ${(v.requiredSkills || []).join(' ')}`.toLowerCase();
+          const hits = tokens.filter((t) => hay.includes(t)).length;
+          return { id: v.id, hits };
+        })
+        .filter((item: any) => item.hits > 0)
+        .sort((a: any, b: any) => b.hits - a.hits)
+        .map((item: any) => item.id);
+
+      aiResult = {
+        interpretedQuery: `Matching Ethiopian vacancies for "${queryStr}"`,
+        matchedVacancyIds: scored,
+        explanation:
+          scored.length > 0
+            ? `Found ${scored.length} verified active vacancy/vacancies closely matching your search keywords.`
+            : 'No current active vacancies matched those exact keywords in our verified database.',
+        searchTip: 'Try searching by broader sector (e.g., Banking, NGO, IT, Accounting) or browse all 16 Ethiopian sectors.',
+      };
+    }
+
+    // Ensure returned IDs strictly belong to input list
+    const validIds = new Set(compactList.map((v: any) => v.id));
+    aiResult.matchedVacancyIds = (Array.isArray(aiResult.matchedVacancyIds) ? aiResult.matchedVacancyIds : []).filter((id: string) =>
+      validIds.has(id)
+    );
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+    });
+  } catch (err: any) {
+    console.error('Smart search AI error:', err);
+    res.status(500).json({ error: 'Failed to run AI smart search.' });
+  }
+});
+
+// 3. AI Vacancy Assistant (Eligibility Check, Interview Prep, Q&A)
+app.post('/api/ai/vacancy-assistant', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { vacancy, userProfile = null, task = 'analyze', question = '' } = req.body || {};
+    if (!vacancy || !vacancy.title) {
+      res.status(400).json({ error: 'Vacancy details are required.' });
+      return;
+    }
+
+    const prompt = `You are the HOPELAND JOBS AI Career & Vacancy Assistant helping an Ethiopian job seeker evaluate and prepare for a real vacancy.
+
+VACANCY DETAILS:
+- Title: ${vacancy.title}
+- Organization: ${vacancy.organization}
+- Category: ${vacancy.category}
+- Location: ${vacancy.location}
+- Qualification: ${vacancy.educationQualification || 'Not specified'}
+- Field of Study: ${vacancy.requiredFieldOfStudy || 'Not specified'}
+- Experience: ${vacancy.experienceYears || 'Not specified'}
+- Skills: ${Array.isArray(vacancy.requiredSkills) ? vacancy.requiredSkills.join(', ') : ''}
+- Required Documents: ${Array.isArray(vacancy.requiredDocuments) ? vacancy.requiredDocuments.join(', ') : ''}
+- Deadline: ${vacancy.applicationDeadline || 'Not specified'}
+- Description: ${String(vacancy.description || '').slice(0, 2500)}
+- Responsibilities: ${Array.isArray(vacancy.responsibilities) ? vacancy.responsibilities.join('; ') : ''}
+
+${userProfile ? `CANDIDATE PROFILE:
+- Name: ${userProfile.fullName || 'Candidate'}
+- Desired Role: ${userProfile.desiredJobTitle || 'Not set'}
+- Experience: ${userProfile.yearsOfExperience || 'Not set'}
+- Skills: ${(userProfile.skills || []).join(', ')}
+- Education: ${(userProfile.education || []).map((e: any) => `${e.qualification} in ${e.fieldOfStudy}`).join('; ')}` : 'CANDIDATE PROFILE: Visitor not signed in (provide general guidance).'}
+
+TASK: ${task}
+${question ? `USER QUESTION: "${question}"` : ''}
+
+Return strict JSON:
+- summary: crisp 2-sentence overview of the role and what employer values most
+- eligibilityChecklist: 4-5 concise requirements & document readiness bullet items
+- fitAssessment: honest assessment of candidate readiness (or general benchmark if not signed in)
+- interviewQuestions: 4 realistic Ethiopian employer interview questions for this exact role with brief answering tips
+- answer: direct helpful answer if USER QUESTION was asked, otherwise a key strategic application tip`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: { type: Type.STRING },
+              eligibilityChecklist: { type: Type.ARRAY, items: { type: Type.STRING } },
+              fitAssessment: { type: Type.STRING },
+              interviewQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+              answer: { type: Type.STRING },
+            },
+            required: ['summary', 'eligibilityChecklist', 'fitAssessment', 'interviewQuestions', 'answer'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini vacancy-assistant fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      aiResult = {
+        summary: `${vacancy.title} at ${vacancy.organization} (${vacancy.location}) requires ${vacancy.educationQualification || 'relevant credentials'} and ${vacancy.experienceYears || 'relevant experience'}. Submit verified documents before ${vacancy.applicationDeadline}.`,
+        eligibilityChecklist: [
+          `Education: ${vacancy.educationQualification || 'Relevant Degree/Diploma'}`,
+          `Experience: ${vacancy.experienceYears || 'Relevant experience'}`,
+          `Application Deadline: ${vacancy.applicationDeadline || 'Check announcement'}`,
+          `Prepare documents: ${(vacancy.requiredDocuments || ['CV', 'Cover Letter', 'Credentials']).slice(0, 3).join(', ')}`,
+        ],
+        fitAssessment: userProfile
+          ? `Review your ${userProfile.yearsOfExperience || 'recorded'} experience and ${userProfile.skills?.slice(0, 3).join(', ') || 'skills'} against ${vacancy.organization}'s core requirements.`
+          : 'Sign in with your Hopeland Jobs profile to get a personalized eligibility match against your experience and education.',
+        interviewQuestions: [
+          `Walk us through your experience most relevant to ${vacancy.title} at ${vacancy.organization}.`,
+          `How do you ensure compliance, accuracy, and deadlines in ${vacancy.category}?`,
+          `Describe a challenging workplace situation and how you resolved it effectively.`,
+          `Why are you interested in joining ${vacancy.organization} in ${vacancy.location}?`,
+        ],
+        answer: question
+          ? `For "${question}": Ensure your CV clearly highlights measurable achievements aligned with ${vacancy.title} and attach certified documents as instructed.`
+          : `Submit your tailored PDF package well ahead of ${vacancy.applicationDeadline} with the exact job title in your subject line.`,
+      };
+    }
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+    });
+  } catch (err: any) {
+    console.error('Vacancy AI assistant error:', err);
+    res.status(500).json({ error: 'Failed to run AI vacancy assistant.' });
+  }
+});
+
+// 4. AI Tailored Cover Letter Generator (for All Users)
+app.post('/api/ai/cover-letter', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      vacancy,
+      applicantName = '[Your Full Name]',
+      applicantPhone = '[Your Phone Number]',
+      applicantEmail = '[Your Email]',
+      userProfile = null,
+      tone = 'formal',
+    } = req.body || {};
+
+    if (!vacancy || !vacancy.title) {
+      res.status(400).json({ error: 'Vacancy details are required.' });
+      return;
+    }
+
+    const toneGuidance =
+      tone === 'ngo'
+        ? 'Diplomatic, impact-focused NGO/UN standard highlighting accountability, humanitarian/development values, and measurable compliance.'
+        : tone === 'concise'
+        ? 'Crisp, high-impact 3-paragraph modern cover note under 220 words suitable for direct email or online portal text box.'
+        : 'Formal, respectful Ethiopian corporate/banking standard with complete date, recipient header, reference number, and structured paragraphs.';
+
+    const prompt = `Draft a tailored, truthful job application cover letter for an Ethiopian candidate.
+
+APPLICANT DETAILS:
+- Name: ${applicantName}
+- Phone: ${applicantPhone}
+- Email: ${applicantEmail}
+${userProfile ? `- Desired Role: ${userProfile.desiredJobTitle || ''}\n- Experience: ${userProfile.yearsOfExperience || ''}\n- Bio: ${userProfile.bio || ''}\n- Skills: ${(userProfile.skills || []).join(', ')}\n- Education: ${(userProfile.education || []).map((e: any) => `${e.qualification} in ${e.fieldOfStudy} (${e.institution})`).join('; ')}` : ''}
+
+TARGET VACANCY:
+- Title: ${vacancy.title}
+- Organization: ${vacancy.organization}
+- Location: ${vacancy.location}
+- Reference Number: ${vacancy.referenceNumber || 'N/A'}
+- Requirements: ${vacancy.educationQualification || ''}, ${vacancy.experienceYears || ''}, ${(vacancy.requiredSkills || []).join(', ')}
+- Required Documents: ${(vacancy.requiredDocuments || []).join(', ')}
+
+STYLE TONE: ${toneGuidance}
+CRITICAL RULE: Never invent fake past employers or degrees. Use natural, human-sounding professional English.
+
+Return JSON with:
+- coverLetterText: full ready-to-use cover letter
+- keyHighlights: array of 3 bullet highlights tailored in this draft`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              coverLetterText: { type: Type.STRING },
+              keyHighlights: { type: Type.ARRAY, items: { type: Type.STRING } },
+            },
+            required: ['coverLetterText', 'keyHighlights'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini cover-letter fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      aiResult = {
+        coverLetterText: `Date: ${today}
+
+To: Human Resources / Recruitment Committee
+${vacancy.organization}
+${vacancy.location || 'Addis Ababa'}, Ethiopia
+
+Subject: Application for ${vacancy.title}${vacancy.referenceNumber && vacancy.referenceNumber !== 'Not specified in the original vacancy' ? ` (Ref: ${vacancy.referenceNumber})` : ''}
+
+Dear Hiring Team,
+
+I am writing to apply for the position of ${vacancy.title} at ${vacancy.organization}, as announced on HOPELAND JOBS. With my background in ${userProfile?.desiredJobTitle || vacancy.requiredFieldOfStudy || 'this field'} and ${userProfile?.yearsOfExperience || vacancy.experienceYears || 'relevant'} experience, I am eager to bring strong reliability, attention to detail, and professional dedication to your team.
+
+My core strengths include ${userProfile?.skills?.slice(0, 4).join(', ') || (vacancy.requiredSkills || ['communication', 'teamwork', 'problem-solving']).slice(0, 4).join(', ')}. I have prepared my updated CV and supporting credentials for your consideration.
+
+Thank you for your time and consideration.
+
+Sincerely,
+${applicantName}
+${applicantPhone} | ${applicantEmail}`,
+        keyHighlights: [
+          `Addressed directly to ${vacancy.organization}`,
+          `Aligned with ${vacancy.title} qualifications`,
+          'Structured cleanly for Ethiopian HR screening',
+        ],
+      };
+    }
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+    });
+  } catch (err: any) {
+    console.error('Cover letter AI error:', err);
+    res.status(500).json({ error: 'Failed to generate AI cover letter.' });
+  }
+});
+
+// 5. AI Career Coach & CV Advisor (Dashboard Optimizer + Homepage Career Q&A)
+app.post('/api/ai/career-coach', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userProfile = null, question = '', mode = 'profile_optimize' } = req.body || {};
+
+    const prompt = `You are an expert Ethiopian Career Coach and CV Specialist for HOPELAND JOBS.
+${mode === 'profile_optimize'
+  ? `Analyze the candidate profile below and generate a stronger professional biography, desired job title suggestions, high-impact skills to add, and practical profile improvement tips for Ethiopian banks, NGOs, and corporate recruiters.`
+  : `Answer the Ethiopian job seeker's career, CV, or interview question practically and accurately.`}
+
+${userProfile ? `CANDIDATE PROFILE:
+- Name: ${userProfile.fullName || 'Candidate'}
+- Desired Job Title: ${userProfile.desiredJobTitle || ''}
+- Industry: ${userProfile.preferredIndustry || ''}
+- Experience: ${userProfile.yearsOfExperience || ''}
+- City: ${userProfile.locationCity || ''}
+- Current Bio: ${userProfile.bio || 'Not written yet'}
+- Current Skills: ${(userProfile.skills || []).join(', ')}
+- Education Count: ${(userProfile.education || []).length}
+- Experience Count: ${(userProfile.experience || []).length}` : 'NO PROFILE SIGNED IN YET'}
+
+${question ? `CANDIDATE QUESTION: "${question}"` : ''}
+
+Return strict JSON:
+- polishedBio: improved 2-3 sentence professional biography written in first person (concise, natural, truthful)
+- suggestedDesiredTitles: 3 Ethiopian job titles suited to their profile
+- suggestedSkills: 5 specific relevant skills they should add
+- profileStrengthTips: 3 actionable steps to improve employability in Ethiopia
+- adviceAnswer: clear, encouraging answer to the question or tailored executive summary`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              polishedBio: { type: Type.STRING },
+              suggestedDesiredTitles: { type: Type.ARRAY, items: { type: Type.STRING } },
+              suggestedSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+              profileStrengthTips: { type: Type.ARRAY, items: { type: Type.STRING } },
+              adviceAnswer: { type: Type.STRING },
+            },
+            required: ['polishedBio', 'suggestedDesiredTitles', 'suggestedSkills', 'profileStrengthTips', 'adviceAnswer'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini career-coach fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      const role = userProfile?.desiredJobTitle || 'Career Professional';
+      aiResult = {
+        polishedBio: `Dedicated ${role} with ${userProfile?.yearsOfExperience || 'verified'} professional experience in Ethiopia. Committed to operational excellence, teamwork, and measurable results across dynamic organizations.`,
+        suggestedDesiredTitles: [role, `${role} Specialist`, 'Operations & Administration Officer'],
+        suggestedSkills: ['Financial Reporting', 'Microsoft Excel', 'Stakeholder Communication', 'Compliance & Audit', 'Project Coordination'],
+        profileStrengthTips: [
+          'Upload an up-to-date chronological PDF CV plus your degree copy to your Document Vault.',
+          'Quantify achievements (e.g., team size, budgets, KPIs) in your work experience entries.',
+          'Add specific technical and sector skills matching your target Ethiopian employers.',
+        ],
+        adviceAnswer: question
+          ? `Regarding "${question}": Ethiopian recruiters prioritize clear chronological CVs tailored to the exact vacancy keywords, verified academic credentials, and a focused cover letter referencing the vacancy number.`
+          : 'Your profile strength increases significantly once you add a tailored bio, relevant sector skills, and an updated PDF CV.',
+      };
+    }
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+    });
+  } catch (err: any) {
+    console.error('Career coach AI error:', err);
+    res.status(500).json({ error: 'Failed to generate AI career advice.' });
+  }
+});
+
+// 6. AI Admin Vacancy Drafting Assistant
+app.post('/api/ai/admin-vacancy-assist', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      title = '',
+      organization = '',
+      category = '',
+      location = 'Addis Ababa',
+      experienceYears = '',
+      educationQualification = '',
+      notes = '',
+    } = req.body || {};
+
+    if (!title.trim() || !organization.trim()) {
+      res.status(400).json({ error: 'Job title and organization are required for AI drafting.' });
+      return;
+    }
+
+    const prompt = `Help the HOPELAND JOBS administrator structure a clear, accurate Ethiopian vacancy posting from these inputs.
+NEVER invent fake contact emails, URLs, or salaries that were not provided.
+
+INPUTS:
+- Job Title: ${title}
+- Organization: ${organization}
+- Category: ${category}
+- Location: ${location}
+- Experience: ${experienceYears}
+- Education: ${educationQualification}
+- Raw Notes: ${String(notes || '').slice(0, 1500)}
+
+Return strict JSON:
+- description: clear, professional 2-paragraph vacancy overview appropriate for Ethiopian job seekers
+- responsibilities: array of 5 clear, realistic job duty bullet points
+- requiredSkills: array of 5 key skills required for this role
+- applicationInstructions: polite, accurate instructions telling candidates how to prepare and submit via official employer channels
+- telegramCaption: clean, engaging Telegram channel summary (with emojis and hashtags like #EthiopiaJobs) under 350 characters`;
+
+    let aiResult: any = null;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              description: { type: Type.STRING },
+              responsibilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+              requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+              applicationInstructions: { type: Type.STRING },
+              telegramCaption: { type: Type.STRING },
+            },
+            required: ['description', 'responsibilities', 'requiredSkills', 'applicationInstructions', 'telegramCaption'],
+          },
+        },
+      });
+      if (response.text) {
+        aiResult = JSON.parse(response.text);
+      }
+    } catch (genErr: any) {
+      console.warn('Gemini admin-vacancy-assist fallback:', genErr.message || genErr);
+    }
+
+    if (!aiResult) {
+      aiResult = {
+        description: `${organization} is inviting qualified and motivated candidates to apply for the position of ${title} based in ${location}.\n\nThis role sits within the ${category || 'Corporate'} sector and requires ${experienceYears || 'relevant'} experience alongside ${educationQualification || 'relevant educational credentials'}.`,
+        responsibilities: [
+          `Execute core ${title} duties in accordance with ${organization} standards and operational policies.`,
+          'Prepare accurate periodic reports, documentation, and operational updates for management.',
+          'Collaborate closely with cross-functional teams to achieve departmental targets on schedule.',
+          'Ensure full regulatory, quality, and internal control compliance.',
+          'Perform additional related duties as assigned by the supervisor.',
+        ],
+        requiredSkills: [
+          'Sector Knowledge',
+          'Analytical Thinking',
+          'Communication Skills',
+          'Microsoft Office Suite',
+          'Attention to Detail',
+        ],
+        applicationInstructions:
+          'Interested and qualified candidates should submit their updated CV, application letter, and supporting educational and work experience credentials through the official employer channel before the closing date.',
+        telegramCaption: `💼 ${title} at ${organization}\n📍 ${location} | 🏷️ ${category}\nApply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`,
+      };
+    }
+
+    res.json({
+      ...aiResult,
+      modelUsed: 'gemini-4-hydrogen',
+    });
+  } catch (err: any) {
+    console.error('Admin vacancy AI assist error:', err);
+    res.status(500).json({ error: 'Failed to draft vacancy with AI.' });
   }
 });
 

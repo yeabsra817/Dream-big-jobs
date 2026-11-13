@@ -50,11 +50,14 @@ import {
   AiBusinessAnalystReport,
   HealthDiagnosticItem,
   SmartAlertItem,
+  CustomerVisitAiInsight,
 } from '../../types/analytics';
 import {
   getInternalTrafficExclusion,
   setInternalTrafficExclusion,
 } from '../../lib/analyticsTracker';
+import { safeResponseJson } from '../../lib/firebase';
+import { generateVisitCountAiInsights } from '../../lib/aiService';
 
 interface Props {
   siteSettings: SiteSettings;
@@ -91,6 +94,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [copiedAi, setCopiedAi] = useState<boolean>(false);
+
+  // Customer Visit Count AI Insight state
+  const [visitInsight, setVisitInsight] = useState<CustomerVisitAiInsight | null>(null);
+  const [isGeneratingVisitInsight, setIsGeneratingVisitInsight] = useState<boolean>(false);
 
   // Health audit state
   const [isRunningAudit, setIsRunningAudit] = useState<boolean>(false);
@@ -164,7 +171,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
       if (!res.ok) {
         throw new Error(`Server returned HTTP ${res.status}`);
       }
-      const data: AnalyticsSummary = await res.json();
+      const data = await safeResponseJson<AnalyticsSummary>(res);
+      if (!data) {
+        throw new Error('Analytics endpoint unavailable');
+      }
       setSummary(data);
       if (data.searchConsole?.propertyUrl) {
         setGscUrlInput(data.searchConsole.propertyUrl);
@@ -205,13 +215,27 @@ export const WebsiteAnalytics: React.FC<Props> = ({
       });
 
       if (!res.ok) throw new Error(`AI generation failed with HTTP ${res.status}`);
-      const data: AiBusinessAnalystReport = await res.json();
+      const data = await safeResponseJson<AiBusinessAnalystReport>(res);
+      if (!data) throw new Error('Invalid AI response from server.');
       setAiReport(data);
     } catch (err: any) {
       console.error('AI Analyst error:', err);
       setAiError(err.message || 'Failed to generate AI insights.');
     } finally {
       setIsGeneratingAi(false);
+    }
+  };
+
+  const handleGenerateVisitCountInsight = async () => {
+    setIsGeneratingVisitInsight(true);
+    try {
+      const insight = await generateVisitCountAiInsights(excludeAdmin);
+      setVisitInsight(insight);
+      showToast('success', 'AI Customer Visit Count insight updated.');
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to analyze visit counts.');
+    } finally {
+      setIsGeneratingVisitInsight(false);
     }
   };
 
@@ -756,6 +780,70 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
             </div>
           )}
 
+          {/* AI Customer Visit Count Analyst Card */}
+          <div className="bg-gradient-to-br from-[#0B132B] to-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-400">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Gemini AI • Customer Visit Count Analyst</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-extrabold text-white mt-0.5">
+                  AI Visit Count Interpretation &amp; Growth Actions
+                </h3>
+                <p className="text-xs text-slate-300">
+                  Analyzes unique customer accounts, browser visits, referral channels, and conversion patterns in real time.
+                </p>
+              </div>
+              <button
+                onClick={handleGenerateVisitCountInsight}
+                disabled={isGeneratingVisitInsight}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-all shrink-0 disabled:opacity-50 cursor-pointer"
+              >
+                <Brain className={`w-4 h-4 ${isGeneratingVisitInsight ? 'animate-spin' : ''}`} />
+                <span>{isGeneratingVisitInsight ? 'Analyzing Visits...' : 'Analyze Customer Visits with AI'}</span>
+              </button>
+            </div>
+
+            {visitInsight && (
+              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 animate-in fade-in">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                  <span className="text-sm font-black text-amber-400">{visitInsight.headline}</span>
+                  <span className="text-[10px] text-slate-400">
+                    Model: {visitInsight.modelUsed} • {new Date(visitInsight.generatedAt).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-[10px] font-bold uppercase text-amber-300 mb-1">Visit Trend</div>
+                    <p className="text-slate-200 leading-relaxed">{visitInsight.visitTrendSummary}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-[10px] font-bold uppercase text-sky-300 mb-1">Audience Behavior</div>
+                    <p className="text-slate-200 leading-relaxed">{visitInsight.audienceBehavior}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                    <div className="text-[10px] font-bold uppercase text-emerald-300 mb-1">Conversion Opportunity</div>
+                    <p className="text-slate-200 leading-relaxed">{visitInsight.conversionOpportunity}</p>
+                  </div>
+                </div>
+                {visitInsight.recommendedActions && visitInsight.recommendedActions.length > 0 && (
+                  <div className="pt-1">
+                    <div className="text-[10px] font-bold uppercase text-slate-400 mb-1.5">AI Recommended Actions</div>
+                    <ul className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-slate-200">
+                      {visitInsight.recommendedActions.map((act, idx) => (
+                        <li key={idx} className="flex items-start gap-1.5 bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{act}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Conversion Funnel Mini View */}
           {summary?.funnel && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
@@ -877,7 +965,7 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
                 <div className="flex items-center gap-2 mb-2">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-amber-400 text-slate-950 uppercase tracking-wider">
                     <Sparkles className="w-3.5 h-3.5" />
-                    Gemini 3.8 Flash Engine
+                    Gemini AI Engine (gemini-4-hydrogen)
                   </span>
                   <span className="text-xs font-bold text-slate-400">
                     Period: {summary?.dateRangeLabel || period}

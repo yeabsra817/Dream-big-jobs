@@ -206,6 +206,7 @@ export const Navbar: React.FC<Props> = ({
                     <img
                       src={userProfile.photoUrl}
                       alt={displayName}
+                      referrerPolicy="no-referrer"
                       className="w-5 h-5 rounded-full object-cover"
                     />
                   ) : (
@@ -262,9 +263,19 @@ export const Navbar: React.FC<Props> = ({
             {isLoggedIn ? (
               <button
                 onClick={onOpenDashboard}
-                className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shadow-sm"
+                className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center shadow-sm overflow-hidden"
+                title="Open Job Seeker Dashboard"
               >
-                {displayInitials}
+                {userProfile?.photoUrl ? (
+                  <img
+                    src={userProfile.photoUrl}
+                    alt={displayName}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  displayInitials
+                )}
               </button>
             ) : (
               <button
@@ -291,9 +302,18 @@ export const Navbar: React.FC<Props> = ({
           {isLoggedIn ? (
             <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 font-bold text-sm flex items-center justify-center">
-                  {displayInitials}
-                </div>
+                {userProfile?.photoUrl ? (
+                  <img
+                    src={userProfile.photoUrl}
+                    alt={displayName}
+                    referrerPolicy="no-referrer"
+                    className="w-9 h-9 rounded-full object-cover border border-amber-400/50"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 font-bold text-sm flex items-center justify-center">
+                    {displayInitials}
+                  </div>
+                )}
                 <div>
                   <p className="font-bold text-sm text-white">{displayName}</p>
                   <p className="text-[11px] text-slate-400">{currentUserEmail}</p>

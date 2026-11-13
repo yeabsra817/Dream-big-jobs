@@ -36,6 +36,7 @@ import { Vacancy } from '../types/job';
 import { saveJobSeekerProfile } from '../lib/firebase';
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
+import { askAiCareerCoach, CareerCoachAiResponse } from '../lib/aiService';
 
 interface Props {
   profile: JobSeekerProfile;
@@ -62,6 +63,24 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [aiCoachResult, setAiCoachResult] = useState<CareerCoachAiResponse | null>(null);
+  const [isAiCoachLoading, setIsAiCoachLoading] = useState(false);
+
+  const handleRunAiCareerCoach = async () => {
+    setIsAiCoachLoading(true);
+    try {
+      const res = await askAiCareerCoach({
+        userProfile: formProfile,
+        mode: 'profile_optimize',
+      });
+      setAiCoachResult(res);
+    } catch (err: any) {
+      setSaveToast(err.message || 'AI Career Coach is temporarily unavailable.');
+      setTimeout(() => setSaveToast(null), 3500);
+    } finally {
+      setIsAiCoachLoading(false);
+    }
+  };
 
   // New item states
   const [isAddingEdu, setIsAddingEdu] = useState(false);
@@ -225,9 +244,18 @@ export const JobSeekerDashboard: React.FC<Props> = ({
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-2xl shadow-md shrink-0">
-                {formProfile.fullName ? formProfile.fullName.charAt(0).toUpperCase() : 'U'}
-              </div>
+              {formProfile.photoUrl ? (
+                <img
+                  src={formProfile.photoUrl}
+                  alt={formProfile.fullName || 'Profile'}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400/70 shadow-md shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-2xl shadow-md shrink-0">
+                  {formProfile.fullName ? formProfile.fullName.charAt(0).toUpperCase() : 'U'}
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center gap-2">
@@ -366,6 +394,108 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">Bookmarked opportunities</div>
                 </div>
+              </div>
+
+              {/* AI Career Coach & Profile Enhancer */}
+              <div className="bg-gradient-to-br from-[#0B132B] to-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-400">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Gemini AI Career Coach</span>
+                    </div>
+                    <h3 className="text-base font-extrabold text-white mt-0.5">
+                      Optimize Your Profile &amp; Boost Employer Matches
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      Get an AI-polished professional bio, target Ethiopian job titles, and high-value skills tailored to your background.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRunAiCareerCoach}
+                    disabled={isAiCoachLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-colors shrink-0 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Sparkles className={`w-4 h-4 ${isAiCoachLoading ? 'animate-spin' : ''}`} />
+                    <span>{isAiCoachLoading ? 'Analyzing Profile...' : 'Optimize Profile with AI'}</span>
+                  </button>
+                </div>
+
+                {aiCoachResult && (
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 text-xs animate-in fade-in">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                          AI-Polished Professional Bio
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormProfile({ ...formProfile, bio: aiCoachResult.polishedBio });
+                            setSaveToast('AI bio applied! Click Save in Personal Details to persist.');
+                            setTimeout(() => setSaveToast(null), 3500);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-[11px] cursor-pointer"
+                        >
+                          Apply Bio to Profile
+                        </button>
+                      </div>
+                      <p className="text-slate-200 leading-relaxed bg-slate-900 p-3 rounded-xl border border-slate-800">
+                        {aiCoachResult.polishedBio}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-sky-300 mb-2">
+                          Suggested Skills (Click to Add)
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {aiCoachResult.suggestedSkills?.map((skill) => {
+                            const exists = (formProfile.skills || []).includes(skill);
+                            return (
+                              <button
+                                key={skill}
+                                type="button"
+                                disabled={exists}
+                                onClick={() => {
+                                  if (!exists) {
+                                    setFormProfile({
+                                      ...formProfile,
+                                      skills: [...(formProfile.skills || []), skill],
+                                    });
+                                  }
+                                }}
+                                className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                                  exists
+                                    ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-700/50'
+                                    : 'bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-slate-200 border border-slate-700 cursor-pointer'
+                                }`}
+                              >
+                                {exists ? `✓ ${skill}` : `+ ${skill}`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">
+                          Profile Strength Tips
+                        </div>
+                        <ul className="space-y-1 text-[11px] text-slate-300">
+                          {aiCoachResult.profileStrengthTips?.map((tip, i) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recent Applications Feed */}

@@ -22,15 +22,18 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { Vacancy } from '../types/job';
+import { JobSeekerProfile } from '../types/jobSeeker';
 import { getDaysLeft } from '../utils/helpers';
 import { CoverLetterAssistant } from './CoverLetterAssistant';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
+import { askAiVacancyAssistant, VacancyAssistantAiResponse } from '../lib/aiService';
 
 interface Props {
   vacancy: Vacancy;
   onClose: () => void;
   telegramUrl: string;
   onApply?: (vacancy: Vacancy) => void;
+  userProfile?: JobSeekerProfile | null;
 }
 
 export const VacancyDetailModal: React.FC<Props> = ({
@@ -38,9 +41,34 @@ export const VacancyDetailModal: React.FC<Props> = ({
   onClose,
   telegramUrl,
   onApply,
+  userProfile = null,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showCoverLetterHelper, setShowCoverLetterHelper] = useState(false);
+  const [aiResult, setAiResult] = useState<VacancyAssistantAiResponse | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiTask, setAiTask] = useState<'analyze' | 'interview' | 'qa'>('analyze');
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleRunAiAssistant = async (task: 'analyze' | 'interview' | 'qa', customQuestion?: string) => {
+    setAiTask(task);
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await askAiVacancyAssistant({
+        vacancy,
+        userProfile,
+        task,
+        question: customQuestion,
+      });
+      setAiResult(res);
+    } catch (err: any) {
+      setAiError(err.message || 'AI Assistant could not respond right now.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     trackAnalyticsEvent('vacancy_view', {
@@ -388,9 +416,122 @@ ${currentUrl}`;
             </div>
           </div>
 
+          {/* AI Vacancy & Interview Assistant */}
+          <div className="bg-gradient-to-br from-[#0B132B] to-slate-900 text-white p-6 rounded-2xl border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-amber-400">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Gemini AI Career Assistant</span>
+                </div>
+                <h3 className="text-base font-extrabold text-white mt-0.5">
+                  Evaluate Eligibility, Fit &amp; Interview Questions for This Job
+                </h3>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleRunAiAssistant('analyze')}
+                  disabled={isAiLoading}
+                  className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isAiLoading && aiTask === 'analyze' ? 'Analyzing...' : 'Check Fit & Eligibility'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRunAiAssistant('interview')}
+                  disabled={isAiLoading}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isAiLoading && aiTask === 'interview' ? 'Preparing...' : 'AI Interview Prep'}
+                </button>
+              </div>
+            </div>
+
+            {/* Ask AI Question Input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (aiQuestion.trim()) {
+                  handleRunAiAssistant('qa', aiQuestion.trim());
+                }
+              }}
+              className="flex flex-col sm:flex-row gap-2"
+            >
+              <input
+                type="text"
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                placeholder={`Ask AI anything about ${vacancy.title} (e.g. documents, experience, salary tips)...`}
+                className="flex-1 px-3.5 py-2 rounded-xl bg-slate-950/80 border border-slate-700 text-xs text-white placeholder-slate-400 focus:border-amber-400 outline-none"
+              />
+              <button
+                type="submit"
+                disabled={isAiLoading || !aiQuestion.trim()}
+                className="px-4 py-2 rounded-xl bg-white hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                Ask AI
+              </button>
+            </form>
+
+            {aiError && (
+              <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-700 text-rose-200 text-xs">
+                {aiError}
+              </div>
+            )}
+
+            {aiResult && (
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 text-xs animate-in fade-in">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">AI Role Summary &amp; Fit Assessment</div>
+                  <p className="text-slate-200 leading-relaxed">{aiResult.summary}</p>
+                  <p className="text-emerald-300 font-semibold pt-1">{aiResult.fitAssessment}</p>
+                </div>
+
+                {aiResult.answer && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 text-amber-100 leading-relaxed">
+                    <strong className="text-amber-300 block mb-0.5">AI Answer &amp; Strategy:</strong>
+                    {aiResult.answer}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-sky-300 mb-2">
+                      Eligibility &amp; Readiness Checklist
+                    </div>
+                    <ul className="space-y-1.5 text-slate-300">
+                      {aiResult.eligibilityChecklist?.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-amber-300 mb-2">
+                      Likely Interview Questions
+                    </div>
+                    <ul className="space-y-1.5 text-slate-300">
+                      {aiResult.interviewQuestions?.map((q, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <span>{q}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Interactive Cover Letter Assistant Drawer if opened */}
           {showCoverLetterHelper && (
-            <CoverLetterAssistant vacancy={vacancy} />
+            <CoverLetterAssistant vacancy={vacancy} userProfile={userProfile} />
           )}
 
           {/* Social Sharing & Action Bar */}

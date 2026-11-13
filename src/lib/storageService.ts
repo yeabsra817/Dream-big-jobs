@@ -6,7 +6,7 @@ import {
   deleteObject,
   getMetadata,
 } from 'firebase/storage';
-import { storage, auth } from './firebase';
+import { storage, auth, safeResponseJson } from './firebase';
 
 export interface UploadResult {
   success: boolean;
@@ -80,14 +80,16 @@ export async function uploadDocumentToCloud(
         body: formData,
       });
       if (res.ok) {
-        const data = await res.json();
-        return {
-          success: true,
-          downloadUrl: data.downloadUrl,
-          storagePath: data.downloadUrl,
-          fileSizeBytes: data.fileSizeBytes || file.size,
-          mimeType: data.mimeType || file.type || 'application/pdf',
-        };
+        const data = await safeResponseJson<{ downloadUrl?: string; fileSizeBytes?: number; mimeType?: string }>(res);
+        if (data?.downloadUrl) {
+          return {
+            success: true,
+            downloadUrl: data.downloadUrl,
+            storagePath: data.downloadUrl,
+            fileSizeBytes: data.fileSizeBytes || file.size,
+            mimeType: data.mimeType || file.type || 'application/pdf',
+          };
+        }
       }
     } catch (fallbackErr) {
       console.warn('Server upload fallback failed:', fallbackErr);
@@ -159,14 +161,16 @@ export async function uploadBase64PdfToCloud(
         }),
       });
       if (res.ok) {
-        const data = await res.json();
-        return {
-          success: true,
-          downloadUrl: data.downloadUrl,
-          storagePath: data.downloadUrl,
-          fileSizeBytes: data.fileSizeBytes || approxBytes,
-          mimeType: 'application/pdf',
-        };
+        const data = await safeResponseJson<{ downloadUrl?: string; fileSizeBytes?: number }>(res);
+        if (data?.downloadUrl) {
+          return {
+            success: true,
+            downloadUrl: data.downloadUrl,
+            storagePath: data.downloadUrl,
+            fileSizeBytes: data.fileSizeBytes || approxBytes,
+            mimeType: 'application/pdf',
+          };
+        }
       }
     } catch (fallbackErr) {
       console.warn('Server base64 upload fallback failed:', fallbackErr);
