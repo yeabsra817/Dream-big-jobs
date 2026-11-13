@@ -1758,8 +1758,22 @@ export async function fetchAnalyticsSummaryFromFirestore(
       if (lastMs >= activeThreshold) activeUsersLast30Min += 1;
     });
 
+    const dailyMap: Record<string, { visitors: number; pageViews: number }> = {};
+    let newVisitorsCount = 0;
+    let returningVisitorsCount = 0;
+
     filteredVisitors.forEach((v) => {
-      totalPageViews += Number(v.pageViews || 1);
+      const pv = Number(v.pageViews || 1);
+      totalPageViews += pv;
+      const dKey = v.dateKey || (v.lastSeenAt ? getAddisDateKey(new Date(v.lastSeenAt)) : todayKey);
+      if (!dailyMap[dKey]) dailyMap[dKey] = { visitors: 0, pageViews: 0 };
+      dailyMap[dKey].visitors += 1;
+      dailyMap[dKey].pageViews += pv;
+
+      const firstDay = v.firstSeenAt ? getAddisDateKey(new Date(v.firstSeenAt)) : dKey;
+      if (firstDay !== dKey || pv > 1) returningVisitorsCount += 1;
+      else newVisitorsCount += 1;
+
       const src = v.source || 'direct';
       sourceCounts[src] = (sourceCounts[src] || 0) + 1;
       if (src === 'telegram') telegramReferralsCount += 1;
@@ -1781,6 +1795,7 @@ export async function fetchAnalyticsSummaryFromFirestore(
 
     const searchMap: Record<string, number> = {};
     const vacancyViewsMap: Record<string, { title: string; organization: string; category?: string; views: number; clicks: number }> = {};
+    const employerViewsMap: Record<string, { totalViews: number; totalApplyClicks: number; vacancyIds: Set<string> }> = {};
     const categoryViewsMap: Record<string, number> = {};
     let totalSearches = 0;
     let vacancyViewsTotal = 0;
@@ -1792,23 +1807,45 @@ export async function fetchAnalyticsSummaryFromFirestore(
         if (ev.searchTerm) searchMap[ev.searchTerm] = (searchMap[ev.searchTerm] || 0) + 1;
       } else if (ev.eventType === 'vacancy_view' && ev.jobId) {
         vacancyViewsTotal += 1;
+        const orgName = ev.organization || 'Employer';
         if (!vacancyViewsMap[ev.jobId]) {
           vacancyViewsMap[ev.jobId] = {
             title: ev.jobTitle || 'Vacancy',
-            organization: ev.organization || 'Employer',
+            organization: orgName,
             category: ev.category,
             views: 0,
             clicks: 0,
           };
         }
         vacancyViewsMap[ev.jobId].views += 1;
+        if (!employerViewsMap[orgName]) {
+          employerViewsMap[orgName] = { totalViews: 0, totalApplyClicks: 0, vacancyIds: new Set() };
+        }
+        employerViewsMap[orgName].totalViews += 1;
+        employerViewsMap[orgName].vacancyIds.add(ev.jobId);
       } else if (ev.eventType === 'click_apply_link' && ev.jobId) {
         applyClicksTotal += 1;
         if (vacancyViewsMap[ev.jobId]) vacancyViewsMap[ev.jobId].clicks += 1;
+        const orgName = ev.organization || vacancyViewsMap[ev.jobId]?.organization || 'Employer';
+        if (!employerViewsMap[orgName]) {
+          employerViewsMap[orgName] = { totalViews: 0, totalApplyClicks: 0, vacancyIds: new Set() };
+        }
+        employerViewsMap[orgName].totalApplyClicks += 1;
+        employerViewsMap[orgName].vacancyIds.add(ev.jobId);
       } else if (ev.eventType === 'category_view' && ev.category) {
         categoryViewsMap[ev.category] = (categoryViewsMap[ev.category] || 0) + 1;
       }
     });
+
+    const dailyStats = Object.entries(dailyMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-30)
+      .map(([date, stats]) => ({
+        date,
+        visitors: stats.visitors,
+        sessions: stats.visitors,
+        pageViews: stats.pageViews,
+      }));
 
     return {
       period,
@@ -1823,8 +1860,8 @@ export async function fetchAnalyticsSummaryFromFirestore(
         .slice(0, 8)
         .map(([term, count]) => ({ term, count, resultsAverage: 1 })),
       telegramReferralsCount,
-      newVisitors: totalVisitorsPeriod,
-      returningVisitors: 0,
+      newVisitors: newVisitorsCount,
+      returningVisitors: returningVisitorsCount,
       activeUsersLast30Min,
       visitorsToday,
       visitorsYesterday,
@@ -1835,14 +1872,10 @@ export async function fetchAnalyticsSummaryFromFirestore(
       provider: 'Firebase Firestore + GA4',
       gaMeasurementId: gaMeasurementId || 'G-KH6X73105S',
       internalExclusionStatus: excludeAdmin ? 'ACTIVE' : 'PAUSED',
-      dailyStats: [
-        {
-          date: todayKey,
-          visitors: visitorsToday,
-          sessions: visitorsToday,
-          pageViews: totalPageViews,
-        },
-      ],
+      dailyStats:
+        dailyStats.length > 0
+          ? dailyStats
+          : [{ date: todayKey, visitors: 0, sessions: 0, pageViews: 0 }],
       trafficSources,
       topVacancies: Object.entries(vacancyViewsMap)
         .map(([jobId, v]) => ({
@@ -1856,8 +1889,29 @@ export async function fetchAnalyticsSummaryFromFirestore(
         }))
         .sort((a, b) => b.views - a.views)
         .slice(0, 10),
-      topEmployers: [],
-      underperformingVacancies: [],
+      topEmployers: Object.entries(employerViewsMap)
+        .map(([organization, emp]) => ({
+          organization,
+          totalViews: emp.totalViews,
+          totalApplyClicks: emp.totalApplyClicks,
+          vacanciesCount: emp.vacancyIds.size,
+          ctr: emp.totalViews > 0 ? Math.round((emp.totalApplyClicks / emp.totalViews) * 100) : 0,
+        }))
+        .sort((a, b) => b.totalViews - a.totalViews)
+        .slice(0, 10),
+      underperformingVacancies: Object.entries(vacancyViewsMap)
+        .filter(([, v]) => v.views >= 3 && v.clicks === 0)
+        .map(([jobId, v]) => ({
+          jobId,
+          title: v.title,
+          organization: v.organization,
+          category: v.category || 'General',
+          views: v.views,
+          applyClicks: 0,
+          ctr: 0,
+          opportunityReason: 'Viewed multiple times with 0 outbound application clicks.',
+        }))
+        .slice(0, 10),
       topCategories: Object.entries(categoryViewsMap)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8)
@@ -1869,7 +1923,7 @@ export async function fetchAnalyticsSummaryFromFirestore(
           count: totalVisitorsPeriod,
           conversionRate: 100,
           dropoffRate: 0,
-          description: 'Distinct visitors recorded in Firestore',
+          description: 'Distinct real visitors recorded in Firestore',
         },
         {
           stage: 'Vacancy Views',
@@ -1917,6 +1971,44 @@ export async function fetchAnalyticsSummaryFromFirestore(
   } catch (err) {
     console.warn('Firestore analytics summary fallback notice:', err);
     return null;
+  }
+}
+
+export async function purgeAnalyticsFromFirestore(internalOnly: boolean): Promise<void> {
+  try {
+    const [visSnap, evSnap] = await Promise.all([
+      getDocs(collection(db, 'analytics_visitors')),
+      getDocs(collection(db, 'analytics_events')),
+    ]);
+
+    const batch = writeBatch(db);
+    let ops = 0;
+
+    visSnap.forEach((d) => {
+      const data = d.data();
+      if (!internalOnly || data?.isInternal) {
+        if (ops < 450) {
+          batch.delete(d.ref);
+          ops++;
+        }
+      }
+    });
+
+    evSnap.forEach((d) => {
+      const data = d.data();
+      if (!internalOnly || data?.isInternal) {
+        if (ops < 450) {
+          batch.delete(d.ref);
+          ops++;
+        }
+      }
+    });
+
+    if (ops > 0) {
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('Firestore analytics purge notice:', err);
   }
 }
 

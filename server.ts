@@ -21,10 +21,15 @@ const port = process.env.PORT || 3000;
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+const IS_VERCEL = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const RUNTIME_BASE_DIR = IS_VERCEL ? '/tmp/hopelandjobs' : __dirname;
+
+const UPLOADS_DIR = path.join(RUNTIME_BASE_DIR, 'public', 'uploads');
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch {}
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const upload = multer({
@@ -34,7 +39,7 @@ const upload = multer({
 
 // Server-side Gemini initialization per skill guidelines
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
+  apiKey: process.env.GEMINI_API_KEY || '',
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
@@ -880,8 +885,8 @@ app.post('/api/admin/scan-existing-duplicates', (req: Request, res: Response) =>
 });
 
 // Persistent Site Settings & Telegram Credentials Storage (survives rebuilds & server restarts)
-const SETTINGS_FILE = path.join(__dirname, 'data', 'site_settings.json');
-const TELEGRAM_CONFIG_FILE = path.join(__dirname, 'data', 'telegram_config.json');
+const SETTINGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'site_settings.json');
+const TELEGRAM_CONFIG_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_config.json');
 
 function loadPersistedSettings(): any {
   try {
@@ -915,7 +920,7 @@ function loadPersistedSettings(): any {
 
 function savePersistedSettings(settings: any): any {
   try {
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
@@ -1060,8 +1065,8 @@ app.post('/api/auth/admin-verify', (req: Request, res: Response): void => {
 // =========================================================================
 // Job Seeker Profiles & Document Vault Persistence
 // =========================================================================
-const USER_PROFILES_FILE = path.join(__dirname, 'data', 'user_profiles.json');
-const JOB_APPLICATIONS_FILE = path.join(__dirname, 'data', 'job_applications.json');
+const USER_PROFILES_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'user_profiles.json');
+const JOB_APPLICATIONS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'job_applications.json');
 
 function loadUserProfiles(): Record<string, any> {
   try {
@@ -1075,7 +1080,7 @@ function loadUserProfiles(): Record<string, any> {
 
 function saveUserProfile(profile: any): void {
   try {
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     const all = loadUserProfiles();
     all[profile.uid] = { ...all[profile.uid], ...profile, updatedAt: new Date().toISOString() };
@@ -1097,7 +1102,7 @@ function loadJobApplications(): any[] {
 
 function saveJobApplications(apps: any[]): void {
   try {
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     fs.writeFileSync(JOB_APPLICATIONS_FILE, JSON.stringify(apps, null, 2), 'utf-8');
   } catch (e) {
@@ -1867,7 +1872,7 @@ app.post('/api/admin/check-links', async (req: Request, res: Response): Promise<
 // Timezone: Africa/Addis_Ababa
 // ==========================================
 
-const ANALYTICS_DIR = path.join(__dirname, 'data');
+const ANALYTICS_DIR = path.join(RUNTIME_BASE_DIR, 'data');
 const ANALYTICS_FILE = path.join(ANALYTICS_DIR, 'analytics_events.json');
 const BUSINESS_BI_FILE = path.join(ANALYTICS_DIR, 'business_bi.json');
 const GSC_CONFIG_FILE = path.join(ANALYTICS_DIR, 'gsc_config.json');
@@ -2012,7 +2017,7 @@ let businessBiData: StoredBusinessBi = {
 
 let gscConfigData: StoredGscConfig = {
   status: 'NOT CONFIGURED',
-  propertyUrl: 'https://dreambigjobs.et',
+  propertyUrl: 'https://www.hopelandjobs.tech',
   lastSyncTime: undefined,
   impressions: 0,
   clicks: 0,
@@ -3331,7 +3336,7 @@ function buildMimeMessage({
     .replace(/=+$/, '');
 }
 
-const AUTO_APPLY_DATA_FILE = path.join(__dirname, 'data', 'auto_apply_data.json');
+const AUTO_APPLY_DATA_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'auto_apply_data.json');
 
 function loadPersistedAutoApplyData(): any {
   try {
@@ -4029,8 +4034,15 @@ app.get('/api/analytics/visit-count', (req: Request, res: Response): void => {
 // 1. AI Customer Visit Count Insights (Gemini)
 app.post('/api/ai/visit-count-insights', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { excludeAdmin = true } = req.body || {};
-    const visitStats = computeCustomerVisitCountStats(Boolean(excludeAdmin));
+    const { excludeAdmin = true, visitStats: clientVisitStats } = req.body || {};
+    const localVisitStats = computeCustomerVisitCountStats(Boolean(excludeAdmin));
+    const visitStats =
+      clientVisitStats &&
+      typeof clientVisitStats.totalUniqueVisits === 'number' &&
+      (localVisitStats.totalUniqueVisits === 0 ||
+        clientVisitStats.totalUniqueVisits >= localVisitStats.totalUniqueVisits)
+        ? clientVisitStats
+        : localVisitStats;
     const baselineEvents = excludeAdmin ? analyticsEvents.filter((e) => !e.isInternal) : analyticsEvents;
 
     const sourceCounts: Record<string, number> = {};
@@ -4665,4 +4677,8 @@ async function setupServer() {
   });
 }
 
-setupServer();
+if (!IS_VERCEL) {
+  setupServer();
+}
+
+export default app;

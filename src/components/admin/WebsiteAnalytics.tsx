@@ -56,7 +56,7 @@ import {
   getInternalTrafficExclusion,
   setInternalTrafficExclusion,
 } from '../../lib/analyticsTracker';
-import { safeResponseJson, fetchAnalyticsSummaryFromFirestore } from '../../lib/firebase';
+import { safeResponseJson, fetchAnalyticsSummaryFromFirestore, purgeAnalyticsFromFirestore } from '../../lib/firebase';
 import { generateVisitCountAiInsights } from '../../lib/aiService';
 
 interface Props {
@@ -104,7 +104,7 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [auditMessage, setAuditMessage] = useState<string | null>(null);
 
   // GSC state
-  const [gscUrlInput, setGscUrlInput] = useState<string>('https://dreambigjobs.et');
+  const [gscUrlInput, setGscUrlInput] = useState<string>('https://www.hopelandjobs.tech');
   const [isSavingGsc, setIsSavingGsc] = useState<boolean>(false);
 
   // Inquiries & Revenue Record Modals / Inputs
@@ -154,7 +154,7 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [rankingSearch, setRankingSearch] = useState<string>('');
   const [rankingCategory, setRankingCategory] = useState<string>('All');
 
-  // Fetch summary from server
+  // Fetch summary from Firestore (persistent cross-device truth) + server diagnostics in parallel
   const fetchAnalyticsSummary = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) setIsRefreshing(true);
     else setLoading(true);
@@ -167,39 +167,52 @@ export const WebsiteAnalytics: React.FC<Props> = ({
         gaMeasurementId: siteSettings.gaMeasurementId || '',
       });
 
-      const res = await fetch(`/api/analytics/summary?${params.toString()}`);
-      if (res.ok) {
-        const data = await safeResponseJson<AnalyticsSummary>(res);
-        if (data) {
-          setSummary(data);
-          if (data.searchConsole?.propertyUrl) {
-            setGscUrlInput(data.searchConsole.propertyUrl);
-          }
-          return;
-        }
+      const [apiResult, fsResult] = await Promise.allSettled([
+        fetch(`/api/analytics/summary?${params.toString()}`).then(async (res) =>
+          res.ok ? await safeResponseJson<AnalyticsSummary>(res) : null
+        ),
+        fetchAnalyticsSummaryFromFirestore(period, excludeAdmin, siteSettings.gaMeasurementId),
+      ]);
+
+      const apiData = apiResult.status === 'fulfilled' ? apiResult.value : null;
+      const fsData = fsResult.status === 'fulfilled' ? fsResult.value : null;
+
+      // Choose the persistent Firestore summary whenever it exists and has real visitor data
+      // or when the serverless lambda memory is empty (e.g., cold Vercel function)
+      let chosen: AnalyticsSummary | null = null;
+      if (fsData && (!apiData || fsData.uniqueVisitors >= apiData.uniqueVisitors || fsData.visitorsLast30 >= apiData.visitorsLast30)) {
+        chosen = {
+          ...fsData,
+          healthDiagnostics: apiData?.healthDiagnostics?.length ? apiData.healthDiagnostics : fsData.healthDiagnostics,
+          smartAlerts: apiData?.smartAlerts?.length ? apiData.smartAlerts : fsData.smartAlerts,
+          searchConsole: apiData?.searchConsole || fsData.searchConsole,
+          businessIntelligence:
+            apiData?.businessIntelligence &&
+            (apiData.businessIntelligence.totalCollectedRevenueEtb > 0 ||
+              apiData.businessIntelligence.employerInquiriesCount > 0)
+              ? {
+                  ...apiData.businessIntelligence,
+                  candidateRegistrationCount: fsData.businessIntelligence.candidateRegistrationCount,
+                }
+              : fsData.businessIntelligence,
+        };
+      } else if (apiData) {
+        chosen = apiData;
+      } else if (fsData) {
+        chosen = fsData;
       }
-      const fsSummary = await fetchAnalyticsSummaryFromFirestore(
-        period,
-        excludeAdmin,
-        siteSettings.gaMeasurementId
-      );
-      if (fsSummary) {
-        setSummary(fsSummary);
-        return;
+
+      if (!chosen) {
+        throw new Error('Unable to load analytics summary from Firestore or API');
       }
-      throw new Error(`Server returned HTTP ${res.status}`);
+
+      setSummary(chosen);
+      if (chosen.searchConsole?.propertyUrl) {
+        setGscUrlInput(chosen.searchConsole.propertyUrl);
+      }
     } catch (err: any) {
-      const fsSummary = await fetchAnalyticsSummaryFromFirestore(
-        period,
-        excludeAdmin,
-        siteSettings.gaMeasurementId
-      );
-      if (fsSummary) {
-        setSummary(fsSummary);
-      } else {
-        console.error('Failed to fetch analytics:', err);
-        setError(err?.message || 'Unable to load analytics summary');
-      }
+      console.error('Failed to fetch analytics:', err);
+      setError(err?.message || 'Unable to load analytics summary');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -404,16 +417,17 @@ export const WebsiteAnalytics: React.FC<Props> = ({
     setPurgeModal(null);
 
     try {
-      const res = await fetch('/api/analytics/reset-test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purgeInternalOnly: internalOnly }),
-      });
-      if (res.ok) {
-        showToast('success', internalOnly ? 'Internal test events purged successfully.' : 'All analytics reset to zero.');
-        setAiReport(null);
-        fetchAnalyticsSummary(true);
-      }
+      await Promise.allSettled([
+        purgeAnalyticsFromFirestore(internalOnly),
+        fetch('/api/analytics/reset-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ purgeInternalOnly: internalOnly }),
+        }),
+      ]);
+      showToast('success', internalOnly ? 'Internal test events purged successfully.' : 'All analytics reset to zero.');
+      setAiReport(null);
+      fetchAnalyticsSummary(true);
     } catch (err: any) {
       showToast('error', 'Error purging data: ' + err.message);
     }

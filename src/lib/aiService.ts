@@ -48,26 +48,30 @@ export interface AdminVacancyDraftAiResponse {
 export async function fetchCustomerVisitCount(
   excludeAdmin: boolean = true
 ): Promise<CustomerVisitCountSummary | null> {
-  try {
-    const res = await fetch(
-      `/api/analytics/visit-count?excludeAdmin=${excludeAdmin ? 'true' : 'false'}`
-    );
-    if (res.ok) {
-      const apiStats = await safeResponseJson<CustomerVisitCountSummary>(res);
-      if (apiStats && apiStats.totalUniqueVisits > 0) return apiStats;
-    }
-  } catch {}
+  const [fsResult, apiResult] = await Promise.allSettled([
+    fetchCustomerVisitCountFromFirestore(excludeAdmin),
+    fetch(`/api/analytics/visit-count?excludeAdmin=${excludeAdmin ? 'true' : 'false'}`).then(async (res) =>
+      res.ok ? await safeResponseJson<CustomerVisitCountSummary>(res) : null
+    ),
+  ]);
 
-  return await fetchCustomerVisitCountFromFirestore(excludeAdmin);
+  const fsStats = fsResult.status === 'fulfilled' ? fsResult.value : null;
+  const apiStats = apiResult.status === 'fulfilled' ? apiResult.value : null;
+
+  if (fsStats && (!apiStats || fsStats.totalUniqueVisits >= apiStats.totalUniqueVisits)) {
+    return fsStats;
+  }
+  return apiStats || fsStats || null;
 }
 
 export async function generateVisitCountAiInsights(
   excludeAdmin: boolean = true
 ): Promise<CustomerVisitAiInsight> {
+  const visitStats = await fetchCustomerVisitCount(excludeAdmin);
   const res = await fetch('/api/ai/visit-count-insights', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ excludeAdmin }),
+    body: JSON.stringify({ excludeAdmin, visitStats }),
   });
   const data = await safeResponseJson<CustomerVisitAiInsight & { error?: string }>(res);
   if (!res.ok || !data) {

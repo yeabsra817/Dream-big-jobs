@@ -203,6 +203,13 @@ export default function App() {
 
   // Load Initial Data (Public data: site settings & published vacancies)
   useEffect(() => {
+    // Track real visitor landing immediately so quick visits or slow mobile loads are never missed
+    initGoogleAnalytics4(undefined, false);
+    trackAnalyticsEvent('page_view', {
+      path: typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/',
+      title: typeof document !== 'undefined' ? document.title : 'HOPELAND JOBS',
+    });
+
     async function loadData() {
       try {
         const [loadedSettings, loadedVacancies] = await Promise.all([
@@ -212,17 +219,10 @@ export default function App() {
         setSiteSettings(loadedSettings);
         setVacancies(loadedVacancies);
 
-        // Initialize GA4 if measurement ID exists
+        // Ensure configured GA4 measurement ID from siteSettings is initialized
         if (loadedSettings.gaMeasurementId) {
           initGoogleAnalytics4(loadedSettings.gaMeasurementId, false);
         }
-
-        // Send initial public page_view event
-        trackAnalyticsEvent('page_view', {
-          path: window.location.pathname + window.location.search,
-          title: document.title,
-          gaMeasurementId: loadedSettings.gaMeasurementId,
-        });
 
         // Check URL parameter or path for direct job link (from Telegram / WhatsApp / Social shares)
         if (typeof window !== 'undefined') {
