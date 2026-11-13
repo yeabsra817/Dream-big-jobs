@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -56,6 +58,7 @@ try {
 
 export const db = firestoreInstance;
 export const auth = getAuth(app);
+auth.useDeviceLanguage();
 export const storage = getStorage(app, (firebaseConfig as any).storageBucket || 'gen-lang-client-0056760370.firebasestorage.app');
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('profile');
@@ -203,7 +206,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Test connection on boot per Firebase skill directive
+// Deferred connection check so it never contends with initial vacancy/settings fetches
 export async function testFirestoreConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
@@ -213,7 +216,38 @@ export async function testFirestoreConnection() {
     }
   }
 }
-testFirestoreConnection();
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    testFirestoreConnection();
+  }, 3000);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
+}
 
 export const ADMIN_EMAILS = [
   'nexusitsoultion@gmail.com',
@@ -227,31 +261,83 @@ export function isUserAdmin(user: User | null): boolean {
   return ADMIN_EMAILS.some((adm) => adm.toLowerCase().trim() === userEmail);
 }
 
+const LOCAL_STORAGE_PUBLISHED_KEY = 'hopelandjobs_published_vacancies_cache';
+const LOCAL_STORAGE_VACANCIES_KEY = 'dreambigjobs_vacancies_cache';
+const LOCAL_STORAGE_SETTINGS_KEY = 'dreambigjobs_settings_cache';
+const LOCAL_STORAGE_DUPLICATES_KEY = 'dreambigjobs_duplicates_cache';
+
+export function getCachedPublishedVacancies(): Vacancy[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_PUBLISHED_KEY) || localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getCachedSiteSettings(): SiteSettings | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+    return raw ? (JSON.parse(raw) as SiteSettings) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getCachedJobSeekerProfile(uid: string): JobSeekerProfile | null {
+  if (typeof window === 'undefined' || !uid) return null;
+  try {
+    const raw = localStorage.getItem(`hopelandjobs_profile_${uid}`);
+    return raw ? (JSON.parse(raw) as JobSeekerProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getCachedUserApplications(userId: string): UserJobApplication[] {
+  if (typeof window === 'undefined' || !userId) return [];
+  try {
+    const raw = localStorage.getItem(`hopelandjobs_apps_${userId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // Vacancy Firestore helpers
 export async function fetchPublishedVacancies(): Promise<Vacancy[]> {
   const path = 'vacancies';
+  const cached = getCachedPublishedVacancies();
   try {
     const q = query(collection(db, path), where('status', '==', 'published'));
-    const snapshot = await getDocs(q);
+    const snapshot = await withTimeout(getDocs(q), 5000, null as any);
+    if (!snapshot) {
+      return cached;
+    }
     const list: Vacancy[] = [];
-    snapshot.forEach((d) => {
+    snapshot.forEach((d: any) => {
       list.push({ ...(d.data() as Vacancy), id: d.id });
     });
     // Sort in memory by publishedAt descending
     list.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
+    try {
+      localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(list));
+    } catch {}
     return list;
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.LIST, path);
     }
     console.warn('Firestore offline/transient notice during fetchPublishedVacancies:', err);
-    return [];
+    return cached;
   }
 }
-
-const LOCAL_STORAGE_VACANCIES_KEY = 'dreambigjobs_vacancies_cache';
-const LOCAL_STORAGE_SETTINGS_KEY = 'dreambigjobs_settings_cache';
-const LOCAL_STORAGE_DUPLICATES_KEY = 'dreambigjobs_duplicates_cache';
 
 export function saveVacancyToLocalCache(vacancy: Vacancy) {
   try {
@@ -461,30 +547,36 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     if (raw) cached = JSON.parse(raw);
   } catch {}
 
-  // 2. Fetch server persisted disk settings (/api/settings)
-  let serverSettings: Partial<SiteSettings> = {};
-  try {
-    const sRes = await fetch('/api/settings');
-    if (sRes.ok) {
-      const sData = await safeResponseJson<Partial<SiteSettings>>(sRes);
-      if (sData && typeof sData === 'object') {
-        serverSettings = sData;
+  // 2 & 3. Fetch server disk settings & cloud Firestore document in parallel with timeouts
+  const fetchServerSettings = async (): Promise<Partial<SiteSettings>> => {
+    try {
+      const sRes = await withTimeout(fetch('/api/settings'), 2500, null as any);
+      if (sRes && sRes.ok) {
+        const sData = await safeResponseJson<Partial<SiteSettings>>(sRes);
+        if (sData && typeof sData === 'object') return sData;
+      }
+    } catch {}
+    return {};
+  };
+
+  const fetchFirestoreSettings = async (): Promise<Partial<SiteSettings>> => {
+    try {
+      const d = await withTimeout(getDoc(doc(db, 'siteSettings', 'general')), 3000, null as any);
+      if (d && d.exists()) {
+        return d.data() as Partial<SiteSettings>;
+      }
+    } catch (err) {
+      if (isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.GET, path);
       }
     }
-  } catch {}
+    return {};
+  };
 
-  // 3. Fetch cloud Firestore document
-  let firestoreSettings: Partial<SiteSettings> = {};
-  try {
-    const d = await getDoc(doc(db, 'siteSettings', 'general'));
-    if (d.exists()) {
-      firestoreSettings = d.data() as Partial<SiteSettings>;
-    }
-  } catch (err) {
-    if (isPermissionError(err)) {
-      handleFirestoreError(err, OperationType.GET, path);
-    }
-  }
+  const [serverSettings, firestoreSettings] = await Promise.all([
+    fetchServerSettings(),
+    fetchFirestoreSettings(),
+  ]);
 
   // Merge with highest priority: Firestore > Server > Local Cache > Defaults
   const merged: SiteSettings = {
@@ -1188,6 +1280,8 @@ export async function generateFullSystemBackupSnapshot(
 // Re-export core auth methods for clean component imports
 export {
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -1203,42 +1297,39 @@ export {
 export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfile | null> {
   if (!uid) return null;
 
-  // 1. Try Firestore
-  try {
-    const docRef = doc(db, 'job_seeker_profiles', uid);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data() as JobSeekerProfile;
-      try {
-        localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(data));
-      } catch {}
-      return data;
+  // 1 & 2. Query Firestore & server backend in parallel with timeout guards
+  const fromFirestore = async (): Promise<JobSeekerProfile | null> => {
+    try {
+      const snap = await withTimeout(getDoc(doc(db, 'job_seeker_profiles', uid)), 3000, null as any);
+      if (snap && snap.exists()) return snap.data() as JobSeekerProfile;
+    } catch (err) {
+      console.warn('Firestore profile fetch notice:', err);
     }
-  } catch (err) {
-    console.warn('Firestore profile fetch notice:', err);
+    return null;
+  };
+
+  const fromServer = async (): Promise<JobSeekerProfile | null> => {
+    try {
+      const res = await withTimeout(fetch(`/api/user-profile/${encodeURIComponent(uid)}`), 2500, null as any);
+      if (res && res.ok) {
+        const serverProfile = await safeResponseJson<JobSeekerProfile>(res);
+        if (serverProfile && serverProfile.uid) return serverProfile;
+      }
+    } catch {}
+    return null;
+  };
+
+  const [fsProfile, srvProfile] = await Promise.all([fromFirestore(), fromServer()]);
+  const resolved = fsProfile || srvProfile;
+  if (resolved) {
+    try {
+      localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(resolved));
+    } catch {}
+    return resolved;
   }
 
-  // 2. Try server backend
-  try {
-    const res = await fetch(`/api/user-profile/${encodeURIComponent(uid)}`);
-    if (res.ok) {
-      const serverProfile = await safeResponseJson<JobSeekerProfile>(res);
-      if (serverProfile && serverProfile.uid) {
-        try {
-          localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(serverProfile));
-        } catch {}
-        return serverProfile;
-      }
-    }
-  } catch {}
-
   // 3. Fallback to localStorage
-  try {
-    const saved = localStorage.getItem(`hopelandjobs_profile_${uid}`);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-
-  return null;
+  return getCachedJobSeekerProfile(uid);
 }
 
 export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<void> {
@@ -1254,22 +1345,19 @@ export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<v
     localStorage.setItem(`hopelandjobs_profile_${profile.uid}`, JSON.stringify(cleanProfile));
   } catch {}
 
-  // 2. Persist to Firestore
-  try {
-    const docRef = doc(db, 'job_seeker_profiles', profile.uid);
-    await setDoc(docRef, cleanProfile, { merge: true });
-  } catch (err) {
-    console.warn('Firestore profile save notice:', err);
-  }
-
-  // 3. Sync to server database
-  try {
-    await fetch('/api/user-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanProfile),
-    });
-  } catch {}
+  // 2 & 3. Persist to Firestore & server database in parallel
+  await Promise.allSettled([
+    withTimeout(setDoc(doc(db, 'job_seeker_profiles', profile.uid), cleanProfile, { merge: true }), 3500, undefined),
+    withTimeout(
+      fetch('/api/user-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cleanProfile),
+      }),
+      3500,
+      null as any
+    ),
+  ]);
 }
 
 /* =========================================================================
@@ -1279,43 +1367,44 @@ export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<v
 export async function fetchUserApplications(userId: string): Promise<UserJobApplication[]> {
   if (!userId) return [];
 
-  // 1. Try Firestore
-  try {
-    const q = query(collection(db, 'job_applications'), where('userId', '==', userId));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const list = snap.docs.map((d) => d.data() as UserJobApplication);
-      list.sort((a, b) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
-      try {
-        localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(list));
-      } catch {}
-      return list;
+  // 1 & 2. Query Firestore & server backend in parallel with timeout guards
+  const fromFirestore = async (): Promise<UserJobApplication[] | null> => {
+    try {
+      const q = query(collection(db, 'job_applications'), where('userId', '==', userId));
+      const snap = await withTimeout(getDocs(q), 3000, null as any);
+      if (snap && !snap.empty) {
+        const list = snap.docs.map((d: any) => d.data() as UserJobApplication);
+        list.sort((a: UserJobApplication, b: UserJobApplication) => new Date(b.appliedAt).getTime() - new Date(a.appliedAt).getTime());
+        return list;
+      }
+    } catch (err) {
+      console.warn('Firestore applications fetch notice:', err);
     }
-  } catch (err) {
-    console.warn('Firestore applications fetch notice:', err);
+    return null;
+  };
+
+  const fromServer = async (): Promise<UserJobApplication[] | null> => {
+    try {
+      const res = await withTimeout(fetch(`/api/applications?userId=${encodeURIComponent(userId)}`), 2500, null as any);
+      if (res && res.ok) {
+        const serverApps = await safeResponseJson<UserJobApplication[]>(res);
+        if (Array.isArray(serverApps) && serverApps.length > 0) return serverApps;
+      }
+    } catch {}
+    return null;
+  };
+
+  const [fsApps, srvApps] = await Promise.all([fromFirestore(), fromServer()]);
+  const resolved = (fsApps && fsApps.length > 0 ? fsApps : null) || srvApps;
+  if (resolved) {
+    try {
+      localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(resolved));
+    } catch {}
+    return resolved;
   }
 
-  // 2. Try server backend
-  try {
-    const res = await fetch(`/api/applications?userId=${encodeURIComponent(userId)}`);
-    if (res.ok) {
-      const serverApps = await safeResponseJson<UserJobApplication[]>(res);
-      if (Array.isArray(serverApps)) {
-        try {
-          localStorage.setItem(`hopelandjobs_apps_${userId}`, JSON.stringify(serverApps));
-        } catch {}
-        return serverApps;
-      }
-    }
-  } catch {}
-
   // 3. Fallback to localStorage
-  try {
-    const saved = localStorage.getItem(`hopelandjobs_apps_${userId}`);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-
-  return [];
+  return getCachedUserApplications(userId);
 }
 
 export async function fetchAllApplicationsAdmin(): Promise<UserJobApplication[]> {

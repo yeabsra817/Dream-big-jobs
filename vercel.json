@@ -2,7 +2,15 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/((?!api/|__/auth/).*)",
+      "source": "/__/auth/:match*",
+      "destination": "https://gen-lang-client-0056760370.firebaseapp.com/__/auth/:match*"
+    },
+    {
+      "source": "/__/firebase/:match*",
+      "destination": "https://gen-lang-client-0056760370.firebaseapp.com/__/firebase/:match*"
+    },
+    {
+      "source": "/((?!api/|__/auth/|__/firebase/).*)",
       "destination": "/index.html"
     }
   ]

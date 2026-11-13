@@ -4640,8 +4640,22 @@ async function setupServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
+    app.use(
+      '/assets',
+      express.static(path.join(__dirname, 'dist', 'assets'), {
+        maxAge: '1y',
+        immutable: true,
+        etag: true,
+      })
+    );
+    app.use(
+      express.static(path.join(__dirname, 'dist'), {
+        maxAge: '1h',
+        etag: true,
+      })
+    );
     app.get('*', (req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }

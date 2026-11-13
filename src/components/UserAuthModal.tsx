@@ -16,9 +16,11 @@ import {
   auth,
   googleProvider,
   signInWithPopup,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile,
   getAdditionalUserInfo,
   fetchJobSeekerProfile,
@@ -106,21 +108,37 @@ export const UserAuthModal: React.FC<Props> = ({
         return 'Network error while connecting to Google Authentication. Please check your internet connection and try again.';
       case 'auth/operation-not-allowed':
         return 'Google Sign-In is not currently enabled in Firebase Authentication providers.';
-      case 'auth/unauthorized-domain':
-        return `Google Sign-In is not authorized yet for "${hostname}". Add "${hostname}" under Firebase Console → Authentication → Settings → Authorized domains (Project: gen-lang-client-0056760370).`;
+      case 'auth/unauthorized-domain': {
+        const domainHint = hostname && hostname !== 'hopelandjobs.tech' && hostname !== 'www.hopelandjobs.tech'
+          ? `"${hostname}", "hopelandjobs.tech", and "www.hopelandjobs.tech"`
+          : '"hopelandjobs.tech" and "www.hopelandjobs.tech"';
+        return `Google Sign-In is blocked by Firebase for "${hostname}". Add ${domainHint} under Firebase Console → Authentication → Settings → Authorized domains (Project: gen-lang-client-0056760370).`;
+      }
       default:
         return err?.message || 'Authentication error. Please try again.';
     }
   };
 
-  // Real Firebase Google Account Selection Popup Sign-In & Registration
+  // Real Firebase Google Account Selection Popup Sign-In & Registration (with mobile redirect fallback)
   const handleGoogleAuth = async () => {
     setLoading(true);
     setError(null);
     setSuccessMsg(null);
 
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      let result;
+      try {
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr: any) {
+        if (
+          popupErr?.code === 'auth/popup-blocked' ||
+          popupErr?.code === 'auth/operation-not-supported-in-this-environment'
+        ) {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupErr;
+      }
       const user = result.user;
       const additionalInfo = getAdditionalUserInfo(result);
       const isNewUser = Boolean(additionalInfo?.isNewUser);
@@ -209,6 +227,7 @@ export const UserAuthModal: React.FC<Props> = ({
 
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         await updateProfile(cred.user, { displayName: fullName.trim() });
+        sendEmailVerification(cred.user).catch(() => {});
 
         const newProfile: JobSeekerProfile = {
           ...DEFAULT_JOB_SEEKER_PROFILE,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import {
   Search,
   Sparkles,
@@ -57,22 +57,18 @@ import {
   fetchJobSeekerProfile,
   saveJobSeekerProfile,
   fetchUserApplications,
+  getCachedPublishedVacancies,
+  getCachedSiteSettings,
+  getCachedJobSeekerProfile,
+  getCachedUserApplications,
+  getRedirectResult,
+  getAdditionalUserInfo,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
-import { CategoryView } from './components/CategoryView';
-import { LocationJobsView } from './components/LocationJobsView';
-import { SavedJobsDrawer } from './components/SavedJobsDrawer';
-import { VacancyDetailModal } from './components/VacancyDetailModal';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AdminAuthModal } from './components/admin/AdminAuthModal';
-import { UserAuthModal } from './components/UserAuthModal';
-import { JobApplicationModal } from './components/JobApplicationModal';
-import { JobSeekerDashboard } from './components/JobSeekerDashboard';
-import { AllCategoriesView } from './components/AllCategoriesView';
 import { Footer } from './components/Footer';
 import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
 import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
@@ -86,6 +82,27 @@ import {
 } from './lib/aiService';
 import { CustomerVisitCountSummary, CustomerVisitAiInsight } from './types/analytics';
 
+// Lazy-loaded secondary pages & modals (reduces initial JS bundle & speeds up navigation)
+const CategoryView = lazy(() => import('./components/CategoryView').then((m) => ({ default: m.CategoryView })));
+const LocationJobsView = lazy(() => import('./components/LocationJobsView').then((m) => ({ default: m.LocationJobsView })));
+const AllCategoriesView = lazy(() => import('./components/AllCategoriesView').then((m) => ({ default: m.AllCategoriesView })));
+const SavedJobsDrawer = lazy(() => import('./components/SavedJobsDrawer').then((m) => ({ default: m.SavedJobsDrawer })));
+const VacancyDetailModal = lazy(() => import('./components/VacancyDetailModal').then((m) => ({ default: m.VacancyDetailModal })));
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const AdminAuthModal = lazy(() => import('./components/admin/AdminAuthModal').then((m) => ({ default: m.AdminAuthModal })));
+const UserAuthModal = lazy(() => import('./components/UserAuthModal').then((m) => ({ default: m.UserAuthModal })));
+const JobApplicationModal = lazy(() => import('./components/JobApplicationModal').then((m) => ({ default: m.JobApplicationModal })));
+const JobSeekerDashboard = lazy(() => import('./components/JobSeekerDashboard').then((m) => ({ default: m.JobSeekerDashboard })));
+
+const PageLoader = () => (
+  <div className="min-h-[50vh] flex items-center justify-center py-16">
+    <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-xs text-xs font-bold text-slate-700">
+      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+      <span>Loading...</span>
+    </div>
+  </div>
+);
+
 const POPULAR_EMPLOYERS = [
   { name: 'Commercial Bank of Ethiopia', short: 'CBE', category: 'Commercial Banking & Microfinance', vacancies: 'Official' },
   { name: 'Awash Bank', short: 'Awash', category: 'Commercial Banking & Microfinance', vacancies: 'Verified' },
@@ -98,23 +115,28 @@ const POPULAR_EMPLOYERS = [
 ];
 
 export default function App() {
-  // Database State
-  const [vacancies, setVacancies] = useState<Vacancy[]>([]);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
-    telegramChannelName: '@DreamBigJobsEthiopia',
-    telegramChannelUrl: 'https://t.me/DreamBigJobsEthiopia',
-    telegramGroupUrl: 'https://t.me/DreamBigJobsEthiopia',
-    telegramBotUsername: '@DreamBigJobsEthiopiaBot',
-    telegramAutoPublish: true,
-    contactEmail: 'nexusitsoultion@gmail.com',
-    contactPhone: '+251 91 123 4567',
-    contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
-    customDomain: 'hopelandjobs.tech',
-    gaMeasurementId: 'G-KH6X73105S',
-    gaTrackingEnabled: true,
-    aboutText:
-      'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
-    updatedAt: new Date().toISOString(),
+  // Database State — hydrated synchronously from localStorage cache for 0ms initial render
+  const [vacancies, setVacancies] = useState<Vacancy[]>(() => getCachedPublishedVacancies());
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    const cached = getCachedSiteSettings();
+    return (
+      cached || {
+        telegramChannelName: '@DreamBigJobsEthiopia',
+        telegramChannelUrl: 'https://t.me/DreamBigJobsEthiopia',
+        telegramGroupUrl: 'https://t.me/DreamBigJobsEthiopia',
+        telegramBotUsername: '@DreamBigJobsEthiopiaBot',
+        telegramAutoPublish: true,
+        contactEmail: 'nexusitsoultion@gmail.com',
+        contactPhone: '+251 91 123 4567',
+        contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
+        customDomain: 'hopelandjobs.tech',
+        gaMeasurementId: 'G-KH6X73105S',
+        gaTrackingEnabled: true,
+        aboutText:
+          'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
+        updatedAt: new Date().toISOString(),
+      }
+    );
   });
   const [duplicateReports, setDuplicateReports] = useState<DuplicateReportItem[]>([]);
 
@@ -233,11 +255,42 @@ export default function App() {
     }
     loadData();
 
+    // Background idle prefetch for frequently visited public chunks
+    const prefetchTimer = setTimeout(() => {
+      import('./components/AllCategoriesView');
+      import('./components/CategoryView');
+      import('./components/LocationJobsView');
+      import('./components/VacancyDetailModal');
+      import('./components/UserAuthModal');
+    }, 1200);
+
+    // Handle return from Google signInWithRedirect (mobile browsers where popups are blocked)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!result?.user) return;
+        const additionalInfo = getAdditionalUserInfo(result);
+        const isNewUser = Boolean(additionalInfo?.isNewUser);
+        trackAnalyticsEvent(isNewUser ? 'job_seeker_register' : 'job_seeker_login', {
+          method: 'google',
+          title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
+        });
+      })
+      .catch((err) => {
+        console.warn('Google redirect sign-in notice:', err);
+      });
+
     // Firebase Auth Listener & Google Account GA4 User Identification
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
         setAnalyticsUserId(user.uid || null);
+
+        // Instant synchronous hydration from local cache before cloud sync completes
+        const cachedProfile = getCachedJobSeekerProfile(user.uid);
+        if (cachedProfile) setUserProfile(cachedProfile);
+        const cachedApps = getCachedUserApplications(user.uid);
+        if (cachedApps.length > 0) setUserApplications(cachedApps);
+
         fetchCustomerVisitCount(true).then((stats) => {
           if (stats) setVisitStats(stats);
         });
@@ -331,6 +384,7 @@ export default function App() {
     return () => {
       unsubscribe();
       clearInterval(visitInterval);
+      clearTimeout(prefetchTimer);
     };
   }, []);
 
@@ -655,8 +709,13 @@ export default function App() {
     setSelectedLocation(loc);
     setSelectedCategory(null);
     setIsAllCategoriesView(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   };
+
+  const savedVacanciesList = useMemo(
+    () => vacancies.filter((v) => savedJobIds.has(v.id)),
+    [vacancies, savedJobIds]
+  );
 
   // Bookmarking / Saved Jobs
   const handleToggleSaveJob = (id: string) => {
@@ -823,35 +882,37 @@ export default function App() {
     if (meta) {
       setSelectedCategory(meta);
       setIsAllCategoriesView(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'auto' });
     }
   };
 
   // If in Admin Dashboard view
   if (isAdminView && isOwnerAuthorized) {
     return (
-      <AdminDashboard
-        adminEmail={adminEmail}
-        onLogout={async () => {
-          await signOut(auth);
-          setIsOwnerAuthorized(false);
-          setIsAdminView(false);
-        }}
-        onCloseDashboard={() => setIsAdminView(false)}
-        vacancies={vacancies}
-        siteSettings={siteSettings}
-        duplicateReports={duplicateReports}
-        onSaveVacancy={handleSaveVacancy}
-        onBatchSaveVacancies={handleBatchSaveVacancies}
-        onDeleteVacancy={handleDeleteVacancy}
-        onBatchDeleteVacancies={handleBatchDeleteVacancies}
-        onUpdateVacancyStatus={handleUpdateVacancyStatus}
-        onSaveSiteSettings={handleSaveSiteSettings}
-        onSaveDuplicateReports={handleSaveDuplicateReports}
-        onDiscardDuplicate={handleDiscardDuplicate}
-        onRestoreDuplicate={handleRestoreDuplicate}
-        onRestoreFullBackup={handleRestoreFullBackup}
-      />
+      <Suspense fallback={<PageLoader />}>
+        <AdminDashboard
+          adminEmail={adminEmail}
+          onLogout={async () => {
+            await signOut(auth);
+            setIsOwnerAuthorized(false);
+            setIsAdminView(false);
+          }}
+          onCloseDashboard={() => setIsAdminView(false)}
+          vacancies={vacancies}
+          siteSettings={siteSettings}
+          duplicateReports={duplicateReports}
+          onSaveVacancy={handleSaveVacancy}
+          onBatchSaveVacancies={handleBatchSaveVacancies}
+          onDeleteVacancy={handleDeleteVacancy}
+          onBatchDeleteVacancies={handleBatchDeleteVacancies}
+          onUpdateVacancyStatus={handleUpdateVacancyStatus}
+          onSaveSiteSettings={handleSaveSiteSettings}
+          onSaveDuplicateReports={handleSaveDuplicateReports}
+          onDiscardDuplicate={handleDiscardDuplicate}
+          onRestoreDuplicate={handleRestoreDuplicate}
+          onRestoreFullBackup={handleRestoreFullBackup}
+        />
+      </Suspense>
     );
   }
 
@@ -874,13 +935,13 @@ export default function App() {
           setSelectedLocation(null);
           setIsAllCategoriesView(false);
           setIsJobSeekerDashboardOpen(false);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({ top: 0, behavior: 'auto' });
         }}
         onOpenAllCategories={() => {
           setIsAllCategoriesView(true);
           setSelectedCategory(null);
           setSelectedLocation(null);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          window.scrollTo({ top: 0, behavior: 'auto' });
         }}
         onOpenLocations={() => handleSelectLocation('All')}
         onOpenSavedJobs={() => setIsSavedDrawerOpen(true)}
@@ -915,45 +976,51 @@ export default function App() {
       <main className="flex-1">
         {isAllCategoriesView ? (
           /* DEDICATED FULL CATEGORIES DIRECTORY */
-          <AllCategoriesView
-            categories={OFFICIAL_CATEGORIES}
-            vacancies={vacancies}
-            onBack={() => setIsAllCategoriesView(false)}
-            onSelectCategory={(cat) => {
-              setIsAllCategoriesView(false);
-              setSelectedCategory(cat);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <AllCategoriesView
+              categories={OFFICIAL_CATEGORIES}
+              vacancies={vacancies}
+              onBack={() => setIsAllCategoriesView(false)}
+              onSelectCategory={(cat) => {
+                setIsAllCategoriesView(false);
+                setSelectedCategory(cat);
+                window.scrollTo({ top: 0, behavior: 'auto' });
+              }}
+            />
+          </Suspense>
         ) : selectedLocation ? (
           /* DEDICATED LOCATION VACANCY PAGE */
-          <LocationJobsView
-            initialLocation={selectedLocation}
-            vacancies={vacancies}
-            onBack={() => {
-              setSelectedLocation(null);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onSelectVacancy={handleSelectVacancy}
-            savedJobIds={savedJobIds}
-            onToggleSaveJob={handleToggleSaveJob}
-            telegramUrl={siteSettings.telegramChannelUrl}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <LocationJobsView
+              initialLocation={selectedLocation}
+              vacancies={vacancies}
+              onBack={() => {
+                setSelectedLocation(null);
+                window.scrollTo({ top: 0, behavior: 'auto' });
+              }}
+              onSelectVacancy={handleSelectVacancy}
+              savedJobIds={savedJobIds}
+              onToggleSaveJob={handleToggleSaveJob}
+              telegramUrl={siteSettings.telegramChannelUrl}
+            />
+          </Suspense>
         ) : selectedCategory ? (
           /* DEDICATED CATEGORY VACANCY PAGE */
-          <CategoryView
-            category={selectedCategory}
-            vacancies={vacancies}
-            onBack={() => {
-              setSelectedCategory(null);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onSelectVacancy={handleSelectVacancy}
-            savedJobIds={savedJobIds}
-            onToggleSaveJob={handleToggleSaveJob}
-            onSelectLocation={handleSelectLocation}
-            telegramUrl={siteSettings.telegramChannelUrl}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <CategoryView
+              category={selectedCategory}
+              vacancies={vacancies}
+              onBack={() => {
+                setSelectedCategory(null);
+                window.scrollTo({ top: 0, behavior: 'auto' });
+              }}
+              onSelectVacancy={handleSelectVacancy}
+              savedJobIds={savedJobIds}
+              onToggleSaveJob={handleToggleSaveJob}
+              onSelectLocation={handleSelectLocation}
+              telegramUrl={siteSettings.telegramChannelUrl}
+            />
+          </Suspense>
         ) : (
           /* HOMEPAGE */
           <>
@@ -1102,7 +1169,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setIsAllCategoriesView(true);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                              window.scrollTo({ top: 0, behavior: 'auto' });
                             }}
                             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
                           >
@@ -1118,7 +1185,7 @@ export default function App() {
 
                 {/* Statistics Row */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-5xl mx-auto pt-6 text-left">
-                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
                     <div className="text-2xl font-black text-amber-400">{totalActiveVacancies}</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Active Vacancies
@@ -1126,7 +1193,7 @@ export default function App() {
                     <div className="text-[10px] text-slate-500">Live verified database</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
                     <div className="text-2xl font-black text-white">16</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Job Sectors
@@ -1134,7 +1201,7 @@ export default function App() {
                     <div className="text-[10px] text-slate-500">Banking to Embassy</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
                     <div className="text-2xl font-black text-white">25+</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Ethiopian Cities
@@ -1142,7 +1209,7 @@ export default function App() {
                     <div className="text-[10px] text-slate-500">Addis & All Regions</div>
                   </div>
 
-                  <div className="bg-slate-900/60 backdrop-blur p-3.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
                     <div className="text-2xl font-black text-emerald-400">100%</div>
                     <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
                       Verified Jobs
@@ -1150,7 +1217,7 @@ export default function App() {
                     <div className="text-[10px] text-slate-500">Zero fake listings</div>
                   </div>
 
-                  <div className="col-span-2 sm:col-span-1 bg-slate-900/80 backdrop-blur p-3.5 rounded-xl border border-amber-500/30 flex flex-col justify-between">
+                  <div className="col-span-2 sm:col-span-1 bg-slate-900/95 p-3.5 rounded-xl border border-amber-500/30 flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between gap-1">
                         <div className="text-2xl font-black text-sky-400">
@@ -1178,7 +1245,7 @@ export default function App() {
 
                 {/* Expandable AI Customer Visit Count Insight Panel */}
                 {showHeroVisitPanel && (
-                  <div className="max-w-5xl mx-auto mt-3 bg-slate-900/90 backdrop-blur border border-amber-400/40 rounded-2xl p-4 sm:p-5 text-left space-y-3">
+                  <div className="max-w-5xl mx-auto mt-3 bg-slate-900/95 border border-amber-400/40 rounded-2xl p-4 sm:p-5 text-left space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-extrabold text-amber-400 uppercase tracking-wider">
                         <BarChart3 className="w-4 h-4" />
@@ -1910,107 +1977,125 @@ export default function App() {
       />
 
       {/* User Auth Modal (Sign In / Register / Google / Forgot Password) */}
-      <UserAuthModal
-        key={`user-auth-${userAuthModalMode}-${isUserAuthModalOpen}`}
-        isOpen={isUserAuthModalOpen}
-        initialMode={userAuthModalMode}
-        onClose={() => setIsUserAuthModalOpen(false)}
-        onSuccess={async (user, profile) => {
-          if (user) {
-            setCurrentUser(user);
-            setAnalyticsUserId(user.uid || null);
-            fetchCustomerVisitCount(true).then((stats) => {
-              if (stats) setVisitStats(stats);
-            });
-          }
-          if (profile) {
-            setUserProfile(profile);
-          }
-          setIsUserAuthModalOpen(false);
-          if (user?.uid) {
-            try {
-              const [p, apps] = await Promise.all([
-                profile ? Promise.resolve(profile) : fetchJobSeekerProfile(user.uid),
-                fetchUserApplications(user.uid),
-              ]);
-              if (p) setUserProfile(p);
-              setUserApplications(apps);
-            } catch {}
-          }
-          if (applyTargetVacancy) {
-            setIsApplicationModalOpen(true);
-          }
-        }}
-      />
+      {isUserAuthModalOpen && (
+        <Suspense fallback={null}>
+          <UserAuthModal
+            key={`user-auth-${userAuthModalMode}-${isUserAuthModalOpen}`}
+            isOpen={isUserAuthModalOpen}
+            initialMode={userAuthModalMode}
+            onClose={() => setIsUserAuthModalOpen(false)}
+            onSuccess={async (user, profile) => {
+              if (user) {
+                setCurrentUser(user);
+                setAnalyticsUserId(user.uid || null);
+                fetchCustomerVisitCount(true).then((stats) => {
+                  if (stats) setVisitStats(stats);
+                });
+              }
+              if (profile) {
+                setUserProfile(profile);
+              }
+              setIsUserAuthModalOpen(false);
+              if (user?.uid) {
+                try {
+                  const [p, apps] = await Promise.all([
+                    profile ? Promise.resolve(profile) : fetchJobSeekerProfile(user.uid),
+                    fetchUserApplications(user.uid),
+                  ]);
+                  if (p) setUserProfile(p);
+                  setUserApplications(apps);
+                } catch {}
+              }
+              if (applyTargetVacancy) {
+                setIsApplicationModalOpen(true);
+              }
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Job Seeker Profile & Dashboard Modal */}
       {isJobSeekerDashboardOpen && userProfile && (
-        <JobSeekerDashboard
-          profile={userProfile}
-          applications={userApplications}
-          savedVacancies={vacancies.filter((v) => savedJobIds.has(v.id))}
-          onClose={() => setIsJobSeekerDashboardOpen(false)}
-          onUpdateProfile={async (updated) => {
-            await saveJobSeekerProfile(updated);
-            setUserProfile(updated);
-          }}
-          onSelectVacancy={handleSelectVacancy}
-        />
+        <Suspense fallback={null}>
+          <JobSeekerDashboard
+            profile={userProfile}
+            applications={userApplications}
+            savedVacancies={savedVacanciesList}
+            onClose={() => setIsJobSeekerDashboardOpen(false)}
+            onUpdateProfile={async (updated) => {
+              await saveJobSeekerProfile(updated);
+              setUserProfile(updated);
+            }}
+            onSelectVacancy={handleSelectVacancy}
+          />
+        </Suspense>
       )}
 
       {/* Job Application Modal (Direct Apply with CV & Cover Note) */}
       {isApplicationModalOpen && applyTargetVacancy && (
-        <JobApplicationModal
-          isOpen={isApplicationModalOpen}
-          vacancy={applyTargetVacancy}
-          userProfile={userProfile}
-          currentUser={currentUser}
-          onClose={() => {
-            setIsApplicationModalOpen(false);
-            setApplyTargetVacancy(null);
-          }}
-          onNeedAuth={() => {
-            setUserAuthModalMode('signin');
-            setIsUserAuthModalOpen(true);
-          }}
-          onApplicationSubmitted={(newApp) => {
-            setUserApplications((prev) => [newApp, ...prev]);
-          }}
-        />
+        <Suspense fallback={null}>
+          <JobApplicationModal
+            isOpen={isApplicationModalOpen}
+            vacancy={applyTargetVacancy}
+            userProfile={userProfile}
+            currentUser={currentUser}
+            onClose={() => {
+              setIsApplicationModalOpen(false);
+              setApplyTargetVacancy(null);
+            }}
+            onNeedAuth={() => {
+              setUserAuthModalMode('signin');
+              setIsUserAuthModalOpen(true);
+            }}
+            onApplicationSubmitted={(newApp) => {
+              setUserApplications((prev) => [newApp, ...prev]);
+            }}
+          />
+        </Suspense>
       )}
 
       {/* Saved Vacancies Drawer */}
-      <SavedJobsDrawer
-        isOpen={isSavedDrawerOpen}
-        onClose={() => setIsSavedDrawerOpen(false)}
-        savedVacancies={vacancies.filter((v) => savedJobIds.has(v.id))}
-        onRemoveSaved={handleRemoveSavedJob}
-        onClearAll={handleClearAllSaved}
-        onSelectVacancy={handleSelectVacancy}
-        telegramUrl={siteSettings.telegramChannelUrl}
-      />
+      {isSavedDrawerOpen && (
+        <Suspense fallback={null}>
+          <SavedJobsDrawer
+            isOpen={isSavedDrawerOpen}
+            onClose={() => setIsSavedDrawerOpen(false)}
+            savedVacancies={savedVacanciesList}
+            onRemoveSaved={handleRemoveSavedJob}
+            onClearAll={handleClearAllSaved}
+            onSelectVacancy={handleSelectVacancy}
+            telegramUrl={siteSettings.telegramChannelUrl}
+          />
+        </Suspense>
+      )}
 
       {/* Individual Vacancy Modal */}
       {selectedVacancy && (
-        <VacancyDetailModal
-          vacancy={selectedVacancy}
-          userProfile={userProfile}
-          onClose={handleCloseVacancy}
-          telegramUrl={siteSettings.telegramChannelUrl}
-          onApply={(v) => handleStartApply(v)}
-        />
+        <Suspense fallback={null}>
+          <VacancyDetailModal
+            vacancy={selectedVacancy}
+            userProfile={userProfile}
+            onClose={handleCloseVacancy}
+            telegramUrl={siteSettings.telegramChannelUrl}
+            onApply={(v) => handleStartApply(v)}
+          />
+        </Suspense>
       )}
 
       {/* Admin Login Modal */}
-      <AdminAuthModal
-        isOpen={isAdminAuthModalOpen}
-        onClose={() => setIsAdminAuthModalOpen(false)}
-        onLoginSuccess={(email) => {
-          setIsOwnerAuthorized(true);
-          setAdminEmail(email);
-          setIsAdminView(true);
-        }}
-      />
+      {isAdminAuthModalOpen && (
+        <Suspense fallback={null}>
+          <AdminAuthModal
+            isOpen={isAdminAuthModalOpen}
+            onClose={() => setIsAdminAuthModalOpen(false)}
+            onLoginSuccess={(email) => {
+              setIsOwnerAuthorized(true);
+              setAdminEmail(email);
+              setIsAdminView(true);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
   KeyRound,
   CheckCircle,
 } from 'lucide-react';
-import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, isUserAdmin, safeResponseJson } from '../../lib/firebase';
+import { auth, googleProvider, signInWithRedirect, ADMIN_EMAIL, ADMIN_EMAILS, isUserAdmin, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 
 interface Props {
@@ -34,7 +34,19 @@ export const AdminAuthModal: React.FC<Props> = ({
     setLoading(true);
     setError(null);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      let result;
+      try {
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (popupErr: any) {
+        if (
+          popupErr?.code === 'auth/popup-blocked' ||
+          popupErr?.code === 'auth/operation-not-supported-in-this-environment'
+        ) {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupErr;
+      }
       const user = result.user;
       if (isUserAdmin(user)) {
         onLoginSuccess(user.email || ADMIN_EMAIL);
@@ -44,7 +56,14 @@ export const AdminAuthModal: React.FC<Props> = ({
       }
     } catch (err: any) {
       console.warn('Google sign-in popup issue:', err);
-      setError('Google Sign-In was blocked or cancelled. You can also sign in using the Master Admin Passcode below.');
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      if (err?.code === 'auth/unauthorized-domain') {
+        setError(
+          `Google Sign-In is blocked by Firebase for "${hostname}". Add "hopelandjobs.tech" and "www.hopelandjobs.tech" under Firebase Console → Authentication → Settings → Authorized domains, or sign in with the Master Admin Passcode below.`
+        );
+      } else {
+        setError('Google Sign-In was blocked or cancelled. You can also sign in using the Master Admin Passcode below.');
+      }
     } finally {
       setLoading(false);
     }

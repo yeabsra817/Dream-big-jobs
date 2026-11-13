@@ -197,7 +197,7 @@ export const LocationJobsView: React.FC<Props> = ({
             </div>
 
             {/* Total count badge */}
-            <div className="bg-slate-900/90 backdrop-blur rounded-2xl p-4 border border-slate-700/80 text-center shrink-0 min-w-[130px]">
+            <div className="bg-slate-900/95 rounded-2xl p-4 border border-slate-700/80 text-center shrink-0 min-w-[130px]">
               <div className="text-3xl font-black text-amber-400">
                 {filteredVacancies.length}
               </div>
@@ -477,7 +477,7 @@ export const LocationJobsView: React.FC<Props> = ({
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                     <div
                       className={`text-[11px] font-bold flex items-center gap-1 ${
-                        isUrgent ? 'text-rose-600 animate-pulse' : 'text-slate-500'
+                        isUrgent ? 'text-rose-600' : 'text-slate-500'
                       }`}
                     >
                       <Clock className="w-3.5 h-3.5" />

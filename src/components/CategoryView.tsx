@@ -126,7 +126,7 @@ export const CategoryView: React.FC<Props> = ({
             </div>
 
             {/* Active vacancies counter badge */}
-            <div className="bg-slate-800/80 backdrop-blur rounded-xl p-4 border border-slate-700 text-center shrink-0">
+            <div className="bg-slate-800/95 rounded-xl p-4 border border-slate-700 text-center shrink-0">
               <div className="text-2xl sm:text-3xl font-black text-amber-400">
                 {categoryVacancies.length}
               </div>
