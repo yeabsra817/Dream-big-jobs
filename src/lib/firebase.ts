@@ -39,6 +39,12 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
 import { JobSeekerProfile, UserJobApplication, ApplicationStatus } from '../types/jobSeeker';
+import {
+  AnalyticsEvent,
+  AnalyticsPeriod,
+  AnalyticsSummary,
+  CustomerVisitCountSummary,
+} from '../types/analytics';
 
 // Initialize Firebase SDK with long polling auto-detection for reliable iframe/proxy connectivity
 const app = initializeApp(firebaseConfig);
@@ -1508,6 +1514,410 @@ export async function updateApplicationStatus(
       body: JSON.stringify({ status, note, timestamp }),
     });
   } catch {}
+}
+
+/* =========================================================================
+ * 12. FIRST-PARTY FIRESTORE ANALYTICS & CUSTOMER VISIT TRACKING
+ * ========================================================================= */
+
+function getAddisDateKey(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Addis_Ababa',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+function getSafeFirestoreId(raw: string): string {
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
+  return cleaned || `id_${Date.now()}`;
+}
+
+export async function recordAnalyticsToFirestore(event: AnalyticsEvent): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const cleanUid = event.userId && !event.userId.includes('@')
+      ? event.userId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
+      : '';
+    const isSignedIn = Boolean(cleanUid);
+    const visitorKey = getSafeFirestoreId(isSignedIn ? `u_${cleanUid}` : event.visitorId || 'vid_anon');
+    const dateKey = getAddisDateKey(new Date(event.timestamp || Date.now()));
+    const nowIso = event.timestamp || new Date().toISOString();
+
+    // Maintain local per-visitor counters so we avoid extra Firestore read roundtrips
+    const counterKey = `hopeland_fs_vis_${visitorKey}`;
+    let prevState: { firstSeenAt?: string; pageViews?: number; aiInteractionsCount?: number } = {};
+    try {
+      const raw = localStorage.getItem(counterKey);
+      if (raw) prevState = JSON.parse(raw);
+    } catch {}
+
+    const nextPageViews = (prevState.pageViews || 0) + (event.eventType === 'page_view' ? 1 : 0);
+    const nextAiCount = (prevState.aiInteractionsCount || 0) + (event.eventType === 'ai_assist' ? 1 : 0);
+    const firstSeenAt = prevState.firstSeenAt || nowIso;
+
+    try {
+      localStorage.setItem(
+        counterKey,
+        JSON.stringify({
+          firstSeenAt,
+          pageViews: Math.max(1, nextPageViews),
+          aiInteractionsCount: nextAiCount,
+        })
+      );
+    } catch {}
+
+    const safeSource = (['direct', 'google', 'telegram', 'facebook', 'referral', 'other'].includes(event.source)
+      ? event.source
+      : 'direct') as AnalyticsEvent['source'];
+    const safeDevice = (['mobile', 'desktop', 'tablet'].includes(event.deviceType)
+      ? event.deviceType
+      : 'desktop') as AnalyticsEvent['deviceType'];
+
+    const visitorDoc = {
+      visitorKey,
+      dateKey,
+      firstSeenAt: String(firstSeenAt).slice(0, 64),
+      lastSeenAt: String(nowIso).slice(0, 64),
+      isSignedIn,
+      isInternal: Boolean(event.isInternal),
+      source: safeSource,
+      deviceType: safeDevice,
+      pageViews: Math.max(1, nextPageViews),
+      aiInteractionsCount: nextAiCount,
+      lastEventType: String(event.eventType || 'page_view').slice(0, 64),
+    };
+
+    const eventId = getSafeFirestoreId(event.id || `ev_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+    const eventDoc: Record<string, any> = {
+      id: eventId,
+      visitorKey,
+      sessionId: String(event.sessionId || 'sid').slice(0, 128),
+      eventType: String(event.eventType || 'page_view').slice(0, 64),
+      path: String(event.path || '/').slice(0, 300),
+      source: safeSource,
+      deviceType: safeDevice,
+      timestamp: String(nowIso).slice(0, 64),
+      isInternal: Boolean(event.isInternal),
+    };
+    if (event.title) eventDoc.title = String(event.title).slice(0, 200);
+    if (event.jobId) eventDoc.jobId = String(event.jobId).slice(0, 128);
+    if (event.jobTitle) eventDoc.jobTitle = String(event.jobTitle).slice(0, 200);
+    if (event.organization) eventDoc.organization = String(event.organization).slice(0, 200);
+    if (event.category) eventDoc.category = String(event.category).slice(0, 120);
+    if (event.searchTerm) eventDoc.searchTerm = String(event.searchTerm).slice(0, 200);
+    if (event.filterType) eventDoc.filterType = String(event.filterType).slice(0, 100);
+
+    await Promise.allSettled([
+      setDoc(doc(db, 'analytics_visitors', visitorKey), visitorDoc, { merge: true }),
+      setDoc(doc(db, 'analytics_events', eventId), eventDoc),
+    ]);
+  } catch (err) {
+    console.warn('Firestore analytics write notice:', err);
+  }
+}
+
+export async function fetchCustomerVisitCountFromFirestore(
+  excludeAdmin: boolean = true
+): Promise<CustomerVisitCountSummary | null> {
+  try {
+    const snap = await withTimeout(
+      getDocs(query(collection(db, 'analytics_visitors'), limit(1000))),
+      3500,
+      null as any
+    );
+    if (!snap) return null;
+
+    const now = Date.now();
+    const todayKey = getAddisDateKey(new Date(now));
+    const yesterdayKey = getAddisDateKey(new Date(now - 86400000));
+    const last7Threshold = now - 7 * 86400000;
+    const last30Threshold = now - 30 * 86400000;
+    const activeThreshold = now - 30 * 60000;
+
+    let visitorsToday = 0;
+    let visitorsYesterday = 0;
+    let visitorsLast7 = 0;
+    let visitorsLast30 = 0;
+    let activeNow = 0;
+    let totalUniqueVisits = 0;
+    let totalPageViews = 0;
+    let signedInCustomerVisits = 0;
+    let telegramReferrals = 0;
+    let aiInteractionsCount = 0;
+
+    snap.forEach((docSnap: any) => {
+      const v = docSnap.data();
+      if (!v) return;
+      if (excludeAdmin && v.isInternal) return;
+
+      totalUniqueVisits += 1;
+      totalPageViews += Number(v.pageViews || 1);
+      aiInteractionsCount += Number(v.aiInteractionsCount || 0);
+      if (v.isSignedIn) signedInCustomerVisits += 1;
+      if (v.source === 'telegram') telegramReferrals += 1;
+
+      const lastMs = v.lastSeenAt ? new Date(v.lastSeenAt).getTime() : 0;
+      const dKey = v.dateKey || (lastMs ? getAddisDateKey(new Date(lastMs)) : '');
+      if (dKey === todayKey) visitorsToday += 1;
+      if (dKey === yesterdayKey) visitorsYesterday += 1;
+      if (lastMs >= last7Threshold) visitorsLast7 += 1;
+      if (lastMs >= last30Threshold) visitorsLast30 += 1;
+      if (lastMs >= activeThreshold) activeNow += 1;
+    });
+
+    return {
+      visitorsToday,
+      visitorsYesterday,
+      visitorsLast7,
+      visitorsLast30,
+      activeNow,
+      totalUniqueVisits,
+      totalPageViews,
+      signedInCustomerVisits,
+      telegramReferrals,
+      aiInteractionsCount,
+      lastUpdated: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn('Firestore customer visit count read notice:', err);
+    return null;
+  }
+}
+
+export async function fetchAnalyticsSummaryFromFirestore(
+  period: AnalyticsPeriod = 'today',
+  excludeAdmin: boolean = true,
+  gaMeasurementId?: string
+): Promise<AnalyticsSummary | null> {
+  try {
+    const [visitorsSnap, eventsSnap] = await Promise.all([
+      withTimeout(getDocs(query(collection(db, 'analytics_visitors'), limit(1000))), 4000, null as any),
+      withTimeout(getDocs(query(collection(db, 'analytics_events'), limit(1000))), 4000, null as any).catch(() => null),
+    ]);
+
+    if (!visitorsSnap && !eventsSnap) return null;
+
+    const now = Date.now();
+    const todayKey = getAddisDateKey(new Date(now));
+    const yesterdayKey = getAddisDateKey(new Date(now - 86400000));
+    const activeThreshold = now - 30 * 60000;
+
+    let periodCutoff = 0;
+    if (period === 'today') periodCutoff = new Date(todayKey + 'T00:00:00').getTime();
+    else if (period === 'yesterday') periodCutoff = now - 2 * 86400000;
+    else if (period === 'last7') periodCutoff = now - 7 * 86400000;
+    else if (period === 'last30') periodCutoff = now - 30 * 86400000;
+    else if (period === 'last90') periodCutoff = now - 90 * 86400000;
+
+    const visitors: any[] = [];
+    visitorsSnap?.forEach((d: any) => {
+      const data = d.data();
+      if (data && !(excludeAdmin && data.isInternal)) visitors.push(data);
+    });
+
+    const events: AnalyticsEvent[] = [];
+    eventsSnap?.forEach((d: any) => {
+      const data = d.data();
+      if (data && !(excludeAdmin && data.isInternal)) {
+        const ts = data.timestamp ? new Date(data.timestamp).getTime() : 0;
+        if (!periodCutoff || ts >= periodCutoff) {
+          events.push(data as AnalyticsEvent);
+        }
+      }
+    });
+
+    const filteredVisitors = visitors.filter((v) => {
+      const ts = v.lastSeenAt ? new Date(v.lastSeenAt).getTime() : 0;
+      return !periodCutoff || ts >= periodCutoff;
+    });
+
+    const sourceCounts: Record<string, number> = {};
+    const deviceBreakdown = { mobile: 0, desktop: 0, tablet: 0 };
+    let visitorsToday = 0;
+    let visitorsYesterday = 0;
+    let visitorsLast7 = 0;
+    let visitorsLast30 = 0;
+    let activeUsersLast30Min = 0;
+    let totalPageViews = 0;
+    let telegramReferralsCount = 0;
+
+    visitors.forEach((v) => {
+      const lastMs = v.lastSeenAt ? new Date(v.lastSeenAt).getTime() : 0;
+      const dKey = v.dateKey || (lastMs ? getAddisDateKey(new Date(lastMs)) : '');
+      if (dKey === todayKey) visitorsToday += 1;
+      if (dKey === yesterdayKey) visitorsYesterday += 1;
+      if (lastMs >= now - 7 * 86400000) visitorsLast7 += 1;
+      if (lastMs >= now - 30 * 86400000) visitorsLast30 += 1;
+      if (lastMs >= activeThreshold) activeUsersLast30Min += 1;
+    });
+
+    filteredVisitors.forEach((v) => {
+      totalPageViews += Number(v.pageViews || 1);
+      const src = v.source || 'direct';
+      sourceCounts[src] = (sourceCounts[src] || 0) + 1;
+      if (src === 'telegram') telegramReferralsCount += 1;
+      if (v.deviceType === 'mobile') deviceBreakdown.mobile += 1;
+      else if (v.deviceType === 'tablet') deviceBreakdown.tablet += 1;
+      else deviceBreakdown.desktop += 1;
+    });
+
+    const totalVisitorsPeriod = filteredVisitors.length;
+    const trafficSources = Object.entries(sourceCounts).map(([source, count]) => ({
+      source,
+      visitors: count,
+      sessions: count,
+      engagedVisitors: count,
+      engagementRate: 100,
+      percentage: totalVisitorsPeriod > 0 ? Math.round((count / totalVisitorsPeriod) * 100) : 0,
+      utmCampaigns: [],
+    }));
+
+    const searchMap: Record<string, number> = {};
+    const vacancyViewsMap: Record<string, { title: string; organization: string; category?: string; views: number; clicks: number }> = {};
+    const categoryViewsMap: Record<string, number> = {};
+    let totalSearches = 0;
+    let vacancyViewsTotal = 0;
+    let applyClicksTotal = 0;
+
+    events.forEach((ev) => {
+      if (ev.eventType === 'search') {
+        totalSearches += 1;
+        if (ev.searchTerm) searchMap[ev.searchTerm] = (searchMap[ev.searchTerm] || 0) + 1;
+      } else if (ev.eventType === 'vacancy_view' && ev.jobId) {
+        vacancyViewsTotal += 1;
+        if (!vacancyViewsMap[ev.jobId]) {
+          vacancyViewsMap[ev.jobId] = {
+            title: ev.jobTitle || 'Vacancy',
+            organization: ev.organization || 'Employer',
+            category: ev.category,
+            views: 0,
+            clicks: 0,
+          };
+        }
+        vacancyViewsMap[ev.jobId].views += 1;
+      } else if (ev.eventType === 'click_apply_link' && ev.jobId) {
+        applyClicksTotal += 1;
+        if (vacancyViewsMap[ev.jobId]) vacancyViewsMap[ev.jobId].clicks += 1;
+      } else if (ev.eventType === 'category_view' && ev.category) {
+        categoryViewsMap[ev.category] = (categoryViewsMap[ev.category] || 0) + 1;
+      }
+    });
+
+    return {
+      period,
+      dateRangeLabel: `Firestore Live (${period})`,
+      uniqueVisitors: totalVisitorsPeriod,
+      totalInteractions: events.length || totalPageViews,
+      totalSessions: totalVisitorsPeriod,
+      totalPageViews: events.filter((e) => e.eventType === 'page_view').length || totalPageViews,
+      totalSearches,
+      popularSearchTerms: Object.entries(searchMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([term, count]) => ({ term, count, resultsAverage: 1 })),
+      telegramReferralsCount,
+      newVisitors: totalVisitorsPeriod,
+      returningVisitors: 0,
+      activeUsersLast30Min,
+      visitorsToday,
+      visitorsYesterday,
+      visitorsLast7,
+      visitorsLast30,
+      lastUpdated: new Date().toISOString(),
+      status: totalVisitorsPeriod > 0 || events.length > 0 ? 'CONNECTED' : 'NO DATA YET',
+      provider: 'Firebase Firestore + GA4',
+      gaMeasurementId: gaMeasurementId || 'G-KH6X73105S',
+      internalExclusionStatus: excludeAdmin ? 'ACTIVE' : 'PAUSED',
+      dailyStats: [
+        {
+          date: todayKey,
+          visitors: visitorsToday,
+          sessions: visitorsToday,
+          pageViews: totalPageViews,
+        },
+      ],
+      trafficSources,
+      topVacancies: Object.entries(vacancyViewsMap)
+        .map(([jobId, v]) => ({
+          jobId,
+          title: v.title,
+          organization: v.organization,
+          category: v.category,
+          views: v.views,
+          applyClicks: v.clicks,
+          ctr: v.views > 0 ? Math.round((v.clicks / v.views) * 100) : 0,
+        }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 10),
+      topEmployers: [],
+      underperformingVacancies: [],
+      topCategories: Object.entries(categoryViewsMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([category, views]) => ({ category, views })),
+      deviceBreakdown,
+      funnel: [
+        {
+          stage: 'Site Visitors',
+          count: totalVisitorsPeriod,
+          conversionRate: 100,
+          dropoffRate: 0,
+          description: 'Distinct visitors recorded in Firestore',
+        },
+        {
+          stage: 'Vacancy Views',
+          count: vacancyViewsTotal,
+          conversionRate: totalVisitorsPeriod > 0 ? Math.min(100, Math.round((vacancyViewsTotal / totalVisitorsPeriod) * 100)) : 0,
+          dropoffRate: 0,
+          description: 'Job details opened',
+        },
+        {
+          stage: 'Apply Clicks',
+          count: applyClicksTotal,
+          conversionRate: vacancyViewsTotal > 0 ? Math.min(100, Math.round((applyClicksTotal / vacancyViewsTotal) * 100)) : 0,
+          dropoffRate: 0,
+          description: 'Application link or direct apply clicks',
+        },
+      ],
+      healthDiagnostics: [],
+      smartAlerts: [],
+      searchConsole: {
+        status: 'CONNECTED',
+        propertyUrl: 'https://www.hopelandjobs.tech',
+        impressions: 0,
+        clicks: 0,
+        ctr: 0,
+        averagePosition: 0,
+        topQueries: [],
+        indexedPages: 0,
+        pagesWithIssues: 0,
+        indexingIssues: [],
+      },
+      businessIntelligence: {
+        actualEmployerRevenueEtb: 0,
+        actualCvServiceRevenueEtb: 0,
+        actualTrainingRevenueEtb: 0,
+        totalCollectedRevenueEtb: 0,
+        employerInquiriesCount: 0,
+        candidateRegistrationCount: visitors.filter((v) => v.isSignedIn).length,
+        activeAdCampaignsCount: 0,
+        currency: 'ETB',
+        lastUpdated: new Date().toISOString(),
+        verifiedInquiries: [],
+        growthOpportunities: [],
+      },
+    };
+  } catch (err) {
+    console.warn('Firestore analytics summary fallback notice:', err);
+    return null;
+  }
 }
 
 

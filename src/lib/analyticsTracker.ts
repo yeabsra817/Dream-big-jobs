@@ -1,5 +1,6 @@
 import { Vacancy } from '../types/job';
 import { AnalyticsEvent } from '../types/analytics';
+import { recordAnalyticsToFirestore } from './firebase';
 
 declare global {
   interface Window {
@@ -190,6 +191,7 @@ function normalizeNonPiiUserId(raw: string | null): string | null {
 export function setAnalyticsUserId(userId: string | null) {
   if (typeof window === 'undefined') return;
   const safeUid = normalizeNonPiiUserId(userId);
+  const prevUid = currentAnalyticsUserId;
   currentAnalyticsUserId = safeUid;
   const gaId = currentGaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
   if (typeof window.gtag === 'function') {
@@ -211,6 +213,30 @@ export function setAnalyticsUserId(userId: string | null) {
     } catch (e) {
       console.warn('[Analytics] Failed to set user_id:', e);
     }
+  }
+
+  // Record distinct signed-in Google account visit directly in Firestore
+  if (safeUid && safeUid !== prevUid) {
+    const { visitorId } = getOrCreateVisitorId();
+    const sessionId = getOrCreateSessionId();
+    const deviceType = detectDeviceType();
+    const { source, utmSource, utmMedium, utmCampaign } = detectTrafficSource();
+    recordAnalyticsToFirestore({
+      id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      visitorId,
+      userId: safeUid,
+      sessionId,
+      eventType: 'job_seeker_login',
+      path: window.location.pathname || '/',
+      title: document.title,
+      source,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      deviceType,
+      timestamp: new Date().toISOString(),
+      isInternal: isInternalAdminVisit(false),
+    }).catch(() => {});
   }
 }
 
@@ -470,6 +496,9 @@ export async function trackAnalyticsEvent(
     return;
   }
 
+  // 3. Persist directly to Firebase Firestore (works on both Vercel static hosting and full-stack)
+  recordAnalyticsToFirestore(eventPayload).catch(() => {});
+
   try {
     const bodyStr = JSON.stringify(eventPayload);
     if (navigator.sendBeacon) {
@@ -525,7 +554,8 @@ export function flushOfflineAnalyticsQueue() {
         } catch {}
       }
 
-      // Replay to First-Party Database
+      // Replay to First-Party Database & Firestore
+      recordAnalyticsToFirestore(payload).catch(() => {});
       try {
         const bodyStr = JSON.stringify(payload);
         if (navigator.sendBeacon) {

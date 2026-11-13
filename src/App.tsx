@@ -340,7 +340,16 @@ export default function App() {
                 await saveJobSeekerProfile(syncedProfile);
               }
             }
-            setUserProfile(syncedProfile);
+              setUserProfile(syncedProfile);
+            if (Array.isArray(syncedProfile.savedJobIds) && syncedProfile.savedJobIds.length > 0) {
+              setSavedJobIds((prev) => {
+                const merged = new Set([...Array.from(prev), ...syncedProfile.savedJobIds!]);
+                try {
+                  localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(Array.from(merged)));
+                } catch {}
+                return merged;
+              });
+            }
           } else {
             // Create default profile on first sign-in
             const newProfile: JobSeekerProfile = {
@@ -352,6 +361,7 @@ export default function App() {
               phone: user.phoneNumber || '',
               authProvider: isGoogleUser ? 'google' : 'email',
               emailVerified: user.emailVerified,
+              savedJobIds: Array.from(savedJobIds).slice(0, 200),
               createdAt: now,
               updatedAt: now,
             };
@@ -717,32 +727,44 @@ export default function App() {
     [vacancies, savedJobIds]
   );
 
+  const syncSavedJobsToCloud = (nextIds: string[]) => {
+    if (!userProfile?.uid) return;
+    const bounded = nextIds.slice(0, 200);
+    const updatedProfile: JobSeekerProfile = {
+      ...userProfile,
+      savedJobIds: bounded,
+      updatedAt: new Date().toISOString(),
+    };
+    setUserProfile(updatedProfile);
+    saveJobSeekerProfile(updatedProfile).catch(() => {});
+  };
+
   // Bookmarking / Saved Jobs
   const handleToggleSaveJob = (id: string) => {
-    setSavedJobIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      try {
-        localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(Array.from(next)));
-      } catch (e) {
-        console.warn('Local storage error:', e);
-      }
-      return next;
-    });
+    const next = new Set(savedJobIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    const nextArr = Array.from(next);
+    setSavedJobIds(next);
+    try {
+      localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(nextArr));
+    } catch (e) {
+      console.warn('Local storage error:', e);
+    }
+    syncSavedJobsToCloud(nextArr);
   };
 
   const handleRemoveSavedJob = (id: string) => {
-    setSavedJobIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      try {
-        localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(Array.from(next)));
-      } catch (e) {
-        console.warn('Local storage error:', e);
-      }
-      return next;
-    });
+    const next = new Set(savedJobIds);
+    next.delete(id);
+    const nextArr = Array.from(next);
+    setSavedJobIds(next);
+    try {
+      localStorage.setItem('dreambigjobs_saved_jobs', JSON.stringify(nextArr));
+    } catch (e) {
+      console.warn('Local storage error:', e);
+    }
+    syncSavedJobsToCloud(nextArr);
   };
 
   const handleClearAllSaved = () => {
@@ -752,6 +774,7 @@ export default function App() {
     } catch (e) {
       console.warn('Local storage error:', e);
     }
+    syncSavedJobsToCloud([]);
   };
 
   // Application Trigger

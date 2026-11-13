@@ -1,27 +1,18 @@
 import React, { useState } from 'react';
 import {
   X,
-  Mail,
-  Lock,
-  User,
-  ArrowRight,
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  Phone,
-  Eye,
-  EyeOff,
+  ShieldCheck,
+  Briefcase,
+  FileCheck2,
 } from 'lucide-react';
 import {
   auth,
   googleProvider,
   signInWithPopup,
   signInWithRedirect,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  updateProfile,
   getAdditionalUserInfo,
   fetchJobSeekerProfile,
   saveJobSeekerProfile,
@@ -44,19 +35,16 @@ export const UserAuthModal: React.FC<Props> = ({
   onSuccess,
   message,
 }) => {
-  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(initialMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [mode, setMode] = useState<'signin' | 'signup'>(
+    initialMode === 'signup' ? 'signup' : 'signin'
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Synchronize internal mode with initialMode prop when modal is opened or mode switched
   React.useEffect(() => {
-    setMode(initialMode);
+    setMode(initialMode === 'signup' ? 'signup' : 'signin');
     setError(null);
     setSuccessMsg(null);
   }, [initialMode, isOpen]);
@@ -75,25 +63,10 @@ export const UserAuthModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
-  const resetForm = () => {
-    setError(null);
-    setSuccessMsg(null);
-  };
-
   const mapAuthError = (err: any): string => {
     const code = err?.code || '';
     const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
     switch (code) {
-      case 'auth/email-already-in-use':
-        return 'An account already exists with this email address. Please sign in instead.';
-      case 'auth/invalid-email':
-        return 'Please enter a valid email address.';
-      case 'auth/weak-password':
-        return 'Password must be at least 6 characters long.';
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        return 'Invalid email or password. Please verify your details.';
       case 'auth/too-many-requests':
         return 'Too many unsuccessful attempts. Please wait a few moments and try again.';
       case 'auth/popup-closed-by-user':
@@ -102,20 +75,19 @@ export const UserAuthModal: React.FC<Props> = ({
         return 'Another sign-in window is already open or was interrupted. Please click Continue with Google again.';
       case 'auth/popup-blocked':
         return 'Your browser blocked the Google sign-in popup. Please allow popups for this site and try again.';
-      case 'auth/account-exists-with-different-credential':
-        return 'An account already exists with this email using email & password. Please sign in with your email and password below.';
       case 'auth/network-request-failed':
         return 'Network error while connecting to Google Authentication. Please check your internet connection and try again.';
       case 'auth/operation-not-allowed':
         return 'Google Sign-In is not currently enabled in Firebase Authentication providers.';
       case 'auth/unauthorized-domain': {
-        const domainHint = hostname && hostname !== 'hopelandjobs.tech' && hostname !== 'www.hopelandjobs.tech'
-          ? `"${hostname}", "hopelandjobs.tech", and "www.hopelandjobs.tech"`
-          : '"hopelandjobs.tech" and "www.hopelandjobs.tech"';
+        const domainHint =
+          hostname && hostname !== 'hopelandjobs.tech' && hostname !== 'www.hopelandjobs.tech'
+            ? `"${hostname}", "hopelandjobs.tech", and "www.hopelandjobs.tech"`
+            : '"hopelandjobs.tech" and "www.hopelandjobs.tech"';
         return `Google Sign-In is blocked by Firebase for "${hostname}". Add ${domainHint} under Firebase Console → Authentication → Settings → Authorized domains (Project: gen-lang-client-0056760370).`;
       }
       default:
-        return err?.message || 'Authentication error. Please try again.';
+        return err?.message || 'Google authentication error. Please try again.';
     }
   };
 
@@ -187,10 +159,13 @@ export const UserAuthModal: React.FC<Props> = ({
       }
 
       // Track registration/login in GA4
-      trackAnalyticsEvent(isNewUser || mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login', {
-        method: 'google',
-        title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
-      });
+      trackAnalyticsEvent(
+        isNewUser || mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login',
+        {
+          method: 'google',
+          title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
+        }
+      );
 
       setSuccessMsg(
         isNewUser
@@ -202,89 +177,6 @@ export const UserAuthModal: React.FC<Props> = ({
         await onSuccess(user, profile);
       }
       onClose();
-    } catch (err: any) {
-      setError(mapAuthError(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Email & Password Submit
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccessMsg(null);
-
-    try {
-      if (mode === 'signup') {
-        if (!fullName.trim()) {
-          throw new Error('Please enter your full name.');
-        }
-        if (password.length < 6) {
-          throw new Error('Password must be at least 6 characters.');
-        }
-
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await updateProfile(cred.user, { displayName: fullName.trim() });
-        sendEmailVerification(cred.user).catch(() => {});
-
-        const newProfile: JobSeekerProfile = {
-          ...DEFAULT_JOB_SEEKER_PROFILE,
-          uid: cred.user.uid,
-          email: cred.user.email || email.trim(),
-          fullName: fullName.trim(),
-          phone: phone.trim(),
-          authProvider: 'email',
-          emailVerified: cred.user.emailVerified,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await saveJobSeekerProfile(newProfile);
-
-        trackAnalyticsEvent('job_seeker_register', {
-          method: 'email',
-          title: 'Email Registration',
-        });
-
-        setSuccessMsg('Account created successfully! Welcome to Hopeland Jobs.');
-        if (onSuccess) {
-          await onSuccess(cred.user, newProfile);
-        }
-        onClose();
-      } else if (mode === 'signin') {
-        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-
-        // Ensure profile exists
-        let profile = await fetchJobSeekerProfile(cred.user.uid);
-        if (!profile) {
-          profile = {
-            ...DEFAULT_JOB_SEEKER_PROFILE,
-            uid: cred.user.uid,
-            email: cred.user.email || email.trim(),
-            fullName: cred.user.displayName || 'Job Seeker',
-            authProvider: 'email',
-            emailVerified: cred.user.emailVerified,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await saveJobSeekerProfile(profile);
-        }
-
-        trackAnalyticsEvent('job_seeker_login', {
-          method: 'email',
-          title: 'Email Login',
-        });
-
-        setSuccessMsg('Welcome back!');
-        if (onSuccess) {
-          await onSuccess(cred.user, profile);
-        }
-        onClose();
-      } else if (mode === 'forgot') {
-        await sendPasswordResetEmail(auth, email.trim());
-        setSuccessMsg('Password reset link sent! Check your inbox to set a new password.');
-      }
     } catch (err: any) {
       setError(mapAuthError(err));
     } finally {
@@ -307,6 +199,7 @@ export const UserAuthModal: React.FC<Props> = ({
         <div className="bg-[#0B132B] text-white p-6 relative">
           <button
             onClick={onClose}
+            aria-label="Close modal"
             className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
@@ -322,14 +215,12 @@ export const UserAuthModal: React.FC<Props> = ({
           </div>
 
           <h2 className="text-xl sm:text-2xl font-black text-white">
-            {mode === 'signin' && 'Welcome Back'}
-            {mode === 'signup' && 'Create Your Free Account'}
-            {mode === 'forgot' && 'Reset Your Password'}
+            {mode === 'signup' ? 'Create Your Free Account' : 'Welcome Back'}
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            {mode === 'signin' && 'Sign in to apply for genuine vacancies and track your applications.'}
-            {mode === 'signup' && 'Join thousands of Ethiopian professionals finding verified jobs.'}
-            {mode === 'forgot' && "Enter your email address and we'll send you a password reset link."}
+            {mode === 'signup'
+              ? 'Register instantly with your Google account — no passwords required.'
+              : 'Sign in with your Google account to apply for vacancies and track applications.'}
           </p>
         </div>
 
@@ -342,46 +233,27 @@ export const UserAuthModal: React.FC<Props> = ({
         )}
 
         <div className="p-6 sm:p-7 space-y-5">
-          {/* Google One-Click Auth Button */}
-          {mode !== 'forgot' && (
-            <div>
-              <button
-                type="button"
-                onClick={handleGoogleAuth}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-slate-300 hover:border-amber-400 hover:bg-slate-50 transition-all font-bold text-xs text-slate-800 shadow-xs cursor-pointer group disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>{loading ? 'Connecting to Google...' : 'Continue with Google'}</span>
-              </button>
-
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-3 text-slate-400 font-bold">Or continue with email</span>
-                </div>
-              </div>
+          {/* Account benefits summary */}
+          <div className="rounded-2xl bg-slate-50 border border-slate-200/80 p-4 space-y-2.5">
+            <div className="flex items-start gap-2.5 text-xs text-slate-700">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Verified Google Account Only:</strong> Instant sign-up or sign-in using your Google profile.
+              </span>
             </div>
-          )}
+            <div className="flex items-start gap-2.5 text-xs text-slate-700">
+              <Briefcase className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>Tailored Job Matches:</strong> Personalized Ethiopian vacancies matched to your experience.
+              </span>
+            </div>
+            <div className="flex items-start gap-2.5 text-xs text-slate-700">
+              <FileCheck2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>10GB Document Vault:</strong> Store your CV & certificates for fast 1-click applications.
+              </span>
+            </div>
+          </div>
 
           {/* Feedback messages */}
           {error && (
@@ -398,171 +270,76 @@ export const UserAuthModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleEmailAuth} className="space-y-3.5">
-            {mode === 'signup' && (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Full Name *
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Abebe Bikila"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                    />
-                  </div>
-                </div>
+          {/* Google One-Click Auth Button */}
+          <button
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl border-2 border-slate-300 hover:border-amber-400 bg-white hover:bg-amber-50/40 transition-all font-extrabold text-sm text-slate-900 shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            <span>
+              {loading
+                ? 'Connecting to Google...'
+                : mode === 'signup'
+                  ? 'Sign Up with Google'
+                  : 'Continue with Google'}
+            </span>
+          </button>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Phone Number (Optional)
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+251 91 123 4567"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Email Address *
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your.email@example.com"
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                />
-              </div>
-            </div>
-
-            {mode !== 'forgot' && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Password *
-                  </label>
-                  {mode === 'signin' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetForm();
-                        setMode('forgot');
-                      }}
-                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700"
-                    >
-                      Forgot Password?
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Minimum 6 characters"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-md disabled:opacity-50 cursor-pointer"
-            >
-              {loading ? (
-                <span>Processing...</span>
-              ) : (
-                <>
-                  <span>
-                    {mode === 'signin' && 'Sign In to Hopeland Jobs'}
-                    {mode === 'signup' && 'Create Free Account'}
-                    {mode === 'forgot' && 'Send Password Reset Link'}
-                  </span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Toggle between Sign In / Sign Up */}
-          <div className="pt-2 text-center text-xs text-slate-600 border-t border-slate-100">
-            {mode === 'signin' && (
+          {/* Toggle context between Sign In / Sign Up */}
+          <div className="pt-3 text-center text-xs text-slate-600 border-t border-slate-100 space-y-1.5">
+            {mode === 'signin' ? (
               <p>
-                Don't have an account yet?{' '}
+                New to Hopeland Jobs?{' '}
                 <button
                   type="button"
                   onClick={() => {
-                    resetForm();
+                    setError(null);
+                    setSuccessMsg(null);
                     setMode('signup');
                   }}
                   className="font-extrabold text-amber-600 hover:text-amber-700 underline"
                 >
-                  Create free account
+                  Register with Google
                 </button>
               </p>
-            )}
-
-            {mode === 'signup' && (
+            ) : (
               <p>
-                Already have an account?{' '}
+                Already registered?{' '}
                 <button
                   type="button"
                   onClick={() => {
-                    resetForm();
+                    setError(null);
+                    setSuccessMsg(null);
                     setMode('signin');
                   }}
                   className="font-extrabold text-amber-600 hover:text-amber-700 underline"
                 >
-                  Sign In
+                  Sign In with Google
                 </button>
               </p>
             )}
-
-            {mode === 'forgot' && (
-              <p>
-                Remember your password?{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetForm();
-                    setMode('signin');
-                  }}
-                  className="font-extrabold text-amber-600 hover:text-amber-700 underline"
-                >
-                  Back to Sign In
-                </button>
-              </p>
-            )}
+            <p className="text-[11px] text-slate-400">
+              Accounts are created and verified exclusively via Google Authentication.
+            </p>
           </div>
         </div>
       </div>

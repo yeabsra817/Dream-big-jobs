@@ -56,7 +56,7 @@ import {
   getInternalTrafficExclusion,
   setInternalTrafficExclusion,
 } from '../../lib/analyticsTracker';
-import { safeResponseJson } from '../../lib/firebase';
+import { safeResponseJson, fetchAnalyticsSummaryFromFirestore } from '../../lib/firebase';
 import { generateVisitCountAiInsights } from '../../lib/aiService';
 
 interface Props {
@@ -168,20 +168,38 @@ export const WebsiteAnalytics: React.FC<Props> = ({
       });
 
       const res = await fetch(`/api/analytics/summary?${params.toString()}`);
-      if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
+      if (res.ok) {
+        const data = await safeResponseJson<AnalyticsSummary>(res);
+        if (data) {
+          setSummary(data);
+          if (data.searchConsole?.propertyUrl) {
+            setGscUrlInput(data.searchConsole.propertyUrl);
+          }
+          return;
+        }
       }
-      const data = await safeResponseJson<AnalyticsSummary>(res);
-      if (!data) {
-        throw new Error('Analytics endpoint unavailable');
+      const fsSummary = await fetchAnalyticsSummaryFromFirestore(
+        period,
+        excludeAdmin,
+        siteSettings.gaMeasurementId
+      );
+      if (fsSummary) {
+        setSummary(fsSummary);
+        return;
       }
-      setSummary(data);
-      if (data.searchConsole?.propertyUrl) {
-        setGscUrlInput(data.searchConsole.propertyUrl);
-      }
+      throw new Error(`Server returned HTTP ${res.status}`);
     } catch (err: any) {
-      console.error('Failed to fetch analytics:', err);
-      setError(err.message || 'Unable to load analytics summary');
+      const fsSummary = await fetchAnalyticsSummaryFromFirestore(
+        period,
+        excludeAdmin,
+        siteSettings.gaMeasurementId
+      );
+      if (fsSummary) {
+        setSummary(fsSummary);
+      } else {
+        console.error('Failed to fetch analytics:', err);
+        setError(err?.message || 'Unable to load analytics summary');
+      }
     } finally {
       setLoading(false);
       setIsRefreshing(false);

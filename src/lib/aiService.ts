@@ -1,7 +1,7 @@
 import { Vacancy } from '../types/job';
 import { JobSeekerProfile } from '../types/jobSeeker';
 import { CustomerVisitCountSummary, CustomerVisitAiInsight } from '../types/analytics';
-import { safeResponseJson } from './firebase';
+import { safeResponseJson, fetchCustomerVisitCountFromFirestore } from './firebase';
 import { trackAnalyticsEvent } from './analyticsTracker';
 
 export interface SmartSearchAiResponse {
@@ -52,11 +52,13 @@ export async function fetchCustomerVisitCount(
     const res = await fetch(
       `/api/analytics/visit-count?excludeAdmin=${excludeAdmin ? 'true' : 'false'}`
     );
-    if (!res.ok) return null;
-    return await safeResponseJson<CustomerVisitCountSummary>(res);
-  } catch {
-    return null;
-  }
+    if (res.ok) {
+      const apiStats = await safeResponseJson<CustomerVisitCountSummary>(res);
+      if (apiStats && apiStats.totalUniqueVisits > 0) return apiStats;
+    }
+  } catch {}
+
+  return await fetchCustomerVisitCountFromFirestore(excludeAdmin);
 }
 
 export async function generateVisitCountAiInsights(

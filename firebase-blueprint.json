@@ -140,6 +140,7 @@
         "desiredJobTitle": { "type": "string", "maxLength": 200 },
         "preferredIndustry": { "type": "string", "maxLength": 200 },
         "yearsOfExperience": { "type": "string", "maxLength": 100 },
+        "savedJobIds": { "type": "array", "description": "Saved vacancy IDs synced across devices" },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["uid", "email", "fullName"]
@@ -164,6 +165,42 @@
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "userId", "vacancyId", "status"]
+    },
+    "AnalyticsVisitor": {
+      "title": "Anonymized Visitor Counter",
+      "description": "Non-PII unique customer visit state keyed by opaque visitor or signed-in UID key.",
+      "type": "object",
+      "properties": {
+        "visitorKey": { "type": "string", "maxLength": 128 },
+        "dateKey": { "type": "string", "maxLength": 20 },
+        "firstSeenAt": { "type": "string", "maxLength": 64 },
+        "lastSeenAt": { "type": "string", "maxLength": 64 },
+        "isSignedIn": { "type": "boolean" },
+        "isInternal": { "type": "boolean" },
+        "source": { "type": "string", "maxLength": 30 },
+        "deviceType": { "type": "string", "maxLength": 20 },
+        "pageViews": { "type": "number" },
+        "aiInteractionsCount": { "type": "number" },
+        "lastEventType": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["visitorKey", "dateKey", "firstSeenAt", "lastSeenAt", "isSignedIn", "isInternal", "source", "deviceType", "pageViews", "aiInteractionsCount"]
+    },
+    "AnalyticsEvent": {
+      "title": "Anonymized Analytics Event",
+      "description": "Sanitized non-PII interaction event persisted directly in Firestore.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "visitorKey": { "type": "string", "maxLength": 128 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "maxLength": 64 },
+        "path": { "type": "string", "maxLength": 300 },
+        "source": { "type": "string", "maxLength": 30 },
+        "deviceType": { "type": "string", "maxLength": 20 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "isInternal": { "type": "boolean" }
+      },
+      "required": ["id", "visitorKey", "sessionId", "eventType", "path", "source", "deviceType", "timestamp", "isInternal"]
     }
   },
   "firestore": {
@@ -204,6 +241,14 @@
     "/job_applications/{applicationId}": {
       "schema": "UserJobApplication",
       "description": "Submitted job seeker applications"
+    },
+    "/analytics_visitors/{visitorKey}": {
+      "schema": "AnalyticsVisitor",
+      "description": "Non-PII customer visit tracking records"
+    },
+    "/analytics_events/{eventId}": {
+      "schema": "AnalyticsEvent",
+      "description": "Non-PII engagement and click events"
     }
   }
 }

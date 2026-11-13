@@ -71,6 +71,7 @@ export interface JobSeekerProfile {
     freshGraduate: boolean;
   };
 
+  savedJobIds?: string[];
   profileCompletionPercentage: number;
   createdAt: string;
   updatedAt: string;
