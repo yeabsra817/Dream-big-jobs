@@ -66,12 +66,10 @@ export function normalizeWebsiteDomain(domainOrUrl?: string): string {
 export function buildTelegramJobHtml(
   vacancy: any,
   customDomainOrUrl = 'hopelandjobs.tech',
-  channelUsername = '@DreamBigJobsEthiopia'
+  _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
   const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-  const cleanChan = channelUsername.replace(/^@/, '');
-  const channelUrl = `https://t.me/${cleanChan}`;
 
   const orgName = escapeHtml(vacancy.organization || 'Employer');
   const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : '';
@@ -102,9 +100,7 @@ export function buildTelegramJobHtml(
 👉<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
 
 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
-=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>
-
-🔰 <b>Telegram:-</b> <a href="${channelUrl}">${channelUrl}</a>`;
+=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>`;
 }
 
 /**
@@ -113,12 +109,10 @@ export function buildTelegramJobHtml(
 export function buildTelegramJobPlainText(
   vacancy: any,
   customDomainOrUrl = 'hopelandjobs.tech',
-  channelUsername = '@DreamBigJobsEthiopia'
+  _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
   const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-  const cleanChan = channelUsername.replace(/^@/, '');
-  const channelUrl = `https://t.me/${cleanChan}`;
 
   const orgName = vacancy.organization || 'Employer';
   const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : '';
@@ -148,9 +142,7 @@ export function buildTelegramJobPlainText(
 👉Read Detail:- ${vacancyLink}
 
 🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
-=>See Detail:- ${baseUrl}
-
-🔰 Telegram:- ${channelUrl}`;
+=>See Detail:- ${baseUrl}`;
 }
 
 /**

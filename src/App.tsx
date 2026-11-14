@@ -1505,10 +1505,10 @@ export default function App() {
                               {days.text}
                             </span>
                             <button
-                              onClick={() => handleStartApply(vac)}
+                              onClick={() => handleSelectVacancy(vac)}
                               className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white transition-colors cursor-pointer"
                             >
-                              Apply Now
+                              View Details
                             </button>
                           </div>
                         </div>
@@ -1628,15 +1628,9 @@ export default function App() {
                               <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => handleSelectVacancy(vac)}
-                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-                                >
-                                  Details
-                                </button>
-                                <button
-                                  onClick={() => handleStartApply(vac)}
                                   className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors shadow-xs cursor-pointer"
                                 >
-                                  Apply Now
+                                  View Details
                                 </button>
                               </div>
                             </div>
@@ -2100,7 +2094,6 @@ export default function App() {
             userProfile={userProfile}
             onClose={handleCloseVacancy}
             telegramUrl={siteSettings.telegramChannelUrl}
-            onApply={(v) => handleStartApply(v)}
           />
         </Suspense>
       )}

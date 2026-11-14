@@ -58,39 +58,165 @@ const ORG_ALIASES: Record<string, string> = {
   midroc: 'midroc',
 };
 
+const PLACEHOLDER_TEXT = new Set([
+  '',
+  'na',
+  'n/a',
+  'none',
+  'nil',
+  'tbd',
+  'unknown',
+  'notapplicable',
+  'notspecified',
+  'notspecifiedintheoriginalvacancy',
+]);
+
+const UNSPECIFIED_LOCATIONS = new Set([
+  '',
+  'ethiopia',
+  'various',
+  'multiple',
+  'multiplelocations',
+  'all',
+  'allethiopianlocations',
+  'anywhere',
+  'notspecified',
+  'notspecifiedintheoriginalvacancy',
+]);
+
+const SENIORITY_AND_LEVEL_TOKENS = new Set([
+  'junior',
+  'jr',
+  'senior',
+  'sr',
+  'assistant',
+  'asst',
+  'associate',
+  'deputy',
+  'lead',
+  'principal',
+  'chief',
+  'head',
+  'trainee',
+  'intern',
+  'graduate',
+  'entry',
+  'mid',
+  'executive',
+  'director',
+  'manager',
+  'supervisor',
+  'coordinator',
+  'specialist',
+  'officer',
+  'analyst',
+  'advisor',
+  'consultant',
+]);
+
+const GRADE_OR_NUMERAL_REGEX = /^(i|ii|iii|iv|v|vi|vii|viii|ix|x|[1-9]|10|a|b|c|d)$/i;
+
 export function cleanOrg(org?: string): string {
   if (!org) return '';
-  const lower = org.toLowerCase().trim();
-  const stripped = lower
-    .replace(/(share company|s\.c\.|s\.c|plc|p\.l\.c\.|p\.l\.c|ltd|limited|corporation|enterprise|organization|org|bank|hotel)/gi, '')
-    .replace(/[^a-z0-9]/g, ' ')
+  const lower = org
+    .toLowerCase()
+    .replace(/[()[\]]/g, ' ')
+    .replace(/\b(share company|s\.c\.|s\.c|p\.l\.c\.|p\.l\.c|plc|ltd|limited|inc|incorporated|llc|llp)\b/gi, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-  if (ORG_ALIASES[stripped]) return ORG_ALIASES[stripped];
+  if (!lower) return '';
+  if (ORG_ALIASES[lower]) return ORG_ALIASES[lower].replace(/[^a-z0-9]/g, '');
+
+  const withoutTrailingEthiopia = lower.replace(/\s+ethiopia$/i, '').trim();
+  if (withoutTrailingEthiopia && ORG_ALIASES[withoutTrailingEthiopia]) {
+    return ORG_ALIASES[withoutTrailingEthiopia].replace(/[^a-z0-9]/g, '');
+  }
+
   for (const [alias, canonical] of Object.entries(ORG_ALIASES)) {
-    if (stripped === alias || (alias.length > 3 && stripped.includes(alias))) {
-      return canonical;
+    const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escapedAlias}$|\\b${escapedAlias}\\b`, 'i');
+    if (alias.length >= 4 && regex.test(lower)) {
+      return canonical.replace(/[^a-z0-9]/g, '');
     }
   }
 
-  return stripped.replace(/\s+/g, '');
+  const effective = withoutTrailingEthiopia.length >= 4 ? withoutTrailingEthiopia : lower;
+  return effective.replace(/\s+/g, '');
+}
+
+export function isSameOrg(org1?: string, org2?: string): boolean {
+  const c1 = cleanOrg(org1);
+  const c2 = cleanOrg(org2);
+  if (!c1 || !c2) return false;
+  return c1 === c2;
+}
+
+function normalizeTitleWords(title?: string): string[] {
+  if (!title) return [];
+  const normalized = title
+    .toLowerCase()
+    .replace(/^(position|job title|role|vacancy announcement|job vacancy)\s*[:\-–—]\s*/gi, '')
+    .replace(/\s*[-–—(\[]\s*(full[\s-]?time|part[\s-]?time|contract|permanent|urgent|re-?advertised)\s*[)\]]?\s*$/gi, '')
+    .replace(/\b(sr\.?|sr)\b/gi, 'senior')
+    .replace(/\b(jr\.?|jr)\b/gi, 'junior')
+    .replace(/\b(asst\.?|asst)\b/gi, 'assistant')
+    .replace(/\b(mgr\.?|mgr)\b/gi, 'manager')
+    .replace(/\b(eng\.?|eng)\b/gi, 'engineer')
+    .replace(/\b(dev\.?|dev)\b/gi, 'developer')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+  return normalized ? normalized.split(/\s+/).filter(Boolean) : [];
 }
 
 export function cleanTitle(title?: string): string {
-  if (!title) return '';
-  return title
-    .toLowerCase()
-    .replace(/^(position|job title|role|vacancy announcement|job vacancy)\s*[:\-–—]\s*/gi, '')
-    .replace(/[-–—]\s*(full time|part time|contract|urgent|re-advertised|readvertised).*$/gi, '')
-    .replace(/\b(sr|sr\.)\b/gi, 'senior')
-    .replace(/\b(jr|jr\.)\b/gi, 'junior')
-    .replace(/\b(asst|asst\.)\b/gi, 'assistant')
-    .replace(/\b(mgr|mgr\.)\b/gi, 'manager')
-    .replace(/\b(eng|eng\.)\b/gi, 'engineer')
-    .replace(/\b(dev|dev\.)\b/gi, 'developer')
-    .replace(/\b(and|&)\b/gi, 'and')
-    .replace(/[^a-z0-9]/g, '')
-    .trim();
+  return normalizeTitleWords(title).join('');
+}
+
+function hasConflictingLevelOrGrade(title1?: string, title2?: string): boolean {
+  const words1 = normalizeTitleWords(title1);
+  const words2 = normalizeTitleWords(title2);
+
+  const levels1 = words1.filter((w) => SENIORITY_AND_LEVEL_TOKENS.has(w)).sort().join('|');
+  const levels2 = words2.filter((w) => SENIORITY_AND_LEVEL_TOKENS.has(w)).sort().join('|');
+  if (levels1 !== levels2) return true;
+
+  const grades1 = words1.filter((w) => GRADE_OR_NUMERAL_REGEX.test(w)).sort().join('|');
+  const grades2 = words2.filter((w) => GRADE_OR_NUMERAL_REGEX.test(w)).sort().join('|');
+  if (grades1 !== grades2) return true;
+
+  return false;
+}
+
+function normalizeLocation(loc?: string): string {
+  if (!loc) return '';
+  const cleaned = loc.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const compact = cleaned.replace(/\s+/g, '');
+  if (UNSPECIFIED_LOCATIONS.has(compact)) return '';
+  return cleaned;
+}
+
+export function areLocationsCompatible(loc1?: string, loc2?: string): boolean {
+  const n1 = normalizeLocation(loc1);
+  const n2 = normalizeLocation(loc2);
+  if (!n1 || !n2) return true;
+  if (n1 === n2) return true;
+  const w1 = n1.split(/\s+/);
+  const w2 = n2.split(/\s+/);
+  if (w1.length === 1 && w2.includes(w1[0])) return true;
+  if (w2.length === 1 && w1.includes(w2[0])) return true;
+  return false;
+}
+
+function normalizeRefNumber(ref?: string): string | null {
+  if (!ref) return null;
+  const cleaned = ref.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!cleaned || cleaned.length < 3 || PLACEHOLDER_TEXT.has(cleaned)) {
+    return null;
+  }
+  return cleaned;
 }
 
 export function stringSimilarity(s1: string, s2: string): number {
@@ -117,94 +243,73 @@ export interface DuplicateMatchResult {
 }
 
 /**
- * Strict multi-tier duplicate vacancy check
- * Evaluates candidates against an existing vacancy pool.
+ * Strict, accurate duplicate vacancy check.
+ * Only flags genuinely identical vacancies while allowing distinct roles,
+ * seniority levels, grades, branch cities, and shared career portal URLs.
  */
 export function checkDuplicateVacancy(
   candidate: Partial<Vacancy>,
   existingVacancies: Vacancy[],
   currentVacancyId?: string
 ): DuplicateMatchResult {
-  const candOrgClean = cleanOrg(candidate.organization || '');
   const candTitleClean = cleanTitle(candidate.title || '');
-  const candRef = candidate.referenceNumber && candidate.referenceNumber !== 'Not specified in the original vacancy'
-    ? candidate.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
-    : null;
+  const candRef = normalizeRefNumber(candidate.referenceNumber);
 
   for (const existing of existingVacancies) {
     if (currentVacancyId && existing.id === currentVacancyId) {
       continue;
     }
-
-    const exOrgClean = cleanOrg(existing.organization || '');
-    const exTitleClean = cleanTitle(existing.title || '');
-    const exRef = existing.referenceNumber && existing.referenceNumber !== 'Not specified in the original vacancy'
-      ? existing.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, '')
-      : null;
-
-    // Tier 1: Exact Reference Number Match
-    if (candRef && exRef && candRef === exRef) {
-      return {
-        isDuplicate: true,
-        matchedVacancy: existing,
-        reason: `Identical official reference code "${candidate.referenceNumber}" already on record for ${existing.organization}.`,
-        similarityScore: 1.0,
-      };
+    if (existing.status === 'duplicate' || existing.status === 'archived') {
+      continue;
     }
 
-    const sameOrg = candOrgClean.length > 0 && exOrgClean.length > 0 && (candOrgClean === exOrgClean || candOrgClean.includes(exOrgClean) || exOrgClean.includes(candOrgClean));
+    const sameOrg = isSameOrg(candidate.organization, existing.organization);
+    if (!sameOrg) {
+      continue;
+    }
 
-    // Tier 2: Exact Normalized Title + Same Organization
-    if (sameOrg && candTitleClean && exTitleClean && candTitleClean === exTitleClean) {
+    const sameLocation = areLocationsCompatible(candidate.location, existing.location);
+    if (!sameLocation) {
+      continue;
+    }
+
+    const exTitleClean = cleanTitle(existing.title || '');
+    const exRef = normalizeRefNumber(existing.referenceNumber);
+    const titleSim = stringSimilarity(
+      normalizeTitleWords(candidate.title).join(' '),
+      normalizeTitleWords(existing.title).join(' ')
+    );
+    const conflictingRoleLevel = hasConflictingLevelOrGrade(candidate.title, existing.title);
+
+    // Tier 1: Exact Normalized Title + Same Organization + Compatible Location
+    if (candTitleClean && exTitleClean && candTitleClean === exTitleClean) {
       return {
         isDuplicate: true,
         matchedVacancy: existing,
-        reason: `Identical position title "${candidate.title}" at "${existing.organization}" already on record.`,
+        reason: `Identical position title "${candidate.title}" at "${existing.organization}"${existing.location ? ` (${existing.location})` : ''} already on record.`,
         similarityScore: 0.98,
       };
     }
 
-    // Tier 3: High Title Similarity (>= 80%) for Same Organization
-    if (sameOrg && candTitleClean && exTitleClean) {
-      const titleSim = stringSimilarity(candidate.title || '', existing.title || '');
-      const substringMatch = (candTitleClean.length > 6 && exTitleClean.includes(candTitleClean)) || (exTitleClean.length > 6 && candTitleClean.includes(exTitleClean));
-      if (titleSim >= 0.8 || (substringMatch && titleSim >= 0.65)) {
-        return {
-          isDuplicate: true,
-          matchedVacancy: existing,
-          reason: `High title similarity (${Math.round(titleSim * 100)}%) with existing "${existing.title}" at ${existing.organization}.`,
-          similarityScore: titleSim,
-        };
-      }
-    }
-
-    // Tier 4: Matching Application URL / Portal Link for Same Organization
-    if (
-      sameOrg &&
-      candidate.applicationUrl &&
-      existing.applicationUrl &&
-      candidate.applicationUrl !== 'Not specified in the original vacancy' &&
-      candidate.applicationUrl.trim().toLowerCase() === existing.applicationUrl.trim().toLowerCase()
-    ) {
+    // Tier 2: Identical Valid Reference Number + Same Organization + Matching Role
+    // (Allows multi-position announcements sharing one batch announcement reference code)
+    if (candRef && exRef && candRef === exRef && !conflictingRoleLevel && titleSim >= 0.6) {
       return {
         isDuplicate: true,
         matchedVacancy: existing,
-        reason: `Identical direct application URL (${candidate.applicationUrl}) already exists for ${existing.organization}.`,
-        similarityScore: 0.95,
+        reason: `Identical reference code "${candidate.referenceNumber}" and matching role "${existing.title}" already on record for ${existing.organization}.`,
+        similarityScore: 1.0,
       };
     }
 
-    // Tier 5: High Full-Text Description Similarity (>= 75%) for Same Organization
-    if (sameOrg && candidate.description && existing.description && candidate.description.length > 60 && existing.description.length > 60) {
-      const descSim = stringSimilarity(candidate.description, existing.description);
-      if (descSim >= 0.75) {
-        return {
-          isDuplicate: true,
-          matchedVacancy: existing,
-          reason: `High description text overlap (${Math.round(descSim * 100)}%) with job at ${existing.organization}.`,
-          similarityScore: descSim,
-        };
-      }
+    // Tier 3: Near-Identical Title Formatting Variation (>= 90% token overlap, same level/grade)
+    if (candTitleClean && exTitleClean && !conflictingRoleLevel && titleSim >= 0.9) {
+      return {
+        isDuplicate: true,
+        matchedVacancy: existing,
+        reason: `Near-identical position title (${Math.round(titleSim * 100)}%) with existing "${existing.title}" at ${existing.organization}.`,
+        similarityScore: titleSim,
+      };
     }
   }
 
@@ -224,11 +329,11 @@ export function auditAllExistingVacancies(vacancies: Vacancy[]): DuplicateReport
 
   for (let i = 0; i < vacancies.length; i++) {
     const cand = vacancies[i];
-    if (cand.status === 'duplicate') continue;
+    if (cand.status === 'duplicate' || cand.status === 'archived') continue;
 
     for (let j = i + 1; j < vacancies.length; j++) {
       const existing = vacancies[j];
-      if (existing.status === 'duplicate') continue;
+      if (existing.status === 'duplicate' || existing.status === 'archived') continue;
 
       const check = checkDuplicateVacancy(cand, [existing], cand.id);
       if (check.isDuplicate && check.matchedVacancy) {

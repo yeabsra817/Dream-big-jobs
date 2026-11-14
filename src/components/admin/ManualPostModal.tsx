@@ -141,11 +141,16 @@ export const ManualPostModal: React.FC<Props> = ({
   // Strict live duplicate screening check
   const duplicateCheck = useMemo(() => {
     if (!title.trim() || !organization.trim()) return null;
+    const effectiveLocation =
+      location === 'Other Ethiopian Cities / Regions' && customLocation.trim()
+        ? customLocation.trim()
+        : location;
     return checkDuplicateVacancy(
       {
         id: initialData?.id || 'manual_temp',
         title: title.trim(),
         organization: organization.trim(),
+        location: effectiveLocation,
         referenceNumber: referenceNumber.trim() || undefined,
         applicationUrl: applicationUrl.trim() || undefined,
         applicationEmail: applicationEmail.trim() || undefined,
@@ -157,6 +162,8 @@ export const ManualPostModal: React.FC<Props> = ({
   }, [
     title,
     organization,
+    location,
+    customLocation,
     referenceNumber,
     applicationUrl,
     applicationEmail,

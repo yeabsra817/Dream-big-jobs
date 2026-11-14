@@ -544,21 +544,173 @@ ${text}`;
     hyatt: "hyatt regency",
     midroc: "midroc"
   };
+  const DUP_PLACEHOLDER_TEXT = /* @__PURE__ */ new Set([
+    "",
+    "na",
+    "n/a",
+    "none",
+    "nil",
+    "tbd",
+    "unknown",
+    "notapplicable",
+    "notspecified",
+    "notspecifiedintheoriginalvacancy"
+  ]);
+  const DUP_UNSPECIFIED_LOCATIONS = /* @__PURE__ */ new Set([
+    "",
+    "ethiopia",
+    "various",
+    "multiple",
+    "multiplelocations",
+    "all",
+    "allethiopianlocations",
+    "anywhere",
+    "notspecified",
+    "notspecifiedintheoriginalvacancy"
+  ]);
+  const DUP_SENIORITY_LEVEL_TOKENS = /* @__PURE__ */ new Set([
+    "junior",
+    "jr",
+    "senior",
+    "sr",
+    "assistant",
+    "asst",
+    "associate",
+    "deputy",
+    "lead",
+    "principal",
+    "chief",
+    "head",
+    "trainee",
+    "intern",
+    "graduate",
+    "entry",
+    "mid",
+    "executive",
+    "director",
+    "manager",
+    "supervisor",
+    "coordinator",
+    "specialist",
+    "officer",
+    "analyst",
+    "advisor",
+    "consultant"
+  ]);
+  const DUP_GRADE_NUMERAL_REGEX = /^(i|ii|iii|iv|v|vi|vii|viii|ix|x|[1-9]|10|a|b|c|d)$/i;
   function cleanOrg(org) {
     if (!org) return "";
-    const lower = org.toLowerCase().trim();
-    const stripped = lower.replace(/(share company|s\.c\.|s\.c|plc|p\.l\.c\.|p\.l\.c|ltd|limited|corporation|enterprise|organization|org|bank|hotel)/gi, "").replace(/[^a-z0-9]/g, " ").trim();
-    if (ETHIOPIAN_ORG_ALIASES[stripped]) return ETHIOPIAN_ORG_ALIASES[stripped];
+    const lower = org.toLowerCase().replace(/[()[\]]/g, " ").replace(/\b(share company|s\.c\.|s\.c|p\.l\.c\.|p\.l\.c|plc|ltd|limited|inc|incorporated|llc|llp)\b/gi, " ").replace(/[^a-z0-9]+/g, " ").trim();
+    if (!lower) return "";
+    if (ETHIOPIAN_ORG_ALIASES[lower]) return ETHIOPIAN_ORG_ALIASES[lower].replace(/[^a-z0-9]/g, "");
+    const withoutTrailingEthiopia = lower.replace(/\s+ethiopia$/i, "").trim();
+    if (withoutTrailingEthiopia && ETHIOPIAN_ORG_ALIASES[withoutTrailingEthiopia]) {
+      return ETHIOPIAN_ORG_ALIASES[withoutTrailingEthiopia].replace(/[^a-z0-9]/g, "");
+    }
     for (const [alias, canonical] of Object.entries(ETHIOPIAN_ORG_ALIASES)) {
-      if (stripped === alias || alias.length > 3 && stripped.includes(alias)) {
-        return canonical;
+      const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`^${escapedAlias}$|\\b${escapedAlias}\\b`, "i");
+      if (alias.length >= 4 && regex.test(lower)) {
+        return canonical.replace(/[^a-z0-9]/g, "");
       }
     }
-    return stripped.replace(/\s+/g, "");
+    const effective = withoutTrailingEthiopia.length >= 4 ? withoutTrailingEthiopia : lower;
+    return effective.replace(/\s+/g, "");
+  }
+  function isSameOrg(org1, org2) {
+    const c1 = cleanOrg(org1);
+    const c2 = cleanOrg(org2);
+    if (!c1 || !c2) return false;
+    return c1 === c2;
+  }
+  function normalizeTitleWords(title) {
+    if (!title) return [];
+    const normalized = title.toLowerCase().replace(/^(position|job title|role|vacancy announcement|job vacancy)\s*[:\-–—]\s*/gi, "").replace(/\s*[-–—(\[]\s*(full[\s-]?time|part[\s-]?time|contract|permanent|urgent|re-?advertised)\s*[)\]]?\s*$/gi, "").replace(/\b(sr\.?|sr)\b/gi, "senior").replace(/\b(jr\.?|jr)\b/gi, "junior").replace(/\b(asst\.?|asst)\b/gi, "assistant").replace(/\b(mgr\.?|mgr)\b/gi, "manager").replace(/\b(eng\.?|eng)\b/gi, "engineer").replace(/\b(dev\.?|dev)\b/gi, "developer").replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+    return normalized ? normalized.split(/\s+/).filter(Boolean) : [];
   }
   function cleanTitle(title) {
-    if (!title) return "";
-    return title.toLowerCase().replace(/^(position|job title|role|vacancy announcement|job vacancy)\s*[:\-–—]\s*/gi, "").replace(/[-–—]\s*(full time|part time|contract|urgent|re-advertised|readvertised).*$/gi, "").replace(/\b(sr|sr\.)\b/gi, "senior").replace(/\b(jr|jr\.)\b/gi, "junior").replace(/\b(asst|asst\.)\b/gi, "assistant").replace(/\b(mgr|mgr\.)\b/gi, "manager").replace(/\b(eng|eng\.)\b/gi, "engineer").replace(/\b(dev|dev\.)\b/gi, "developer").replace(/\b(and|&)\b/gi, "and").replace(/[^a-z0-9]/g, "").trim();
+    return normalizeTitleWords(title).join("");
+  }
+  function hasConflictingLevelOrGrade(title1, title2) {
+    const words1 = normalizeTitleWords(title1);
+    const words2 = normalizeTitleWords(title2);
+    const levels1 = words1.filter((w) => DUP_SENIORITY_LEVEL_TOKENS.has(w)).sort().join("|");
+    const levels2 = words2.filter((w) => DUP_SENIORITY_LEVEL_TOKENS.has(w)).sort().join("|");
+    if (levels1 !== levels2) return true;
+    const grades1 = words1.filter((w) => DUP_GRADE_NUMERAL_REGEX.test(w)).sort().join("|");
+    const grades2 = words2.filter((w) => DUP_GRADE_NUMERAL_REGEX.test(w)).sort().join("|");
+    if (grades1 !== grades2) return true;
+    return false;
+  }
+  function normalizeDupLocation(loc) {
+    if (!loc) return "";
+    const cleaned = loc.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const compact = cleaned.replace(/\s+/g, "");
+    if (DUP_UNSPECIFIED_LOCATIONS.has(compact)) return "";
+    return cleaned;
+  }
+  function areDupLocationsCompatible(loc1, loc2) {
+    const n1 = normalizeDupLocation(loc1);
+    const n2 = normalizeDupLocation(loc2);
+    if (!n1 || !n2) return true;
+    if (n1 === n2) return true;
+    const w1 = n1.split(/\s+/);
+    const w2 = n2.split(/\s+/);
+    if (w1.length === 1 && w2.includes(w1[0])) return true;
+    if (w2.length === 1 && w1.includes(w2[0])) return true;
+    return false;
+  }
+  function normalizeDupRef(ref) {
+    if (!ref) return null;
+    const cleaned = ref.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!cleaned || cleaned.length < 3 || DUP_PLACEHOLDER_TEXT.has(cleaned)) {
+      return null;
+    }
+    return cleaned;
+  }
+  function evaluateDuplicatePair(cand, existing) {
+    if (!cand || !existing) return { isMatch: false, reason: "", score: 0 };
+    if (existing.id && cand.id && existing.id === cand.id) return { isMatch: false, reason: "", score: 0 };
+    if (existing.status === "duplicate" || existing.status === "archived") {
+      return { isMatch: false, reason: "", score: 0 };
+    }
+    if (!isSameOrg(cand.organization, existing.organization)) {
+      return { isMatch: false, reason: "", score: 0 };
+    }
+    if (!areDupLocationsCompatible(cand.location, existing.location)) {
+      return { isMatch: false, reason: "", score: 0 };
+    }
+    const candTitleClean = cleanTitle(cand.title || "");
+    const exTitleClean = cleanTitle(existing.title || "");
+    const candRef = normalizeDupRef(cand.referenceNumber);
+    const exRef = normalizeDupRef(existing.referenceNumber);
+    const titleSim = stringSimilarity(
+      normalizeTitleWords(cand.title).join(" "),
+      normalizeTitleWords(existing.title).join(" ")
+    );
+    const conflictingRoleLevel = hasConflictingLevelOrGrade(cand.title, existing.title);
+    if (candTitleClean && exTitleClean && candTitleClean === exTitleClean) {
+      return {
+        isMatch: true,
+        reason: `Identical position title "${cand.title}" at "${existing.organization}"${existing.location ? ` (${existing.location})` : ""} already on record.`,
+        score: 0.98
+      };
+    }
+    if (candRef && exRef && candRef === exRef && !conflictingRoleLevel && titleSim >= 0.6) {
+      return {
+        isMatch: true,
+        reason: `Identical vacancy reference number "${cand.referenceNumber}" and matching role "${existing.title}" at ${existing.organization}.`,
+        score: 1
+      };
+    }
+    if (candTitleClean && exTitleClean && !conflictingRoleLevel && titleSim >= 0.9) {
+      return {
+        isMatch: true,
+        reason: `Near-identical position title (${Math.round(titleSim * 100)}%) with existing "${existing.title}" at ${existing.organization}.`,
+        score: titleSim
+      };
+    }
+    return { isMatch: false, reason: "", score: 0 };
   }
   app.post("/api/admin/detect-duplicates", (req, res) => {
     try {
@@ -570,87 +722,25 @@ ${text}`;
         let matchedVacancy = null;
         let reason = "";
         let score = 0;
-        const candOrgClean = cleanOrg(cand.organization || "");
-        const candTitleClean = cleanTitle(cand.title || "");
-        const candRef = cand.referenceNumber && cand.referenceNumber !== "Not specified in the original vacancy" ? cand.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, "") : null;
         for (const existing of existingVacancies) {
-          if (existing.id === cand.id) continue;
-          const exOrgClean = cleanOrg(existing.organization || "");
-          const exTitleClean = cleanTitle(existing.title || "");
-          const exRef = existing.referenceNumber && existing.referenceNumber !== "Not specified in the original vacancy" ? existing.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, "") : null;
-          const sameOrg = candOrgClean.length > 0 && exOrgClean.length > 0 && (candOrgClean === exOrgClean || candOrgClean.includes(exOrgClean) || exOrgClean.includes(candOrgClean));
-          if (candRef && exRef && candRef === exRef) {
+          const match = evaluateDuplicatePair(cand, existing);
+          if (match.isMatch) {
             isDup = true;
             matchedVacancy = existing;
-            reason = `Identical vacancy reference number "${cand.referenceNumber}" already exists for ${existing.organization}.`;
-            score = 1;
+            reason = match.reason;
+            score = match.score;
             break;
-          }
-          if (sameOrg && candTitleClean && exTitleClean && candTitleClean === exTitleClean) {
-            isDup = true;
-            matchedVacancy = existing;
-            reason = `Identical position title "${cand.title}" at "${existing.organization}" already on record.`;
-            score = 0.98;
-            break;
-          }
-          if (sameOrg && candTitleClean && exTitleClean) {
-            const titleSim = stringSimilarity(cand.title || "", existing.title || "");
-            const substringMatch = candTitleClean.length > 6 && exTitleClean.includes(candTitleClean) || exTitleClean.length > 6 && candTitleClean.includes(exTitleClean);
-            if (titleSim >= 0.8 || substringMatch && titleSim >= 0.65) {
-              isDup = true;
-              matchedVacancy = existing;
-              reason = `High title similarity (${Math.round(titleSim * 100)}%) with existing "${existing.title}" at ${existing.organization}.`;
-              score = titleSim;
-              break;
-            }
-          }
-          if (sameOrg && cand.applicationUrl && existing.applicationUrl && cand.applicationUrl !== "Not specified in the original vacancy" && cand.applicationUrl.trim().toLowerCase() === existing.applicationUrl.trim().toLowerCase()) {
-            isDup = true;
-            matchedVacancy = existing;
-            reason = `Identical application URL (${cand.applicationUrl}) already exists for ${existing.organization}.`;
-            score = 0.95;
-            break;
-          }
-          if (sameOrg && cand.description && existing.description && cand.description.length > 60 && existing.description.length > 60) {
-            const descSim = stringSimilarity(cand.description, existing.description);
-            if (descSim >= 0.75) {
-              isDup = true;
-              matchedVacancy = existing;
-              reason = `High description text overlap (${Math.round(descSim * 100)}%) with job at ${existing.organization}.`;
-              score = descSim;
-              break;
-            }
           }
         }
         if (!isDup) {
           for (const prev of validCandidates) {
-            const prevOrgClean = cleanOrg(prev.organization || "");
-            const prevTitleClean = cleanTitle(prev.title || "");
-            const prevRef = prev.referenceNumber && prev.referenceNumber !== "Not specified in the original vacancy" ? prev.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, "") : null;
-            const sameOrg = candOrgClean.length > 0 && prevOrgClean.length > 0 && (candOrgClean === prevOrgClean || candOrgClean.includes(prevOrgClean) || prevOrgClean.includes(candOrgClean));
-            if (candRef && prevRef && candRef === prevRef) {
+            const match = evaluateDuplicatePair(cand, prev);
+            if (match.isMatch) {
               isDup = true;
               matchedVacancy = prev;
-              reason = `Duplicate reference code "${cand.referenceNumber}" within this same batch (matches item #${prev.id}).`;
-              score = 1;
+              reason = `${match.reason} (within same batch)`;
+              score = match.score;
               break;
-            }
-            if (sameOrg && candTitleClean && prevTitleClean && candTitleClean === prevTitleClean) {
-              isDup = true;
-              matchedVacancy = prev;
-              reason = `Duplicate title "${cand.title}" at "${prev.organization}" within this same batch (matches item #${prev.id}).`;
-              score = 1;
-              break;
-            }
-            if (sameOrg && candTitleClean && prevTitleClean) {
-              const titleSim = stringSimilarity(cand.title || "", prev.title || "");
-              if (titleSim >= 0.8) {
-                isDup = true;
-                matchedVacancy = prev;
-                reason = `High title similarity (${Math.round(titleSim * 100)}%) with another job in this batch ("${prev.title}" at ${prev.organization}).`;
-                score = titleSim;
-                break;
-              }
             }
           }
         }
@@ -699,53 +789,25 @@ ${text}`;
     try {
       const { vacancies = [] } = req.body;
       const duplicatesReport = [];
+      const duplicatePairs = [];
       const duplicateVacancyIds = /* @__PURE__ */ new Set();
       for (let i = 0; i < vacancies.length; i++) {
         const v1 = vacancies[i];
+        if (v1.status === "duplicate" || v1.status === "archived") continue;
         if (duplicateVacancyIds.has(v1.id)) continue;
-        const v1OrgClean = cleanOrg(v1.organization || "");
-        const v1TitleClean = cleanTitle(v1.title || "");
-        const v1Ref = v1.referenceNumber && v1.referenceNumber !== "Not specified in the original vacancy" ? v1.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, "") : null;
         for (let j = i + 1; j < vacancies.length; j++) {
           const v2 = vacancies[j];
+          if (v2.status === "duplicate" || v2.status === "archived") continue;
           if (duplicateVacancyIds.has(v2.id)) continue;
-          const v2OrgClean = cleanOrg(v2.organization || "");
-          const v2TitleClean = cleanTitle(v2.title || "");
-          const v2Ref = v2.referenceNumber && v2.referenceNumber !== "Not specified in the original vacancy" ? v2.referenceNumber.toLowerCase().replace(/[^a-z0-9]/g, "") : null;
-          const sameOrg = v1OrgClean.length > 0 && v2OrgClean.length > 0 && (v1OrgClean === v2OrgClean || v1OrgClean.includes(v2OrgClean) || v2OrgClean.includes(v1OrgClean));
-          let isMatch = false;
-          let reason = "";
-          let score = 0;
-          if (v1Ref && v2Ref && v1Ref === v2Ref) {
-            isMatch = true;
-            reason = `Identical vacancy reference number "${v1.referenceNumber}" between jobs #${v1.id} and #${v2.id}.`;
-            score = 1;
-          } else if (sameOrg && v1TitleClean && v2TitleClean && v1TitleClean === v2TitleClean) {
-            isMatch = true;
-            reason = `Identical title "${v1.title}" at "${v1.organization}".`;
-            score = 0.98;
-          } else if (sameOrg && v1TitleClean && v2TitleClean) {
-            const titleSim = stringSimilarity(v1.title || "", v2.title || "");
-            const substringMatch = v1TitleClean.length > 6 && v2TitleClean.includes(v1TitleClean) || v2TitleClean.length > 6 && v1TitleClean.includes(v2TitleClean);
-            if (titleSim >= 0.8 || substringMatch && titleSim >= 0.65) {
-              isMatch = true;
-              reason = `High title similarity (${Math.round(titleSim * 100)}%) between "${v1.title}" and "${v2.title}" at ${v1.organization}.`;
-              score = titleSim;
-            }
-          } else if (sameOrg && v1.applicationUrl && v2.applicationUrl && v1.applicationUrl !== "Not specified in the original vacancy" && v1.applicationUrl.trim().toLowerCase() === v2.applicationUrl.trim().toLowerCase()) {
-            isMatch = true;
-            reason = `Same application URL (${v1.applicationUrl}) for ${v1.organization}.`;
-            score = 0.95;
-          } else if (sameOrg && v1.description && v2.description && v1.description.length > 60 && v2.description.length > 60) {
-            const descSim = stringSimilarity(v1.description, v2.description);
-            if (descSim >= 0.75) {
-              isMatch = true;
-              reason = `High content similarity (${Math.round(descSim * 100)}%) at ${v1.organization}.`;
-              score = descSim;
-            }
-          }
-          if (isMatch) {
+          const match = evaluateDuplicatePair(v2, v1);
+          if (match.isMatch) {
             duplicateVacancyIds.add(v2.id);
+            duplicatePairs.push({
+              originalId: v1.id,
+              duplicateId: v2.id,
+              similarityScore: match.score,
+              reason: match.reason
+            });
             duplicatesReport.push({
               id: `audit_${Date.now()}_${i}_${j}`,
               candidateTitle: v2.title,
@@ -754,8 +816,8 @@ ${text}`;
               matchedTitle: v1.title,
               matchedOrg: v1.organization,
               matchedDeadline: v1.applicationDeadline,
-              similarityScore: score,
-              reason,
+              similarityScore: match.score,
+              reason: match.reason,
               status: "discarded",
               detectedAt: (/* @__PURE__ */ new Date()).toISOString(),
               candidateData: v2
@@ -768,7 +830,8 @@ ${text}`;
         totalAudited: vacancies.length,
         duplicatesFound: duplicatesReport.length,
         duplicateVacancyIds: Array.from(duplicateVacancyIds),
-        duplicatesReport
+        duplicatesReport,
+        duplicatePairs
       });
     } catch (err) {
       console.error("Audit duplicates error:", err);
@@ -1286,11 +1349,9 @@ ${text}`;
     let clean = domainOrUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
     return `https://${clean}`;
   }
-  function buildTelegramJobHtml(vacancy, domainOrUrl = "hopelandjobs.tech", channel = "@DreamBigJobsEthiopia") {
+  function buildTelegramJobHtml(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
     const baseUrl = normalizeWebsiteDomain(domainOrUrl);
     const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-    const cleanChan = channel.replace(/^@/, "");
-    const channelUrl = `https://t.me/${cleanChan}`;
     const orgName = escapeHtml(vacancy.organization || "Employer");
     const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : "";
     const positionTitle = escapeHtml(vacancy.title || "Various Positions");
@@ -1317,15 +1378,11 @@ ${text}`;
 \u{1F449}<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
 
 \u{1F530} <b>\u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}</b>
-=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>
-
-\u{1F530} <b>Telegram:-</b> <a href="${channelUrl}">${channelUrl}</a>`;
+=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>`;
   }
-  function buildTelegramJobPlainText(vacancy, domainOrUrl = "hopelandjobs.tech", channel = "@DreamBigJobsEthiopia") {
+  function buildTelegramJobPlainText(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
     const baseUrl = normalizeWebsiteDomain(domainOrUrl);
     const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-    const cleanChan = channel.replace(/^@/, "");
-    const channelUrl = `https://t.me/${cleanChan}`;
     const orgName = vacancy.organization || "Employer";
     const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : "";
     const positionTitle = vacancy.title || "Various Positions";
@@ -1352,9 +1409,7 @@ ${text}`;
 \u{1F449}Read Detail:- ${vacancyLink}
 
 \u{1F530} \u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}
-=>See Detail:- ${baseUrl}
-
-\u{1F530} Telegram:- ${channelUrl}`;
+=>See Detail:- ${baseUrl}`;
   }
   async function sendTelegramVacancyMessage(token, channel, vacancy, domainOrUrl) {
     const cleanChannel = channel.startsWith("@") ? channel : `@${channel}`;

@@ -999,11 +999,6 @@ export const TelegramSettings: React.FC<Props> = ({
                     =&gt;<strong>See Detail:-</strong> https://{customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech'}
                   </p>
                 </div>
-                <div className="pt-1">
-                  <p className="text-[#64B5F6]">
-                    🔰 <strong>Telegram:-</strong> https://t.me/{channelUsername.replace('@', '')}
-                  </p>
-                </div>
               </div>
             </div>
 
