@@ -228,6 +228,12 @@
           "type": "string",
           "enum": ["open", "closed", "expired", "unverified"]
         },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["private_pending", "approved_public", "rejected", "expired"]
+        },
+        "discoveredAt": { "type": "string", "maxLength": 100 },
+        "verifiedAt": { "type": "string", "maxLength": 100 },
         "lastVerifiedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "country", "employerOrProgramme", "jobTitle", "directApplicationUrl", "originalSourceUrl", "verificationStatus"]
@@ -248,6 +254,12 @@
           "type": "string",
           "enum": ["VERIFIED", "UNVERIFIED", "SUSPENDED_BROKEN_LINK", "EXPIRED", "REJECTED_SUSPICIOUS"]
         },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["private_pending", "approved_public", "rejected", "expired"]
+        },
+        "discoveredAt": { "type": "string", "maxLength": 100 },
+        "verifiedAt": { "type": "string", "maxLength": 100 },
         "lastVerifiedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "country", "pathwayTitle", "officialGovernmentWebsite", "originalSourceUrl", "verificationStatus"]
@@ -271,6 +283,12 @@
           "type": "string",
           "enum": ["open", "closed", "expired", "unverified"]
         },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["private_pending", "approved_public", "rejected", "expired"]
+        },
+        "discoveredAt": { "type": "string", "maxLength": 100 },
+        "verifiedAt": { "type": "string", "maxLength": 100 },
         "lastVerifiedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "country", "universityOrInstitution", "scholarshipName", "officialApplicationUrl", "originalSourceUrl", "verificationStatus"]

@@ -10,16 +10,18 @@ export function isBankingVacancyClient(v: Partial<Vacancy>): boolean {
   const title = String(v.title || '').toLowerCase();
   const org = String(v.organization || '').toLowerCase();
   const desc = String(v.description || '').toLowerCase();
+  const ngoExplicit = cat.includes('ngo') || cat.includes('embassies') || cat.includes('diplomatic');
+  if (ngoExplicit) return false;
   if (cat.includes('banking') || cat.includes('microfinance') || cat.includes('insurance')) {
     return true;
   }
-  if (/\b(bank|microfinance|s\.?c\.?|savings and credit|cooperative bank|national bank|development bank)\b/i.test(org)) {
+  if (/\b(bank|microfinance|savings and credit|cooperative bank|national bank|development bank)\b/i.test(org)) {
     return true;
   }
   if (/\b(branch manager|banker|teller|loan officer|credit analyst|treasury|kyc|aml|core banking|banking operations)\b/i.test(title)) {
     return true;
   }
-  if (/\bcommercial bank|dashen bank|awash bank|abyssinia|wegagen|hibret|nib bank|oromia bank|tsedey bank|zemen bank|berhan bank|enat bank|bunna bank\b/i.test(`${org} ${desc}`)) {
+  if (/\bcommercial bank|dashen bank|awash bank|bank of abyssinia|wegagen bank|hibret bank|nib bank|oromia bank|tsedey bank|zemen bank|berhan bank|enat bank|bunna bank|siinqee bank|amhara bank\b/i.test(`${org} ${desc}`)) {
     return true;
   }
   return false;
@@ -35,13 +37,22 @@ export function isNgoVacancyClient(v: Partial<Vacancy>): boolean {
   if (cat.includes('ngo') || cat.includes('civil society') || cat.includes('embassies') || cat.includes('diplomatic')) {
     return true;
   }
-  if (/\b(unicef|undp|unhcr|wfp|who|fao|ilo|unesco|usaid|giz|msf|médecins sans frontières|save the children|world vision|care|oxfam|plan international|nrc|irc|mercy corps|icrc|red cross|pathfinder|fhi 360|crs|catholic relief|action against hunger|danish refugee|goal|tearfund|sos children|amref|jhpiego|psi|engenderhealth|pact|rti|chemonics)\b/i.test(org)) {
+  if (/\b(unicef|undp|unhcr|wfp|who|fao|ilo|unesco|usaid|giz|msf|médecins sans frontières|save the children|world vision|care international|oxfam|plan international|nrc|irc|international rescue committee|mercy corps|icrc|red cross|pathfinder|fhi 360|crs|catholic relief|action against hunger|danish refugee|norwegian refugee|goal ethiopia|tearfund|sos children|amref|jhpiego|psi|engenderhealth|pact|rti|chemonics|helvetas|snv|lutheran world)\b/i.test(org)) {
     return true;
   }
-  if (/\b(ngo|international organization|non-governmental|humanitarian|donor funded|embassy|diplomatic mission)\b/i.test(`${org} ${title}`)) {
+  if (/\b(ngo|ingo|international organization|non-governmental|humanitarian|donor funded|embassy|diplomatic mission)\b/i.test(`${org} ${title}`)) {
     return true;
   }
   return false;
+}
+
+/**
+ * Classify a vacancy into one of System 1's 3 broad sectors: Banking, NGO, or Other.
+ */
+export function classifyVacancyBroadSectorClient(v: Partial<Vacancy>): 'Banking' | 'NGO' | 'Other' {
+  if (isNgoVacancyClient(v)) return 'NGO';
+  if (isBankingVacancyClient(v)) return 'Banking';
+  return 'Other';
 }
 
 /**
@@ -51,10 +62,10 @@ export function isNgoVacancyClient(v: Partial<Vacancy>): boolean {
  */
 export function isWashNgoVacancyClient(v: Partial<Vacancy>): boolean {
   if (!isNgoVacancyClient(v)) return false;
-  const responsibilitiesText = Array.isArray(v.responsibilities) ? v.responsibilities.join(' ') : '';
-  const skillsText = Array.isArray(v.requiredSkills) ? v.requiredSkills.join(' ') : '';
+  const responsibilitiesText = Array.isArray(v.responsibilities) ? v.responsibilities.join(' ') : String(v.responsibilities || '');
+  const skillsText = Array.isArray(v.requiredSkills) ? v.requiredSkills.join(' ') : String(v.requiredSkills || '');
   const combined = `${v.title || ''} ${v.description || ''} ${responsibilitiesText} ${v.requiredFieldOfStudy || ''} ${skillsText} ${v.specialRequirements || ''}`;
-  return /\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+and\s+sanitation|sanitation\s+and\s+water\s+supply|hygiene\s+promotion|sanitation\s+and\s+hygiene|wash\s+officer|wash\s+coordinator|wash\s+project\s+manager|wash\s+engineer(?:ing)?|emergency\s+wash|community\s+water\s+and\s+sanitation|latrine\s+construction|borehole\s+rehabilitation|water\s+supply\s+scheme|water\s+quality\s+monitoring)\b/i.test(
+  return /\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+and\s+sanitation|sanitation\s+and\s+water\s+supply|hygiene\s+promotion|sanitation\s+and\s+hygiene|wash\s+officer|wash\s+coordinator|wash\s+manager|wash\s+project\s+manager|wash\s+engineer(?:ing)?|emergency\s+wash|humanitarian\s+wash|community\s+water\s+and\s+sanitation|latrine\s+construction|borehole\s+rehabilitation|water\s+supply\s+scheme|water\s+quality\s+monitoring)\b/i.test(
     combined
   );
 }
@@ -219,7 +230,7 @@ export function buildTelegramJobHtml(
     eduParts.push(`${vacancy.experienceYears} experience`);
   }
   const educationFieldText = escapeHtml(eduParts.join(', '));
-  const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢 <b>WASH OPPORTUNITY</b>\n\n' : '';
+  const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
   return `${washPrefix}<b>Vacancy at ${orgName}</b>
 
@@ -259,7 +270,7 @@ export function buildTelegramJobPlainText(
     eduParts.push(`${vacancy.experienceYears} experience`);
   }
   const educationFieldText = eduParts.join(', ');
-  const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢 WASH OPPORTUNITY\n\n' : '';
+  const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
   return `${washPrefix}Vacancy at ${orgName}
 
@@ -275,8 +286,8 @@ export function buildTelegramJobPlainText(
 }
 
 /**
- * Automatic WASH Classification & Gate C Pre-Publish Validator:
- * Ensures verified WASH NGO vacancies always display 🟢 WASH OPPORTUNITY near top BEFORE job title,
+ * Automatic WASH Classification & Pre-Publish Validator:
+ * Ensures verified WASH NGO vacancies always display 🟢⭐ WASH JOB at the beginning BEFORE the job title,
  * and non-WASH NGO vacancies never carry the marker.
  */
 export function applyAndValidateWashLabelClient(
@@ -296,13 +307,13 @@ export function applyAndValidateWashLabelClient(
   let nextPlain = plainMsg;
 
   if (isWash) {
-    if (!nextHtml.includes('🟢') || !nextHtml.includes('WASH OPPORTUNITY')) {
-      nextHtml = `🟢 <b>WASH OPPORTUNITY</b>\n\n${nextHtml}`;
+    if (!nextHtml.includes('🟢⭐') || !nextHtml.includes('WASH JOB')) {
+      nextHtml = `🟢⭐ <b>WASH JOB</b>\n\n${nextHtml.replace(/^🟢(?:\s*⭐)?\s*(?:<b>)?WASH[^<\n]*(?:<\/b>)?\s*/i, '')}`;
     }
-    if (!nextPlain.includes('🟢 WASH OPPORTUNITY')) {
-      nextPlain = `🟢 WASH OPPORTUNITY\n\n${nextPlain}`;
+    if (!nextPlain.includes('🟢⭐ WASH JOB')) {
+      nextPlain = `🟢⭐ WASH JOB\n\n${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, '')}`;
     }
-    const labelPos = nextPlain.indexOf('🟢 WASH OPPORTUNITY');
+    const labelPos = nextPlain.indexOf('🟢⭐ WASH JOB');
     const titlePos = vacancy.title ? nextPlain.indexOf(vacancy.title) : nextPlain.indexOf('Vacancy at');
     if (labelPos < 0 || (titlePos >= 0 && labelPos > titlePos)) {
       return {
@@ -311,7 +322,7 @@ export function applyAndValidateWashLabelClient(
         hasWashLabel: false,
         html: nextHtml,
         plainText: nextPlain,
-        reason: 'Blocked by Pre-Publish WASH Gate: Missing 🟢 WASH OPPORTUNITY marker before job title.',
+        reason: 'Blocked by Pre-Publish WASH Gate: Missing 🟢⭐ WASH JOB marker before job title.',
       };
     }
     return {
@@ -326,7 +337,7 @@ export function applyAndValidateWashLabelClient(
   return {
     valid: true,
     isWashNgo: false,
-    hasWashLabel: nextPlain.includes('🟢 WASH OPPORTUNITY'),
+    hasWashLabel: nextPlain.includes('🟢⭐ WASH JOB'),
     html: nextHtml,
     plainText: nextPlain,
   };

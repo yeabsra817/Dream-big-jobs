@@ -269,6 +269,49 @@ export const ADMIN_EMAILS = [
   'yeabsra45@gmail.com',
 ];
 
+const ADMIN_SESSION_STORAGE_KEY = 'hopelandjobs_admin_session_email';
+let activeAdminSessionEmail: string | null = null;
+
+export function setActiveAdminSessionEmail(email: string | null): void {
+  const normalized = email ? String(email).toLowerCase().trim() : null;
+  activeAdminSessionEmail =
+    normalized && ADMIN_EMAILS.some((e) => e.toLowerCase() === normalized) ? normalized : null;
+  if (typeof window !== 'undefined') {
+    try {
+      if (activeAdminSessionEmail) {
+        sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, activeAdminSessionEmail);
+      } else {
+        sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      }
+    } catch {}
+  }
+}
+
+export function getActiveAdminSessionEmail(): string {
+  if (activeAdminSessionEmail) return activeAdminSessionEmail;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+      if (saved && ADMIN_EMAILS.some((e) => e.toLowerCase() === saved.toLowerCase().trim())) {
+        activeAdminSessionEmail = saved.toLowerCase().trim();
+        return activeAdminSessionEmail;
+      }
+    } catch {}
+  }
+  const fbEmail = (auth.currentUser?.email || '').toLowerCase().trim();
+  if (fbEmail && ADMIN_EMAILS.some((e) => e.toLowerCase() === fbEmail)) {
+    return fbEmail;
+  }
+  return '';
+}
+
+export function isApprovedPublicInternationalRecord(item: any): boolean {
+  if (!item || item.verificationStatus !== 'VERIFIED') return false;
+  if (item.applicationStatus === 'expired') return false;
+  if (!item.approvalStatus) return true;
+  return item.approvalStatus === 'approved_public';
+}
+
 // Check if user is the website owner / admin
 export function isUserAdmin(user: User | null): boolean {
   if (!user) return false;
@@ -2058,15 +2101,21 @@ function writeLocalArray<T>(key: string, items: T[]) {
   } catch {}
 }
 
-async function fetchInternationalStateFromServer(): Promise<{
+export async function fetchInternationalStateFromServer(adminMode = false): Promise<{
   internationalJobs?: InternationalJob[];
   immigrationPathways?: ImmigrationPathway[];
   experienceScholarships?: ExperienceScholarship[];
   researchHistory?: ResearchHistoryRun[];
   verificationLogs?: VerificationReportItem[];
+  monitoredSources?: any[];
+  developerNotifications?: any[];
+  schedulerStatus?: any;
 } | null> {
   try {
-    const res = await withTimeout(fetch('/api/international/state'), 3000, null as any);
+    const ownerEmail = adminMode ? getActiveAdminSessionEmail() : '';
+    const endpoint = ownerEmail ? '/api/international/private-state' : '/api/international/public';
+    const headers: Record<string, string> = ownerEmail ? { 'x-admin-email': ownerEmail } : {};
+    const res = await withTimeout(fetch(endpoint, { headers }), 4000, null as any);
     if (res && res.ok) {
       const data = await safeResponseJson<any>(res);
       if (data && typeof data === 'object') return data;
@@ -2083,9 +2132,14 @@ async function syncInternationalStateToServer(payload: {
   verificationLogs?: VerificationReportItem[];
 }): Promise<void> {
   try {
+    const ownerEmail = getActiveAdminSessionEmail();
+    if (!ownerEmail) return;
     await fetch('/api/international/state', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-email': ownerEmail,
+      },
       body: JSON.stringify(payload),
     });
   } catch (e) {
@@ -2096,6 +2150,15 @@ async function syncInternationalStateToServer(payload: {
 export async function fetchInternationalJobs(adminMode = false): Promise<InternationalJob[]> {
   const path = 'international_jobs';
   const cached = readLocalArray<InternationalJob>(LS_INTL_JOBS_KEY);
+
+  if (adminMode) {
+    const serverPrivate = await fetchInternationalStateFromServer(true);
+    if (serverPrivate?.internationalJobs) {
+      writeLocalArray(LS_INTL_JOBS_KEY, serverPrivate.internationalJobs);
+      return serverPrivate.internationalJobs;
+    }
+  }
+
   try {
     const q = adminMode && auth.currentUser
       ? collection(db, path)
@@ -2107,9 +2170,10 @@ export async function fetchInternationalJobs(adminMode = false): Promise<Interna
         list.push({ ...(d.data() as InternationalJob), id: d.id });
       });
       list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-      if (list.length > 0 || adminMode) {
-        writeLocalArray(LS_INTL_JOBS_KEY, list);
-        return list;
+      const filtered = adminMode ? list : list.filter(isApprovedPublicInternationalRecord);
+      if (filtered.length > 0 || adminMode) {
+        if (adminMode) writeLocalArray(LS_INTL_JOBS_KEY, filtered);
+        return filtered;
       }
     }
   } catch (err) {
@@ -2118,16 +2182,16 @@ export async function fetchInternationalJobs(adminMode = false): Promise<Interna
     }
   }
 
-  const serverData = await fetchInternationalStateFromServer();
+  const serverData = await fetchInternationalStateFromServer(adminMode);
   if (serverData?.internationalJobs && serverData.internationalJobs.length > 0) {
     const items = adminMode
       ? serverData.internationalJobs
-      : serverData.internationalJobs.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired');
-    writeLocalArray(LS_INTL_JOBS_KEY, items);
+      : serverData.internationalJobs.filter(isApprovedPublicInternationalRecord);
+    if (adminMode) writeLocalArray(LS_INTL_JOBS_KEY, items);
     return items;
   }
 
-  return adminMode ? cached : cached.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired');
+  return adminMode ? cached : cached.filter(isApprovedPublicInternationalRecord);
 }
 
 export async function saveBatchInternationalJobs(jobs: InternationalJob[]): Promise<void> {
@@ -2175,6 +2239,15 @@ export async function deleteInternationalJob(id: string): Promise<void> {
 export async function fetchImmigrationPathways(adminMode = false): Promise<ImmigrationPathway[]> {
   const path = 'immigration_pathways';
   const cached = readLocalArray<ImmigrationPathway>(LS_IMMIGRATION_KEY);
+
+  if (adminMode) {
+    const serverPrivate = await fetchInternationalStateFromServer(true);
+    if (serverPrivate?.immigrationPathways) {
+      writeLocalArray(LS_IMMIGRATION_KEY, serverPrivate.immigrationPathways);
+      return serverPrivate.immigrationPathways;
+    }
+  }
+
   try {
     const q = adminMode && auth.currentUser
       ? collection(db, path)
@@ -2186,9 +2259,10 @@ export async function fetchImmigrationPathways(adminMode = false): Promise<Immig
         list.push({ ...(d.data() as ImmigrationPathway), id: d.id });
       });
       list.sort((a, b) => a.country.localeCompare(b.country));
-      if (list.length > 0 || adminMode) {
-        writeLocalArray(LS_IMMIGRATION_KEY, list);
-        return list;
+      const filtered = adminMode ? list : list.filter(isApprovedPublicInternationalRecord);
+      if (filtered.length > 0 || adminMode) {
+        if (adminMode) writeLocalArray(LS_IMMIGRATION_KEY, filtered);
+        return filtered;
       }
     }
   } catch (err) {
@@ -2197,16 +2271,16 @@ export async function fetchImmigrationPathways(adminMode = false): Promise<Immig
     }
   }
 
-  const serverData = await fetchInternationalStateFromServer();
+  const serverData = await fetchInternationalStateFromServer(adminMode);
   if (serverData?.immigrationPathways && serverData.immigrationPathways.length > 0) {
     const items = adminMode
       ? serverData.immigrationPathways
-      : serverData.immigrationPathways.filter((p) => p.verificationStatus === 'VERIFIED');
-    writeLocalArray(LS_IMMIGRATION_KEY, items);
+      : serverData.immigrationPathways.filter(isApprovedPublicInternationalRecord);
+    if (adminMode) writeLocalArray(LS_IMMIGRATION_KEY, items);
     return items;
   }
 
-  return adminMode ? cached : cached.filter((p) => p.verificationStatus === 'VERIFIED');
+  return adminMode ? cached : cached.filter(isApprovedPublicInternationalRecord);
 }
 
 export async function saveBatchImmigrationPathways(pathways: ImmigrationPathway[]): Promise<void> {
@@ -2252,6 +2326,15 @@ export async function deleteImmigrationPathway(id: string): Promise<void> {
 export async function fetchExperienceScholarships(adminMode = false): Promise<ExperienceScholarship[]> {
   const path = 'experience_scholarships';
   const cached = readLocalArray<ExperienceScholarship>(LS_SCHOLARSHIPS_KEY);
+
+  if (adminMode) {
+    const serverPrivate = await fetchInternationalStateFromServer(true);
+    if (serverPrivate?.experienceScholarships) {
+      writeLocalArray(LS_SCHOLARSHIPS_KEY, serverPrivate.experienceScholarships);
+      return serverPrivate.experienceScholarships;
+    }
+  }
+
   try {
     const q = adminMode && auth.currentUser
       ? collection(db, path)
@@ -2263,9 +2346,10 @@ export async function fetchExperienceScholarships(adminMode = false): Promise<Ex
         list.push({ ...(d.data() as ExperienceScholarship), id: d.id });
       });
       list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-      if (list.length > 0 || adminMode) {
-        writeLocalArray(LS_SCHOLARSHIPS_KEY, list);
-        return list;
+      const filtered = adminMode ? list : list.filter(isApprovedPublicInternationalRecord);
+      if (filtered.length > 0 || adminMode) {
+        if (adminMode) writeLocalArray(LS_SCHOLARSHIPS_KEY, filtered);
+        return filtered;
       }
     }
   } catch (err) {
@@ -2274,16 +2358,16 @@ export async function fetchExperienceScholarships(adminMode = false): Promise<Ex
     }
   }
 
-  const serverData = await fetchInternationalStateFromServer();
+  const serverData = await fetchInternationalStateFromServer(adminMode);
   if (serverData?.experienceScholarships && serverData.experienceScholarships.length > 0) {
     const items = adminMode
       ? serverData.experienceScholarships
-      : serverData.experienceScholarships.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired');
-    writeLocalArray(LS_SCHOLARSHIPS_KEY, items);
+      : serverData.experienceScholarships.filter(isApprovedPublicInternationalRecord);
+    if (adminMode) writeLocalArray(LS_SCHOLARSHIPS_KEY, items);
     return items;
   }
 
-  return adminMode ? cached : cached.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired');
+  return adminMode ? cached : cached.filter(isApprovedPublicInternationalRecord);
 }
 
 export async function saveBatchExperienceScholarships(scholarships: ExperienceScholarship[]): Promise<void> {
@@ -2329,6 +2413,13 @@ export async function deleteExperienceScholarship(id: string): Promise<void> {
 }
 
 export async function fetchResearchHistory(): Promise<ResearchHistoryRun[]> {
+  const ownerEmail = getActiveAdminSessionEmail();
+  if (!ownerEmail) return [];
+  const serverData = await fetchInternationalStateFromServer(true);
+  if (serverData?.researchHistory) {
+    writeLocalArray(LS_RESEARCH_HISTORY_KEY, serverData.researchHistory);
+    return serverData.researchHistory;
+  }
   const cached = readLocalArray<ResearchHistoryRun>(LS_RESEARCH_HISTORY_KEY);
   if (auth.currentUser) {
     try {
@@ -2345,11 +2436,6 @@ export async function fetchResearchHistory(): Promise<ResearchHistoryRun[]> {
     } catch (err) {
       console.warn('fetchResearchHistory notice:', err);
     }
-  }
-  const serverData = await fetchInternationalStateFromServer();
-  if (serverData?.researchHistory && serverData.researchHistory.length > 0) {
-    writeLocalArray(LS_RESEARCH_HISTORY_KEY, serverData.researchHistory);
-    return serverData.researchHistory;
   }
   return cached;
 }
@@ -2368,6 +2454,13 @@ export async function saveResearchHistoryRun(run: ResearchHistoryRun): Promise<v
 }
 
 export async function fetchVerificationLogs(): Promise<VerificationReportItem[]> {
+  const ownerEmail = getActiveAdminSessionEmail();
+  if (!ownerEmail) return [];
+  const serverData = await fetchInternationalStateFromServer(true);
+  if (serverData?.verificationLogs) {
+    writeLocalArray(LS_VERIFICATION_LOGS_KEY, serverData.verificationLogs);
+    return serverData.verificationLogs;
+  }
   const cached = readLocalArray<VerificationReportItem>(LS_VERIFICATION_LOGS_KEY);
   if (auth.currentUser) {
     try {
@@ -2384,11 +2477,6 @@ export async function fetchVerificationLogs(): Promise<VerificationReportItem[]>
     } catch (err) {
       console.warn('fetchVerificationLogs notice:', err);
     }
-  }
-  const serverData = await fetchInternationalStateFromServer();
-  if (serverData?.verificationLogs && serverData.verificationLogs.length > 0) {
-    writeLocalArray(LS_VERIFICATION_LOGS_KEY, serverData.verificationLogs);
-    return serverData.verificationLogs;
   }
   return cached;
 }

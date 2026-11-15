@@ -50,7 +50,7 @@ import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './Smart
 import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
 import { InternationalControlCenter } from './InternationalControlCenter';
-import { auth, googleProvider, ADMIN_EMAIL, safeResponseJson } from '../../lib/firebase';
+import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
 
@@ -88,6 +88,13 @@ interface Props {
   onDeleteExperienceScholarship?: (id: string) => Promise<void>;
   onSaveResearchRun?: (run: ResearchHistoryRun) => Promise<void>;
   onSaveVerificationLogs?: (logs: VerificationReportItem[]) => Promise<void>;
+  onSyncInternationalState?: (data: {
+    internationalJobs?: InternationalJob[];
+    immigrationPathways?: ImmigrationPathway[];
+    experienceScholarships?: ExperienceScholarship[];
+    researchHistory?: ResearchHistoryRun[];
+    verificationLogs?: VerificationReportItem[];
+  }) => void;
 }
 
 export const AdminDashboard: React.FC<Props> = ({
@@ -120,7 +127,12 @@ export const AdminDashboard: React.FC<Props> = ({
   onDeleteExperienceScholarship = async () => {},
   onSaveResearchRun = async () => {},
   onSaveVerificationLogs = async () => {},
+  onSyncInternationalState,
 }) => {
+  const isYeabsraOwner = Boolean(
+    adminEmail && ADMIN_EMAILS.some((e) => e.toLowerCase() === adminEmail.toLowerCase().trim())
+  );
+
   const [activeTab, setActiveTab] = useState<
     'bulk' | 'international' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'applications' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
   >('bulk');
@@ -352,22 +364,24 @@ export const AdminDashboard: React.FC<Props> = ({
               <span>Bulk Import System (50 Jobs)</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('international')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
-                activeTab === 'international'
-                  ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Globe className="w-4 h-4 text-sky-400" />
-              <span>International &amp; Global</span>
-              {(internationalJobs.length + immigrationPathways.length + experienceScholarships.length) > 0 && (
-                <span className="ml-1 px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[10px] font-black">
-                  {internationalJobs.length + immigrationPathways.length + experienceScholarships.length}
-                </span>
-              )}
-            </button>
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('international')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                  activeTab === 'international'
+                    ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Globe className="w-4 h-4 text-sky-400" />
+                <span>Private Research Engine (Yeabsra Only)</span>
+                {(internationalJobs.length + immigrationPathways.length + experienceScholarships.length) > 0 && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[10px] font-black">
+                    {internationalJobs.length + immigrationPathways.length + experienceScholarships.length}
+                  </span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab('telegramQueue')}
@@ -469,20 +483,22 @@ export const AdminDashboard: React.FC<Props> = ({
               )}
             </button>
 
-            <button
-              onClick={() => setActiveTab('autoApply')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border ${
-                activeTab === 'autoApply'
-                  ? 'bg-amber-400 text-slate-950 shadow-sm font-black border-amber-300'
-                  : 'text-amber-300 hover:text-white hover:bg-slate-800 border-amber-500/30'
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-amber-400 fill-current" />
-              <span>Personal AI Auto Apply</span>
-              <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                Yeabsra
-              </span>
-            </button>
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('autoApply')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border ${
+                  activeTab === 'autoApply'
+                    ? 'bg-amber-400 text-slate-950 shadow-sm font-black border-amber-300'
+                    : 'text-amber-300 hover:text-white hover:bg-slate-800 border-amber-500/30'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-400 fill-current" />
+                <span>Personal AI Auto Apply</span>
+                <span className="text-[9px] uppercase tracking-wider font-extrabold px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                  Yeabsra
+                </span>
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab('telegram')}
@@ -525,8 +541,9 @@ export const AdminDashboard: React.FC<Props> = ({
           />
         )}
 
-        {activeTab === 'international' && (
+        {activeTab === 'international' && isYeabsraOwner && (
           <InternationalControlCenter
+            adminEmail={adminEmail}
             siteSettings={siteSettings}
             onSaveSiteSettings={onSaveSiteSettings}
             domesticVacancies={vacancies}
@@ -544,6 +561,7 @@ export const AdminDashboard: React.FC<Props> = ({
             onDeleteScholarship={onDeleteExperienceScholarship}
             onSaveResearchRun={onSaveResearchRun}
             onSaveVerificationLogs={onSaveVerificationLogs}
+            onSyncInternationalState={onSyncInternationalState}
           />
         )}
 
@@ -625,7 +643,7 @@ export const AdminDashboard: React.FC<Props> = ({
           />
         )}
 
-        {activeTab === 'autoApply' && (
+        {activeTab === 'autoApply' && isYeabsraOwner && (
           <PersonalAutoApply
             vacancies={vacancies}
             adminEmail={adminEmail}

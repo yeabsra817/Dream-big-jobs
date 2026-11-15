@@ -169,6 +169,12 @@ service cloud.firestore {
       allow get, list, update, delete: if isOwnerAdmin();
     }
 
+    function isValidApprovalFields(data) {
+      return (!('approvalStatus' in data) || (data.approvalStatus is string && data.approvalStatus in ['private_pending', 'approved_public', 'rejected', 'expired']))
+        && (!('discoveredAt' in data) || (data.discoveredAt is string && data.discoveredAt.size() <= 100))
+        && (!('verifiedAt' in data) || (data.verifiedAt is string && data.verifiedAt.size() <= 100));
+    }
+
     function isValidInternationalJobWrite(data) {
       return data.id is string && data.id.size() <= 128
         && data.country is string && data.country.size() <= 100
@@ -176,7 +182,8 @@ service cloud.firestore {
         && data.jobTitle is string && data.jobTitle.size() <= 250
         && data.directApplicationUrl is string && data.directApplicationUrl.size() <= 1000
         && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
-        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS']
+        && isValidApprovalFields(data);
     }
 
     function isValidImmigrationWrite(data) {
@@ -185,7 +192,8 @@ service cloud.firestore {
         && data.pathwayTitle is string && data.pathwayTitle.size() <= 250
         && data.officialGovernmentWebsite is string && data.officialGovernmentWebsite.size() <= 1000
         && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
-        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS']
+        && isValidApprovalFields(data);
     }
 
     function isValidScholarshipWrite(data) {
@@ -195,26 +203,27 @@ service cloud.firestore {
         && data.scholarshipName is string && data.scholarshipName.size() <= 250
         && data.officialApplicationUrl is string && data.officialApplicationUrl.size() <= 1000
         && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
-        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS']
+        && isValidApprovalFields(data);
     }
 
-    // International Jobs Collection (Public can only read VERIFIED open entries; expired/broken entries use non-VERIFIED statuses)
+    // International Jobs Collection (Public can only read VERIFIED and approved_public entries; private_pending entries are strictly Yeabsra-only)
     match /international_jobs/{jobId} {
-      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow get, list: if ((resource.data.verificationStatus == 'VERIFIED') && (!('approvalStatus' in resource.data) || resource.data.approvalStatus == 'approved_public')) || isOwnerAdmin();
       allow create, update: if isOwnerAdmin() && isValidId(jobId) && isValidInternationalJobWrite(request.resource.data);
       allow delete: if isOwnerAdmin();
     }
 
-    // International Immigration & Permanent Residence Pathways (Public can only read VERIFIED entries)
+    // International Immigration & Permanent Residence Pathways (Public can only read VERIFIED and approved_public entries)
     match /immigration_pathways/{pathwayId} {
-      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow get, list: if ((resource.data.verificationStatus == 'VERIFIED') && (!('approvalStatus' in resource.data) || resource.data.approvalStatus == 'approved_public')) || isOwnerAdmin();
       allow create, update: if isOwnerAdmin() && isValidId(pathwayId) && isValidImmigrationWrite(request.resource.data);
       allow delete: if isOwnerAdmin();
     }
 
-    // Experience-Based Scholarships (Public can only read VERIFIED open entries; expired/broken entries use non-VERIFIED statuses)
+    // Experience-Based Scholarships (Public can only read VERIFIED and approved_public entries)
     match /experience_scholarships/{scholarshipId} {
-      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow get, list: if ((resource.data.verificationStatus == 'VERIFIED') && (!('approvalStatus' in resource.data) || resource.data.approvalStatus == 'approved_public')) || isOwnerAdmin();
       allow create, update: if isOwnerAdmin() && isValidId(scholarshipId) && isValidScholarshipWrite(request.resource.data);
       allow delete: if isOwnerAdmin();
     }

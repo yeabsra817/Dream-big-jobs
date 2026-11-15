@@ -27,10 +27,17 @@ import {
   BulkImportStats,
   DuplicateReportItem,
   JobCategoryName,
+  TelegramDistributionMode,
 } from '../../types/job';
 import { SAMPLE_BULK_PASTE_DATA } from '../../utils/helpers';
 import { VacancyDetailModal } from '../VacancyDetailModal';
-import { evaluateVacancyForTelegramClient } from '../../utils/telegramClient';
+import {
+  evaluateVacancyForTelegramClient,
+  classifyVacancyBroadSectorClient,
+  isWashNgoVacancyClient,
+  isVacancyDeadlineExpiredClient,
+  getTelegramDistributionModeLabel,
+} from '../../utils/telegramClient';
 
 interface Props {
   existingVacancies: Vacancy[];
@@ -64,6 +71,9 @@ export const BulkImportSystem: React.FC<Props> = ({
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('All');
   const [previewVacancy, setPreviewVacancy] = useState<Vacancy | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [telegramOption, setTelegramOption] = useState<TelegramDistributionMode>(
+    siteSettings?.telegramDistributionMode || 'all_jobs'
+  );
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -165,8 +175,9 @@ export const BulkImportSystem: React.FC<Props> = ({
       let telegramNote = '';
       try {
         const channel = siteSettings?.telegramChannelName || '@DreamBigJobsEthiopia';
+        const effectiveSettings = { ...siteSettings, telegramDistributionMode: telegramOption };
         const eligibleForTelegram = toPublish.filter(
-          (v) => evaluateVacancyForTelegramClient(v, siteSettings, false, 'vacancy').allowed
+          (v) => evaluateVacancyForTelegramClient(v, effectiveSettings, false, 'vacancy').allowed
         );
         const tgRes = await fetch('/api/admin/batch-telegram-publish', {
           method: 'POST',
@@ -174,7 +185,7 @@ export const BulkImportSystem: React.FC<Props> = ({
           body: JSON.stringify({
             vacancies: eligibleForTelegram,
             channelName: channel,
-            distributionMode: siteSettings?.telegramDistributionMode || 'all_jobs',
+            distributionMode: telegramOption,
           }),
         });
         const tgData = await tgRes.json();
@@ -271,7 +282,16 @@ export const BulkImportSystem: React.FC<Props> = ({
       }
 
       // Step 3: Populate organized vacancies & duplicate report
-      setExtractedVacancies(dupData.validCandidates);
+      const enrichedValid: Vacancy[] = (dupData.validCandidates || []).map((v: Vacancy) => {
+        const broad = v.broadCategory || classifyVacancyBroadSectorClient(v);
+        const wash = typeof v.isWashNgo === 'boolean' ? v.isWashNgo : isWashNgoVacancyClient(v);
+        const expired =
+          typeof v.isExpired === 'boolean'
+            ? v.isExpired
+            : v.status === 'expired' || isVacancyDeadlineExpiredClient(v.applicationDeadline);
+        return { ...v, broadCategory: broad, isWashNgo: wash, isExpired: expired };
+      });
+      setExtractedVacancies(enrichedValid);
       setDuplicateReports(dupData.duplicatesReport);
       setStats(dupData.stats);
 
@@ -355,8 +375,9 @@ export const BulkImportSystem: React.FC<Props> = ({
       if (siteSettings?.telegramAutoPublish) {
         try {
           const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
+          const effectiveSettings = { ...siteSettings, telegramDistributionMode: telegramOption };
           const eligibleForTelegram = toPublish.filter(
-            (v) => evaluateVacancyForTelegramClient(v, siteSettings, false, 'vacancy').allowed
+            (v) => evaluateVacancyForTelegramClient(v, effectiveSettings, false, 'vacancy').allowed
           );
           const tgRes = await fetch('/api/admin/batch-telegram-publish', {
             method: 'POST',
@@ -364,7 +385,7 @@ export const BulkImportSystem: React.FC<Props> = ({
             body: JSON.stringify({
               vacancies: eligibleForTelegram,
               channelName: channel,
-              distributionMode: siteSettings.telegramDistributionMode || 'all_jobs',
+              distributionMode: telegramOption,
             }),
           });
           const tgData = await tgRes.json();
@@ -515,6 +536,34 @@ export const BulkImportSystem: React.FC<Props> = ({
           placeholder="Paste raw vacancy announcements from newspapers, Telegram channels, company websites, or official PDFs...&#10;&#10;Example:&#10;Commercial Bank of Ethiopia&#10;Position: Senior Risk Officer&#10;Location: Addis Ababa&#10;Deadline: 2026-11-20...&#10;&#10;The AI will automatically separate, classify, and format each vacancy without any manual splitting needed."
           className="w-full text-xs font-mono p-4 rounded-2xl border border-slate-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 leading-relaxed outline-none"
         />
+
+        {/* Telegram Publishing Option Selector (System 1 Only) */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="font-bold text-slate-800">
+            Telegram Broadcast Filter ({getTelegramDistributionModeLabel(telegramOption)}):
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { id: 'all_jobs' as TelegramDistributionMode, label: 'A. ALL JOBS' },
+              { id: 'banking_only' as TelegramDistributionMode, label: 'B. BANKING JOBS ONLY' },
+              { id: 'ngo_only' as TelegramDistributionMode, label: 'C. NGO JOBS ONLY' },
+              { id: 'banking_and_ngo_only' as TelegramDistributionMode, label: 'D. BANKING AND NGO JOBS ONLY' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setTelegramOption(opt.id)}
+                className={`px-2.5 py-1 rounded-lg font-extrabold text-[11px] border transition-colors ${
+                  telegramOption === opt.id
+                    ? 'bg-[#0B132B] text-amber-400 border-[#0B132B]'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Process Action Bar */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
@@ -782,9 +831,30 @@ export const BulkImportSystem: React.FC<Props> = ({
                     <div className="flex-1 space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
+                          {(vacancy.isWashNgo || isWashNgoVacancyClient(vacancy)) && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-400">
+                              🟢⭐ WASH JOB
+                            </span>
+                          )}
                           <span className="font-bold text-sm text-[#0B132B]">
                             {vacancy.title}
                           </span>
+                          <span
+                            className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                              (vacancy.broadCategory || classifyVacancyBroadSectorClient(vacancy)) === 'Banking'
+                                ? 'bg-sky-50 text-sky-900 border-sky-300'
+                                : (vacancy.broadCategory || classifyVacancyBroadSectorClient(vacancy)) === 'NGO'
+                                ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                                : 'bg-slate-100 text-slate-700 border-slate-300'
+                            }`}
+                          >
+                            {vacancy.broadCategory || classifyVacancyBroadSectorClient(vacancy)}
+                          </span>
+                          {(vacancy.isExpired || isVacancyDeadlineExpiredClient(vacancy.applicationDeadline)) && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300">
+                              EXPIRED
+                            </span>
+                          )}
                           <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
                             {vacancy.organization}
                           </span>

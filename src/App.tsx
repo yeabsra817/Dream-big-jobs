@@ -86,6 +86,8 @@ import {
   saveResearchHistoryRun,
   fetchVerificationLogs,
   saveBatchVerificationLogs,
+  setActiveAdminSessionEmail,
+  fetchInternationalStateFromServer,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
@@ -348,9 +350,11 @@ export default function App() {
         if (isUserAdmin(user)) {
           setIsOwnerAuthorized(true);
           setAdminEmail(user.email);
+          setActiveAdminSessionEmail(user.email || ADMIN_EMAIL);
         } else {
           setIsOwnerAuthorized(false);
           setAdminEmail(null);
+          setActiveAdminSessionEmail(null);
         }
 
         // Load Job Seeker Profile & Applications
@@ -520,14 +524,17 @@ export default function App() {
           setResearchHistory(historyRuns);
           setVerificationLogs(verLogs);
 
-          const freq = freshSettings?.researchFrequency || siteSettings.researchFrequency || 'manual';
-          if (freq !== 'manual') {
-            fetch('/api/international/auto-run-check', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ researchFrequency: freq }),
-            }).catch(() => {});
-          }
+          // Pull latest private server state from the autonomous 30s System 2 scheduler
+          fetchInternationalStateFromServer(true)
+            .then((srv) => {
+              if (!srv) return;
+              if (Array.isArray(srv.internationalJobs)) setInternationalJobs(srv.internationalJobs);
+              if (Array.isArray(srv.immigrationPathways)) setImmigrationPathways(srv.immigrationPathways);
+              if (Array.isArray(srv.experienceScholarships)) setExperienceScholarships(srv.experienceScholarships);
+              if (Array.isArray(srv.researchHistory)) setResearchHistory(srv.researchHistory);
+              if (Array.isArray(srv.verificationLogs)) setVerificationLogs(srv.verificationLogs);
+            })
+            .catch(() => {});
         })
         .catch((err) => console.warn('Admin data load error:', err));
     }
@@ -1058,6 +1065,21 @@ export default function App() {
     await saveBatchVerificationLogs(logs);
   };
 
+  const handleSyncInternationalState = (srv: {
+    internationalJobs?: InternationalJob[];
+    immigrationPathways?: ImmigrationPathway[];
+    experienceScholarships?: ExperienceScholarship[];
+    researchHistory?: ResearchHistoryRun[];
+    verificationLogs?: VerificationReportItem[];
+  }) => {
+    if (!srv) return;
+    if (Array.isArray(srv.internationalJobs)) setInternationalJobs(srv.internationalJobs);
+    if (Array.isArray(srv.immigrationPathways)) setImmigrationPathways(srv.immigrationPathways);
+    if (Array.isArray(srv.experienceScholarships)) setExperienceScholarships(srv.experienceScholarships);
+    if (Array.isArray(srv.researchHistory)) setResearchHistory(srv.researchHistory);
+    if (Array.isArray(srv.verificationLogs)) setVerificationLogs(srv.verificationLogs);
+  };
+
   const handleSelectCategoryByName = (categoryName: string) => {
     const meta = OFFICIAL_CATEGORIES.find((c) => c.name === categoryName);
     if (meta) {
@@ -1076,6 +1098,8 @@ export default function App() {
           adminEmail={adminEmail}
           onLogout={async () => {
             await signOut(auth);
+            setActiveAdminSessionEmail(null);
+            setAdminEmail(null);
             setIsOwnerAuthorized(false);
             setIsAdminView(false);
           }}
@@ -1106,6 +1130,7 @@ export default function App() {
           onDeleteExperienceScholarship={handleDeleteExperienceScholarship}
           onSaveResearchRun={handleSaveResearchRun}
           onSaveVerificationLogs={handleSaveVerificationLogs}
+          onSyncInternationalState={handleSyncInternationalState}
         />
       </Suspense>
     );
@@ -2416,6 +2441,7 @@ export default function App() {
             isOpen={isAdminAuthModalOpen}
             onClose={() => setIsAdminAuthModalOpen(false)}
             onLoginSuccess={(email) => {
+              setActiveAdminSessionEmail(email);
               setIsOwnerAuthorized(true);
               setAdminEmail(email);
               setIsAdminView(true);

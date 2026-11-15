@@ -31,6 +31,8 @@ import {
   broadcastJobToTelegram,
   maskTelegramToken,
   LOCAL_STORAGE_TOKEN_KEY,
+  isWashNgoVacancyClient,
+  getTelegramDistributionModeLabel,
 } from '../../utils/telegramClient';
 
 interface Props {
@@ -408,12 +410,7 @@ export const TelegramSettings: React.FC<Props> = ({
         updatedAt: new Date().toISOString(),
       };
       await onSaveSettings(newSettings);
-      const modeLabel =
-        distributionMode === 'banking_only'
-          ? 'OPTION B: BANKING JOBS ONLY'
-          : distributionMode === 'ngo_only'
-          ? 'OPTION C: NGO JOBS ONLY'
-          : 'OPTION A: ALL JOBS';
+      const modeLabel = getTelegramDistributionModeLabel(distributionMode);
       setFeedbackMessage({
         type: 'success',
         text: `Settings saved! Target channel: ${cleanChan}. Mode: ${modeLabel}. Domain: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
@@ -897,34 +894,46 @@ export const TelegramSettings: React.FC<Props> = ({
                 </p>
               </div>
               <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0B132B] text-amber-300 shrink-0">
-                Active:{' '}
-                {distributionMode === 'banking_only'
-                  ? 'OPTION B: BANKING ONLY'
-                  : distributionMode === 'ngo_only'
-                  ? 'OPTION C: NGO ONLY'
-                  : 'OPTION A: ALL JOBS'}
+                Active: {getTelegramDistributionModeLabel(distributionMode)}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900 font-semibold flex flex-wrap items-center justify-between gap-2">
+              <span>
+                🟢⭐ <strong>Mandatory WASH NGO Rule:</strong> Any genuine WASH-related NGO vacancy published under Option A, C, or D automatically receives{' '}
+                <code className="px-1.5 py-0.5 bg-white rounded border border-emerald-300 font-extrabold text-emerald-800">🟢⭐ WASH JOB</code>{' '}
+                before its title. Under Option B (Banking Only), NGO &amp; WASH jobs are strictly excluded.
+              </span>
+              <span className="text-[10px] font-bold text-slate-600">
+                Applies to System 1 (Telegram/Bulk) only — never controls System 2.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 {
                   id: 'all_jobs' as TelegramDistributionMode,
                   code: 'OPTION A',
                   title: 'ALL JOBS',
-                  desc: 'Publish all verified job vacancies that meet Hopeland website publication standards and have open deadlines.',
+                  desc: 'Publish every eligible verified vacancy across all sectors.',
                 },
                 {
                   id: 'banking_only' as TelegramDistributionMode,
                   code: 'OPTION B',
                   title: 'BANKING JOBS ONLY',
-                  desc: 'Publish only genuine commercial bank, microfinance, and banking institution vacancies.',
+                  desc: 'Publish banking & financial institution vacancies only. Excludes NGO and WASH jobs.',
                 },
                 {
                   id: 'ngo_only' as TelegramDistributionMode,
                   code: 'OPTION C',
                   title: 'NGO JOBS ONLY',
-                  desc: 'Publish only genuine local NGO, international NGO, UN agency, and diplomatic mission vacancies.',
+                  desc: 'Publish NGO, INGO & UN vacancies only (qualifying WASH jobs carry 🟢⭐ WASH JOB).',
+                },
+                {
+                  id: 'banking_and_ngo_only' as TelegramDistributionMode,
+                  code: 'OPTION D',
+                  title: 'BANKING & NGO ONLY',
+                  desc: 'Publish banking and NGO vacancies together, excluding all other categories.',
                 },
               ].map((opt) => {
                 const active = distributionMode === opt.id;
@@ -1114,6 +1123,11 @@ export const TelegramSettings: React.FC<Props> = ({
                 <span className="font-mono text-slate-400">hopelandjobs.tech</span>
               </div>
               <div className="space-y-2 leading-relaxed text-[11px]">
+                {isWashNgoVacancyClient(activeBroadcastVacancy) && (
+                  <p className="inline-block font-black text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded">
+                    🟢⭐ WASH JOB
+                  </p>
+                )}
                 <p className="font-bold text-base text-white">Vacancy at {activeBroadcastVacancy.organization || 'Ethiopian Employer'}</p>
                 <p className="text-slate-200">
                   🔰 <strong>{activeBroadcastVacancy.organization || 'Employer'}</strong> invites qualified applicants for the <strong>{activeBroadcastVacancy.title || 'Various'}</strong> position.

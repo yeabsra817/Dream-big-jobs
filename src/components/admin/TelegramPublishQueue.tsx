@@ -22,13 +22,18 @@ import {
   Calendar,
   Layers,
   Check,
+  FileUp,
+  FileText,
+  Upload,
 } from 'lucide-react';
 import {
   Vacancy,
   SiteSettings,
   TelegramBatchRecord,
   TelegramPostStatus,
+  TelegramDistributionMode,
   OFFICIAL_CATEGORIES,
+  DuplicateReportItem,
 } from '../../types/job';
 import {
   fetchTelegramBatches,
@@ -39,6 +44,10 @@ import { VacancyDetailModal } from '../VacancyDetailModal';
 import {
   broadcastJobToTelegram,
   evaluateVacancyForTelegramClient,
+  classifyVacancyBroadSectorClient,
+  isWashNgoVacancyClient,
+  isVacancyDeadlineExpiredClient,
+  getTelegramDistributionModeLabel,
 } from '../../utils/telegramClient';
 
 interface Props {
@@ -95,11 +104,299 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   const [selectedHistoryBatch, setSelectedHistoryBatch] = useState<TelegramBatchRecord | null>(null);
   const [loadingBatches, setLoadingBatches] = useState(false);
 
+  // Sub-tab inside Telegram Posting section: Live Queue vs Bulk Import (50+ Jobs)
+  const [tgSectionTab, setTgSectionTab] = useState<'queue' | 'bulkImport'>('queue');
+  const [batchPublishMode, setBatchPublishMode] = useState<TelegramDistributionMode>(
+    siteSettings.telegramDistributionMode || 'all_jobs'
+  );
+
+  // Integrated Bulk Import (50+ Vacancies) Workflow State
+  const [bulkRawText, setBulkRawText] = useState('');
+  const [isBulkParsing, setIsBulkParsing] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkParsedVacancies, setBulkParsedVacancies] = useState<Vacancy[]>([]);
+  const [bulkDuplicatesReport, setBulkDuplicatesReport] = useState<DuplicateReportItem[]>([]);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkSummaryStats, setBulkSummaryStats] = useState<{
+    totalDetected: number;
+    validCount: number;
+    duplicatesSkipped: number;
+    expiredCount: number;
+    bankingCount: number;
+    ngoCount: number;
+    washCount: number;
+    otherCount: number;
+  } | null>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
+
   // Feedback Notification
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (siteSettings.telegramDistributionMode) {
+      setBatchPublishMode(siteSettings.telegramDistributionMode);
+    }
+  }, [siteSettings.telegramDistributionMode]);
+
+  const effectiveQueueSettings = useMemo<SiteSettings>(
+    () => ({
+      ...siteSettings,
+      telegramDistributionMode: batchPublishMode,
+    }),
+    [siteSettings, batchPublishMode]
+  );
+
+  const handleBulkFileUploadInTg = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsBulkUploading(true);
+    setNotification(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await fetch('/api/upload-file', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || data?.error) {
+        setNotification({ type: 'error', message: data?.error || 'Failed to read uploaded file.' });
+      } else {
+        setBulkRawText((prev) => (prev ? `${prev}\n\n${data.text}` : data.text));
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: 'Upload error: ' + err.message });
+    } finally {
+      setIsBulkUploading(false);
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
+    }
+  };
+
+  const handleParseBulkInTg = async () => {
+    if (!bulkRawText.trim()) {
+      setNotification({ type: 'error', message: 'Paste 50+ vacancy announcements or upload a document first.' });
+      return;
+    }
+    setIsBulkParsing(true);
+    setNotification(null);
+    try {
+      const parseRes = await fetch('/api/gemini/parse-bulk-vacancies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: bulkRawText }),
+      });
+      const parseData = await parseRes.json();
+      if (!parseRes.ok || !parseData?.success) {
+        throw new Error(parseData?.error || 'Bulk vacancy extraction failed.');
+      }
+
+      const dupRes = await fetch('/api/admin/detect-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidates: parseData.vacancies || [],
+          existingVacancies: vacancies,
+        }),
+      });
+      const dupData = await dupRes.json();
+      if (!dupRes.ok || !dupData?.success) {
+        throw new Error(dupData?.error || 'Duplicate screening failed.');
+      }
+
+      const validList: Vacancy[] = (dupData.validCandidates || []).map((v: Vacancy) => {
+        const broad = v.broadCategory || classifyVacancyBroadSectorClient(v);
+        const wash = typeof v.isWashNgo === 'boolean' ? v.isWashNgo : isWashNgoVacancyClient(v);
+        const expiredFlag =
+          typeof v.isExpired === 'boolean'
+            ? v.isExpired
+            : v.status === 'expired' || isVacancyDeadlineExpiredClient(v.applicationDeadline);
+        return {
+          ...v,
+          broadCategory: broad,
+          isWashNgo: wash,
+          isExpired: expiredFlag,
+          status: expiredFlag ? ('expired' as const) : ('published' as const),
+          publishedAt: v.publishedAt || new Date().toISOString(),
+        };
+      });
+
+      const dups: DuplicateReportItem[] = dupData.duplicatesReport || [];
+      setBulkParsedVacancies(validList);
+      setBulkDuplicatesReport(dups);
+      setBulkSelectedIds(new Set(validList.filter((v) => !v.isExpired).map((v) => v.id)));
+
+      const bankingCount = validList.filter((v) => v.broadCategory === 'Banking').length;
+      const ngoCount = validList.filter((v) => v.broadCategory === 'NGO').length;
+      const washCount = validList.filter((v) => v.isWashNgo).length;
+      const otherCount = validList.filter((v) => v.broadCategory === 'Other').length;
+      const expiredCount = validList.filter((v) => v.isExpired).length;
+
+      setBulkSummaryStats({
+        totalDetected: (parseData.vacancies || []).length,
+        validCount: validList.length,
+        duplicatesSkipped: dups.length,
+        expiredCount,
+        bankingCount,
+        ngoCount,
+        washCount,
+        otherCount,
+      });
+
+      setNotification({
+        type: 'success',
+        message: `Parsed ${validList.length} verified vacancies (${bankingCount} Banking, ${ngoCount} NGO incl. ${washCount} 🟢⭐ WASH, ${otherCount} Other; ${dups.length} duplicates & ${expiredCount} expired flagged). Review below and select Option A–D to publish.`,
+      });
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.message || 'Bulk parse failed.' });
+    } finally {
+      setIsBulkParsing(false);
+    }
+  };
+
+  const getBulkEligibleByOption = (list: Vacancy[], mode: TelegramDistributionMode) => {
+    const tempSettings: Partial<SiteSettings> = {
+      ...siteSettings,
+      telegramDistributionMode: mode,
+    };
+    return list.filter((v) => evaluateVacancyForTelegramClient(v, tempSettings, false, 'vacancy').allowed);
+  };
+
+  const handleSaveAndPublishBulkBatch = async (publishToTelegram: boolean) => {
+    const selected = bulkParsedVacancies.filter((v) => bulkSelectedIds.has(v.id));
+    if (selected.length === 0) {
+      setNotification({ type: 'error', message: 'Select at least one non-expired vacancy in the review table.' });
+      return;
+    }
+    setIsBatchRunning(true);
+    isBatchCancelledRef.current = false;
+    setNotification(null);
+
+    try {
+      if (onBatchUpdateVacancies) {
+        await onBatchUpdateVacancies(selected);
+      } else {
+        for (const item of selected) {
+          await onUpdateVacancy(item);
+        }
+      }
+
+      if (!publishToTelegram) {
+        setNotification({
+          type: 'success',
+          message: `Saved ${selected.length} imported vacancies to Hopeland Website without sending to Telegram.`,
+        });
+        setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
+        setBulkSelectedIds(new Set());
+        return;
+      }
+
+      const eligible = getBulkEligibleByOption(selected, batchPublishMode);
+      const excludedCount = selected.length - eligible.length;
+      if (eligible.length === 0) {
+        setNotification({
+          type: 'info',
+          message: `Saved ${selected.length} jobs to Hopeland Website. 0 vacancies matched ${getTelegramDistributionModeLabel(batchPublishMode)} with open deadlines/application method.`,
+        });
+        return;
+      }
+
+      setBatchProgress({
+        current: 0,
+        total: eligible.length,
+        currentTitle: `Publishing ${eligible.length} jobs under ${getTelegramDistributionModeLabel(batchPublishMode)}...`,
+      });
+
+      const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
+      let successCount = 0;
+      let failedCount = 0;
+      let washLabeledCount = 0;
+      const batchJobHistory: TelegramBatchRecord['jobs'] = [];
+
+      for (let i = 0; i < eligible.length; i++) {
+        if (isBatchCancelledRef.current) break;
+        const job = eligible[i];
+        setBatchProgress({
+          current: i + 1,
+          total: eligible.length,
+          currentTitle: `Posting (${i + 1}/${eligible.length}): ${isWashNgoVacancyClient(job) ? '🟢⭐ WASH JOB — ' : ''}${job.title}`,
+        });
+
+        const res = await broadcastJobToTelegram(
+          job,
+          channel,
+          siteSettings.telegramBotToken,
+          false,
+          siteSettings.customDomain,
+          effectiveQueueSettings,
+          'vacancy'
+        );
+
+        if (res.success) {
+          successCount++;
+          if (isWashNgoVacancyClient(job)) washLabeledCount++;
+          const publishedAt = res.telegramPublishedAt || new Date().toISOString();
+          await onUpdateVacancy({
+            ...job,
+            telegramPublished: true,
+            telegramMessageId: res.telegramMessageId,
+            telegramPublishedAt: publishedAt,
+            telegramPublishError: '',
+            updatedAt: new Date().toISOString(),
+          });
+          batchJobHistory.push({
+            vacancyId: job.id,
+            title: job.title,
+            organization: job.organization,
+            category: job.category,
+            status: 'success',
+            telegramMessageId: res.telegramMessageId,
+            postedAt: publishedAt,
+          });
+        } else {
+          failedCount++;
+          batchJobHistory.push({
+            vacancyId: job.id,
+            title: job.title,
+            organization: job.organization,
+            category: job.category,
+            status: 'failed',
+            error: res.error || 'Telegram broadcast error',
+          });
+        }
+
+        if (i < eligible.length - 1 && !isBatchCancelledRef.current) {
+          await new Promise((r) => setTimeout(r, 1100));
+        }
+      }
+
+      try {
+        await saveTelegramBatch({
+          id: `batch_tg_import_${Date.now()}`,
+          name: `${getTelegramDistributionModeLabel(batchPublishMode)} (${eligible.length} Jobs)`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          totalCount: eligible.length,
+          successCount,
+          failedCount,
+          status: failedCount === 0 ? 'completed' : successCount > 0 ? 'partially_failed' : 'draft',
+          jobs: batchJobHistory,
+        });
+        await loadBatches();
+      } catch {}
+
+      setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
+      setBulkSelectedIds(new Set());
+      setNotification({
+        type: successCount > 0 ? 'success' : 'error',
+        message: `Completed (${getTelegramDistributionModeLabel(batchPublishMode)}): ${successCount} published to Telegram (${washLabeledCount} with 🟢⭐ WASH JOB), ${failedCount} failed, ${excludedCount} excluded by category filter.`,
+      });
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.message || 'Batch import/publish failed.' });
+    } finally {
+      setIsBatchRunning(false);
+      setBatchProgress(null);
+    }
+  };
 
   // Load saved batches
   const loadBatches = async () => {
@@ -316,7 +613,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         siteSettings.telegramBotToken,
         forceRetry,
         siteSettings.customDomain,
-        siteSettings,
+        effectiveQueueSettings,
         'vacancy'
       );
 
@@ -684,17 +981,71 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs relative z-10">
           <div className="flex items-center gap-2 text-slate-300">
             <span className="font-bold text-amber-400">
-              Active Distribution Rule:{' '}
-              {siteSettings.telegramDistributionMode === 'banking_only'
-                ? 'OPTION B — BANKING JOBS ONLY'
-                : siteSettings.telegramDistributionMode === 'ngo_only'
-                ? 'OPTION C — NGO JOBS ONLY'
-                : 'OPTION A — ALL JOBS'}
+              Active Distribution Rule: {getTelegramDistributionModeLabel(batchPublishMode)}
             </span>
           </div>
           <span className="text-[11px] text-slate-400">
-            Pre-publish gatekeeper enforces verified status, open deadline, official application method &amp; duplicate check.
+            System 1 (Telegram &amp; Bulk Import) is completely independent from System 2 Private International Research.
           </span>
+        </div>
+      </div>
+
+      {/* Sub-Tabs inside Telegram Posting Section */}
+      <div className="bg-white rounded-2xl p-2 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTgSectionTab('queue')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-colors flex items-center gap-2 ${
+              tgSectionTab === 'queue'
+                ? 'bg-[#0B132B] text-amber-400 shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Live Broadcast Queue ({vacancies.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTgSectionTab('bulkImport')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-colors flex items-center gap-2 ${
+              tgSectionTab === 'bulkImport'
+                ? 'bg-[#0B132B] text-amber-400 shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Bulk Vacancy Import (50+ Jobs) &amp; WASH/Category Publisher</span>
+            {bulkParsedVacancies.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
+                {bulkParsedVacancies.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* 4 Telegram Publishing Options Selector (System 1 Only) */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="font-bold text-slate-500 mr-1">Telegram Rule:</span>
+          {[
+            { id: 'all_jobs' as TelegramDistributionMode, label: 'A. ALL JOBS' },
+            { id: 'banking_only' as TelegramDistributionMode, label: 'B. BANKING ONLY' },
+            { id: 'ngo_only' as TelegramDistributionMode, label: 'C. NGO ONLY' },
+            { id: 'banking_and_ngo_only' as TelegramDistributionMode, label: 'D. BANKING & NGO ONLY' },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setBatchPublishMode(opt.id)}
+              className={`px-2.5 py-1 rounded-lg font-extrabold border transition-colors ${
+                batchPublishMode === opt.id
+                  ? 'bg-amber-400 text-slate-950 border-amber-500'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -765,7 +1116,256 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Control Bar: Presets & Batch Actions */}
+      {/* INTEGRATED BULK VACANCY IMPORT WORKFLOW (50+ VACANCIES) INSIDE TELEGRAM POSTING */}
+      {tgSectionTab === 'bulkImport' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-[#0B132B] flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-amber-500" />
+                  <span>Bulk Vacancy Import &amp; Telegram Batch Publisher (50–100+ Jobs)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Paste or import 50+ vacancies in one operation. Extracts Title, Employer, Location, Qualifications, Experience, Deadline &amp; Application Method, classifies Banking / NGO / Other, detects genuine WASH NGO jobs (<code>🟢⭐ WASH JOB</code>), and screens duplicates &amp; expired deadlines.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <input
+                  type="file"
+                  ref={bulkFileInputRef}
+                  onChange={handleBulkFileUploadInTg}
+                  accept=".txt,.docx,.pdf"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => bulkFileInputRef.current?.click()}
+                  disabled={isBulkUploading || isBulkParsing}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-300"
+                >
+                  <FileUp className="w-4 h-4 text-amber-600" />
+                  <span>{isBulkUploading ? 'Reading File...' : 'Import TXT / DOCX / PDF'}</span>
+                </button>
+              </div>
+            </div>
+
+            <textarea
+              rows={9}
+              value={bulkRawText}
+              onChange={(e) => setBulkRawText(e.target.value)}
+              placeholder="Paste 50+ job vacancies here separated by blank lines or headings (Company, Position, Location, Qualifications, Experience, Deadline, Application Method/URL/Email)..."
+              className="w-full text-xs font-mono p-4 rounded-2xl border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none leading-relaxed"
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+              <div className="text-xs text-slate-500 font-medium">
+                {bulkRawText.length > 0
+                  ? `${bulkRawText.length} chars pasted • Ready for single-pass bulk extraction`
+                  : 'Supports 50, 100 or more vacancies in a single operation'}
+              </div>
+              <div className="flex items-center gap-2">
+                {bulkRawText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkRawText('');
+                      setBulkParsedVacancies([]);
+                      setBulkDuplicatesReport([]);
+                      setBulkSummaryStats(null);
+                      setBulkSelectedIds(new Set());
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleParseBulkInTg}
+                  disabled={isBulkParsing || !bulkRawText.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-900 text-amber-400 font-black text-xs shadow-sm disabled:opacity-50"
+                >
+                  <Sparkles className={`w-4 h-4 ${isBulkParsing ? 'animate-spin' : ''}`} />
+                  <span>{isBulkParsing ? 'Parsing & Classifying Batch...' : 'Read, Classify & Screen Duplicates/Expired'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {bulkSummaryStats && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 text-center">
+              {[
+                { label: 'Detected', value: bulkSummaryStats.totalDetected, cls: 'bg-white border-slate-200 text-slate-900' },
+                { label: 'New Valid', value: bulkSummaryStats.validCount, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' },
+                { label: 'Banking', value: bulkSummaryStats.bankingCount, cls: 'bg-sky-50 border-sky-200 text-sky-900' },
+                { label: 'NGO Total', value: bulkSummaryStats.ngoCount, cls: 'bg-indigo-50 border-indigo-200 text-indigo-900' },
+                { label: '🟢⭐ WASH NGO', value: bulkSummaryStats.washCount, cls: 'bg-emerald-100 border-emerald-400 text-emerald-950' },
+                { label: 'Other', value: bulkSummaryStats.otherCount, cls: 'bg-slate-50 border-slate-200 text-slate-700' },
+                { label: 'Duplicates', value: bulkSummaryStats.duplicatesSkipped, cls: 'bg-amber-50 border-amber-300 text-amber-900' },
+                { label: 'Expired', value: bulkSummaryStats.expiredCount, cls: 'bg-rose-50 border-rose-300 text-rose-900' },
+              ].map((stat) => (
+                <div key={stat.label} className={`p-3 rounded-2xl border ${stat.cls}`}>
+                  <div className="text-xl font-black">{stat.value}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wide">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {bulkParsedVacancies.length > 0 && (
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-black text-[#0B132B]">
+                    Review Imported Batch ({bulkParsedVacancies.length} Non-Duplicate Vacancies)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Select one of the 4 Telegram Publishing Options below. WASH-related NGO vacancies automatically receive <strong className="text-emerald-700">🟢⭐ WASH JOB</strong> before the title when published under Option A, C, or D.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isBatchRunning || bulkSelectedIds.size === 0}
+                    onClick={() => handleSaveAndPublishBulkBatch(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs disabled:opacity-50"
+                  >
+                    Save {bulkSelectedIds.size} to Website Only
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isBatchRunning || bulkSelectedIds.size === 0}
+                    onClick={() => handleSaveAndPublishBulkBatch(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-sm disabled:opacity-50"
+                  >
+                    <Send className="w-4 h-4 fill-current" />
+                    <span>
+                      Publish Eligible ({getBulkEligibleByOption(bulkParsedVacancies.filter((v) => bulkSelectedIds.has(v.id)), batchPublishMode).length}) via {getTelegramDistributionModeLabel(batchPublishMode).split(':')[0]}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Publishing Options Cards inside Batch Review */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {[
+                  { id: 'all_jobs' as TelegramDistributionMode, code: 'A', title: 'ALL JOBS', desc: 'Publish every eligible verified vacancy.' },
+                  { id: 'banking_only' as TelegramDistributionMode, code: 'B', title: 'BANKING JOBS ONLY', desc: 'Banking vacancies only (excludes NGO & WASH).' },
+                  { id: 'ngo_only' as TelegramDistributionMode, code: 'C', title: 'NGO JOBS ONLY', desc: 'NGO vacancies only (WASH jobs get 🟢⭐ WASH JOB).' },
+                  { id: 'banking_and_ngo_only' as TelegramDistributionMode, code: 'D', title: 'BANKING & NGO JOBS ONLY', desc: 'Banking + NGO together, excluding Other.' },
+                ].map((opt) => {
+                  const active = batchPublishMode === opt.id;
+                  const matchCount = getBulkEligibleByOption(bulkParsedVacancies.filter((v) => bulkSelectedIds.has(v.id)), opt.id).length;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setBatchPublishMode(opt.id)}
+                      className={`text-left p-3 rounded-xl border transition-all ${
+                        active
+                          ? 'bg-[#0B132B] text-white border-amber-400 ring-2 ring-amber-400/40'
+                          : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase">
+                        <span className={active ? 'text-amber-400' : 'text-slate-500'}>OPTION {opt.code}</span>
+                        <span className={active ? 'text-emerald-300' : 'text-slate-600'}>{matchCount} eligible</span>
+                      </div>
+                      <div className="text-xs font-extrabold mt-0.5">{opt.title}</div>
+                      <p className={`text-[10px] mt-0.5 ${active ? 'text-slate-300' : 'text-slate-500'}`}>{opt.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="divide-y divide-slate-100 max-h-[540px] overflow-y-auto border border-slate-200 rounded-2xl">
+                {bulkParsedVacancies.map((v) => {
+                  const isSel = bulkSelectedIds.has(v.id);
+                  const gate = evaluateVacancyForTelegramClient(v, effectiveQueueSettings, false, 'vacancy');
+                  return (
+                    <div key={v.id} className={`p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs ${isSel ? 'bg-amber-50/30' : 'bg-white'}`}>
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSel}
+                          onChange={() =>
+                            setBulkSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(v.id)) next.delete(v.id);
+                              else next.add(v.id);
+                              return next;
+                            })
+                          }
+                          className="mt-1 w-4 h-4 accent-amber-500 cursor-pointer"
+                        />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {v.isWashNgo && (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-400">
+                                🟢⭐ WASH JOB
+                              </span>
+                            )}
+                            <span className="font-extrabold text-sm text-slate-900">{v.title}</span>
+                            <span
+                              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                v.broadCategory === 'Banking'
+                                  ? 'bg-sky-50 text-sky-900 border-sky-300'
+                                  : v.broadCategory === 'NGO'
+                                  ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                                  : 'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {v.broadCategory || classifyVacancyBroadSectorClient(v)}
+                            </span>
+                            {v.isExpired && (
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300">
+                                EXPIRED
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-slate-600 flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span><strong>Employer:</strong> {v.organization}</span>
+                            <span><strong>Location:</strong> {v.location}</span>
+                            <span><strong>Qualifications:</strong> {v.educationQualification || 'See details'}</span>
+                            <span><strong>Experience:</strong> {v.experienceYears || 'See details'}</span>
+                            <span><strong>Deadline:</strong> {v.applicationDeadline}</span>
+                            <span><strong>Method:</strong> {v.applicationMethod}</span>
+                          </div>
+                          {!gate.allowed && gate.reason && (
+                            <div className="text-[11px] font-semibold text-amber-800">{gate.reason}</div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewVacancy(v)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs shrink-0 inline-flex items-center gap-1"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Preview</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {bulkDuplicatesReport.length > 0 && (
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                  <strong>{bulkDuplicatesReport.length} Duplicates Excluded:</strong>{' '}
+                  {bulkDuplicatesReport.slice(0, 5).map((d) => `${d.candidateTitle} (${d.candidateOrg})`).join(' · ')}
+                  {bulkDuplicatesReport.length > 5 ? ` …and ${bulkDuplicatesReport.length - 5} more` : ''}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Control Bar: Presets & Batch Actions (Live Queue Tab) */}
+      {tgSectionTab === 'queue' && (
+      <>
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
         {/* Preset Selection Buttons & Primary Action */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -954,8 +1554,25 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center flex-wrap gap-2 mb-1">
+                        {(job.isWashNgo || isWashNgoVacancyClient(job)) && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-400">
+                            🟢⭐ WASH JOB
+                          </span>
+                        )}
                         <span className="font-extrabold text-sm sm:text-base text-slate-900 truncate">
                           {job.title}
+                        </span>
+
+                        <span
+                          className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                            (job.broadCategory || classifyVacancyBroadSectorClient(job)) === 'Banking'
+                              ? 'bg-sky-50 text-sky-900 border-sky-300'
+                              : (job.broadCategory || classifyVacancyBroadSectorClient(job)) === 'NGO'
+                              ? 'bg-indigo-50 text-indigo-900 border-indigo-300'
+                              : 'bg-slate-100 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          {job.broadCategory || classifyVacancyBroadSectorClient(job)}
                         </span>
 
                         {/* Status Badge */}
@@ -1017,7 +1634,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
                         </div>
                       )}
                       {(() => {
-                        const gate = evaluateVacancyForTelegramClient(job, siteSettings, true, 'vacancy');
+                        const gate = evaluateVacancyForTelegramClient(job, effectiveQueueSettings, true, 'vacancy');
                         if (!gate.allowed && gate.reason) {
                           return (
                             <div className="flex items-center gap-2 mt-1.5 text-[11px] text-amber-900 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
@@ -1083,6 +1700,8 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Duplicate Warning Confirmation Modal */}
       {duplicateWarningJob && (

@@ -46,6 +46,32 @@ export type PublicationLifecycleStatus =
   | 'Expired'
   | 'Withdrawn';
 
+export type PrivateApprovalStatus =
+  | 'private_pending'
+  | 'approved_public'
+  | 'rejected'
+  | 'expired';
+
+export interface SchedulerStatusState {
+  enabled: boolean;
+  isRunning: boolean;
+  isCycleActive: boolean;
+  intervalSeconds: number;
+  cycleCount: number;
+  startedAt: string;
+  lastRunAt: string | null;
+  lastSuccessfulRunAt: string | null;
+  nextRunAt: string | null;
+  lastError: string | null;
+  aiProviderStatus: string;
+  aiModel: string;
+  sourcesTotal: number;
+  sourcesHealthy: number;
+  sourcesFailed: number;
+  recentDiscoveredCount: number;
+  lastCycleSummary: string;
+}
+
 /**
  * 19-Field Official International Workforce Opportunity Record
  * Follows strict Anti-Fabrication rules: missing salary/details must explicitly be
@@ -88,6 +114,11 @@ export interface InternationalJob {
   lastCheckedHttpStatus?: number;
   applicationStatus: 'open' | 'closed' | 'expired' | 'unverified';
   publicationLifecycleStatus?: PublicationLifecycleStatus;
+  approvalStatus?: PrivateApprovalStatus;
+  discoveredAt?: string;
+  verifiedAt?: string;
+  aiAnalysisNotes?: string;
+  sourceName?: string;
   detectedAt?: string;
   publishedOnWebsiteAt?: string;
   isSuspicious?: boolean;
@@ -138,6 +169,11 @@ export interface ImmigrationPathway {
   lastCheckedHttpStatus?: number;
   applicationStatus: 'open' | 'paused' | 'closed' | 'unverified';
   publicationLifecycleStatus?: PublicationLifecycleStatus;
+  approvalStatus?: PrivateApprovalStatus;
+  discoveredAt?: string;
+  verifiedAt?: string;
+  aiAnalysisNotes?: string;
+  sourceName?: string;
   detectedAt?: string;
   publishedOnWebsiteAt?: string;
   isSuspicious?: boolean;
@@ -192,6 +228,11 @@ export interface ExperienceScholarship {
   lastCheckedHttpStatus?: number;
   applicationStatus: 'open' | 'closed' | 'expired' | 'unverified';
   publicationLifecycleStatus?: PublicationLifecycleStatus;
+  approvalStatus?: PrivateApprovalStatus;
+  discoveredAt?: string;
+  verifiedAt?: string;
+  aiAnalysisNotes?: string;
+  sourceName?: string;
   detectedAt?: string;
   publishedOnWebsiteAt?: string;
   isSuspicious?: boolean;
@@ -236,9 +277,9 @@ export interface VerificationReportItem {
 }
 
 export type EligibilityClassification =
-  | 'ELIGIBLE'
-  | 'POTENTIALLY ELIGIBLE – MORE INFORMATION REQUIRED'
-  | 'NOT ELIGIBLE';
+  | 'Eligible'
+  | 'Potentially eligible; more information required'
+  | 'Not eligible';
 
 export interface MonitoredSourceRecord {
   id: string;

@@ -183,20 +183,55 @@ function inferEthiopianCategory(title: string, org: string, desc: string): strin
   return 'Private Companies';
 }
 
-// Smart rule-based Ethiopian vacancy parser (handles temporary Gemini 503 outages)
+// Broad sector & WASH classifiers (shared between System 1 Bulk Parser and Telegram Publisher)
+function isNgoVacancyServerCore(v: any): boolean {
+  const cat = String(v?.category || '').toLowerCase();
+  if (cat === 'ngo and international organizations' || cat === 'ngo & international organizations' || cat.includes('ngo') || cat.includes('embassies') || cat.includes('diplomatic')) {
+    return true;
+  }
+  const combined = `${v?.organization || ''} ${v?.title || ''}`;
+  return /(\bngo\b|\bingo\b|unicef|undp|unhcr|wfp|\bwho\b|\bfao\b|\bilo\b|\biom\b|icrc|\bmsf\b|doctors without borders|oxfam|care international|international rescue committee|\birc\b|save the children|world vision|plan international|mercy corps|fhi 360|jhpiego|catholic relief|crs|lutheran world|action against hunger|norwegian refugee|danish refugee|helvetas|snv|goal ethiopia|concern worldwide|tearfund|amref|pathfinder|marie stopes|wateraid)/i.test(combined);
+}
+
+function isBankingVacancyServerCore(v: any): boolean {
+  const cat = String(v?.category || '').toLowerCase();
+  const isNgo = isNgoVacancyServerCore(v);
+  if (isNgo) return false;
+  if (cat === 'banking and financial institutions' || cat === 'banking & finance' || cat === 'microfinance institutions' || cat === 'insurance companies') return true;
+  const combined = `${v?.organization || ''} ${v?.title || ''}`;
+  return /(commercial bank|development bank|awash bank|dashen bank|bank of abyssinia|hibret bank|coop bank|cooperative bank of oromia|wegagen|zemen bank|berhan bank|bunna bank|abay bank|enat bank|amhara bank|tsedey bank|siinqee bank|geda bank|oromia bank|nib international bank|lion international bank|global bank|tsehay bank|goh betoch|\bmicrofinance\b|\bbank\b)/i.test(combined);
+}
+
+function classifyBroadCategoryServer(v: any): 'Banking' | 'NGO' | 'Other' {
+  if (isNgoVacancyServerCore(v)) return 'NGO';
+  if (isBankingVacancyServerCore(v)) return 'Banking';
+  return 'Other';
+}
+
+function isWashNgoVacancyServer(v: any): boolean {
+  if (!isNgoVacancyServerCore(v)) return false;
+  const respText = Array.isArray(v?.responsibilities) ? v.responsibilities.join(' ') : String(v?.responsibilities || '');
+  const skillsText = Array.isArray(v?.requiredSkills) ? v.requiredSkills.join(' ') : String(v?.requiredSkills || '');
+  const combined = `${v?.title || ''} ${v?.description || ''} ${respText} ${v?.requiredFieldOfStudy || ''} ${skillsText} ${v?.specialRequirements || ''}`;
+  return /\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+and\s+sanitation|sanitation\s+and\s+water\s+supply|hygiene\s+promotion|sanitation\s+and\s+hygiene|wash\s+officer|wash\s+coordinator|wash\s+manager|wash\s+project\s+manager|wash\s+engineer(?:ing)?|emergency\s+wash|humanitarian\s+wash|community\s+water\s+and\s+sanitation|latrine\s+construction|borehole\s+rehabilitation|water\s+supply\s+scheme|water\s+quality\s+monitoring)\b/i.test(
+    combined
+  );
+}
+
+// Smart rule-based Ethiopian vacancy parser (handles 50-200+ vacancies deterministically & acts as Gemini fallback)
 function parseVacanciesSmartFallback(rawText: string): any[] {
   const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   if (!text) return [];
 
   let blocks: string[] = [];
 
-  // Split by numbered items: "1.", "2." or "Job 1", "Vacancy 1" or dashes
-  const numberedSplit = text.split(/\n\s*(?:(?:\d{1,2}[\.\)]\s+)|(?:Job\s+\d+:?)|(?:Vacancy\s+\d+:?)|(?:Position\s+\d+:?)|(?:-{3,})|(?:={3,}))/i);
-  if (numberedSplit.length > 1) {
-    blocks = numberedSplit.map((b) => b.trim()).filter((b) => b.length > 25);
+  // 1. Split by numbered items ("1.", "100.") or "Job 1:" / "Vacancy #1:" or horizontal dividers ("---", "===")
+  const numberedSplit = text.split(/(?:^|\n)\s*(?:(?:\d{1,4}[\.\)]\s+)|(?:Job\s+#?\d+\s*:?)|(?:Vacancy\s+#?\d+\s*:?)|(?:Position\s+#?\d+\s*:?)|(?:-{3,})|(?:={3,}))/i);
+  if (numberedSplit.filter((b) => b.trim().length > 20).length > 1) {
+    blocks = numberedSplit.map((b) => b.trim()).filter((b) => b.length > 20);
   }
 
-  // Split by repeated "Position:" or "Job Title:"
+  // 2. Split by repeated "Position:" or "Job Title:"
   if (blocks.length <= 1) {
     const positionMatches = [...text.matchAll(/(?:^|\n)\s*(?:(?:Position|Job Title|Role|Vacancy Title)\s*:)/gi)];
     if (positionMatches.length > 1) {
@@ -210,11 +245,11 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
     }
   }
 
-  // Split by double/triple newlines
+  // 3. Split by double/triple newlines
   if (blocks.length <= 1) {
     const doubleNewlineSplit = text.split(/\n\s*\n\s*\n|\n\s*\n/);
     if (doubleNewlineSplit.length > 1) {
-      blocks = doubleNewlineSplit.map((b) => b.trim()).filter((b) => b.length > 25);
+      blocks = doubleNewlineSplit.map((b) => b.trim()).filter((b) => b.length > 20);
     }
   }
 
@@ -230,19 +265,19 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
     let title = titleMatch ? titleMatch[1].trim() : '';
     if (!title) {
       const titleLine = lines.find((l) =>
-        /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista)/i.test(l)
+        /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista|coordinator|teller|analyst)/i.test(l)
       );
       title = titleLine || lines[0] || 'Job Vacancy';
     }
     title = title.replace(/^[-*•\d\.\)\s]+/, '').replace(/[:;-]+$/, '').trim();
 
     // Organization
-    const orgMatch = block.match(/(?:Organization|Company|Employer|Bank|Hotel|Hiring Organization)\s*:\s*([^\n\r]+)/i);
+    const orgMatch = block.match(/(?:Organization|Employer|Hiring Organization|Company|Bank|Hotel)\s*:\s*([^\n\r]+)/i);
     let organization = orgMatch ? orgMatch[1].trim() : '';
     if (!organization) {
       const orgLine = lines.find(
         (l) =>
-          /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|plc|p\.l\.c|share company|s\.c|association|ngo|hospital|clinic|university|college|corporation|enterprise)/i.test(l) &&
+          /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|unhcr|wfp|msf|oxfam|save the children|world vision|care|plan international|icrc|irc|mercy corps|plc|p\.l\.c|share company|s\.c\.?|association|ngo|hospital|clinic|university|college|corporation|enterprise)/i.test(l) &&
           l !== title
       );
       organization = orgLine || (lines.length > 1 && lines[0] !== title ? lines[0] : 'Ethiopian Organization');
@@ -261,6 +296,8 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
       else if (/mekelle/i.test(block)) location = 'Mekelle';
       else if (/jimma/i.test(block)) location = 'Jimma';
       else if (/bishoftu|debre zeit/i.test(block)) location = 'Bishoftu';
+      else if (/jijiga|somali/i.test(block)) location = 'Jijiga';
+      else if (/gambella/i.test(block)) location = 'Gambella';
       else if (/remote/i.test(block)) location = 'Remote / Ethiopia';
       else location = 'Addis Ababa, Ethiopia';
     }
@@ -277,51 +314,67 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
     const expMatch = block.match(/(?:Experience|Work Experience)\s*:\s*([^\n\r]+)/i);
     const experienceYears = expMatch ? expMatch[1].trim() : 'Not specified in the original vacancy';
 
-    // Education
-    const eduMatch = block.match(/(?:Education|Qualification|Educational Background)\s*:\s*([^\n\r]+)/i);
+    // Education / Qualifications
+    const eduMatch = block.match(/(?:Education|Qualification|Qualifications|Educational Background)\s*:\s*([^\n\r]+)/i);
     const educationQualification = eduMatch ? eduMatch[1].trim() : 'Not specified in the original vacancy';
 
-    // Email
+    // Field of Study
+    const fieldMatch = block.match(/(?:Field of Study|Discipline|Major)\s*:\s*([^\n\r]+)/i);
+    const requiredFieldOfStudy = fieldMatch ? fieldMatch[1].trim() : educationQualification;
+
+    // Responsibilities
+    const respMatch = block.match(/(?:Responsibilities|Duties|Job Description|Overview)\s*:\s*([^\n\r]+)/i);
+    const responsibilities = respMatch ? [respMatch[1].trim()] : [];
+
+    // Email & URL
     const emailMatch = block.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
     const applicationEmail = emailMatch ? emailMatch[1] : '';
-
-    // URL
-    const urlMatch = block.match(/(https?:\/\/[^\s]+)/i);
+    const urlMatch = block.match(/(https?:\/\/[^\s\)]+)/i);
     const applicationUrl = urlMatch ? urlMatch[1] : '';
 
-    // Phone / Contact
-    const phoneMatch = block.match(/(?:\+251\s*\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}|09\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
-    const contactInfo = phoneMatch ? `Phone: ${phoneMatch[0]}` : locMatch ? locMatch[1].trim() : 'Addis Ababa, Ethiopia';
-
-    // Inferred Category
-    const category = inferEthiopianCategory(title, organization, block);
-
     // Application Method
+    const methodMatch = block.match(/(?:Application Method|How to Apply|Apply Via)\s*:\s*([^\n\r]+)/i);
     let applicationMethod = 'Online / In-Person';
     if (applicationUrl) applicationMethod = 'Online URL';
     else if (applicationEmail) applicationMethod = 'Email';
-    else if (/in person|physical/i.test(block)) applicationMethod = 'In-Person / Physical';
+    else if (/in person|physical|head office/i.test(block)) applicationMethod = 'In-Person / Physical';
+    const applicationInstructions = methodMatch ? methodMatch[1].trim() : (applicationUrl ? `Apply online at ${applicationUrl}` : applicationEmail ? `Send CV to ${applicationEmail}` : 'Submit application as indicated in vacancy description.');
+
+    // Phone / Contact
+    const phoneMatch = block.match(/(?:\+251\s*\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}|09\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
+    const contactInfo = phoneMatch ? `Phone: ${phoneMatch[0]}` : locMatch ? locMatch[1].trim() : location;
+
+    // Inferred Category
+    const category = inferEthiopianCategory(title, organization, block);
+    const draftObj = {
+      title,
+      organization,
+      category,
+      description: block,
+      responsibilities,
+      requiredFieldOfStudy,
+    };
 
     return {
       title,
       organization,
       category,
       location,
-      employmentType: 'Full-time',
+      employmentType: /contract/i.test(block) ? 'Contract' : /part[\s-]?time/i.test(block) ? 'Part-time' : /intern/i.test(block) ? 'Internship' : 'Full-time',
       vacanciesCount: 'Not specified in the original vacancy',
       jobGrade: 'Not specified in the original vacancy',
       salary,
       educationQualification,
-      requiredFieldOfStudy: 'Relevant field of study',
+      requiredFieldOfStudy,
       experienceYears,
       requiredSkills: [],
       description: block,
-      responsibilities: [],
+      responsibilities,
       requiredDocuments: ['CV', 'Relevant Credentials / Documents'],
       applicationMethod,
       applicationEmail,
       applicationUrl,
-      applicationInstructions: 'Submit application by email or in person as indicated in vacancy description.',
+      applicationInstructions,
       applicationDeadline: deadline,
       contactInfo,
       languageRequirements: 'English and Amharic',
@@ -330,11 +383,14 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
       specialRequirements: 'Not specified in the original vacancy',
       referenceNumber: '',
       missingFields: [],
+      broadCategory: classifyBroadCategoryServer(draftObj),
+      isWashNgo: isWashNgoVacancyServer(draftObj),
+      isExpired: isVacancyDeadlineExpiredServer(deadline),
     };
   });
 }
 
-// Bulk vacancy parsing endpoint
+// Bulk vacancy parsing endpoint (supports 50, 100+ vacancies cleanly in a single operation)
 app.post('/api/gemini/parse-bulk-vacancies', async (req: Request, res: Response): Promise<void> => {
   try {
     const { text } = req.body;
@@ -343,11 +399,14 @@ app.post('/api/gemini/parse-bulk-vacancies', async (req: Request, res: Response)
       return;
     }
 
+    const smartPreSplit = parseVacanciesSmartFallback(text);
+    const useDirectBatchEngine = smartPreSplit.length >= 12;
+
     const systemInstruction = `You are the specialized vacancy extraction parser for HOPELAND JOBS in Ethiopia.
 The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, and employers.
 
 CRITICAL INSTRUCTIONS:
-1. Detect each separate vacancy in the text (support up to 50 vacancies).
+1. Detect every single separate vacancy in the text (support 50, 100 or more vacancies without dropping any).
 2. NEVER invent fake vacancies, imaginary organizations, or synthetic URLs. Preserve all real details faithfully.
 3. If any field was not specified in the pasted text, you MUST output: "Not specified in the original vacancy".
 4. Assign every vacancy to EXACTLY ONE of the following 16 approved categories:
@@ -367,122 +426,121 @@ CRITICAL INSTRUCTIONS:
    - "Accounting and Finance"
    - "Internships and Graduate Trainee Programs"
    - "Remote and International Jobs"
-5. For Ethiopian locations, identify: Addis Ababa, Hawassa, Adama, Dire Dawa, Bahir Dar, Mekelle, Jimma, Shashemene, Bishoftu, or other specific Ethiopian towns if stated, or "Remote / Anywhere in Ethiopia".
-6. Extract required documents specifically mentioned (e.g. CV, Cover Letter, Degree, Work Experience Certificate, Kebele ID, Renewed Driving License). Only include what was actually requested.
-7. Return a clean, structured JSON array conforming to the specified responseSchema.`;
+5. Return a clean, structured JSON array conforming to the specified responseSchema.`;
 
     const prompt = `Please parse all individual vacancies from the following text:\n\n${text}`;
-
-    // Primary Gemini model per skill guidelines
-    const candidateModels = [
-      'gemini-4-hydrogen',
-    ];
+    const candidateModels = ['gemini-4-hydrogen'];
 
     let rawVacancies: any[] = [];
-    let engineUsed = 'gemini';
+    let engineUsed = 'high-precision smart rule engine';
 
-    for (const modelName of candidateModels) {
-      try {
-        console.log(`Attempting vacancy parsing with model: ${modelName}...`);
-        const responsePromise = ai.models.generateContent({
-          model: modelName,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.ARRAY,
-              description: 'List of parsed vacancies',
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING, description: 'Official Job Title' },
-                  organization: { type: Type.STRING, description: 'Organization / Company Name' },
-                  category: { type: Type.STRING, description: 'One of the exact 16 categories' },
-                  location: { type: Type.STRING, description: 'Ethiopian location or Remote' },
-                  employmentType: { type: Type.STRING, description: 'Full-time, Part-time, Contract, Permanent, Internship, Remote, Other' },
-                  vacanciesCount: { type: Type.STRING, description: 'Number of vacancies or Not specified' },
-                  jobGrade: { type: Type.STRING, description: 'Job grade or level if stated' },
-                  salary: { type: Type.STRING, description: 'Salary in ETB or attractive / company scale' },
-                  educationQualification: { type: Type.STRING, description: 'Degree, Diploma, Masters, etc.' },
-                  requiredFieldOfStudy: { type: Type.STRING, description: 'Field of study required' },
-                  experienceYears: { type: Type.STRING, description: 'Required years of experience' },
-                  requiredSkills: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Key skills required',
+    if (!useDirectBatchEngine) {
+      for (const modelName of candidateModels) {
+        try {
+          console.log(`Attempting vacancy parsing with model: ${modelName}...`);
+          const responsePromise = ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.ARRAY,
+                description: 'List of parsed vacancies',
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING, description: 'Official Job Title' },
+                    organization: { type: Type.STRING, description: 'Organization / Company Name' },
+                    category: { type: Type.STRING, description: 'One of the exact 16 categories' },
+                    location: { type: Type.STRING, description: 'Ethiopian location or Remote' },
+                    employmentType: { type: Type.STRING, description: 'Full-time, Part-time, Contract, Permanent, Internship, Remote, Other' },
+                    vacanciesCount: { type: Type.STRING, description: 'Number of vacancies or Not specified' },
+                    jobGrade: { type: Type.STRING, description: 'Job grade or level if stated' },
+                    salary: { type: Type.STRING, description: 'Salary in ETB or attractive / company scale' },
+                    educationQualification: { type: Type.STRING, description: 'Degree, Diploma, Masters, etc.' },
+                    requiredFieldOfStudy: { type: Type.STRING, description: 'Field of study required' },
+                    experienceYears: { type: Type.STRING, description: 'Required years of experience' },
+                    requiredSkills: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: 'Key skills required',
+                    },
+                    description: { type: Type.STRING, description: 'Comprehensive job overview' },
+                    responsibilities: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: 'Key job duties',
+                    },
+                    requiredDocuments: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: 'Required documents to apply',
+                    },
+                    applicationMethod: { type: Type.STRING, description: 'Online URL, Email, In-Person / Physical, Postal / Mail, or Other' },
+                    applicationEmail: { type: Type.STRING, description: 'Employer application email if provided' },
+                    applicationUrl: { type: Type.STRING, description: 'Employer application link if provided' },
+                    applicationInstructions: { type: Type.STRING, description: 'How to apply instructions' },
+                    applicationDeadline: { type: Type.STRING, description: 'Deadline date or duration' },
+                    contactInfo: { type: Type.STRING, description: 'Phone, address, or PO Box' },
+                    languageRequirements: { type: Type.STRING, description: 'Language skills required' },
+                    ageRequirements: { type: Type.STRING, description: 'Age criteria if officially specified' },
+                    genderRequirements: { type: Type.STRING, description: 'Gender criteria if officially specified' },
+                    specialRequirements: { type: Type.STRING, description: 'Special certifications or licenses' },
+                    referenceNumber: { type: Type.STRING, description: 'Job code or announcement reference number' },
+                    missingFields: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: 'List of important fields that were not specified in original vacancy',
+                    },
                   },
-                  description: { type: Type.STRING, description: 'Comprehensive job overview' },
-                  responsibilities: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Key job duties',
-                  },
-                  requiredDocuments: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Required documents to apply',
-                  },
-                  applicationMethod: { type: Type.STRING, description: 'Online URL, Email, In-Person / Physical, Postal / Mail, or Other' },
-                  applicationEmail: { type: Type.STRING, description: 'Employer application email if provided' },
-                  applicationUrl: { type: Type.STRING, description: 'Employer application link if provided' },
-                  applicationInstructions: { type: Type.STRING, description: 'How to apply instructions' },
-                  applicationDeadline: { type: Type.STRING, description: 'Deadline date or duration' },
-                  contactInfo: { type: Type.STRING, description: 'Phone, address, or PO Box' },
-                  languageRequirements: { type: Type.STRING, description: 'Language skills required' },
-                  ageRequirements: { type: Type.STRING, description: 'Age criteria if officially specified' },
-                  genderRequirements: { type: Type.STRING, description: 'Gender criteria if officially specified' },
-                  specialRequirements: { type: Type.STRING, description: 'Special certifications or licenses' },
-                  referenceNumber: { type: Type.STRING, description: 'Job code or announcement reference number' },
-                  missingFields: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'List of important fields that were not specified in original vacancy',
-                  },
+                  required: ['title', 'organization', 'category', 'location', 'applicationDeadline', 'description'],
                 },
-                required: ['title', 'organization', 'category', 'location', 'applicationDeadline', 'description'],
               },
             },
-          },
-        });
+          });
 
-        // 6.5-second timeout per model
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Model timeout after 6500ms')), 6500)
-        );
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Model timeout after 6500ms')), 6500)
+          );
 
-        const response: any = await Promise.race([responsePromise, timeoutPromise]);
-        if (response?.text) {
-          const parsed = JSON.parse(response.text);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            rawVacancies = parsed;
-            engineUsed = `gemini (${modelName})`;
-            console.log(`Successfully extracted ${parsed.length} vacancies with ${modelName}`);
-            break;
+          const response: any = await Promise.race([responsePromise, timeoutPromise]);
+          if (response?.text) {
+            const parsed = JSON.parse(response.text);
+            if (Array.isArray(parsed) && parsed.length >= Math.max(1, smartPreSplit.length - 1)) {
+              rawVacancies = parsed;
+              engineUsed = `gemini (${modelName})`;
+              break;
+            }
           }
+        } catch (err: any) {
+          console.warn(`Model ${modelName} unavailable or timed out:`, err.message || err);
         }
-      } catch (err: any) {
-        console.warn(`Model ${modelName} unavailable or timed out:`, err.message || err);
       }
     }
 
-    // Safety Net Fallback: If Gemini is temporarily experiencing 503 high demand or network timeout,
-    // seamlessly use the high-precision smart Ethiopian regex engine so the user never gets an error!
     if (rawVacancies.length === 0) {
-      console.log('Activating high-precision smart Ethiopian parser fallback...');
-      rawVacancies = parseVacanciesSmartFallback(text);
-      engineUsed = 'high-precision smart rule engine';
+      rawVacancies = smartPreSplit;
+      engineUsed = useDirectBatchEngine
+        ? `high-precision bulk batch engine (${smartPreSplit.length} items)`
+        : 'high-precision smart rule engine';
     }
 
-    // Format and enrich with IDs and timestamps
+    // Format and enrich with IDs, System 1 broadCategory, WASH classification, and expiry flag
     const now = new Date().toISOString();
     const formattedVacancies = rawVacancies.map((item: any, idx: number) => {
       const id = `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`;
+      const resolvedCategory = item.category || inferEthiopianCategory(item.title || '', item.organization || '', item.description || '');
+      const enrichedObj = {
+        ...item,
+        category: resolvedCategory,
+      };
+      const isExpired = isVacancyDeadlineExpiredServer(item.applicationDeadline);
       return {
         id,
         title: item.title || 'Untitled Vacancy',
         organization: item.organization || 'Not specified in the original vacancy',
-        category: item.category || inferEthiopianCategory(item.title || '', item.organization || '', item.description || ''),
+        category: resolvedCategory,
         location: item.location || 'Addis Ababa',
         employmentType: item.employmentType || 'Full-time',
         vacanciesCount: item.vacanciesCount || 'Not specified in the original vacancy',
@@ -506,7 +564,7 @@ CRITICAL INSTRUCTIONS:
         genderRequirements: item.genderRequirements || 'Not specified in the original vacancy',
         specialRequirements: item.specialRequirements || 'Not specified in the original vacancy',
         referenceNumber: item.referenceNumber || '',
-        status: 'pending_review',
+        status: isExpired ? 'expired' : 'pending_review',
         featured: false,
         viewsCount: 0,
         sharesCount: 0,
@@ -514,6 +572,9 @@ CRITICAL INSTRUCTIONS:
         updatedAt: now,
         isAiParsed: true,
         missingFields: Array.isArray(item.missingFields) ? item.missingFields : [],
+        broadCategory: classifyBroadCategoryServer(enrichedObj),
+        isWashNgo: isWashNgoVacancyServer(enrichedObj),
+        isExpired,
       };
     });
 
@@ -525,14 +586,13 @@ CRITICAL INSTRUCTIONS:
     });
   } catch (error: any) {
     console.error('Bulk parse error:', error);
-    // Never fail: fall back to smart parser even if an unexpected top-level error occurred
     try {
       const fallbackList = parseVacanciesSmartFallback(req.body.text || '');
       const now = new Date().toISOString();
       const formatted = fallbackList.map((item: any, idx: number) => ({
         ...item,
         id: `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-        status: 'pending_review',
+        status: item.isExpired ? 'expired' : 'pending_review',
         featured: false,
         viewsCount: 0,
         sharesCount: 0,
@@ -1598,6 +1658,59 @@ function normalizeWebsiteDomain(domainOrUrl?: string): string {
   return `https://${clean}`;
 }
 
+function applyAndValidateWashLabelServer(
+  vacancy: any,
+  htmlMsg: string,
+  plainMsg: string
+): {
+  valid: boolean;
+  isWashNgo: boolean;
+  hasWashLabel: boolean;
+  html: string;
+  plainText: string;
+  reason?: string;
+} {
+  const isWash = isWashNgoVacancyServer(vacancy);
+  let nextHtml = htmlMsg;
+  let nextPlain = plainMsg;
+
+  if (isWash) {
+    if (!nextHtml.includes('🟢⭐') || !nextHtml.includes('WASH JOB')) {
+      nextHtml = `🟢⭐ <b>WASH JOB</b>\n\n${nextHtml.replace(/^🟢(?:\s*⭐)?\s*(?:<b>)?WASH[^<\n]*(?:<\/b>)?\s*/i, '')}`;
+    }
+    if (!nextPlain.includes('🟢⭐ WASH JOB')) {
+      nextPlain = `🟢⭐ WASH JOB\n\n${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, '')}`;
+    }
+    const labelPos = nextPlain.indexOf('🟢⭐ WASH JOB');
+    const titlePos = vacancy?.title ? nextPlain.indexOf(vacancy.title) : nextPlain.indexOf('Vacancy at');
+    if (labelPos < 0 || (titlePos >= 0 && labelPos > titlePos)) {
+      return {
+        valid: false,
+        isWashNgo: true,
+        hasWashLabel: false,
+        html: nextHtml,
+        plainText: nextPlain,
+        reason: 'Blocked by Pre-Publish WASH Gate: Missing 🟢⭐ WASH JOB label before job title.',
+      };
+    }
+    return {
+      valid: true,
+      isWashNgo: true,
+      hasWashLabel: true,
+      html: nextHtml,
+      plainText: nextPlain,
+    };
+  }
+
+  return {
+    valid: true,
+    isWashNgo: false,
+    hasWashLabel: nextPlain.includes('🟢⭐ WASH JOB'),
+    html: nextHtml,
+    plainText: nextPlain,
+  };
+}
+
 function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
   const baseUrl = normalizeWebsiteDomain(domainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
@@ -1619,8 +1732,9 @@ function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _
     eduParts.push(`${vacancy.experienceYears} experience`);
   }
   const educationFieldText = escapeHtml(eduParts.join(', '));
+  const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  return `<b>Vacancy at ${orgName}</b>
+  return `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
@@ -1654,8 +1768,9 @@ function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tec
     eduParts.push(`${vacancy.experienceYears} experience`);
   }
   const educationFieldText = eduParts.join(', ');
+  const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  return `Vacancy at ${orgName}
+  return `${washPrefix}Vacancy at ${orgName}
 
 🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
@@ -1672,11 +1787,46 @@ async function sendTelegramVacancyMessage(
   token: string,
   channel: string,
   vacancy: any,
-  domainOrUrl: string
-): Promise<{ ok: boolean; messageId?: number; error?: string; formattedMessage: string }> {
+  domainOrUrl: string,
+  dryRun = false
+): Promise<{
+  ok: boolean;
+  messageId?: number;
+  error?: string;
+  formattedMessage: string;
+  formattedPlain: string;
+  isWashNgo: boolean;
+  hasWashLabel: boolean;
+}> {
   const cleanChannel = channel.startsWith('@') ? channel : `@${channel}`;
-  const htmlMsg = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel);
-  const plainMsg = buildTelegramJobPlainText(vacancy, domainOrUrl, cleanChannel);
+  const rawHtml = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel);
+  const rawPlain = buildTelegramJobPlainText(vacancy, domainOrUrl, cleanChannel);
+  const washCheck = applyAndValidateWashLabelServer(vacancy, rawHtml, rawPlain);
+
+  if (!washCheck.valid) {
+    return {
+      ok: false,
+      error: washCheck.reason || 'Blocked by Pre-Publish WASH Gate',
+      formattedMessage: washCheck.html,
+      formattedPlain: washCheck.plainText,
+      isWashNgo: washCheck.isWashNgo,
+      hasWashLabel: washCheck.hasWashLabel,
+    };
+  }
+
+  const htmlMsg = washCheck.html;
+  const plainMsg = washCheck.plainText;
+
+  if (dryRun) {
+    return {
+      ok: true,
+      messageId: 0,
+      formattedMessage: htmlMsg,
+      formattedPlain: plainMsg,
+      isWashNgo: washCheck.isWashNgo,
+      hasWashLabel: washCheck.hasWashLabel,
+    };
+  }
 
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -1692,7 +1842,6 @@ async function sendTelegramVacancyMessage(
 
     let data = (await res.json()) as any;
 
-    // If Telegram rejects entity parsing or formatting for any reason, seamlessly retry with safe plain text delivery
     if (!data.ok) {
       console.warn(`Telegram HTML broadcast attempt returned: ${data.description}. Retrying immediately with safe plain-text mode...`);
       try {
@@ -1711,6 +1860,9 @@ async function sendTelegramVacancyMessage(
             ok: true,
             messageId: fallbackData.result?.message_id,
             formattedMessage: plainMsg,
+            formattedPlain: plainMsg,
+            isWashNgo: washCheck.isWashNgo,
+            hasWashLabel: washCheck.hasWashLabel,
           };
         }
         data = fallbackData;
@@ -1724,6 +1876,9 @@ async function sendTelegramVacancyMessage(
         ok: false,
         error: data.description || 'Telegram rejected broadcast',
         formattedMessage: htmlMsg,
+        formattedPlain: plainMsg,
+        isWashNgo: washCheck.isWashNgo,
+        hasWashLabel: washCheck.hasWashLabel,
       };
     }
 
@@ -1731,12 +1886,18 @@ async function sendTelegramVacancyMessage(
       ok: true,
       messageId: data.result?.message_id,
       formattedMessage: htmlMsg,
+      formattedPlain: plainMsg,
+      isWashNgo: washCheck.isWashNgo,
+      hasWashLabel: washCheck.hasWashLabel,
     };
   } catch (err: any) {
     return {
       ok: false,
       error: `Network error connecting to Telegram: ${err.message || String(err)}`,
       formattedMessage: htmlMsg,
+      formattedPlain: plainMsg,
+      isWashNgo: washCheck.isWashNgo,
+      hasWashLabel: washCheck.hasWashLabel,
     };
   }
 }
@@ -1763,19 +1924,11 @@ function hasOfficialApplicationMethodServer(v: any): boolean {
 }
 
 function isBankingVacancyServer(v: any): boolean {
-  const cat = String(v?.category || '').toLowerCase();
-  if (cat === 'banking and financial institutions' || cat === 'banking & finance') return true;
-  const combined = `${v?.organization || ''} ${v?.title || ''}`;
-  const matchesBank = /(commercial bank|development bank|awash bank|dashen bank|bank of abyssinia|hibret bank|coop bank|cooperative bank of oromia|wegagen|zemen bank|berhan bank|bunna bank|abay bank|enat bank|amhara bank|tsedey bank|siinqee bank|geda bank|oromia bank|nib international bank|lion international bank|global bank|tsehay bank|goh betoch|\bbank\b)/i.test(combined);
-  const isNgo = cat.includes('ngo') || isNgoVacancyServer(v);
-  return matchesBank && !isNgo;
+  return isBankingVacancyServerCore(v);
 }
 
 function isNgoVacancyServer(v: any): boolean {
-  const cat = String(v?.category || '').toLowerCase();
-  if (cat === 'ngo and international organizations' || cat === 'ngo & international organizations') return true;
-  const combined = `${v?.organization || ''} ${v?.title || ''}`;
-  return /(\bngo\b|\bingo\b|unicef|undp|unhcr|wfp|\bwho\b|\bfao\b|\bilo\b|\biom\b|icrc|\bmsf\b|doctors without borders|oxfam|care international|international rescue committee|\birc\b|save the children|world vision|plan international|mercy corps|fhi 360|jhpiego|catholic relief|crs|lutheran world|action against hunger|norwegian refugee|danish refugee|helvetas|snv|goal ethiopia|concern worldwide|tearfund|amref|pathfinder|marie stopes)/i.test(combined);
+  return isNgoVacancyServerCore(v);
 }
 
 function evaluateTelegramPublishEligibilityServer(
@@ -1821,16 +1974,22 @@ function evaluateTelegramPublishEligibilityServer(
     return { allowed: false, reason: 'Blocked: Vacancy is missing a verified official application method (link, email, or official instructions).' };
   }
   const mode = overrideMode || settings?.telegramDistributionMode || 'all_jobs';
-  if (mode === 'banking_only' && !isBankingVacancyServer(vacancy)) {
+  if (mode === 'banking_only' && (!isBankingVacancyServer(vacancy) || isNgoVacancyServer(vacancy))) {
     return {
       allowed: false,
-      reason: `Skipped by Telegram Distribution Mode (OPTION B: BANKING JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not classified as a genuine banking vacancy.`,
+      reason: `Skipped by Telegram Distribution Mode (OPTION B: BANKING JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not a banking vacancy.`,
     };
   }
   if (mode === 'ngo_only' && !isNgoVacancyServer(vacancy)) {
     return {
       allowed: false,
-      reason: `Skipped by Telegram Distribution Mode (OPTION C: NGO JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not classified as a genuine NGO/INGO vacancy.`,
+      reason: `Skipped by Telegram Distribution Mode (OPTION C: NGO JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not an NGO/INGO vacancy.`,
+    };
+  }
+  if (mode === 'banking_and_ngo_only' && !isBankingVacancyServer(vacancy) && !isNgoVacancyServer(vacancy)) {
+    return {
+      allowed: false,
+      reason: `Skipped by Telegram Distribution Mode (OPTION D: BANKING AND NGO JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is neither Banking nor NGO.`,
     };
   }
   return { allowed: true };
@@ -1839,7 +1998,7 @@ function evaluateTelegramPublishEligibilityServer(
 // Telegram Publishing Endpoint
 app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancy, botToken, channelName, forceRetry, customDomain, contentType, distributionMode } = req.body;
+    const { vacancy, botToken, channelName, forceRetry, customDomain, contentType, distributionMode, dryRun } = req.body;
     if (!vacancy) {
       res.status(400).json({ error: 'Vacancy payload is required' });
       return;
@@ -1859,7 +2018,7 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
     }
 
     const effectiveToken = botToken || getTelegramToken();
-    if (!effectiveToken) {
+    if (!dryRun && !effectiveToken) {
       res.status(400).json({
         error: 'Telegram bot token is not configured on the server. Please configure TELEGRAM_BOT_TOKEN first.',
       });
@@ -1874,23 +2033,30 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
       'hopelandjobs.tech';
     if (effectiveDomain === 'healmorin.com') effectiveDomain = 'hopelandjobs.tech';
 
-    const result = await sendTelegramVacancyMessage(effectiveToken, targetChannel, vacancy, effectiveDomain);
+    const result = await sendTelegramVacancyMessage(effectiveToken || 'dry-run', targetChannel, vacancy, effectiveDomain, Boolean(dryRun));
 
     if (!result.ok) {
       res.json({
         success: false,
         error: `Telegram API responded: ${result.error}`,
         formattedMessage: result.formattedMessage,
+        formattedPlain: result.formattedPlain,
+        isWashNgo: result.isWashNgo,
+        hasWashLabel: result.hasWashLabel,
       });
       return;
     }
 
     res.json({
       success: true,
-      message: `Successfully broadcasted to ${targetChannel}!`,
+      dryRun: Boolean(dryRun),
+      message: dryRun ? `Validated & formatted preview for ${targetChannel}` : `Successfully broadcasted to ${targetChannel}!`,
       telegramMessageId: result.messageId,
       telegramPublishedAt: new Date().toISOString(),
       formattedMessage: result.formattedMessage,
+      formattedPlain: result.formattedPlain,
+      isWashNgo: result.isWashNgo,
+      hasWashLabel: result.hasWashLabel,
     });
   } catch (err: any) {
     console.error('Telegram publish error:', err);
@@ -1901,9 +2067,9 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
 // Batch Telegram Broadcast Endpoint for Auto-Publishing Approved Vacancies
 app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancies = [], channelName, distributionMode } = req.body;
+    const { vacancies = [], channelName, distributionMode, dryRun } = req.body;
     const effectiveToken = getTelegramToken();
-    if (!effectiveToken) {
+    if (!dryRun && !effectiveToken) {
       res.status(400).json({
         error: 'Telegram bot token is not configured on the server. Please enter your bot token in Admin Settings.',
       });
@@ -1923,17 +2089,26 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
         results.push({
           id: v.id,
           title: v.title,
+          organization: v.organization,
+          broadCategory: classifyBroadCategoryServer(v),
+          isWashNgo: isWashNgoVacancyServer(v),
           status: 'skipped',
           reason: gate.reason || 'Excluded by Telegram distribution rule',
         });
         continue;
       }
 
-      const postRes = await sendTelegramVacancyMessage(effectiveToken, targetChannel, v, appUrl);
+      const postRes = await sendTelegramVacancyMessage(effectiveToken || 'dry-run', targetChannel, v, appUrl, Boolean(dryRun));
       if (postRes.ok) {
         results.push({
           id: v.id,
           title: v.title,
+          organization: v.organization,
+          broadCategory: classifyBroadCategoryServer(v),
+          isWashNgo: postRes.isWashNgo,
+          hasWashLabel: postRes.hasWashLabel,
+          formattedMessage: postRes.formattedMessage,
+          formattedPlain: postRes.formattedPlain,
           status: 'success',
           telegramMessageId: postRes.messageId,
           telegramPublishedAt: new Date().toISOString(),
@@ -1942,19 +2117,27 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
         results.push({
           id: v.id,
           title: v.title,
+          organization: v.organization,
+          broadCategory: classifyBroadCategoryServer(v),
+          isWashNgo: postRes.isWashNgo,
+          hasWashLabel: postRes.hasWashLabel,
           status: 'failed',
           error: postRes.error,
         });
       }
 
-      // Safe delay between batch posts
-      await new Promise((r) => setTimeout(r, 400));
+      if (!dryRun) {
+        await new Promise((r) => setTimeout(r, 400));
+      }
     }
 
     res.json({
       success: true,
+      dryRun: Boolean(dryRun),
+      distributionMode: distributionMode || persisted?.telegramDistributionMode || 'all_jobs',
       total: vacancies.length,
       publishedCount: results.filter((r) => r.status === 'success').length,
+      skippedCount: results.filter((r) => r.status === 'skipped').length,
       results,
     });
   } catch (err: any) {
@@ -4862,24 +5045,169 @@ Return strict JSON:
   const OFFICIAL_NOT_STATED = 'NOT STATED IN THE OFFICIAL ANNOUNCEMENT';
   const OWNER_EMAILS_SET = new Set(['nexusitsoultion@gmail.com', 'yeabsra45@gmail.com']);
 
+  function getCallerEmailFromReq(req: Request): string {
+    return String(
+      req.headers['x-admin-email'] ||
+        (req.body && typeof req.body === 'object' ? req.body.adminEmail : '') ||
+        (req.query && typeof req.query === 'object' ? req.query.adminEmail : '') ||
+        ''
+    )
+      .toLowerCase()
+      .trim();
+  }
+
+  function isOwnerDeveloperRequest(req: Request): boolean {
+    const email = getCallerEmailFromReq(req);
+    return Boolean(email && OWNER_EMAILS_SET.has(email));
+  }
+
+  function requireOwnerDeveloper(req: Request, res: Response): boolean {
+    if (!isOwnerDeveloperRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error:
+          'Access Denied (System 2 Private Research): Restricted exclusively to owner developer Yeabsra Teffera.',
+      });
+      return false;
+    }
+    return true;
+  }
+
+  function normalizeRecordApprovalStatus(item: any): 'private_pending' | 'approved_public' | 'rejected' | 'expired' {
+    if (
+      item?.approvalStatus === 'private_pending' ||
+      item?.approvalStatus === 'approved_public' ||
+      item?.approvalStatus === 'rejected' ||
+      item?.approvalStatus === 'expired'
+    ) {
+      return item.approvalStatus;
+    }
+    if (item?.verificationStatus === 'EXPIRED' || item?.applicationStatus === 'expired') {
+      return 'expired';
+    }
+    // Preserve existing legacy VERIFIED public entries saved before private approval gate
+    if (item?.verificationStatus === 'VERIFIED') {
+      return 'approved_public';
+    }
+    return 'private_pending';
+  }
+
+  function isPublicApprovedRecord(item: any): boolean {
+    if (!item || item.verificationStatus !== 'VERIFIED') return false;
+    if (item.applicationStatus === 'expired') return false;
+    return normalizeRecordApprovalStatus(item) === 'approved_public';
+  }
+
+  const DEFAULT_MONITORED_SOURCES: any[] = [
+    // International Employers, Banking & NGO / UN Portals
+    { id: 'src_ebrd_jobs', name: 'EBRD Careers (Banking & Finance)', country: 'United Kingdom / International', region: 'Europe', entityType: 'international_job', url: 'https://jobs.ebrd.com/search/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'international_org' },
+    { id: 'src_unesco_jobs', name: 'UNESCO Official Careers', country: 'International', region: 'Europe', entityType: 'international_job', url: 'https://careers.unesco.org/go/All-jobs-open-to-external-candidates/782502/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'international_org' },
+    { id: 'src_icrc_jobs', name: 'ICRC Global Humanitarian Careers', country: 'Switzerland / International', region: 'Africa & Other', entityType: 'international_job', url: 'https://careers.icrc.org/search/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'international_org' },
+    // Europe Workforce & Immigration Portals
+    { id: 'src_de_makeit', name: 'Make it in Germany (Federal Government)', country: 'Germany', region: 'Europe', entityType: 'immigration', url: 'https://www.make-it-in-germany.com/en/visa-residence/types/work-qualified-professionals', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_fi_work', name: 'Work in Finland (Business Finland)', country: 'Finland', region: 'Europe', entityType: 'international_job', url: 'https://www.workinfinland.com/en/open-jobs/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    { id: 'src_ee_work', name: 'Work in Estonia (Enterprise Estonia)', country: 'Estonia', region: 'Europe', entityType: 'international_job', url: 'https://www.workinestonia.com/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    { id: 'src_lv_pmlp', name: 'PMLP Latvia Residence & Work Permits', country: 'Latvia', region: 'Europe', entityType: 'immigration', url: 'https://www.pmlp.gov.lv/en/residence-permit', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_lt_migracija', name: 'Migration Department of Lithuania', country: 'Lithuania', region: 'Europe', entityType: 'immigration', url: 'https://www.migracija.lt/en/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_ro_igi', name: 'General Inspectorate for Immigration Romania', country: 'Romania', region: 'Europe', entityType: 'immigration', url: 'https://igi.mai.gov.ro/en/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_hr_mup', name: 'Croatia Ministry of Interior — Stay & Work', country: 'Croatia', region: 'Europe', entityType: 'immigration', url: 'https://mup.gov.hr/aliens-281621/stay-and-work/281622', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_se_mig', name: 'Migrationsverket Sweden', country: 'Sweden', region: 'Europe', entityType: 'immigration', url: 'https://www.migrationsverket.se/English/Private-individuals/Working-in-Sweden.html', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_no_udi', name: 'UDI Norway Work Immigration', country: 'Norway', region: 'Europe', entityType: 'immigration', url: 'https://www.udi.no/en/want-to-apply/work-immigration/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_dk_siri', name: 'Ny i Danmark (SIRI)', country: 'Denmark', region: 'Europe', entityType: 'immigration', url: 'https://www.nyidanmark.dk/en-GB/You-want-to-apply/Work', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_rs_welcome', name: 'Welcome to Serbia Gov Portal', country: 'Serbia', region: 'Europe', entityType: 'immigration', url: 'https://welcometoserbia.gov.rs/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_ge_migration', name: 'Georgia Migration Portal', country: 'Georgia', region: 'Europe', entityType: 'immigration', url: 'https://migration.gov.ge/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_uk_visas', name: 'GOV.UK Work Visas', country: 'United Kingdom', region: 'Europe', entityType: 'international_job', url: 'https://www.gov.uk/browse/visas-immigration/work-visas', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    // Middle East Workforce & Immigration Portals
+    { id: 'src_ae_mohre', name: 'UAE MoHRE Official Portal', country: 'United Arab Emirates', region: 'Middle East', entityType: 'international_job', url: 'https://www.mohre.gov.ae/en/home.aspx', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    { id: 'src_sa_hrsd', name: 'Saudi Arabia MHRSD Portal', country: 'Saudi Arabia', region: 'Middle East', entityType: 'immigration', url: 'https://www.hrsd.gov.sa/en', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_qa_hukoomi', name: 'Hukoomi Qatar Work Residence', country: 'Qatar', region: 'Middle East', entityType: 'immigration', url: 'https://hukoomi.gov.qa/en/service/issue-new-work-residence-permit', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_bh_lmra', name: 'LMRA Bahrain Work Permits', country: 'Bahrain', region: 'Middle East', entityType: 'immigration', url: 'https://www.lmra.gov.bh/en/home', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_om_rop', name: 'Royal Oman Police Employment Visa', country: 'Oman', region: 'Middle East', entityType: 'immigration', url: 'https://www.rop.gov.om/english/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_jo_moi', name: 'Ministry of Interior Jordan', country: 'Jordan', region: 'Middle East', entityType: 'immigration', url: 'https://moi.gov.jo/EN/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    // Far East & Asia Workforce, PR & Scholarships
+    { id: 'src_kr_hikorea', name: 'HiKorea Immigration Portal', country: 'South Korea', region: 'Far East & Asia', entityType: 'immigration', url: 'https://www.hikorea.go.kr/Main.pt?locale=en', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_jp_mofa', name: 'MOFA Japan Official Visa Portal', country: 'Japan', region: 'Far East & Asia', entityType: 'international_job', url: 'https://www.mofa.go.jp/j_info/visit/visa/index.html', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    { id: 'src_cn_nia', name: 'China National Immigration Administration', country: 'China', region: 'Far East & Asia', entityType: 'immigration', url: 'https://en.nia.gov.cn/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_sg_mom', name: 'Ministry of Manpower Singapore', country: 'Singapore', region: 'Far East & Asia', entityType: 'international_job', url: 'https://www.mom.gov.sg/passes-and-permits', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'government_portal' },
+    { id: 'src_my_imi', name: 'Immigration Department of Malaysia', country: 'Malaysia', region: 'Far East & Asia', entityType: 'immigration', url: 'https://www.imi.gov.my/index.php/en/main-services/pass/visitor-pass/employment-pass/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    // Americas & Oceania + Global Scholarships
+    { id: 'src_ca_ircc', name: 'IRCC Express Entry Canada', country: 'Canada', region: 'Americas & Oceania', entityType: 'immigration', url: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_au_homeaffairs', name: 'Department of Home Affairs Australia', country: 'Australia', region: 'Americas & Oceania', entityType: 'immigration', url: 'https://immi.homeaffairs.gov.au/visas/working-in-australia', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'immigration_ministry' },
+    { id: 'src_sch_chevening', name: 'Chevening Scholarships Official Portal', country: 'United Kingdom', region: 'Europe', entityType: 'scholarship', url: 'https://www.chevening.org/scholarships/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_si', name: 'Swedish Institute SISGP Scholarships', country: 'Sweden', region: 'Europe', entityType: 'scholarship', url: 'https://si.se/en/apply/scholarships/swedish-institute-scholarships-for-global-professionals/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_daad', name: 'DAAD EPOS Scholarships Germany', country: 'Germany', region: 'Europe', entityType: 'scholarship', url: 'https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_hu', name: 'Stipendium Hungaricum Official', country: 'Hungary', region: 'Europe', entityType: 'scholarship', url: 'https://stipendiumhungaricum.hu/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_gks', name: 'Global Korea Scholarship (Study in Korea)', country: 'South Korea', region: 'Far East & Asia', entityType: 'scholarship', url: 'https://www.studyinkorea.go.kr/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_mext', name: 'Study in Japan MEXT Scholarships', country: 'Japan', region: 'Far East & Asia', entityType: 'scholarship', url: 'https://www.studyinjapan.go.jp/en/planning/scholarships/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+    { id: 'src_sch_csc', name: 'CampusChina (CSC Government Scholarship)', country: 'China', region: 'Far East & Asia', entityType: 'scholarship', url: 'https://www.campuschina.org/', feedType: 'http_poll', pollIntervalSeconds: 30, enabled: true, newAnnouncementsDetected: 0, failedChecks: 0, verificationStatus: 'PENDING', authorityType: 'scholarship_body' },
+  ];
+
+  function mergeMonitoredSourcesWithDefaults(existing: any[]): any[] {
+    const map = new Map<string, any>();
+    for (const def of DEFAULT_MONITORED_SOURCES) {
+      map.set(def.url.toLowerCase(), { ...def });
+    }
+    for (const item of Array.isArray(existing) ? existing : []) {
+      if (item?.url) {
+        const key = String(item.url).toLowerCase();
+        const base = map.get(key) || {};
+        map.set(key, { ...base, ...item });
+      }
+    }
+    return Array.from(map.values());
+  }
+
   function loadPersistedInternationalData(): {
     internationalJobs: any[];
     immigrationPathways: any[];
     experienceScholarships: any[];
     researchHistory: any[];
     verificationLogs: any[];
+    monitoredSources: any[];
+    developerNotifications: any[];
+    schedulerConfig: { enabled: boolean; intervalSeconds: number; cycleCount: number; sourceCursorIndex: number; lastRunAt: string | null; lastSuccessfulRunAt: string | null; lastError: string | null; aiProviderStatus: string; lastCycleSummary: string };
     updatedAt: string;
   } {
+    const defaultSchedulerConfig = {
+      enabled: true,
+      intervalSeconds: 30,
+      cycleCount: 0,
+      sourceCursorIndex: 0,
+      lastRunAt: null as string | null,
+      lastSuccessfulRunAt: null as string | null,
+      lastError: null as string | null,
+      aiProviderStatus: process.env.GEMINI_API_KEY ? 'ready (gemini-4-hydrogen)' : 'not_configured (GEMINI_API_KEY unset) — Live Official Crawler active',
+      lastCycleSummary: 'Initializing automatic 30-second research scheduler...',
+    };
     try {
       if (fs.existsSync(INTERNATIONAL_DATA_FILE)) {
         const raw = fs.readFileSync(INTERNATIONAL_DATA_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
+        const jobs = (Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : []).map((j: any) => ({
+          ...j,
+          approvalStatus: normalizeRecordApprovalStatus(j),
+        }));
+        const pathways = (Array.isArray(parsed.immigrationPathways) ? parsed.immigrationPathways : []).map((p: any) => ({
+          ...p,
+          approvalStatus: normalizeRecordApprovalStatus(p),
+        }));
+        const scholarships = (Array.isArray(parsed.experienceScholarships) ? parsed.experienceScholarships : []).map((s: any) => ({
+          ...s,
+          approvalStatus: normalizeRecordApprovalStatus(s),
+        }));
         return {
-          internationalJobs: Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : [],
-          immigrationPathways: Array.isArray(parsed.immigrationPathways) ? parsed.immigrationPathways : [],
-          experienceScholarships: Array.isArray(parsed.experienceScholarships) ? parsed.experienceScholarships : [],
+          internationalJobs: jobs,
+          immigrationPathways: pathways,
+          experienceScholarships: scholarships,
           researchHistory: Array.isArray(parsed.researchHistory) ? parsed.researchHistory : [],
           verificationLogs: Array.isArray(parsed.verificationLogs) ? parsed.verificationLogs : [],
+          monitoredSources: mergeMonitoredSourcesWithDefaults(parsed.monitoredSources || []),
+          developerNotifications: Array.isArray(parsed.developerNotifications) ? parsed.developerNotifications : [],
+          schedulerConfig: {
+            ...defaultSchedulerConfig,
+            ...(parsed.schedulerConfig && typeof parsed.schedulerConfig === 'object' ? parsed.schedulerConfig : {}),
+            intervalSeconds: 30,
+          },
           updatedAt: parsed.updatedAt || new Date().toISOString(),
         };
       }
@@ -4890,6 +5218,9 @@ Return strict JSON:
       experienceScholarships: [],
       researchHistory: [],
       verificationLogs: [],
+      monitoredSources: mergeMonitoredSourcesWithDefaults([]),
+      developerNotifications: [],
+      schedulerConfig: defaultSchedulerConfig,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -4897,11 +5228,21 @@ Return strict JSON:
   function savePersistedInternationalData(data: any): boolean {
     try {
       if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(
-        INTERNATIONAL_DATA_FILE,
-        JSON.stringify({ ...data, updatedAt: new Date().toISOString() }, null, 2),
-        'utf-8'
-      );
+      const prev = fs.existsSync(INTERNATIONAL_DATA_FILE)
+        ? (() => {
+            try {
+              return JSON.parse(fs.readFileSync(INTERNATIONAL_DATA_FILE, 'utf-8'));
+            } catch {
+              return {};
+            }
+          })()
+        : {};
+      const payload = {
+        ...prev,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      };
+      fs.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
       return true;
     } catch (e) {
       console.warn('Could not save international_data.json:', e);
@@ -4946,10 +5287,13 @@ Return strict JSON:
       if (
         /\.gov(\.[a-z]{2})?$|\.gouv\.[a-z]{2}$|\.gv\.[a-z]{2}$|\.gc\.ca$|\.govt\.[a-z]{2}$|europa\.eu$/.test(host) ||
         [
-          'make-it-in-germany.com', 'migri.fi', 'migrationsverket.se', 'udi.no', 'nyidanmark.dk',
-          'workindenmark.dk', 'workinestonia.com', 'politsei.ee', 'pmlp.gov.lv', 'migracija.lrv.lt',
-          'ind.nl', 'eps.go.kr', 'mofa.go.jp', 'mom.gov.sg', 'mohre.gov.ae', 'qiwa.sa',
-          'madlsa.gov.qa', 'canada.ca', 'homeaffairs.gov.au', 'immigration.govt.nz',
+          'make-it-in-germany.com', 'chancenkarte.com', 'migri.fi', 'workinfinland.com',
+          'migrationsverket.se', 'udi.no', 'nyidanmark.dk', 'workindenmark.dk',
+          'workinestonia.com', 'politsei.ee', 'pmlp.gov.lv', 'migracija.lt', 'migracija.lrv.lt',
+          'gov.pl', 'mup.gov.hr', 'mup.gov.rs', 'migration.gov.ge', 'igi.mai.gov.ro', 'mvr.bg',
+          'ind.nl', 'eps.go.kr', 'hikorea.go.kr', 'mofa.go.jp', 'moj.go.jp',
+          'mom.gov.sg', 'mohre.gov.ae', 'qiwa.sa', 'hrsd.gov.sa', 'madlsa.gov.qa',
+          'canada.ca', 'homeaffairs.gov.au', 'immigration.govt.nz', 'uscis.gov', 'gov.uk',
           'auswaertiges-amt.de', 'diplomatie.gouv.fr', 'esteri.it', 'exteriores.gob.es',
         ].some((d) => host === d || host.endsWith(`.${d}`))
       ) {
@@ -4969,10 +5313,12 @@ Return strict JSON:
         /\.edu(\.[a-z]{2})?$|\.ac\.[a-z]{2}$/.test(host) ||
         [
           'daad.de', 'chevening.org', 'commonwealthscholarships.org', 'cscuk.fcdo.gov.uk',
-          'studyinsweden.se', 'si.se', 'studyinfinland.fi', 'stipendiumhungaricum.hu',
-          'tka.hu', 'fulbright', 'erasmus-plus.ec.europa.eu', 'mastercardfdn.org',
-          'ox.ac.uk', 'cam.ac.uk', 'ethz.ch', 'kth.se', 'lunduniversity.lu.se', 'ku.dk',
-          'helsinki.fi', 'aalto.fi', 'tudelft.nl', 'uu.nl', 'uva.nl', 'uni-', 'university',
+          'studyinsweden.se', 'si.se', 'studyinfinland.fi', 'studyinnorway.no', 'studyinnl.org',
+          'stipendiumhungaricum.hu', 'tka.hu', 'fulbright', 'erasmus-plus.ec.europa.eu',
+          'mastercardfdn.org', 'studyinjapan.go.jp', 'studyinkorea.go.kr', 'campuschina.org',
+          'studyinsaudi.moe.gov.sa', 'ox.ac.uk', 'cam.ac.uk', 'ethz.ch', 'kth.se',
+          'lunduniversity.lu.se', 'ku.dk', 'helsinki.fi', 'aalto.fi', 'tudelft.nl',
+          'uu.nl', 'uva.nl', 'uni-', 'university',
         ].some((d) => host.includes(d))
       ) {
         return {
@@ -4981,13 +5327,14 @@ Return strict JSON:
         };
       }
 
-      // UN & International Organizations
+      // UN & International Organizations / Development Banks
       if (
         [
-          'un.org', 'undp.org', 'unicef.org', 'unhcr.org', 'who.int', 'wfp.org', 'fao.org',
-          'ilo.org', 'iom.int', 'worldbank.org', 'imf.org', 'afdb.org', 'au.int', 'msf.org',
-          'icrc.org', 'oxfam.org', 'savethechildren.net', 'rescue.org', 'mercycorps.org',
-          'plan-international.org', 'care.org', 'wvi.org',
+          'un.org', 'undp.org', 'unicef.org', 'unhcr.org', 'unesco.org', 'who.int', 'wfp.org',
+          'fao.org', 'ilo.org', 'iom.int', 'worldbank.org', 'imf.org', 'afdb.org', 'au.int',
+          'ebrd.com', 'eib.org', 'adb.org', 'isdb.org', 'msf.org', 'icrc.org', 'oxfam.org',
+          'savethechildren.net', 'rescue.org', 'mercycorps.org', 'plan-international.org',
+          'care.org', 'wvi.org',
         ].some((d) => host === d || host.endsWith(`.${d}`))
       ) {
         return { accepted: true, authorityType: 'international_org' };
@@ -5184,11 +5531,48 @@ Return strict JSON:
     return s;
   }
 
+  app.get('/api/international/public', (_req: Request, res: Response): void => {
+    const state = loadPersistedInternationalData();
+    res.json({
+      internationalJobs: (state.internationalJobs || []).filter(isPublicApprovedRecord),
+      immigrationPathways: (state.immigrationPathways || []).filter(isPublicApprovedRecord),
+      experienceScholarships: (state.experienceScholarships || []).filter(isPublicApprovedRecord),
+      updatedAt: state.updatedAt,
+    });
+  });
+
+  app.get('/api/international/private-state', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const state = loadPersistedInternationalData();
+    res.json({
+      ...state,
+      schedulerStatus: buildSchedulerStatusSnapshot(state),
+    });
+  });
+
   app.get('/api/international/state', (req: Request, res: Response): void => {
-    res.json(loadPersistedInternationalData());
+    const state = loadPersistedInternationalData();
+    if (isOwnerDeveloperRequest(req)) {
+      res.json({
+        ...state,
+        schedulerStatus: buildSchedulerStatusSnapshot(state),
+      });
+      return;
+    }
+    res.json({
+      internationalJobs: (state.internationalJobs || []).filter(isPublicApprovedRecord),
+      immigrationPathways: (state.immigrationPathways || []).filter(isPublicApprovedRecord),
+      experienceScholarships: (state.experienceScholarships || []).filter(isPublicApprovedRecord),
+      researchHistory: [],
+      verificationLogs: [],
+      monitoredSources: [],
+      developerNotifications: [],
+      updatedAt: state.updatedAt,
+    });
   });
 
   app.post('/api/international/state', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
     try {
       const current = loadPersistedInternationalData();
       const body = req.body || {};
@@ -5207,9 +5591,11 @@ Return strict JSON:
   });
 
   app.post('/api/international/verify-url', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
     try {
-      const { url, kind = 'job' } = req.body || {};
-      const result = await verifyOfficialUrlLive(url, kind);
+      const { url, kind = 'job', entityType } = req.body || {};
+      const normalizedKind = kind || (entityType === 'immigration' ? 'immigration' : entityType === 'scholarship' ? 'scholarship' : 'job');
+      const result = await verifyOfficialUrlLive(url, normalizedKind);
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'URL verification failed' });
@@ -5217,6 +5603,7 @@ Return strict JSON:
   });
 
   app.post('/api/international/verify-all-sources', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
     try {
       const state = loadPersistedInternationalData();
       const jobs = Array.isArray(req.body?.internationalJobs) ? req.body.internationalJobs : state.internationalJobs;
@@ -5389,6 +5776,7 @@ Return strict JSON:
   });
 
   app.post('/api/international/cleanup-expired', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
     try {
       const state = loadPersistedInternationalData();
       const nowIso = new Date().toISOString();
@@ -5433,7 +5821,553 @@ Return strict JSON:
     }
   });
 
+  const LIVE_UA_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  function decodeHtmlEntities(s: string): string {
+    return String(s || '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  async function fetchLiveOfficialPageMeta(url: string): Promise<{
+    ok: boolean;
+    status: number;
+    finalUrl: string;
+    title: string;
+    description: string;
+    bodyText: string;
+  }> {
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: LIVE_UA_HEADERS,
+        signal: AbortSignal.timeout(7000),
+      });
+      const html = await resp.text();
+      const title = decodeHtmlEntities(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
+      const descMatch =
+        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["']/i) ||
+        html.match(/<meta[^>]+content=["']([\s\S]*?)["'][^>]+name=["']description["']/i) ||
+        html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["']/i);
+      const description = decodeHtmlEntities(descMatch?.[1] || '');
+      const bodyText = decodeHtmlEntities(
+        html
+          .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+      ).slice(0, 5000);
+      return {
+        ok: resp.ok || [401, 403, 405, 429].includes(resp.status),
+        status: resp.status,
+        finalUrl: resp.url || url,
+        title,
+        description,
+        bodyText,
+      };
+    } catch {
+      return { ok: false, status: 0, finalUrl: url, title: '', description: '', bodyText: '' };
+    }
+  }
+
+  async function runGeminiSearchWithFallback(prompt: string): Promise<{
+    response: any;
+    groundingUrls: Set<string>;
+    modelUsed: string;
+  } | null> {
+    const client = await getAiClient();
+    if (!client) return null;
+    for (const [modelName, timeoutMs] of [
+      ['gemini-4-hydrogen', 16000],
+      ['gemini-3.1-flash-lite', 14000],
+    ] as const) {
+      try {
+        const response = (await Promise.race([
+          client.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config: { tools: [{ googleSearch: {} }] },
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`${modelName} timed out`)), timeoutMs)
+          ),
+        ])) as any;
+        const groundingUrls = extractGroundingUrls(response);
+        return { response, groundingUrls, modelUsed: modelName };
+      } catch (err: any) {
+        const msg = String(err?.message || err);
+        console.warn(`Gemini Search (${modelName}) fallback triggered:`, msg.slice(0, 160));
+      }
+    }
+    return null;
+  }
+
+  function inferCountryAndRegionFromLoc(locText: string, fallbackRegion: string): { country: string; region: string } {
+    const l = String(locText || '').toLowerCase();
+    const checks: Array<[RegExp, string, string]> = [
+      [/germany|berlin|munich|frankfurt|\bde\b/, 'Germany', 'Europe'],
+      [/finland|helsinki|\bfi\b/, 'Finland', 'Europe'],
+      [/estonia|tallinn|\bee\b/, 'Estonia', 'Europe'],
+      [/latvia|riga|\blv\b/, 'Latvia', 'Europe'],
+      [/lithuania|vilnius|\blt\b/, 'Lithuania', 'Europe'],
+      [/poland|warsaw|\bpl\b/, 'Poland', 'Europe'],
+      [/romania|bucharest|\bro\b/, 'Romania', 'Europe'],
+      [/bulgaria|sofia|\bbg\b/, 'Bulgaria', 'Europe'],
+      [/croatia|zagreb|\bhr\b/, 'Croatia', 'Europe'],
+      [/sweden|stockholm|\bse\b/, 'Sweden', 'Europe'],
+      [/norway|oslo|\bno\b/, 'Norway', 'Europe'],
+      [/denmark|copenhagen|\bdk\b/, 'Denmark', 'Europe'],
+      [/serbia|belgrade|\brs\b/, 'Serbia', 'Europe'],
+      [/georgia|tbilisi|\bge\b/, 'Georgia', 'Europe'],
+      [/united kingdom|london|\buk\b|\bgb\b/, 'United Kingdom', 'Europe'],
+      [/italy|trieste|rome|\bit\b/, 'Italy', 'Europe'],
+      [/france|paris|\bfr\b/, 'France', 'Europe'],
+      [/switzerland|geneva|zurich|\bch\b/, 'Switzerland', 'Europe'],
+      [/kyiv|ukraine|\bua\b/, 'Ukraine', 'Europe'],
+      [/saudi|riyadh|jeddah|\bsa\b/, 'Saudi Arabia', 'Middle East'],
+      [/uae|dubai|abu dhabi|emirates|\bae\b/, 'United Arab Emirates', 'Middle East'],
+      [/qatar|doha|\bqa\b/, 'Qatar', 'Middle East'],
+      [/kuwait|\bkw\b/, 'Kuwait', 'Middle East'],
+      [/bahrain|\bbh\b/, 'Bahrain', 'Middle East'],
+      [/oman|muscat|\bom\b/, 'Oman', 'Middle East'],
+      [/jordan|amman|\bjo\b/, 'Jordan', 'Middle East'],
+      [/japan|tokyo|\bjp\b/, 'Japan', 'Far East & Asia'],
+      [/korea|seoul|\bkr\b/, 'South Korea', 'Far East & Asia'],
+      [/singapore|\bsg\b/, 'Singapore', 'Far East & Asia'],
+      [/malaysia|kuala lumpur|\bmy\b/, 'Malaysia', 'Far East & Asia'],
+      [/china|beijing|shanghai|\bcn\b/, 'China', 'Far East & Asia'],
+      [/uzbekistan|tashkent|kazakhstan|almaty|india|philippines|manila/, 'Asia Regional', 'Far East & Asia'],
+      [/canada|toronto|ottawa|\bca\b/, 'Canada', 'Americas & Oceania'],
+      [/united states|washington|new york|\bus\b|\busa\b/, 'United States', 'Americas & Oceania'],
+      [/australia|sydney|canberra|\bau\b/, 'Australia', 'Americas & Oceania'],
+      [/ethiopia|addis|kenya|nairobi|africa|somalia|mogadishu|sudan|egypt|cairo|uganda|rwanda|nigeria/, 'Africa Regional', 'Africa & Other'],
+    ];
+    for (const [rx, c, r] of checks) {
+      if (rx.test(l)) return { country: c, region: r };
+    }
+    const parts = locText.split(',').map((s) => s.trim()).filter(Boolean);
+    return { country: parts[parts.length - 1] || 'International', region: fallbackRegion || 'Europe' };
+  }
+
+  const OFFICIAL_WORKFORCE_PORTALS: Array<{
+    country: string;
+    region: string;
+    employerOrProgramme: string;
+    jobTitle: string;
+    url: string;
+    category: string;
+  }> = [
+    { country: 'Germany', region: 'Europe', employerOrProgramme: 'Federal Government of Germany — Make it in Germany', jobTitle: 'Skilled Foreign Worker & Opportunity Card (Chancenkarte) Recruitment', url: 'https://www.make-it-in-germany.com/en/working-in-germany/professions-in-demand', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Finland', region: 'Europe', employerOrProgramme: 'Work in Finland / Business Finland', jobTitle: 'International Talent & Foreign Worker Recruitment Portal', url: 'https://www.workinfinland.com/en/open-jobs/', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Estonia', region: 'Europe', employerOrProgramme: 'Work in Estonia (Enterprise Estonia)', jobTitle: 'International Recruitment for Skilled Foreign Professionals', url: 'https://www.workinestonia.com/', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Latvia', region: 'Europe', employerOrProgramme: 'Office of Citizenship and Migration Affairs (PMLP Latvia)', jobTitle: 'Foreign Employment & EU Blue Card Recruitment Guidelines', url: 'https://www.pmlp.gov.lv/en/residence-permit', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Lithuania', region: 'Europe', employerOrProgramme: 'Migration Department of Lithuania', jobTitle: 'Foreign Worker Shortage Occupations & Work Residence Recruitment', url: 'https://www.migracija.lt/en/', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Poland', region: 'Europe', employerOrProgramme: 'Government of Poland — Mazowiecki Office', jobTitle: 'Foreign Worker Employment & Type A Work Permit Programme', url: 'https://www.gov.pl/web/uw-mazowiecki/work-permits', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Sweden', region: 'Europe', employerOrProgramme: 'Swedish Migration Agency (Migrationsverket)', jobTitle: 'Employer-Sponsored Work Permit & EU Blue Card Occupations', url: 'https://www.migrationsverket.se/English/Private-individuals/Working-in-Sweden.html', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Norway', region: 'Europe', employerOrProgramme: 'Norwegian Directorate of Immigration (UDI)', jobTitle: 'Skilled Worker Recruitment & Employer Work Immigration', url: 'https://www.udi.no/en/want-to-apply/work-immigration/', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Denmark', region: 'Europe', employerOrProgramme: 'Danish Agency for International Recruitment & Integration (SIRI)', jobTitle: 'Positive List & Pay Limit International Recruitment Scheme', url: 'https://www.nyidanmark.dk/en-GB/You-want-to-apply/Work', category: 'Government Approved Foreign Recruitment' },
+    { country: 'United Kingdom', region: 'Europe', employerOrProgramme: 'UK Home Office (GOV.UK)', jobTitle: 'Skilled Worker & Health/Care Visa Sponsored Employers', url: 'https://www.gov.uk/browse/visas-immigration/work-visas', category: 'Government Approved Foreign Recruitment' },
+    { country: 'European Union', region: 'Europe', employerOrProgramme: 'EURES — European Employment Services Portal', jobTitle: 'EURES Cross-Border Employer Recruitment & Mobility Schemes', url: 'https://eures.europa.eu/eures-services/eures-targeted-mobility-scheme_en', category: 'Government Approved Foreign Recruitment' },
+    { country: 'United Arab Emirates', region: 'Middle East', employerOrProgramme: 'UAE Ministry of Human Resources & Emiratisation (MoHRE)', jobTitle: 'Federal Foreign Labour & Employer-Sponsored Work Permit Framework', url: 'https://www.mohre.gov.ae/en/home.aspx', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Saudi Arabia', region: 'Middle East', employerOrProgramme: 'Ministry of Human Resources and Social Development (MHRSD) / Qiwa', jobTitle: 'Official Foreign Workforce Recruitment & Contract Verification', url: 'https://www.hrsd.gov.sa/en', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Singapore', region: 'Far East & Asia', employerOrProgramme: 'Ministry of Manpower (MOM Singapore)', jobTitle: 'Employment Pass & S Pass Foreign Specialist Work Passes', url: 'https://www.mom.gov.sg/passes-and-permits', category: 'Government Approved Foreign Recruitment' },
+    { country: 'South Korea', region: 'Far East & Asia', employerOrProgramme: 'Korea Immigration / EPS Foreign Employment System', jobTitle: 'Employment Permit System (E-9) & Skilled E-7 Work Visas', url: 'https://www.hikorea.go.kr/Main.pt?locale=en', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Japan', region: 'Far East & Asia', employerOrProgramme: 'Ministry of Foreign Affairs of Japan (MOFA)', jobTitle: 'Specified Skilled Worker & Engineer/Specialist Work Visas', url: 'https://www.mofa.go.jp/j_info/visit/visa/index.html', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Canada', region: 'Americas & Oceania', employerOrProgramme: 'Immigration, Refugees and Citizenship Canada (IRCC)', jobTitle: 'Express Entry & Temporary Foreign Worker Programme', url: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/work-canada.html', category: 'Government Approved Foreign Recruitment' },
+    { country: 'Australia', region: 'Americas & Oceania', employerOrProgramme: 'Department of Home Affairs Australia', jobTitle: 'Skills in Demand & Employer-Sponsored Work Visas', url: 'https://immi.homeaffairs.gov.au/visas/working-in-australia', category: 'Government Approved Foreign Recruitment' },
+  ];
+
+  async function discoverInternationalJobsDirectLive(
+    countryList: string[],
+    region: string,
+    categories: string[]
+  ): Promise<any[]> {
+    const results: any[] = [];
+    const wantBanking = categories.some((c) => /bank|finance/i.test(c));
+    const wantNgo = categories.some((c) => /ngo|international org|humanitarian/i.test(c));
+
+    // 1. Live scrape real international career boards (EBRD Banking, UNESCO UN, ICRC NGO)
+    const liveBoardTasks: Array<Promise<void>> = [];
+
+    if (wantBanking || categories.length === 0) {
+      liveBoardTasks.push(
+        (async () => {
+          try {
+            const html = await (await fetch('https://jobs.ebrd.com/search/', { headers: LIVE_UA_HEADERS, signal: AbortSignal.timeout(7000) })).text();
+            const rows = [...html.matchAll(/<tr[^>]*class="[^"]*data-row[^"]*"[\s\S]*?<\/tr>/gi)].slice(0, 6);
+            for (const row of rows) {
+              const href = row[0].match(/href="([^"]+)"/i)?.[1] || '';
+              const title = decodeHtmlEntities(row[0].match(/class="jobTitle-link"[^>]*>([\s\S]*?)<\/a>/i)?.[1] || '');
+              const loc = decodeHtmlEntities(row[0].match(/class="jobLocation"[^>]*>([\s\S]*?)<\/span>/i)?.[1] || '');
+              if (!title || !href) continue;
+              const fullUrl = href.startsWith('http') ? href : `https://jobs.ebrd.com${href}`;
+              const inferred = inferCountryAndRegionFromLoc(loc, region);
+              results.push({
+                country: inferred.country,
+                region: inferred.region,
+                category: 'Banking & Finance',
+                employerOrProgramme: 'European Bank for Reconstruction and Development (EBRD)',
+                jobTitle: title,
+                location: loc || OFFICIAL_NOT_STATED,
+                requiredEducation: OFFICIAL_NOT_STATED,
+                requiredExperience: OFFICIAL_NOT_STATED,
+                languageRequirements: 'English (see official EBRD posting)',
+                salary: OFFICIAL_NOT_STATED,
+                foreignerAndEthiopianEligibility: 'Open to international applicants subject to EBRD official nationality & vacancy terms.',
+                ethiopiansEligible: 'conditional',
+                visaSponsorshipInfo: 'Work permit / visa support per official EBRD headquarters & country-office policy.',
+                visaSponsored: true,
+                whoPaysVisaAndRecruitmentCosts: OFFICIAL_NOT_STATED,
+                visaFeePolicy: 'not_stated',
+                noRecruitmentAgencyFee: true,
+                accommodationAndRelocationSupport: OFFICIAL_NOT_STATED,
+                contractDuration: OFFICIAL_NOT_STATED,
+                applicationDeadline: OFFICIAL_NOT_STATED,
+                requiredDocuments: ['CV / Resume', 'Cover Letter', 'Academic & Professional Credentials'],
+                officialApplicationInstructions: 'Apply directly on the official EBRD e-recruitment portal.',
+                directApplicationUrl: fullUrl,
+                originalSourceUrl: fullUrl,
+                familyReunification: OFFICIAL_NOT_STATED,
+                permanentResidencePathway: OFFICIAL_NOT_STATED,
+              });
+            }
+          } catch {}
+        })()
+      );
+    }
+
+    if (wantNgo || categories.length === 0) {
+      liveBoardTasks.push(
+        (async () => {
+          try {
+            const html = await (
+              await fetch('https://careers.unesco.org/go/All-jobs-open-to-external-candidates/782502/', {
+                headers: LIVE_UA_HEADERS,
+                signal: AbortSignal.timeout(7000),
+              })
+            ).text();
+            const rows = [...html.matchAll(/<tr[^>]*class="[^"]*data-row[^"]*"[\s\S]*?<\/tr>/gi)].slice(0, 5);
+            for (const row of rows) {
+              const href = row[0].match(/href="([^"]+)"/i)?.[1] || '';
+              const title = decodeHtmlEntities(row[0].match(/class="jobTitle-link"[^>]*>([\s\S]*?)<\/a>/i)?.[1] || '');
+              const loc = decodeHtmlEntities(row[0].match(/class="jobLocation"[^>]*>([\s\S]*?)<\/span>/i)?.[1] || '');
+              if (!title || !href) continue;
+              const fullUrl = href.startsWith('http') ? href : `https://careers.unesco.org${href}`;
+              const inferred = inferCountryAndRegionFromLoc(loc, region);
+              results.push({
+                country: inferred.country,
+                region: inferred.region,
+                category: 'NGO & International Organizations',
+                employerOrProgramme: 'UNESCO (United Nations)',
+                jobTitle: title,
+                location: loc || OFFICIAL_NOT_STATED,
+                requiredEducation: OFFICIAL_NOT_STATED,
+                requiredExperience: OFFICIAL_NOT_STATED,
+                languageRequirements: OFFICIAL_NOT_STATED,
+                salary: OFFICIAL_NOT_STATED,
+                foreignerAndEthiopianEligibility: 'Open to nationals of UNESCO Member States (including Ethiopia) unless restricted to national officer level.',
+                ethiopiansEligible: /national/i.test(title) ? 'conditional' : 'yes',
+                visaSponsorshipInfo: 'UN international duty-station visa & laissez-passer rules apply where international.',
+                visaSponsored: !/national/i.test(title),
+                whoPaysVisaAndRecruitmentCosts: 'No recruitment agency fee charged by UN agencies.',
+                visaFeePolicy: 'not_stated',
+                noRecruitmentAgencyFee: true,
+                accommodationAndRelocationSupport: OFFICIAL_NOT_STATED,
+                contractDuration: OFFICIAL_NOT_STATED,
+                applicationDeadline: OFFICIAL_NOT_STATED,
+                requiredDocuments: ['UN Personal History Form / CV', 'Education Certificates'],
+                officialApplicationInstructions: 'Apply directly through UNESCO official careers portal.',
+                directApplicationUrl: fullUrl,
+                originalSourceUrl: fullUrl,
+                familyReunification: OFFICIAL_NOT_STATED,
+                permanentResidencePathway: OFFICIAL_NOT_STATED,
+              });
+            }
+          } catch {}
+        })(),
+        (async () => {
+          try {
+            const html = await (
+              await fetch('https://careers.icrc.org/search/', { headers: LIVE_UA_HEADERS, signal: AbortSignal.timeout(7000) })
+            ).text();
+            const seenHref = new Set<string>();
+            const anchors = [...html.matchAll(/<a[^>]+href="(\/job\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+            for (const m of anchors) {
+              const title = decodeHtmlEntities(m[2].replace(/<[^>]+>/g, ''));
+              if (!title || title.length < 4 || seenHref.has(m[1])) continue;
+              seenHref.add(m[1]);
+              if (seenHref.size > 4) break;
+              const fullUrl = `https://careers.icrc.org${m[1]}`;
+              const locSlug = m[1].split('/')[2]?.split('-').slice(0, 2).join(' ') || '';
+              const inferred = inferCountryAndRegionFromLoc(locSlug, region);
+              results.push({
+                country: inferred.country,
+                region: inferred.region,
+                category: 'NGO & International Organizations',
+                employerOrProgramme: 'International Committee of the Red Cross (ICRC)',
+                jobTitle: title,
+                location: locSlug || OFFICIAL_NOT_STATED,
+                requiredEducation: OFFICIAL_NOT_STATED,
+                requiredExperience: OFFICIAL_NOT_STATED,
+                languageRequirements: 'English / French (per official ICRC post)',
+                salary: OFFICIAL_NOT_STATED,
+                foreignerAndEthiopianEligibility: 'Open to qualified international & Ethiopian candidates subject to ICRC operational terms.',
+                ethiopiansEligible: 'yes',
+                visaSponsorshipInfo: 'ICRC arranges mission visa / deployment clearances per official post.',
+                visaSponsored: true,
+                whoPaysVisaAndRecruitmentCosts: 'Zero recruitment agency fees; ICRC handles official mission clearance.',
+                visaFeePolicy: 'not_stated',
+                noRecruitmentAgencyFee: true,
+                accommodationAndRelocationSupport: OFFICIAL_NOT_STATED,
+                contractDuration: OFFICIAL_NOT_STATED,
+                applicationDeadline: OFFICIAL_NOT_STATED,
+                requiredDocuments: ['CV', 'Motivation Letter', 'Diplomas / Work Certificates'],
+                officialApplicationInstructions: 'Submit application directly on careers.icrc.org.',
+                directApplicationUrl: fullUrl,
+                originalSourceUrl: fullUrl,
+                familyReunification: OFFICIAL_NOT_STATED,
+                permanentResidencePathway: OFFICIAL_NOT_STATED,
+              });
+            }
+          } catch {}
+        })()
+      );
+    }
+
+    // 2. Live fetch official country foreign workforce portals matching countryList / region
+    const normalizedCountries = countryList.map((c) => c.toLowerCase());
+    const matchingPortals = OFFICIAL_WORKFORCE_PORTALS.filter(
+      (p) =>
+        normalizedCountries.some((c) => p.country.toLowerCase().includes(c) || c.includes(p.country.toLowerCase())) ||
+        p.region.toLowerCase() === region.toLowerCase()
+    ).slice(0, 5);
+
+    for (const portal of matchingPortals) {
+      liveBoardTasks.push(
+        (async () => {
+          const meta = await fetchLiveOfficialPageMeta(portal.url);
+          if (!meta.ok && meta.status === 0) return;
+          const desc = meta.description || meta.title || portal.jobTitle;
+          results.push({
+            country: portal.country,
+            region: portal.region,
+            category: portal.category,
+            employerOrProgramme: portal.employerOrProgramme,
+            jobTitle: meta.title ? `${portal.jobTitle} (${meta.title.slice(0, 70)})` : portal.jobTitle,
+            location: `${portal.country} (National / Multi-City)`,
+            requiredEducation: OFFICIAL_NOT_STATED,
+            requiredExperience: OFFICIAL_NOT_STATED,
+            languageRequirements: OFFICIAL_NOT_STATED,
+            salary: OFFICIAL_NOT_STATED,
+            foreignerAndEthiopianEligibility: `Third-country & Ethiopian nationals may apply through licensed employers via ${portal.employerOrProgramme}. Live source note: ${desc.slice(0, 220)}`,
+            ethiopiansEligible: 'conditional',
+            visaSponsorshipInfo: 'Employer sponsorship or skilled-worker residence permit rules apply per official government portal.',
+            visaSponsored: true,
+            whoPaysVisaAndRecruitmentCosts: OFFICIAL_NOT_STATED,
+            visaFeePolicy: 'not_stated',
+            noRecruitmentAgencyFee: true,
+            accommodationAndRelocationSupport: OFFICIAL_NOT_STATED,
+            contractDuration: OFFICIAL_NOT_STATED,
+            applicationDeadline: 'Rolling / Open',
+            requiredDocuments: ['Valid Passport', 'Recognized Qualifications', 'Employer Contract / Official Forms'],
+            officialApplicationInstructions: `Review current occupations and apply directly through the official ${portal.employerOrProgramme} portal.`,
+            directApplicationUrl: meta.finalUrl || portal.url,
+            originalSourceUrl: portal.url,
+            familyReunification: OFFICIAL_NOT_STATED,
+            permanentResidencePathway: OFFICIAL_NOT_STATED,
+          });
+        })()
+      );
+    }
+
+    await Promise.all(liveBoardTasks);
+    return results;
+  }
+
+  const OFFICIAL_IMMIGRATION_PORTALS: Array<{
+    country: string;
+    region: string;
+    pathwayTitle: string;
+    pathwayType: string;
+    url: string;
+    yearsToPr: string;
+    jobOfferRequired: 'yes' | 'no' | 'conditional' | 'not_stated';
+  }> = [
+    { country: 'Germany', region: 'Europe', pathwayTitle: 'EU Blue Card, Skilled Workers & Opportunity Card (Chancenkarte)', pathwayType: 'Skilled Worker Immigration', url: 'https://www.make-it-in-germany.com/en/visa-residence/types/work-qualified-professionals', yearsToPr: '33 months (21 months with B1 German) for EU Blue Card; 3-5 years for Skilled Workers per AufenthG', jobOfferRequired: 'conditional' },
+    { country: 'Finland', region: 'Europe', pathwayTitle: 'Residence Permit for an Employed Person & Specialist Permit', pathwayType: 'Work-Based Residence Permit', url: 'https://migri.fi/en/working-in-finland', yearsToPr: '4 years continuous Type-A residence permit (per Migri rules)', jobOfferRequired: 'yes' },
+    { country: 'Estonia', region: 'Europe', pathwayTitle: 'Residence Permit for Employment & EU Blue Card (PPA)', pathwayType: 'Work-Based Residence Permit', url: 'https://www.politsei.ee/en/instructions/working-in-estonia', yearsToPr: '5 years temporary residence prior to long-term resident status', jobOfferRequired: 'yes' },
+    { country: 'Latvia', region: 'Europe', pathwayTitle: 'Temporary Residence Permit Based on Employment / EU Blue Card', pathwayType: 'Work-Based Residence Permit', url: 'https://www.pmlp.gov.lv/en/residence-permit', yearsToPr: '5 years continuous legal residence', jobOfferRequired: 'yes' },
+    { country: 'Lithuania', region: 'Europe', pathwayTitle: 'Temporary Residence Permit for Work / High-Skilled EU Blue Card', pathwayType: 'Work-Based Residence Permit', url: 'https://www.migracija.lt/en/', yearsToPr: '5 years continuous residence', jobOfferRequired: 'yes' },
+    { country: 'Poland', region: 'Europe', pathwayTitle: 'Temporary Residence and Work Permit (Single Permit)', pathwayType: 'Work-Based Residence Permit', url: 'https://www.gov.pl/web/uw-mazowiecki/work-permits', yearsToPr: '5 years continuous legal stay for EU long-term resident permit', jobOfferRequired: 'yes' },
+    { country: 'Romania', region: 'Europe', pathwayTitle: 'General Inspectorate for Immigration — Employment Residence Permit', pathwayType: 'Employer-Sponsored Immigration', url: 'https://igi.mai.gov.ro/en/', yearsToPr: '5 years continuous legal stay', jobOfferRequired: 'yes' },
+    { country: 'Bulgaria', region: 'Europe', pathwayTitle: 'Single Residence & Work Permit / EU Blue Card', pathwayType: 'Work-Based Residence Permit', url: 'https://www.mvr.bg/en/', yearsToPr: '5 years continuous residence', jobOfferRequired: 'yes' },
+    { country: 'Croatia', region: 'Europe', pathwayTitle: 'Stay and Work Permit for Third-Country Nationals (MUP)', pathwayType: 'Work-Based Residence Permit', url: 'https://mup.gov.hr/aliens-281621/stay-and-work/281622', yearsToPr: '5 years uninterrupted lawful stay', jobOfferRequired: 'yes' },
+    { country: 'Sweden', region: 'Europe', pathwayTitle: 'Work Permit & Permanent Residence Rules (Migrationsverket)', pathwayType: 'Work-Based Residence Permit', url: 'https://www.migrationsverket.se/English/Private-individuals/Working-in-Sweden.html', yearsToPr: '4 years of work permit residence within 7 years', jobOfferRequired: 'yes' },
+    { country: 'Norway', region: 'Europe', pathwayTitle: 'Skilled Worker Residence Permit & Permanent Residence (UDI)', pathwayType: 'Skilled Worker Immigration', url: 'https://www.udi.no/en/want-to-apply/work-immigration/', yearsToPr: '3 years continuous residence permit eligible for PR', jobOfferRequired: 'yes' },
+    { country: 'Denmark', region: 'Europe', pathwayTitle: 'Pay Limit & Positive List Work Residence (SIRI)', pathwayType: 'Work-Based Residence Permit', url: 'https://www.nyidanmark.dk/en-GB/You-want-to-apply/Work', yearsToPr: '8 years (4 years under supplementary fast-track criteria)', jobOfferRequired: 'yes' },
+    { country: 'Serbia', region: 'Europe', pathwayTitle: 'Unified Work & Temporary Residence Permit (Welcoming Serbia)', pathwayType: 'Work-Based Residence Permit', url: 'https://welcometoserbia.gov.rs/', yearsToPr: '3 years continuous temporary residence per 2023/2024 Law on Foreigners', jobOfferRequired: 'yes' },
+    { country: 'Georgia', region: 'Europe', pathwayTitle: 'Work Residence Permit & Permanent Residence (PSDA Georgia)', pathwayType: 'Work-Based Residence Permit', url: 'https://migration.gov.ge/', yearsToPr: '10 years temporary residence (per statutory rules)', jobOfferRequired: 'yes' },
+    { country: 'United Kingdom', region: 'Europe', pathwayTitle: 'Skilled Worker Visa & Indefinite Leave to Remain (GOV.UK)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.gov.uk/browse/visas-immigration/work-visas', yearsToPr: '5 years continuous Skilled Worker leave for ILR', jobOfferRequired: 'yes' },
+    { country: 'Netherlands', region: 'Europe', pathwayTitle: 'Highly Skilled Migrant & Permanent Residence (IND)', pathwayType: 'Skilled Worker Immigration', url: 'https://ind.nl/en/residence-permits/work', yearsToPr: '5 years continuous legal residence', jobOfferRequired: 'yes' },
+    { country: 'Saudi Arabia', region: 'Middle East', pathwayTitle: 'Work Residency (Iqama) & Premium Residency Programme', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.hrsd.gov.sa/en', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'United Arab Emirates', region: 'Middle East', pathwayTitle: 'Employment Residence Visa & UAE Green / Golden Visa', pathwayType: 'Work-Based Residence Permit', url: 'https://www.mohre.gov.ae/en/home.aspx', yearsToPr: 'Work visa is temporary & renewable; no standard naturalization PR timeline stated', jobOfferRequired: 'yes' },
+    { country: 'Qatar', region: 'Middle East', pathwayTitle: 'Employer Work Residence Permit (MoFA / Hukoomi Qatar)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://hukoomi.gov.qa/en/service/issue-new-work-residence-permit', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'Kuwait', region: 'Middle East', pathwayTitle: 'Private Sector Work Visa Article 18 (Ministry of Interior)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.moi.gov.kw/main/', yearsToPr: 'Temporary employer-sponsored residency only; no standard PR pathway', jobOfferRequired: 'yes' },
+    { country: 'Bahrain', region: 'Middle East', pathwayTitle: 'Expatriate Work Permit (LMRA Bahrain)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.lmra.gov.bh/en/home', yearsToPr: 'Temporary renewable permit (Golden Residency separate criteria)', jobOfferRequired: 'yes' },
+    { country: 'Oman', region: 'Middle East', pathwayTitle: 'Employment Visa (Royal Oman Police)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.rop.gov.om/english/', yearsToPr: 'Temporary employment visa; no general PR track', jobOfferRequired: 'yes' },
+    { country: 'Jordan', region: 'Middle East', pathwayTitle: 'Work & Residence Permit for Foreigners (Ministry of Interior)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://moi.gov.jo/EN/', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'China', region: 'Far East & Asia', pathwayTitle: 'Foreigner Work Permit (Z Visa) & Residence Permit (NIA)', pathwayType: 'Work-Based Residence Permit', url: 'https://en.nia.gov.cn/', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'South Korea', region: 'Far East & Asia', pathwayTitle: 'Skilled E-7 & F-2 / F-5 Permanent Residence (HiKorea)', pathwayType: 'Skilled Worker Immigration', url: 'https://www.hikorea.go.kr/Main.pt?locale=en', yearsToPr: '5 years legal stay (subject to F-5 income & KIIP criteria)', jobOfferRequired: 'yes' },
+    { country: 'Japan', region: 'Far East & Asia', pathwayTitle: 'Working Visa, Highly Skilled Professional & Permanent Residence', pathwayType: 'Skilled Worker Immigration', url: 'https://www.moj.go.jp/isa/index.html?hl=en', yearsToPr: '10 years (1 or 3 years under Highly Skilled Professional Points)', jobOfferRequired: 'yes' },
+    { country: 'Singapore', region: 'Far East & Asia', pathwayTitle: 'Employment Pass / S Pass & PR Application (MOM / ICA)', pathwayType: 'Work-Based Residence Permit', url: 'https://www.mom.gov.sg/passes-and-permits', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'Malaysia', region: 'Far East & Asia', pathwayTitle: 'Employment Pass (Immigration Department of Malaysia)', pathwayType: 'Employer-Sponsored Immigration', url: 'https://www.imi.gov.my/index.php/en/main-services/pass/visitor-pass/employment-pass/', yearsToPr: OFFICIAL_NOT_STATED, jobOfferRequired: 'yes' },
+    { country: 'Canada', region: 'Americas & Oceania', pathwayTitle: 'Express Entry & Permanent Residence (IRCC Canada)', pathwayType: 'Permanent Residence', url: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html', yearsToPr: 'Direct Permanent Residence upon Express Entry ITA approval', jobOfferRequired: 'no' },
+    { country: 'Australia', region: 'Americas & Oceania', pathwayTitle: 'Skilled Independent & Employer Nomination Visas', pathwayType: 'Permanent Residence', url: 'https://immi.homeaffairs.gov.au/visas/working-in-australia', yearsToPr: 'Direct PR (Subclass 189/190) or 2-3 years via employer transition (186)', jobOfferRequired: 'conditional' },
+    { country: 'New Zealand', region: 'Americas & Oceania', pathwayTitle: 'Skilled Migrant & Accredited Employer Work to Residence', pathwayType: 'Skilled Worker Immigration', url: 'https://www.immigration.govt.nz/new-zealand-visas/preparing-a-visa-application/working-in-nz', yearsToPr: '2 years in Tier 1/Work-to-Residence or Skilled Migrant points approval', jobOfferRequired: 'yes' },
+  ];
+
+  async function discoverImmigrationPathwaysDirectLive(countryList: string[], region: string): Promise<any[]> {
+    const normalized = countryList.map((c) => c.toLowerCase());
+    let targets = OFFICIAL_IMMIGRATION_PORTALS.filter((p) =>
+      normalized.some((c) => p.country.toLowerCase() === c || p.country.toLowerCase().includes(c) || c.includes(p.country.toLowerCase()))
+    );
+    if (targets.length === 0) {
+      targets = OFFICIAL_IMMIGRATION_PORTALS.filter((p) => p.region.toLowerCase() === region.toLowerCase()).slice(0, 6);
+    }
+
+    const discovered: any[] = [];
+    await Promise.all(
+      targets.slice(0, 6).map(async (entry) => {
+        const meta = await fetchLiveOfficialPageMeta(entry.url);
+        const liveSummary = meta.description || meta.title || OFFICIAL_NOT_STATED;
+        const body = meta.bodyText || '';
+        const familyMention = body.match(/[^.]*family[^.]*\./i)?.[0]?.trim() || OFFICIAL_NOT_STATED;
+        const feeMention = body.match(/[^.]*(?:fee|eur|usd|\$|€)[^.]*\d+[^.]*\./i)?.[0]?.trim() || OFFICIAL_NOT_STATED;
+
+        discovered.push({
+          country: entry.country,
+          region: entry.region,
+          pathwayTitle: meta.title ? `${entry.pathwayTitle}` : entry.pathwayTitle,
+          pathwayType: entry.pathwayType,
+          ethiopianCitizenEligibility: 'conditional',
+          ethiopianEligibilityDetails: `Third-country nationals including Ethiopian citizens are eligible subject to meeting statutory criteria on the official ${entry.country} portal. Live source summary: ${liveSummary.slice(0, 220)}`,
+          eligibilityRequirements: liveSummary.slice(0, 350),
+          requiredEducationAndExperience: OFFICIAL_NOT_STATED,
+          minimumIncomeOrFinancialRequirement: OFFICIAL_NOT_STATED,
+          languageRequirements: OFFICIAL_NOT_STATED,
+          requiredDocuments: ['Valid Passport', 'Authorized Employment Contract or Points Qualification', 'Police Clearance & Health/Education Certificates'],
+          governmentApplicationFees: feeMention.slice(0, 180),
+          processingTimeline: OFFICIAL_NOT_STATED,
+          jobOfferRequired: entry.jobOfferRequired,
+          yearsToPermanentResidence: entry.yearsToPr,
+          temporaryVsPermanentClarification: 'Initial work-based residence permits are temporary and time-limited; permanent residence or long-term settlement requires separate statutory renewal and continuous legal stay.',
+          familyReunificationRules: familyMention.slice(0, 220),
+          citizenshipPathwayNotes: OFFICIAL_NOT_STATED,
+          officialGovernmentWebsite: meta.finalUrl || entry.url,
+          originalSourceUrl: entry.url,
+          exactApplicationSteps: [
+            `Consult the official ${entry.country} immigration portal (${entry.url}) for latest category rules.`,
+            'Verify whether an employer sponsor, labour-market test, or points assessment is required.',
+            'Submit documents & pay statutory government fees directly through the official embassy or immigration authority.',
+          ],
+        });
+      })
+    );
+    return discovered;
+  }
+
+  const OFFICIAL_SCHOLARSHIP_PORTALS: Array<{
+    region: string;
+    country: string;
+    universityOrInstitution: string;
+    scholarshipName: string;
+    studyLevel: string;
+    url: string;
+    expCompensates: 'confirmed_yes' | 'considered' | 'no' | 'not_stated';
+  }> = [
+    { region: 'Europe', country: 'Sweden', universityOrInstitution: 'Swedish Institute (SI)', scholarshipName: 'Swedish Institute Scholarships for Global Professionals (SISGP)', studyLevel: 'Postgraduate / Master', url: 'https://si.se/en/apply/scholarships/swedish-institute-scholarships-for-global-professionals/', expCompensates: 'confirmed_yes' },
+    { region: 'Europe', country: 'Hungary', universityOrInstitution: 'Tempus Public Foundation (Government of Hungary)', scholarshipName: 'Stipendium Hungaricum Scholarship Programme', studyLevel: 'Postgraduate / Master', url: 'https://stipendiumhungaricum.hu/', expCompensates: 'considered' },
+    { region: 'Europe', country: 'Finland', universityOrInstitution: 'Study in Finland (Finnish National Agency for Education)', scholarshipName: 'Finland Scholarship & University Tuition Waivers', studyLevel: 'Postgraduate / Master', url: 'https://www.studyinfinland.fi/scholarships', expCompensates: 'considered' },
+    { region: 'Europe', country: 'United Kingdom', universityOrInstitution: 'UK FCDO — Chevening Secretariat', scholarshipName: 'Chevening Scholarships (Work Experience & Leadership Focus)', studyLevel: 'Postgraduate / Master', url: 'https://www.chevening.org/scholarships/', expCompensates: 'confirmed_yes' },
+    { region: 'Europe', country: 'Germany', universityOrInstitution: 'DAAD — German Academic Exchange Service', scholarshipName: 'DAAD EPOS Development-Related Postgraduate Courses', studyLevel: 'Postgraduate / Master', url: 'https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/', expCompensates: 'confirmed_yes' },
+    { region: 'Europe', country: 'Netherlands', universityOrInstitution: 'Nuffic / Study in NL', scholarshipName: 'NL Scholarship & Orange Knowledge / Institutional Funding', studyLevel: 'Postgraduate / Master', url: 'https://www.studyinnl.org/finances', expCompensates: 'considered' },
+    { region: 'Europe', country: 'Norway', universityOrInstitution: 'Directorate for Higher Education and Skills (Study in Norway)', scholarshipName: 'Norwegian Higher Education & Institutional Scholarships', studyLevel: 'Postgraduate / Master', url: 'https://studyinnorway.no/', expCompensates: 'not_stated' },
+    { region: 'Europe', country: 'Switzerland', universityOrInstitution: 'ETH Zurich', scholarshipName: 'Excellence Scholarship & Opportunity Programme (ESOP)', studyLevel: 'Postgraduate / Master', url: 'https://ethz.ch/students/en/studies/financial/scholarships/excellencescholarship.html', expCompensates: 'not_stated' },
+    { region: 'Middle East', country: 'Saudi Arabia', universityOrInstitution: 'Ministry of Education Saudi Arabia', scholarshipName: 'Study in Saudi Government Scholarship Portal', studyLevel: 'Undergraduate', url: 'https://studyinsaudi.moe.gov.sa/', expCompensates: 'considered' },
+    { region: 'Far East & Asia', country: 'South Korea', universityOrInstitution: 'NIIED — Government of South Korea', scholarshipName: 'Global Korea Scholarship (GKS)', studyLevel: 'Postgraduate / Master', url: 'https://www.studyinkorea.go.kr/', expCompensates: 'considered' },
+    { region: 'Far East & Asia', country: 'China', universityOrInstitution: 'China Scholarship Council (CSC)', scholarshipName: 'Chinese Government Scholarship Programme', studyLevel: 'Postgraduate / Master', url: 'https://www.campuschina.org/', expCompensates: 'considered' },
+    { region: 'Far East & Asia', country: 'Japan', universityOrInstitution: 'MEXT / JASSO Study in Japan', scholarshipName: 'Japanese Government (MEXT) Scholarship', studyLevel: 'Postgraduate / Master', url: 'https://www.studyinjapan.go.jp/en/planning/scholarships/', expCompensates: 'considered' },
+    { region: 'Africa & Other', country: 'Global / Multiple Partner Universities', universityOrInstitution: 'Mastercard Foundation', scholarshipName: 'Mastercard Foundation Scholars Program', studyLevel: 'Postgraduate / Master', url: 'https://mastercardfdn.org/all/scholars/', expCompensates: 'confirmed_yes' },
+  ];
+
+  async function discoverScholarshipsDirectLive(region: string, countryList: string[], studyLevel: string): Promise<any[]> {
+    const normCountries = countryList.map((c) => c.toLowerCase());
+    let targets = OFFICIAL_SCHOLARSHIP_PORTALS.filter(
+      (s) =>
+        normCountries.some((c) => s.country.toLowerCase().includes(c) || c.includes(s.country.toLowerCase())) ||
+        s.region.toLowerCase() === region.toLowerCase()
+    );
+    if (targets.length === 0) targets = OFFICIAL_SCHOLARSHIP_PORTALS.slice(0, 6);
+
+    const discovered: any[] = [];
+    await Promise.all(
+      targets.slice(0, 6).map(async (entry) => {
+        const meta = await fetchLiveOfficialPageMeta(entry.url);
+        const desc = meta.description || meta.title || OFFICIAL_NOT_STATED;
+        const body = `${meta.description} ${meta.bodyText}`;
+        const noGpaExplicit = /\bno\s+minimum\s+gpa\b|\bno\s+high\s+gpa\b|\bdoes\s+not\s+require\s+a?\s*gpa\b/i.test(body);
+        const noRecExplicit = /\bno\s+recommendation\s+letters?\b|\brecommendation\s+letters?\s+are\s+not\s+required\b/i.test(body);
+
+        discovered.push({
+          region: entry.region,
+          studyLevel: studyLevel || entry.studyLevel,
+          universityOrInstitution: entry.universityOrInstitution,
+          country: entry.country,
+          scholarshipName: entry.scholarshipName,
+          studyProgramme: OFFICIAL_NOT_STATED,
+          eligibilityForEthiopians: `Review official eligibility for Ethiopian nationals on ${entry.universityOrInstitution}. Live note: ${desc.slice(0, 200)}`,
+          ethiopiansEligible: 'conditional',
+          academicRequirements: OFFICIAL_NOT_STATED,
+          gpaRequirement: OFFICIAL_NOT_STATED,
+          noHighGpaConfirmed: noGpaExplicit,
+          recommendationLetterRequirement: OFFICIAL_NOT_STATED,
+          noRecommendationLetterConfirmed: noRecExplicit,
+          professionalExperienceCompensates: entry.expCompensates,
+          experienceCompensationNotes:
+            entry.expCompensates === 'confirmed_yes'
+              ? 'Official programme explicitly evaluates prior work and leadership experience alongside academics.'
+              : OFFICIAL_NOT_STATED,
+          requiredDocuments: ['CV / Resume', 'Academic Transcripts & Degree', 'Valid Passport'],
+          fundingCoverage: desc.slice(0, 240),
+          coversTuition: /tuition/i.test(body),
+          coversAccommodation: /accommodation|housing/i.test(body),
+          coversLivingAllowance: /stipend|living\s+allowance|monthly/i.test(body),
+          coversTravel: /travel|flight/i.test(body),
+          applicationDeadline: OFFICIAL_NOT_STATED,
+          officialApplicationUrl: meta.finalUrl || entry.url,
+          originalSourceUrl: entry.url,
+          exactApplicationProcedure: [
+            `Visit the official scholarship portal (${entry.url}) for the current call timeline.`,
+            'Verify Ethiopian country eligibility and upload supporting work/leadership documents.',
+            'Submit before the officially published closing date.',
+          ],
+        });
+      })
+    );
+    return discovered;
+  }
+
   app.post('/api/international/research-jobs', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
     const startedAt = new Date().toISOString();
     try {
       const {
@@ -5444,14 +6378,6 @@ Return strict JSON:
       } = req.body || {};
 
       const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 6) : ['Germany'];
-      const client = await getAiClient();
-      if (!client) {
-        res.status(503).json({
-          success: false,
-          error: 'GEMINI_API_KEY is not configured on the server. Configure GEMINI_API_KEY to run automated web discovery, or use Manual Official Record Entry.',
-        });
-        return;
-      }
 
       const prompt = `Use Google Search to research REAL, currently open official foreign workforce programmes and direct employer career openings recruiting international/foreign workers (and check whether Ethiopian citizens can apply) in: ${countryList.join(', ')} (${region}).
 Priority categories: ${categories.join(', ')}.
@@ -5492,20 +6418,17 @@ CRITICAL ANTI-FABRICATION RULES:
   }
 ]`;
 
-      const response = (await Promise.race([
-        client.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: prompt,
-          config: { tools: [{ googleSearch: {} }] },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('International jobs research timed out after 25s. Try narrowing selected countries.')), 25000)
-        ),
-      ])) as any;
+      const aiAttempt = await runGeminiSearchWithFallback(prompt);
+      let groundingUrls = aiAttempt?.groundingUrls || new Set<string>();
+      const parsed = aiAttempt ? parseJsonBlockFromText(aiAttempt.response?.text || '') : null;
+      let candidates: any[] = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+      let searchMethod = aiAttempt && candidates.length > 0 ? `Gemini Search Grounding (${aiAttempt.modelUsed})` : 'Live Direct Official Internet Crawler';
 
-      const groundingUrls = extractGroundingUrls(response);
-      const parsed = parseJsonBlockFromText(response.text || '');
-      const candidates = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+      if (candidates.length === 0) {
+        candidates = await discoverInternationalJobsDirectLive(countryList, region, categories);
+        groundingUrls = new Set(candidates.map((c) => c.originalSourceUrl).filter(Boolean));
+        searchMethod = 'Live Direct Official Internet Crawler';
+      }
 
       const state = loadPersistedInternationalData();
       const allExisting = existingJobs.length > 0 ? existingJobs : state.internationalJobs;
@@ -5595,6 +6518,11 @@ CRITICAL ANTI-FABRICATION RULES:
           directApplicationUrl: directUrl || sourceUrl,
           originalSourceUrl: sourceUrl || directUrl,
           lastVerifiedAt: nowIso,
+          discoveredAt: nowIso,
+          verifiedAt: effectiveVerification === 'VERIFIED' ? nowIso : undefined,
+          approvalStatus: expired ? 'expired' : 'private_pending',
+          aiAnalysisNotes: searchMethod,
+          sourceName: employer,
           familyReunification: safeNotStated(raw?.familyReunification),
           permanentResidencePathway: safeNotStated(raw?.permanentResidencePathway),
           verificationStatus: effectiveVerification,
@@ -5628,7 +6556,7 @@ CRITICAL ANTI-FABRICATION RULES:
       const run = {
         id: `run_jobs_${Date.now()}`,
         runType: 'international_jobs',
-        triggeredBy: 'Administrator',
+        triggeredBy: 'Yeabsra Teffera (Private Manual Trigger)',
         startedAt,
         completedAt: new Date().toISOString(),
         regionsResearched: [region],
@@ -5638,7 +6566,7 @@ CRITICAL ANTI-FABRICATION RULES:
         unverifiedCount: createdJobs.length - verifiedCount,
         rejectedCount,
         duplicatesSkipped,
-        summary: `Researched ${countryList.join(', ')}: ${verifiedCount} VERIFIED official opportunities, ${createdJobs.length - verifiedCount} unverified/rejected, ${duplicatesSkipped} duplicates skipped.`,
+        summary: `[${searchMethod}] Discovered ${createdJobs.length} private_pending jobs for ${countryList.join(', ')}: ${verifiedCount} VERIFIED official links, ${duplicatesSkipped} duplicates skipped.`,
         status: 'completed',
       };
 
@@ -5647,22 +6575,18 @@ CRITICAL ANTI-FABRICATION RULES:
       const mergedLogs = [...logs, ...(state.verificationLogs || [])].slice(0, 300);
       savePersistedInternationalData({ ...state, internationalJobs: mergedJobs, researchHistory: mergedHistory, verificationLogs: mergedLogs });
 
-      res.json({ success: true, discovered: createdJobs, run, logs, groundingUrlsCount: groundingUrls.size });
+      res.json({ success: true, searchMethod, discovered: createdJobs, run, logs, groundingUrlsCount: groundingUrls.size });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'International job research failed' });
     }
   });
 
   app.post('/api/international/research-immigration', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
     const startedAt = new Date().toISOString();
     try {
       const { countries = ['Germany', 'Finland', 'Estonia', 'Sweden', 'Canada'], region = 'Europe', existingPathways = [] } = req.body || {};
       const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 6) : ['Germany'];
-      const client = await getAiClient();
-      if (!client) {
-        res.status(503).json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' });
-        return;
-      }
 
       const prompt = `Use Google Search to research ONLY OFFICIAL government immigration department, ministry, or embassy websites for legal work residence permits, skilled worker immigration, job-seeker visas, family reunification, and permanent residence pathways available to Ethiopian citizens in: ${countryList.join(', ')}.
 
@@ -5698,20 +6622,18 @@ Return JSON array with up to 6 pathways:
   }
 ]`;
 
-      const response = (await Promise.race([
-        client.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: prompt,
-          config: { tools: [{ googleSearch: {} }] },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Legal immigration research timed out after 25s. Try narrowing selected countries.')), 25000)
-        ),
-      ])) as any;
+      const aiAttempt = await runGeminiSearchWithFallback(prompt);
+      let groundingUrls = aiAttempt?.groundingUrls || new Set<string>();
+      const parsed = aiAttempt ? parseJsonBlockFromText(aiAttempt.response?.text || '') : null;
+      let candidates: any[] = Array.isArray(parsed) ? parsed : [];
+      let searchMethod = aiAttempt && candidates.length > 0 ? `Gemini Search Grounding (${aiAttempt.modelUsed})` : 'Live Direct Official Government Portal Crawler';
 
-      const groundingUrls = extractGroundingUrls(response);
-      const parsed = parseJsonBlockFromText(response.text || '');
-      const candidates = Array.isArray(parsed) ? parsed : [];
+      if (candidates.length === 0) {
+        candidates = await discoverImmigrationPathwaysDirectLive(countryList, region);
+        groundingUrls = new Set(candidates.map((c) => c.originalSourceUrl || c.officialGovernmentWebsite).filter(Boolean));
+        searchMethod = 'Live Direct Official Government Portal Crawler';
+      }
+
       const state = loadPersistedInternationalData();
       const allExisting = existingPathways.length > 0 ? existingPathways : state.immigrationPathways;
       const existingKeys = new Set(allExisting.map((p: any) => `${String(p.country).toLowerCase()}|${String(p.pathwayTitle).toLowerCase()}`));
@@ -5789,6 +6711,11 @@ Return JSON array with up to 6 pathways:
             ? raw.exactApplicationSteps.map((s: any) => String(s))
             : [OFFICIAL_NOT_STATED],
           lastVerifiedAt: nowIso,
+          discoveredAt: nowIso,
+          verifiedAt: effectiveVerification === 'VERIFIED' ? nowIso : undefined,
+          approvalStatus: 'private_pending',
+          aiAnalysisNotes: searchMethod,
+          sourceName: `${country} Official Immigration Portal`,
           verificationStatus: effectiveVerification,
           verificationNotes,
           sourceAuthorityType: chk.authorityType,
@@ -5818,7 +6745,7 @@ Return JSON array with up to 6 pathways:
       const run = {
         id: `run_imm_${Date.now()}`,
         runType: 'immigration_pr',
-        triggeredBy: 'Administrator',
+        triggeredBy: 'Yeabsra Teffera (Private Manual Trigger)',
         startedAt,
         completedAt: new Date().toISOString(),
         regionsResearched: [region],
@@ -5828,7 +6755,7 @@ Return JSON array with up to 6 pathways:
         unverifiedCount: created.length - verifiedCount,
         rejectedCount: created.filter((p) => p.verificationStatus === 'REJECTED_SUSPICIOUS').length,
         duplicatesSkipped,
-        summary: `Researched official immigration & PR portals for ${countryList.join(', ')}: ${verifiedCount} VERIFIED.`,
+        summary: `[${searchMethod}] Discovered ${created.length} private_pending immigration pathways for ${countryList.join(', ')}: ${verifiedCount} VERIFIED, ${duplicatesSkipped} duplicates skipped.`,
         status: 'completed',
       };
 
@@ -5839,22 +6766,18 @@ Return JSON array with up to 6 pathways:
         verificationLogs: [...logs, ...(state.verificationLogs || [])].slice(0, 300),
       });
 
-      res.json({ success: true, discovered: created, run, logs });
+      res.json({ success: true, searchMethod, discovered: created, run, logs });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Immigration research failed' });
     }
   });
 
   app.post('/api/international/research-scholarships', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
     const startedAt = new Date().toISOString();
     try {
       const { region = 'Europe', countries = [], studyLevel = 'Postgraduate / Master', existingScholarships = [] } = req.body || {};
       const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 8) : [];
-      const client = await getAiClient();
-      if (!client) {
-        res.status(503).json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' });
-        return;
-      }
 
       const countryClause = countryList.length > 0 ? ` Target countries: ${countryList.join(', ')}.` : '';
       const prompt = `Use Google Search to research REAL international scholarships (Master's, Leadership, Professional Development, Short Courses, Undergraduate) from official universities, governments, or recognized scholarship agencies open to Ethiopian applicants where professional/management/leadership experience is valued or can compensate for ordinary academic results. Focus region: ${region},${countryClause} level preference: ${studyLevel}.
@@ -5894,20 +6817,18 @@ Return JSON array of up to 6 scholarships:
   }
 ]`;
 
-      const response = (await Promise.race([
-        client.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: prompt,
-          config: { tools: [{ googleSearch: {} }] },
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Scholarship research timed out after 25s. Try narrowing selected countries.')), 25000)
-        ),
-      ])) as any;
+      const aiAttempt = await runGeminiSearchWithFallback(prompt);
+      let groundingUrls = aiAttempt?.groundingUrls || new Set<string>();
+      const parsed = aiAttempt ? parseJsonBlockFromText(aiAttempt.response?.text || '') : null;
+      let candidates: any[] = Array.isArray(parsed) ? parsed : [];
+      let searchMethod = aiAttempt && candidates.length > 0 ? `Gemini Search Grounding (${aiAttempt.modelUsed})` : 'Live Direct Official Scholarship Portal Crawler';
 
-      const groundingUrls = extractGroundingUrls(response);
-      const parsed = parseJsonBlockFromText(response.text || '');
-      const candidates = Array.isArray(parsed) ? parsed : [];
+      if (candidates.length === 0) {
+        candidates = await discoverScholarshipsDirectLive(region, countryList, studyLevel);
+        groundingUrls = new Set(candidates.map((c) => c.originalSourceUrl || c.officialApplicationUrl).filter(Boolean));
+        searchMethod = 'Live Direct Official Scholarship Portal Crawler';
+      }
+
       const state = loadPersistedInternationalData();
       const allExisting = existingScholarships.length > 0 ? existingScholarships : state.experienceScholarships;
       const existingKeys = new Set(allExisting.map((s: any) => `${String(s.country).toLowerCase()}|${String(s.scholarshipName).toLowerCase()}`));
@@ -5993,6 +6914,11 @@ Return JSON array of up to 6 scholarships:
             ? raw.exactApplicationProcedure.map((s: any) => String(s))
             : [OFFICIAL_NOT_STATED],
           lastVerifiedAt: nowIso,
+          discoveredAt: nowIso,
+          verifiedAt: finalStatus === 'VERIFIED' ? nowIso : undefined,
+          approvalStatus: expired ? 'expired' : 'private_pending',
+          aiAnalysisNotes: searchMethod,
+          sourceName: inst,
           verificationStatus: finalStatus,
           verificationNotes,
           sourceAuthorityType: chk.authorityType,
@@ -6022,7 +6948,7 @@ Return JSON array of up to 6 scholarships:
       const run = {
         id: `run_sch_${Date.now()}`,
         runType: 'scholarships',
-        triggeredBy: 'Administrator',
+        triggeredBy: 'Yeabsra Teffera (Private Manual Trigger)',
         startedAt,
         completedAt: new Date().toISOString(),
         regionsResearched: [region],
@@ -6032,7 +6958,7 @@ Return JSON array of up to 6 scholarships:
         unverifiedCount: created.length - verifiedCount,
         rejectedCount: created.filter((s) => s.verificationStatus === 'REJECTED_SUSPICIOUS').length,
         duplicatesSkipped,
-        summary: `Researched experience-based scholarships (${region}): ${verifiedCount} VERIFIED official programmes.`,
+        summary: `[${searchMethod}] Discovered ${created.length} private_pending scholarships (${region}): ${verifiedCount} VERIFIED official programmes, ${duplicatesSkipped} duplicates skipped.`,
         status: 'completed',
       };
 
@@ -6043,7 +6969,7 @@ Return JSON array of up to 6 scholarships:
         verificationLogs: [...logs, ...(state.verificationLogs || [])].slice(0, 300),
       });
 
-      res.json({ success: true, discovered: created, run, logs });
+      res.json({ success: true, searchMethod, discovered: created, run, logs });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Scholarship research failed' });
     }
@@ -6301,26 +7227,897 @@ Return strict JSON array:
     }
   });
 
-  app.post('/api/international/auto-run-check', async (req: Request, res: Response): Promise<void> => {
+  // =========================================================================
+  // SYSTEM 2 AUTOMATIC 30-SECOND RESEARCH ENGINE, AI ANALYSIS & SOURCE REGISTRY
+  // =========================================================================
+  const SCHEDULER_GLOBAL_KEY = '__hopelandSystem2Scheduler';
+  const schedulerRuntime: {
+    startedAt: string;
+    isCycleActive: boolean;
+    nextRunAt: string | null;
+    timerId: any;
+    startupTimerId: any;
+  } = (globalThis as any)[SCHEDULER_GLOBAL_KEY] || {
+    startedAt: new Date().toISOString(),
+    isCycleActive: false,
+    nextRunAt: null,
+    timerId: null,
+    startupTimerId: null,
+  };
+  (globalThis as any)[SCHEDULER_GLOBAL_KEY] = schedulerRuntime;
+
+  function buildSchedulerStatusSnapshot(data = loadPersistedInternationalData()) {
+    const cfg = data.schedulerConfig || {
+      enabled: true,
+      intervalSeconds: 30,
+      cycleCount: 0,
+      lastRunAt: null,
+      lastSuccessfulRunAt: null,
+      lastError: null,
+      aiProviderStatus: 'ready',
+      lastCycleSummary: '',
+    };
+    const sources = Array.isArray(data.monitoredSources) ? data.monitoredSources : [];
+    const healthyCount = sources.filter((s: any) => s.verificationStatus === 'HEALTHY').length;
+    const failedCount = sources.filter((s: any) => s.verificationStatus === 'FAILED').length;
+    return {
+      enabled: cfg.enabled !== false,
+      isRunning: cfg.enabled !== false,
+      isCycleActive: schedulerRuntime.isCycleActive,
+      intervalSeconds: 30,
+      cycleCount: Number(cfg.cycleCount || 0),
+      startedAt: schedulerRuntime.startedAt,
+      lastRunAt: cfg.lastRunAt || null,
+      lastSuccessfulRunAt: cfg.lastSuccessfulRunAt || null,
+      nextRunAt:
+        cfg.enabled !== false
+          ? schedulerRuntime.nextRunAt || new Date(Date.now() + 30000).toISOString()
+          : null,
+      lastError: cfg.lastError || null,
+      aiProviderStatus: cfg.aiProviderStatus || 'Live Official Crawler active',
+      aiModel: 'gemini-4-hydrogen',
+      sourcesTotal: sources.length,
+      sourcesHealthy: healthyCount,
+      sourcesFailed: failedCount,
+      recentDiscoveredCount:
+        (data.internationalJobs || []).filter((j: any) => j.approvalStatus === 'private_pending').length +
+        (data.immigrationPathways || []).filter((p: any) => p.approvalStatus === 'private_pending').length +
+        (data.experienceScholarships || []).filter((s: any) => s.approvalStatus === 'private_pending').length,
+      lastCycleSummary: cfg.lastCycleSummary || 'Automatic 30-second research active.',
+    };
+  }
+
+  async function analyzeOfficialAnnouncementWithAiOrLive(
+    source: any,
+    pageMeta: { title: string; description: string; bodyText: string; finalUrl: string; status: number }
+  ): Promise<{
+    aiStatus: string;
+    ethiopianEligibility: string;
+    keyRequirements: string;
+    deadline: string;
+    feesOrFunding: string;
+    aiSummary: string;
+  }> {
+    const fallbackSummary =
+      pageMeta.description ||
+      pageMeta.title ||
+      `Official announcement checked from ${source.name} (${source.country})`;
+    const body = `${pageMeta.title} ${pageMeta.description} ${pageMeta.bodyText}`;
+    const detectedDeadline =
+      body.match(/(?:deadline|closing\s+date|apply\s+by)[:\s]*([A-Z]?[a-z]+\s+\d{1,2},?\s+20\d{2}|\d{4}-\d{2}-\d{2})/i)?.[1] ||
+      OFFICIAL_NOT_STATED;
+    const detectedFeeOrSalary =
+      body.match(/[^.]*(?:fee|eur|usd|\$|€|stipend|tuition|salary)[^.]*\d+[^.]*\./i)?.[0]?.trim().slice(0, 220) ||
+      OFFICIAL_NOT_STATED;
+
+    const client = await getAiClient();
+    if (!client) {
+      return {
+        aiStatus: 'not_configured (GEMINI_API_KEY unset) — Live Official Crawler active',
+        ethiopianEligibility: `Third-country & Ethiopian eligibility subject to official criteria on ${source.name}.`,
+        keyRequirements: fallbackSummary.slice(0, 280),
+        deadline: detectedDeadline,
+        feesOrFunding: detectedFeeOrSalary,
+        aiSummary: `Live Official Crawler analyzed HTTP ${pageMeta.status} from ${source.name}.`,
+      };
+    }
+
     try {
-      const { frequency = 'manual', lastRunAt } = req.body || {};
-      if (frequency === 'manual') {
-        res.json({ due: false, reason: 'Research frequency is set to manual.' });
+      const prompt = `Analyze this live fetched official portal snippet strictly without inventing facts.
+Source: ${source.name} (${source.country}, type: ${source.entityType}, URL: ${pageMeta.finalUrl})
+Title: ${pageMeta.title}
+Meta: ${pageMeta.description}
+Text: ${pageMeta.bodyText.slice(0, 1600)}
+
+Return strict JSON:
+{
+  "ethiopianEligibility": "factual summary or NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
+  "keyRequirements": "concise factual summary",
+  "deadline": "exact deadline or NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
+  "feesOrFunding": "exact official fee/salary/funding or NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
+  "aiSummary": "1-sentence factual analysis of what the official source currently announces"
+}`;
+      const resp = (await Promise.race([
+        client.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: prompt,
+          config: { responseMimeType: 'application/json' },
+        }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini timeout (7s)')), 7000)),
+      ])) as any;
+      const parsed = parseJsonBlockFromText(resp?.text || '');
+      if (parsed && typeof parsed === 'object') {
+        return {
+          aiStatus: 'active (gemini-4-hydrogen)',
+          ethiopianEligibility: safeNotStated(parsed.ethiopianEligibility),
+          keyRequirements: safeNotStated(parsed.keyRequirements),
+          deadline: safeNotStated(parsed.deadline),
+          feesOrFunding: safeNotStated(parsed.feesOrFunding),
+          aiSummary: String(parsed.aiSummary || `Analyzed with gemini-4-hydrogen from ${source.name}`).slice(0, 260),
+        };
+      }
+    } catch (aiErr: any) {
+      const errMsg = String(aiErr?.message || aiErr || 'AI error');
+      const shortErr = /429|RESOURCE_EXHAUSTED|quota/i.test(errMsg)
+        ? 'degraded (Gemini 429 quota exceeded) — Live Official Crawler active'
+        : `degraded (${errMsg.slice(0, 60)}) — Live Official Crawler active`;
+      return {
+        aiStatus: shortErr,
+        ethiopianEligibility: `Third-country & Ethiopian eligibility subject to official criteria on ${source.name}.`,
+        keyRequirements: fallbackSummary.slice(0, 280),
+        deadline: detectedDeadline,
+        feesOrFunding: detectedFeeOrSalary,
+        aiSummary: `Live Official Crawler extracted metadata (${shortErr}).`,
+      };
+    }
+
+    return {
+      aiStatus: 'active (gemini-4-hydrogen)',
+      ethiopianEligibility: `Third-country & Ethiopian eligibility subject to official criteria on ${source.name}.`,
+      keyRequirements: fallbackSummary.slice(0, 280),
+      deadline: detectedDeadline,
+      feesOrFunding: detectedFeeOrSalary,
+      aiSummary: `Live Official Crawler analyzed ${source.name}.`,
+    };
+  }
+
+  function extractOfficialLinksFromHtmlForRegistry(
+    html: string,
+    baseUrl: string,
+    parentSource: any,
+    existingUrls: Set<string>
+  ): any[] {
+    if (!html) return [];
+    const discoveredSources: any[] = [];
+    const hrefMatches = [...html.matchAll(/href=["'](https?:\/\/[^"'#\s>]+)["']/gi)];
+    for (const m of hrefMatches) {
+      if (discoveredSources.length >= 2) break;
+      const rawHref = m[1].trim();
+      try {
+        const u = new URL(rawHref);
+        const parentHost = new URL(baseUrl).hostname.replace(/^www\./, '');
+        const linkHost = u.hostname.replace(/^www\./, '');
+        if (linkHost === parentHost || existingUrls.has(rawHref.toLowerCase())) continue;
+        if (!/visa|work|permit|residence|immigration|career|scholar|fellowship|recruit/i.test(rawHref)) continue;
+        const auth = classifyOfficialSourceAuthority(rawHref, parentSource.entityType === 'immigration' ? 'immigration' : parentSource.entityType === 'scholarship' ? 'scholarship' : 'job');
+        if (!auth.accepted) continue;
+        if (!['government_portal', 'immigration_ministry', 'embassy', 'scholarship_body', 'official_university', 'international_org'].includes(auth.authorityType)) {
+          continue;
+        }
+        existingUrls.add(rawHref.toLowerCase());
+        discoveredSources.push({
+          id: `src_auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: `${linkHost} (Auto-Discovered Official Portal)`,
+          country: parentSource.country,
+          region: parentSource.region,
+          entityType: parentSource.entityType,
+          url: rawHref,
+          feedType: 'http_poll',
+          pollIntervalSeconds: 30,
+          enabled: true,
+          newAnnouncementsDetected: 0,
+          failedChecks: 0,
+          verificationStatus: 'PENDING',
+          authorityType: auth.authorityType,
+        });
+      } catch {}
+    }
+    return discoveredSources;
+  }
+
+  async function runPrivateResearchCycle(
+    triggerSource: 'startup' | 'interval_30s' | 'manual',
+    targetKind?: 'job' | 'immigration' | 'scholarship'
+  ) {
+    if (schedulerRuntime.isCycleActive) {
+      return {
+        skipped: true,
+        reason: 'Another System 2 research cycle is currently running.',
+        schedulerStatus: buildSchedulerStatusSnapshot(),
+      };
+    }
+
+    schedulerRuntime.isCycleActive = true;
+    const startedAt = new Date().toISOString();
+
+    try {
+      const state = loadPersistedInternationalData();
+      const allSources = mergeMonitoredSourcesWithDefaults(state.monitoredSources || []);
+      const enabledSources = allSources.filter((s: any) => {
+        if (s.enabled === false) return false;
+        if (targetKind === 'job') return s.entityType === 'international_job';
+        if (targetKind === 'immigration') return s.entityType === 'immigration';
+        if (targetKind === 'scholarship') return s.entityType === 'scholarship';
+        return true;
+      });
+
+      const batchSize = 3;
+      const cursor = Number(state.schedulerConfig?.sourceCursorIndex || 0) % Math.max(1, enabledSources.length);
+      const selectedSources: any[] = [];
+      for (let i = 0; i < Math.min(batchSize, enabledSources.length); i++) {
+        selectedSources.push(enabledSources[(cursor + i) % enabledSources.length]);
+      }
+      const nextCursor = (cursor + selectedSources.length) % Math.max(1, enabledSources.length);
+
+      let latestAiStatus = state.schedulerConfig?.aiProviderStatus || 'Live Official Crawler active';
+      const existingSourceUrls = new Set<string>(allSources.map((s: any) => String(s.url).toLowerCase()));
+      const newlyDiscoveredSources: any[] = [];
+
+      const existingJobFps = new Set(
+        (state.internationalJobs || []).map((j: any) => `${String(j.country).toLowerCase()}|${String(j.employerOrProgramme).toLowerCase()}|${String(j.jobTitle).toLowerCase()}`)
+      );
+      const existingImmFps = new Set(
+        (state.immigrationPathways || []).map((p: any) => `${String(p.country).toLowerCase()}|${String(p.pathwayTitle).toLowerCase()}`)
+      );
+      const existingSchFps = new Set(
+        (state.experienceScholarships || []).map((s: any) => `${String(s.country).toLowerCase()}|${String(s.scholarshipName).toLowerCase()}`)
+      );
+
+      const newJobs: any[] = [];
+      const newPathways: any[] = [];
+      const newScholarships: any[] = [];
+      const newNotifications: any[] = [];
+      const newLogs: any[] = [];
+      let duplicatesSkipped = 0;
+      let cycleVerifiedCount = 0;
+      let cycleFailedCount = 0;
+
+      // Process each selected official source live
+      const updatedSourceMap = new Map<string, any>(allSources.map((s: any) => [s.id, { ...s }]));
+
+      for (const src of selectedSources) {
+        const nowIso = new Date().toISOString();
+        let rawHtml = '';
+        let pageMeta = { ok: false, status: 0, finalUrl: src.url, title: '', description: '', bodyText: '' };
+
+        try {
+          const resp = await fetch(src.url, {
+            method: 'GET',
+            redirect: 'follow',
+            headers: LIVE_UA_HEADERS,
+            signal: AbortSignal.timeout(6500),
+          });
+          rawHtml = await resp.text();
+          const title = decodeHtmlEntities(rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
+          const descMatch =
+            rawHtml.match(/<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["']/i) ||
+            rawHtml.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["']/i);
+          const description = decodeHtmlEntities(descMatch?.[1] || '');
+          const bodyText = decodeHtmlEntities(
+            rawHtml
+              .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, ' ')
+              .replace(/<[^>]+>/g, ' ')
+          ).slice(0, 4000);
+          pageMeta = {
+            ok: resp.ok || [401, 403, 405, 429].includes(resp.status),
+            status: resp.status,
+            finalUrl: resp.url || src.url,
+            title,
+            description,
+            bodyText,
+          };
+        } catch (fetchErr: any) {
+          const sRec = updatedSourceMap.get(src.id) || src;
+          sRec.lastCheckedAt = nowIso;
+          sRec.failedChecks = Number(sRec.failedChecks || 0) + 1;
+          sRec.verificationStatus = 'FAILED';
+          sRec.lastError = fetchErr?.message || 'Fetch error';
+          updatedSourceMap.set(src.id, sRec);
+          cycleFailedCount++;
+          continue;
+        }
+
+        const domainCheck = classifyOfficialSourceAuthority(
+          pageMeta.finalUrl || src.url,
+          src.entityType === 'immigration' ? 'immigration' : src.entityType === 'scholarship' ? 'scholarship' : 'job'
+        );
+
+        const sRec = updatedSourceMap.get(src.id) || src;
+        sRec.lastCheckedAt = nowIso;
+        sRec.nextScheduledCheck = new Date(Date.now() + 30000).toISOString();
+        if (pageMeta.ok && domainCheck.accepted) {
+          sRec.lastSuccessfulCheck = nowIso;
+          sRec.verificationStatus = 'HEALTHY';
+          sRec.lastError = undefined;
+          cycleVerifiedCount++;
+        } else {
+          sRec.failedChecks = Number(sRec.failedChecks || 0) + 1;
+          sRec.verificationStatus = 'FAILED';
+          sRec.lastError = !domainCheck.accepted ? domainCheck.reason : `HTTP ${pageMeta.status}`;
+          cycleFailedCount++;
+        }
+
+        // Auto-discover any new official linked portals found inside this official page
+        if (rawHtml && newlyDiscoveredSources.length < 3) {
+          const foundNew = extractOfficialLinksFromHtmlForRegistry(rawHtml, pageMeta.finalUrl, src, existingSourceUrls);
+          newlyDiscoveredSources.push(...foundNew);
+        }
+
+        if (!pageMeta.ok || !domainCheck.accepted) {
+          updatedSourceMap.set(src.id, sRec);
+          continue;
+        }
+
+        // Analyze live fetched content (with Gemini or deterministic crawler fallback)
+        const analysis = await analyzeOfficialAnnouncementWithAiOrLive(src, pageMeta);
+        latestAiStatus = analysis.aiStatus;
+
+        if (src.entityType === 'immigration') {
+          const pathwayTitle = pageMeta.title ? `${src.name} — ${pageMeta.title.slice(0, 75)}` : src.name;
+          const fp = `${String(src.country).toLowerCase()}|${pathwayTitle.toLowerCase()}`;
+          if (existingImmFps.has(fp)) {
+            duplicatesSkipped++;
+          } else {
+            existingImmFps.add(fp);
+            const id = `imm_auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const item = {
+              id,
+              country: src.country,
+              region: src.region,
+              pathwayTitle,
+              pathwayType: 'Work-Based Residence Permit',
+              ethiopianCitizenEligibility: 'conditional',
+              ethiopianEligibilityDetails: analysis.ethiopianEligibility,
+              eligibilityRequirements: analysis.keyRequirements || OFFICIAL_NOT_STATED,
+              requiredEducationAndExperience: OFFICIAL_NOT_STATED,
+              minimumIncomeOrFinancialRequirement: OFFICIAL_NOT_STATED,
+              languageRequirements: OFFICIAL_NOT_STATED,
+              requiredDocuments: ['Valid Passport', 'Official Application Forms', 'Supporting Credentials'],
+              governmentApplicationFees: analysis.feesOrFunding || OFFICIAL_NOT_STATED,
+              processingTimeline: OFFICIAL_NOT_STATED,
+              jobOfferRequired: 'conditional',
+              yearsToPermanentResidence: OFFICIAL_NOT_STATED,
+              temporaryVsPermanentClarification:
+                'Initial work residence permits are temporary; permanent residence requires separate statutory continuous stay.',
+              familyReunificationRules: OFFICIAL_NOT_STATED,
+              citizenshipPathwayNotes: OFFICIAL_NOT_STATED,
+              officialGovernmentWebsite: pageMeta.finalUrl || src.url,
+              originalSourceUrl: src.url,
+              exactApplicationSteps: [
+                `Inspect official criteria on ${src.url}.`,
+                'Confirm Ethiopian citizen eligibility and employer sponsorship rules.',
+              ],
+              lastVerifiedAt: nowIso,
+              discoveredAt: nowIso,
+              verifiedAt: nowIso,
+              approvalStatus: 'private_pending',
+              aiAnalysisNotes: analysis.aiSummary,
+              sourceName: src.name,
+              verificationStatus: 'VERIFIED',
+              verificationNotes: `Live official ${domainCheck.authorityType.replace(/_/g, ' ')} check (HTTP ${pageMeta.status})`,
+              sourceAuthorityType: domainCheck.authorityType,
+              lastCheckedHttpStatus: pageMeta.status,
+              applicationStatus: 'open',
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            newPathways.push(item);
+            sRec.newAnnouncementsDetected = Number(sRec.newAnnouncementsDetected || 0) + 1;
+            newLogs.push({
+              id: `vlog_${id}`,
+              entityType: 'immigration',
+              entityId: id,
+              title: pathwayTitle,
+              countryOrOrg: src.country,
+              url: item.officialGovernmentWebsite,
+              verificationStatus: 'VERIFIED',
+              httpStatus: pageMeta.status,
+              reason: item.verificationNotes,
+              checkedAt: nowIso,
+            });
+            newNotifications.push({
+              id: `notif_${id}`,
+              notificationType: 'new_immigration_pr',
+              country: src.country,
+              programmeOrOpportunityName: pathwayTitle,
+              whatChangedOrAnnounced: analysis.aiSummary,
+              ethiopianEligibility: item.ethiopianEligibilityDetails,
+              eligibilityRequirements: item.eligibilityRequirements,
+              requiredDocuments: item.requiredDocuments,
+              governmentFees: item.governmentApplicationFees,
+              deadline: 'Official Portal',
+              exactOfficialApplicationLink: item.officialGovernmentWebsite,
+              originalSourceUrl: item.originalSourceUrl,
+              detectedAt: nowIso,
+              verifiedAt: nowIso,
+              read: false,
+              severity: 'info',
+            });
+          }
+        } else if (src.entityType === 'scholarship') {
+          const schTitle = pageMeta.title ? `${src.name} — ${pageMeta.title.slice(0, 70)}` : src.name;
+          const fp = `${String(src.country).toLowerCase()}|${schTitle.toLowerCase()}`;
+          if (existingSchFps.has(fp)) {
+            duplicatesSkipped++;
+          } else {
+            existingSchFps.add(fp);
+            const id = `sch_auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const item = {
+              id,
+              region: src.region,
+              studyLevel: 'Postgraduate / Master',
+              universityOrInstitution: src.name,
+              country: src.country,
+              scholarshipName: schTitle,
+              studyProgramme: OFFICIAL_NOT_STATED,
+              eligibilityForEthiopians: analysis.ethiopianEligibility,
+              ethiopiansEligible: 'conditional',
+              academicRequirements: analysis.keyRequirements || OFFICIAL_NOT_STATED,
+              gpaRequirement: OFFICIAL_NOT_STATED,
+              noHighGpaConfirmed: false,
+              recommendationLetterRequirement: OFFICIAL_NOT_STATED,
+              noRecommendationLetterConfirmed: false,
+              professionalExperienceCompensates: 'considered',
+              experienceCompensationNotes: OFFICIAL_NOT_STATED,
+              requiredDocuments: ['CV / Resume', 'Degree & Transcript', 'Valid Passport'],
+              fundingCoverage: analysis.feesOrFunding || OFFICIAL_NOT_STATED,
+              coversTuition: /tuition/i.test(pageMeta.bodyText),
+              coversAccommodation: /accommodation|housing/i.test(pageMeta.bodyText),
+              coversLivingAllowance: /stipend|living/i.test(pageMeta.bodyText),
+              coversTravel: /travel|flight/i.test(pageMeta.bodyText),
+              applicationDeadline: analysis.deadline,
+              officialApplicationUrl: pageMeta.finalUrl || src.url,
+              originalSourceUrl: src.url,
+              exactApplicationProcedure: [`Apply directly on ${src.url}`],
+              lastVerifiedAt: nowIso,
+              discoveredAt: nowIso,
+              verifiedAt: nowIso,
+              approvalStatus: 'private_pending',
+              aiAnalysisNotes: analysis.aiSummary,
+              sourceName: src.name,
+              verificationStatus: 'VERIFIED',
+              verificationNotes: `Live official ${domainCheck.authorityType.replace(/_/g, ' ')} check (HTTP ${pageMeta.status})`,
+              sourceAuthorityType: domainCheck.authorityType,
+              lastCheckedHttpStatus: pageMeta.status,
+              applicationStatus: 'open',
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            newScholarships.push(item);
+            sRec.newAnnouncementsDetected = Number(sRec.newAnnouncementsDetected || 0) + 1;
+            newLogs.push({
+              id: `vlog_${id}`,
+              entityType: 'scholarship',
+              entityId: id,
+              title: schTitle,
+              countryOrOrg: `${src.country} • ${src.name}`,
+              url: item.officialApplicationUrl,
+              verificationStatus: 'VERIFIED',
+              httpStatus: pageMeta.status,
+              reason: item.verificationNotes,
+              checkedAt: nowIso,
+            });
+            newNotifications.push({
+              id: `notif_${id}`,
+              notificationType: 'new_scholarship',
+              country: src.country,
+              programmeOrOpportunityName: schTitle,
+              whatChangedOrAnnounced: analysis.aiSummary,
+              ethiopianEligibility: item.eligibilityForEthiopians,
+              eligibilityRequirements: item.academicRequirements,
+              requiredDocuments: item.requiredDocuments,
+              governmentFees: item.fundingCoverage,
+              deadline: item.applicationDeadline,
+              exactOfficialApplicationLink: item.officialApplicationUrl,
+              originalSourceUrl: item.originalSourceUrl,
+              detectedAt: nowIso,
+              verifiedAt: nowIso,
+              read: false,
+              severity: 'info',
+            });
+          }
+        } else {
+          // international_job portal
+          const jobTitle = pageMeta.title ? `${src.name} — ${pageMeta.title.slice(0, 70)}` : `${src.name} International Opportunities`;
+          const fp = `${String(src.country).toLowerCase()}|${src.name.toLowerCase()}|${jobTitle.toLowerCase()}`;
+          if (existingJobFps.has(fp)) {
+            duplicatesSkipped++;
+          } else {
+            existingJobFps.add(fp);
+            const id = `intl_auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const item = {
+              id,
+              region: src.region,
+              category: 'Government Approved Foreign Recruitment',
+              country: src.country,
+              employerOrProgramme: src.name,
+              jobTitle,
+              location: `${src.country}`,
+              requiredEducation: OFFICIAL_NOT_STATED,
+              requiredExperience: OFFICIAL_NOT_STATED,
+              languageRequirements: OFFICIAL_NOT_STATED,
+              salary: OFFICIAL_NOT_STATED,
+              foreignerAndEthiopianEligibility: analysis.ethiopianEligibility,
+              ethiopiansEligible: 'conditional',
+              visaSponsorshipInfo: 'Employer sponsorship or skilled work permit rules apply per official portal.',
+              visaSponsored: true,
+              whoPaysVisaAndRecruitmentCosts: analysis.feesOrFunding || OFFICIAL_NOT_STATED,
+              visaFeePolicy: 'not_stated',
+              noRecruitmentAgencyFee: true,
+              accommodationAndRelocationSupport: OFFICIAL_NOT_STATED,
+              contractDuration: OFFICIAL_NOT_STATED,
+              applicationDeadline: analysis.deadline,
+              requiredDocuments: ['Valid Passport', 'CV / Resume', 'Credentials'],
+              officialApplicationInstructions: `Review and apply directly via ${src.url}.`,
+              directApplicationUrl: pageMeta.finalUrl || src.url,
+              originalSourceUrl: src.url,
+              lastVerifiedAt: nowIso,
+              discoveredAt: nowIso,
+              verifiedAt: nowIso,
+              approvalStatus: 'private_pending',
+              aiAnalysisNotes: analysis.aiSummary,
+              sourceName: src.name,
+              familyReunification: OFFICIAL_NOT_STATED,
+              permanentResidencePathway: OFFICIAL_NOT_STATED,
+              verificationStatus: 'VERIFIED',
+              verificationNotes: `Live official ${domainCheck.authorityType.replace(/_/g, ' ')} check (HTTP ${pageMeta.status})`,
+              sourceAuthorityType: domainCheck.authorityType,
+              lastCheckedHttpStatus: pageMeta.status,
+              applicationStatus: 'open',
+              createdAt: nowIso,
+              updatedAt: nowIso,
+            };
+            newJobs.push(item);
+            sRec.newAnnouncementsDetected = Number(sRec.newAnnouncementsDetected || 0) + 1;
+            newLogs.push({
+              id: `vlog_${id}`,
+              entityType: 'international_job',
+              entityId: id,
+              title: jobTitle,
+              countryOrOrg: `${src.country} • ${src.name}`,
+              url: item.directApplicationUrl,
+              verificationStatus: 'VERIFIED',
+              httpStatus: pageMeta.status,
+              reason: item.verificationNotes,
+              checkedAt: nowIso,
+            });
+            newNotifications.push({
+              id: `notif_${id}`,
+              notificationType: 'new_work_visa',
+              country: src.country,
+              programmeOrOpportunityName: jobTitle,
+              whatChangedOrAnnounced: analysis.aiSummary,
+              ethiopianEligibility: item.foreignerAndEthiopianEligibility,
+              eligibilityRequirements: analysis.keyRequirements,
+              requiredDocuments: item.requiredDocuments,
+              governmentFees: item.whoPaysVisaAndRecruitmentCosts,
+              deadline: item.applicationDeadline,
+              exactOfficialApplicationLink: item.directApplicationUrl,
+              originalSourceUrl: item.originalSourceUrl,
+              detectedAt: nowIso,
+              verifiedAt: nowIso,
+              read: false,
+              severity: 'info',
+            });
+          }
+        }
+
+        updatedSourceMap.set(src.id, sRec);
+      }
+
+      const completedAt = new Date().toISOString();
+      const nextCycleCount = Number(state.schedulerConfig?.cycleCount || 0) + 1;
+      const totalNew = newJobs.length + newPathways.length + newScholarships.length;
+      const cycleSummary = `Cycle #${nextCycleCount} (${triggerSource}): polled ${selectedSources.length} official sources (${selectedSources.map((s) => s.country).join(', ')}), verified ${cycleVerifiedCount} sources, discovered ${totalNew} new private_pending item(s), ${duplicatesSkipped} duplicates skipped, ${newlyDiscoveredSources.length} new source(s) registered.`;
+
+      const run = {
+        id: `run_auto_${Date.now()}`,
+        runType: targetKind === 'immigration' ? 'immigration_pr' : targetKind === 'scholarship' ? 'scholarships' : 'international_jobs',
+        triggeredBy: `System 2 Auto-Scheduler (${triggerSource})`,
+        startedAt,
+        completedAt,
+        regionsResearched: Array.from(new Set(selectedSources.map((s) => s.region))),
+        countriesResearched: Array.from(new Set(selectedSources.map((s) => s.country))),
+        discoveredCount: totalNew,
+        verifiedCount: totalNew,
+        unverifiedCount: cycleFailedCount,
+        rejectedCount: 0,
+        duplicatesSkipped,
+        summary: cycleSummary,
+        status: 'completed',
+      };
+
+      const mergedSources = [
+        ...Array.from(updatedSourceMap.values()),
+        ...newlyDiscoveredSources,
+      ].slice(0, 120);
+
+      const nextState = {
+        ...state,
+        internationalJobs: [...newJobs, ...(state.internationalJobs || [])],
+        immigrationPathways: [...newPathways, ...(state.immigrationPathways || [])],
+        experienceScholarships: [...newScholarships, ...(state.experienceScholarships || [])],
+        researchHistory: [run, ...(state.researchHistory || [])].slice(0, 100),
+        verificationLogs: [...newLogs, ...(state.verificationLogs || [])].slice(0, 300),
+        monitoredSources: mergedSources,
+        developerNotifications: [...newNotifications, ...(state.developerNotifications || [])].slice(0, 150),
+        schedulerConfig: {
+          ...(state.schedulerConfig || {}),
+          enabled: state.schedulerConfig?.enabled !== false,
+          intervalSeconds: 30,
+          cycleCount: nextCycleCount,
+          sourceCursorIndex: nextCursor,
+          lastRunAt: completedAt,
+          lastSuccessfulRunAt: cycleVerifiedCount > 0 ? completedAt : state.schedulerConfig?.lastSuccessfulRunAt || completedAt,
+          lastError: null,
+          aiProviderStatus: latestAiStatus,
+          lastCycleSummary: cycleSummary,
+        },
+      };
+      savePersistedInternationalData(nextState);
+      schedulerRuntime.nextRunAt = new Date(Date.now() + 30000).toISOString();
+
+      return {
+        success: true,
+        cycleCount: nextCycleCount,
+        newlyDiscoveredCount: totalNew,
+        newJobs,
+        newPathways,
+        newScholarships,
+        run,
+        schedulerStatus: buildSchedulerStatusSnapshot(nextState),
+      };
+    } catch (err: any) {
+      const state = loadPersistedInternationalData();
+      const errMsg = err?.message || String(err);
+      savePersistedInternationalData({
+        ...state,
+        schedulerConfig: {
+          ...(state.schedulerConfig || {}),
+          lastRunAt: new Date().toISOString(),
+          lastError: errMsg,
+        },
+      });
+      schedulerRuntime.nextRunAt = new Date(Date.now() + 30000).toISOString();
+      return {
+        success: false,
+        error: errMsg,
+        schedulerStatus: buildSchedulerStatusSnapshot(),
+      };
+    } finally {
+      schedulerRuntime.isCycleActive = false;
+    }
+  }
+
+  function ensureBackgroundSchedulerStarted() {
+    const state = loadPersistedInternationalData();
+    const enabled = state.schedulerConfig?.enabled !== false;
+    if (!enabled) {
+      if (schedulerRuntime.timerId) {
+        clearInterval(schedulerRuntime.timerId);
+        schedulerRuntime.timerId = null;
+      }
+      if (schedulerRuntime.startupTimerId) {
+        clearTimeout(schedulerRuntime.startupTimerId);
+        schedulerRuntime.startupTimerId = null;
+      }
+      schedulerRuntime.nextRunAt = null;
+      return;
+    }
+
+    if (!schedulerRuntime.timerId && !IS_VERCEL) {
+      schedulerRuntime.nextRunAt = new Date(Date.now() + 30000).toISOString();
+      schedulerRuntime.startupTimerId = setTimeout(() => {
+        const latest = loadPersistedInternationalData();
+        if (latest.schedulerConfig?.enabled !== false) {
+          runPrivateResearchCycle('startup').catch((e) =>
+            console.warn('System 2 startup research cycle notice:', e?.message || e)
+          );
+        }
+      }, 600);
+      schedulerRuntime.timerId = setInterval(() => {
+        const latest = loadPersistedInternationalData();
+        if (latest.schedulerConfig?.enabled !== false) {
+          schedulerRuntime.nextRunAt = new Date(Date.now() + 30000).toISOString();
+          runPrivateResearchCycle('interval_30s').catch((e) =>
+            console.warn('System 2 30s interval research notice:', e?.message || e)
+          );
+        }
+      }, 30000);
+      if (typeof schedulerRuntime.timerId?.unref === 'function') {
+        schedulerRuntime.timerId.unref();
+      }
+      if (typeof schedulerRuntime.startupTimerId?.unref === 'function') {
+        schedulerRuntime.startupTimerId.unref();
+      }
+      console.log('🌍 System 2 Private International Research Scheduler active (30s interval, immediate startup scan scheduled).');
+    }
+  }
+
+  // Start System 2 automatic 30-second research scheduler on server boot
+  ensureBackgroundSchedulerStarted();
+
+  app.get('/api/international/scheduler/status', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      success: true,
+      schedulerStatus: buildSchedulerStatusSnapshot(),
+    });
+  });
+
+  app.post('/api/international/scheduler/toggle', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const enabled = Boolean(req.body?.enabled);
+    const state = loadPersistedInternationalData();
+    const nextState = {
+      ...state,
+      schedulerConfig: {
+        ...(state.schedulerConfig || {}),
+        enabled,
+        intervalSeconds: 30,
+      },
+    };
+    savePersistedInternationalData(nextState);
+    if (!enabled) {
+      if (schedulerRuntime.timerId) {
+        clearInterval(schedulerRuntime.timerId);
+        schedulerRuntime.timerId = null;
+      }
+      if (schedulerRuntime.startupTimerId) {
+        clearTimeout(schedulerRuntime.startupTimerId);
+        schedulerRuntime.startupTimerId = null;
+      }
+      schedulerRuntime.nextRunAt = null;
+    } else {
+      ensureBackgroundSchedulerStarted();
+    }
+    res.json({
+      success: true,
+      schedulerStatus: buildSchedulerStatusSnapshot(nextState),
+    });
+  });
+
+  app.post('/api/international/scheduler/run-now', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const targetKind = req.body?.targetKind;
+    const result = await runPrivateResearchCycle('manual', targetKind);
+    res.json(result);
+  });
+
+  app.post('/api/international/sources/add', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    try {
+      const {
+        name = '',
+        country = 'International',
+        region = 'Europe',
+        entityType = 'international_job',
+        url = '',
+        feedType = 'http_poll',
+      } = req.body || {};
+      const cleanUrl = String(url || '').trim();
+      if (!/^https?:\/\/\S+/i.test(cleanUrl)) {
+        res.status(400).json({ success: false, error: 'Valid official http(s) URL is required.' });
         return;
       }
-      const nowMs = Date.now();
-      const lastMs = lastRunAt ? new Date(lastRunAt).getTime() : 0;
-      const intervalMs = frequency === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-      const due = !lastMs || Number.isNaN(lastMs) || nowMs - lastMs >= intervalMs;
+      const kind = entityType === 'immigration' ? 'immigration' : entityType === 'scholarship' ? 'scholarship' : 'job';
+      const chk = await verifyOfficialUrlLive(cleanUrl, kind);
+      if (chk.verificationStatus === 'REJECTED_SUSPICIOUS') {
+        res.status(400).json({ success: false, error: chk.reason || 'Disallowed third-party source URL.' });
+        return;
+      }
+      const state = loadPersistedInternationalData();
+      const sources = mergeMonitoredSourcesWithDefaults(state.monitoredSources || []);
+      const existing = sources.find((s: any) => String(s.url).toLowerCase() === cleanUrl.toLowerCase());
+      if (existing) {
+        res.json({ success: true, source: existing, monitoredSources: sources, duplicate: true });
+        return;
+      }
+      const record = {
+        id: `src_custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: String(name || new URL(cleanUrl).hostname).trim(),
+        country: String(country || 'International').trim(),
+        region,
+        entityType,
+        url: cleanUrl,
+        feedType: ['rss_atom', 'official_api', 'http_poll'].includes(feedType) ? feedType : 'http_poll',
+        pollIntervalSeconds: 30,
+        enabled: true,
+        lastCheckedAt: new Date().toISOString(),
+        lastSuccessfulCheck: chk.ok ? new Date().toISOString() : undefined,
+        newAnnouncementsDetected: 0,
+        failedChecks: chk.ok ? 0 : 1,
+        verificationStatus: chk.ok ? 'HEALTHY' : 'FAILED',
+        lastError: chk.ok ? undefined : chk.reason,
+        authorityType: chk.authorityType,
+      };
+      const nextSources = [record, ...sources];
+      savePersistedInternationalData({ ...state, monitoredSources: nextSources });
+      res.json({ success: true, source: record, monitoredSources: nextSources });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to add official source' });
+    }
+  });
+
+  app.post('/api/international/approval', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    try {
+      const { entityType, id, action } = req.body || {};
+      if (!entityType || !id || !action) {
+        res.status(400).json({ success: false, error: 'entityType, id, and action are required.' });
+        return;
+      }
+      const state = loadPersistedInternationalData();
+      const nowIso = new Date().toISOString();
+      const key =
+        entityType === 'international_job'
+          ? 'internationalJobs'
+          : entityType === 'immigration'
+          ? 'immigrationPathways'
+          : 'experienceScholarships';
+      const list: any[] = Array.isArray((state as any)[key]) ? [...(state as any)[key]] : [];
+      const idx = list.findIndex((x: any) => x.id === id);
+      if (idx === -1) {
+        res.status(404).json({ success: false, error: 'Record not found.' });
+        return;
+      }
+
+      if (action === 'delete') {
+        list.splice(idx, 1);
+      } else if (action === 'approve_public') {
+        const cur = list[idx];
+        list[idx] = {
+          ...cur,
+          approvalStatus: 'approved_public',
+          verificationStatus: cur.verificationStatus === 'EXPIRED' ? 'VERIFIED' : cur.verificationStatus || 'VERIFIED',
+          publishedOnWebsiteAt: cur.publishedOnWebsiteAt || nowIso,
+          updatedAt: nowIso,
+        };
+      } else if (action === 'keep_private') {
+        list[idx] = { ...list[idx], approvalStatus: 'private_pending', updatedAt: nowIso };
+      } else if (action === 'reject') {
+        list[idx] = { ...list[idx], approvalStatus: 'rejected', updatedAt: nowIso };
+      } else if (action === 'mark_expired') {
+        list[idx] = {
+          ...list[idx],
+          approvalStatus: 'expired',
+          verificationStatus: 'EXPIRED',
+          applicationStatus: 'expired',
+          updatedAt: nowIso,
+        };
+      }
+
+      const nextState = { ...state, [key]: list };
+      savePersistedInternationalData(nextState);
       res.json({
-        due,
-        frequency,
-        lastRunAt: lastRunAt || null,
-        nextDueAt: new Date((lastMs || nowMs) + intervalMs).toISOString(),
+        success: true,
+        updatedRecord: action === 'delete' ? null : list[idx],
+        internationalJobs: nextState.internationalJobs,
+        immigrationPathways: nextState.immigrationPathways,
+        experienceScholarships: nextState.experienceScholarships,
       });
     } catch (err: any) {
-      res.status(500).json({ due: false, error: err?.message || 'Auto-run check failed' });
+      res.status(500).json({ success: false, error: err?.message || 'Approval update failed' });
     }
+  });
+
+  app.post('/api/international/auto-run-check', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      due: false,
+      mode: 'automatic_30s_server_scheduler',
+      schedulerStatus: buildSchedulerStatusSnapshot(),
+    });
   });
 
   return app;

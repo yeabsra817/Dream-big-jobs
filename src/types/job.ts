@@ -42,6 +42,9 @@ export interface Vacancy {
   telegramMessageId?: number;
   telegramPublishedAt?: string;
   telegramPublishError?: string;
+  broadCategory?: 'Banking' | 'NGO' | 'Other';
+  isWashNgo?: boolean;
+  isExpired?: boolean;
 }
 
 export type TelegramPostStatus =
