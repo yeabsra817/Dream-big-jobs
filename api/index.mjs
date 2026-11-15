@@ -1028,6 +1028,17 @@ ${text}`;
       const incoming = req.body || {};
       const current = loadPersistedSettings() || {};
       const merged = { ...current, ...incoming };
+      if (typeof incoming.telegramChannelName === "string" && incoming.telegramChannelName.trim()) {
+        const normalized = normalizeTelegramChatIdServer(incoming.telegramChannelName);
+        if (!normalized.isInviteLink) {
+          merged.telegramChannelName = normalized.chatId;
+          if (normalized.isNumeric) {
+            merged.telegramChannelId = normalized.chatId;
+          } else if (normalized.slug && (!incoming.telegramChannelUrl || String(incoming.telegramChannelUrl).includes("t.me/"))) {
+            merged.telegramChannelUrl = `https://t.me/${normalized.slug}`;
+          }
+        }
+      }
       if (incoming.telegramBotToken) {
         const clean = String(incoming.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, "");
         if (clean && clean.includes(":")) {
@@ -1254,22 +1265,6 @@ ${text}`;
     const token = getTelegramToken();
     const persisted = loadPersistedSettings() || {};
     if (!token || token === "MY_TELEGRAM_BOT_TOKEN") {
-      if (persisted.telegramConnected || persisted.telegramBotUsername) {
-        res.json({
-          configured: true,
-          connected: true,
-          bot: {
-            id: 9228258664,
-            first_name: "Hopeland Jobs Bot",
-            username: (persisted.telegramBotUsername || "DreamBigJobsEthiopiaBot").replace("@", ""),
-            can_join_groups: true,
-            can_read_all_group_messages: true
-          },
-          maskedToken: persisted.telegramBotToken ? `${persisted.telegramBotToken.substring(0, 6)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${persisted.telegramBotToken.slice(-4)}` : "Configured (Server Active)",
-          message: "Telegram bot credentials permanently active and synced across all devices."
-        });
-        return;
-      }
       res.json({
         configured: false,
         connected: false,
@@ -1277,9 +1272,10 @@ ${text}`;
       });
       return;
     }
+    const maskedToken = `${token.substring(0, 6)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${token.slice(-4)}`;
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4e3);
+      const timeout = setTimeout(() => controller.abort(), 4500);
       const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, { signal: controller.signal });
       clearTimeout(timeout);
       const data = await tgRes.json();
@@ -1300,32 +1296,33 @@ ${text}`;
             can_read_all_group_messages: data.result.can_read_all_group_messages,
             supports_inline_queries: data.result.supports_inline_queries
           },
-          maskedToken: `${token.substring(0, 6)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${token.slice(-4)}`
+          maskedToken
         });
       } else {
         res.json({
           configured: true,
-          connected: Boolean(persisted.telegramConnected),
-          bot: {
-            id: 9228258664,
-            first_name: "Hopeland Jobs Bot",
-            username: (persisted.telegramBotUsername || "DreamBigJobsEthiopiaBot").replace("@", "")
-          },
-          maskedToken: `${token.substring(0, 6)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${token.slice(-4)}`,
-          error: data.description
+          connected: false,
+          bot: persisted.telegramBotUsername ? {
+            id: 0,
+            first_name: "Configured Bot",
+            username: String(persisted.telegramBotUsername).replace("@", "")
+          } : void 0,
+          maskedToken,
+          error: data.description || "Telegram API rejected bot token."
         });
       }
-    } catch {
+    } catch (err) {
       res.json({
         configured: true,
-        connected: true,
-        bot: {
-          id: 9228258664,
-          first_name: "Hopeland Jobs Bot",
-          username: (persisted.telegramBotUsername || "DreamBigJobsEthiopiaBot").replace("@", "")
-        },
-        maskedToken: token ? `${token.substring(0, 6)}\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${token.slice(-4)}` : "Configured (Active)",
-        notice: "Serving verified cached bot state"
+        connected: false,
+        networkError: true,
+        bot: persisted.telegramBotUsername ? {
+          id: 0,
+          first_name: "Configured Bot",
+          username: String(persisted.telegramBotUsername).replace("@", "")
+        } : void 0,
+        maskedToken,
+        error: `Could not reach Telegram Bot API: ${err?.message || "Timeout"}`
       });
     }
   });
@@ -1413,6 +1410,276 @@ ${text}`;
         success: false,
         error: `Failed to connect to Telegram servers: ${err.message || String(err)}`
       });
+    }
+  });
+  function normalizeTelegramChatIdServer(input) {
+    const raw = String(input || "").trim();
+    if (!raw) {
+      return {
+        chatId: "@DreamBigJobsEthiopia",
+        isNumeric: false,
+        isInviteLink: false,
+        slug: "DreamBigJobsEthiopia"
+      };
+    }
+    const numericCandidate = raw.replace(/^@/, "").trim();
+    if (/^-?\d+$/.test(numericCandidate)) {
+      return {
+        chatId: numericCandidate,
+        isNumeric: true,
+        isInviteLink: false
+      };
+    }
+    const urlCandidate = raw.replace(/^@/, "").trim();
+    const inviteMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:\+|joinchat\/)([A-Za-z0-9_-]+)/i);
+    if (inviteMatch) {
+      return {
+        chatId: raw,
+        isNumeric: false,
+        isInviteLink: true,
+        error: "Private Telegram invite links (t.me/+...) cannot be used as a bot chat_id. Add your bot as Channel Administrator and enter the numeric -100... Channel ID or click Auto-Detect Channel."
+      };
+    }
+    const publicUrlMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{3,})(?:[/?#].*)?$/i);
+    if (publicUrlMatch) {
+      const slug = publicUrlMatch[1];
+      return {
+        chatId: `@${slug}`,
+        isNumeric: false,
+        isInviteLink: false,
+        slug
+      };
+    }
+    const bare = urlCandidate.replace(/\/+$/, "").trim();
+    return {
+      chatId: `@${bare}`,
+      isNumeric: false,
+      isInviteLink: false,
+      slug: bare
+    };
+  }
+  function isFatalTelegramConfigErrorServer(errorMsg) {
+    const msg = String(errorMsg || "").toLowerCase();
+    if (!msg) return false;
+    return msg.includes("chat not found") || msg.includes("unauthorized") || msg.includes("bot was kicked") || msg.includes("bot is not a member") || msg.includes("need administrator rights") || msg.includes("not enough rights") || msg.includes("bot token is not configured") || msg.includes("private telegram invite links");
+  }
+  async function discoverBotChannelsServer(token) {
+    const seen = /* @__PURE__ */ new Map();
+    if (!token || token === "dry-run") return [];
+    try {
+      const allowed = encodeURIComponent(
+        JSON.stringify(["channel_post", "edited_channel_post", "my_chat_member", "chat_member", "message"])
+      );
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4500);
+      const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&allowed_updates=${allowed}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.result)) {
+        for (const upd of data.result) {
+          const chats = [
+            upd?.channel_post?.chat,
+            upd?.edited_channel_post?.chat,
+            upd?.my_chat_member?.chat,
+            upd?.chat_member?.chat,
+            upd?.message?.chat,
+            upd?.message?.forward_from_chat
+          ].filter(Boolean);
+          for (const c of chats) {
+            if (c?.id && (c.type === "channel" || c.type === "supergroup" || c.type === "group")) {
+              const key = String(c.id);
+              const botStatus = upd?.my_chat_member?.new_chat_member?.status || seen.get(key)?.botStatus;
+              seen.set(key, {
+                id: key,
+                title: c.title || c.username || key,
+                username: c.username ? `@${c.username}` : void 0,
+                type: c.type,
+                botStatus
+              });
+            }
+          }
+        }
+      }
+    } catch {
+    }
+    return Array.from(seen.values());
+  }
+  async function verifyTelegramChannelServer(token, rawChannel) {
+    const persisted = loadPersistedSettings() || {};
+    const normalized = normalizeTelegramChatIdServer(rawChannel || persisted.telegramChannelName || persisted.telegramChannelId);
+    if (!token || token === "MY_TELEGRAM_BOT_TOKEN") {
+      return {
+        ok: false,
+        chatExists: false,
+        normalizedChannel: normalized.chatId,
+        error: "Telegram Bot Token is not configured on the server."
+      };
+    }
+    let botInfo;
+    try {
+      const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const meData = await meRes.json();
+      if (!meData?.ok || !meData?.result) {
+        return {
+          ok: false,
+          chatExists: false,
+          normalizedChannel: normalized.chatId,
+          error: `Bot token rejected by Telegram: ${meData?.description || "Unauthorized"}`
+        };
+      }
+      botInfo = {
+        id: meData.result.id,
+        first_name: meData.result.first_name,
+        username: meData.result.username
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        chatExists: false,
+        normalizedChannel: normalized.chatId,
+        error: `Could not connect to Telegram API: ${err?.message || String(err)}`
+      };
+    }
+    if (normalized.isInviteLink) {
+      const discoveredChats = await discoverBotChannelsServer(token);
+      return {
+        ok: false,
+        chatExists: false,
+        normalizedChannel: normalized.chatId,
+        bot: botInfo,
+        discoveredChats,
+        error: normalized.error
+      };
+    }
+    const candidates = [normalized.chatId];
+    if (persisted.telegramChannelId && !candidates.includes(String(persisted.telegramChannelId))) {
+      candidates.push(String(persisted.telegramChannelId));
+    }
+    if (persisted.telegramChannelUrl) {
+      const urlNorm = normalizeTelegramChatIdServer(persisted.telegramChannelUrl);
+      if (!urlNorm.isInviteLink && !candidates.includes(urlNorm.chatId)) {
+        candidates.push(urlNorm.chatId);
+      }
+    }
+    let foundChat = null;
+    let lastChatError = "Bad Request: chat not found";
+    let matchedTarget = normalized.chatId;
+    for (const candidate of candidates) {
+      try {
+        const chatRes = await fetch(
+          `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(candidate)}`
+        );
+        const chatData = await chatRes.json();
+        if (chatData?.ok && chatData?.result) {
+          foundChat = chatData.result;
+          matchedTarget = candidate;
+          break;
+        } else {
+          lastChatError = chatData?.description || lastChatError;
+        }
+      } catch (err) {
+        lastChatError = err?.message || lastChatError;
+      }
+    }
+    if (!foundChat) {
+      const discoveredChats = await discoverBotChannelsServer(token);
+      return {
+        ok: false,
+        chatExists: false,
+        normalizedChannel: normalized.chatId,
+        bot: botInfo,
+        discoveredChats,
+        error: `Telegram API responded: ${lastChatError}`,
+        diagnosis: discoveredChats.length > 0 ? `Target "${normalized.chatId}" was not found, but bot @${botInfo.username} has access to ${discoveredChats.length} other channel(s). Select the correct channel below or make sure @${botInfo.username} is added as Administrator.` : `Telegram cannot find "${normalized.chatId}". This happens if the channel was turned Private (requiring its numeric -100... Channel ID), its @username was changed, or @${botInfo.username} has not been added as Channel Administrator yet.`
+      };
+    }
+    try {
+      savePersistedSettings({
+        telegramChannelId: String(foundChat.id),
+        ...foundChat.username && matchedTarget === normalized.chatId ? {
+          telegramChannelName: `@${foundChat.username}`,
+          telegramChannelUrl: `https://t.me/${foundChat.username}`
+        } : {}
+      });
+    } catch {
+    }
+    let isAdmin = false;
+    let canPost = false;
+    let memberError;
+    try {
+      const memberRes = await fetch(
+        `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(String(foundChat.id))}&user_id=${botInfo.id}`
+      );
+      const memberData = await memberRes.json();
+      if (memberData?.ok && memberData?.result) {
+        const st = memberData.result.status;
+        isAdmin = st === "administrator" || st === "creator";
+        canPost = st === "creator" || isAdmin && memberData.result.can_post_messages !== false;
+        if (!isAdmin) {
+          memberError = `Bot @${botInfo.username} found "${foundChat.title}", but its status is "${st}". Promote @${botInfo.username} to Channel Administrator with "Post Messages" enabled.`;
+        } else if (!canPost) {
+          memberError = `Bot @${botInfo.username} is Administrator in "${foundChat.title}", but "Post Messages" permission is disabled.`;
+        }
+      } else {
+        memberError = memberData?.description;
+      }
+    } catch (err) {
+      memberError = err?.message;
+    }
+    return {
+      ok: isAdmin && canPost,
+      chatExists: true,
+      normalizedChannel: foundChat.username ? `@${foundChat.username}` : String(foundChat.id),
+      isAdmin,
+      canPost,
+      chat: {
+        id: foundChat.id,
+        title: foundChat.title || foundChat.username || String(foundChat.id),
+        username: foundChat.username,
+        type: foundChat.type
+      },
+      bot: botInfo,
+      error: memberError
+    };
+  }
+  app.get("/api/telegram/verify-channel", async (req, res) => {
+    const channel = typeof req.query.channel === "string" ? req.query.channel : void 0;
+    const result = await verifyTelegramChannelServer(getTelegramToken(), channel);
+    res.json(result);
+  });
+  app.post("/api/telegram/verify-channel", async (req, res) => {
+    const { channelName, botToken } = req.body || {};
+    const token = botToken && String(botToken).includes(":") ? String(botToken).trim() : getTelegramToken();
+    const result = await verifyTelegramChannelServer(token, channelName);
+    res.json(result);
+  });
+  app.get("/api/telegram/discover-chats", async (req, res) => {
+    const token = getTelegramToken();
+    if (!token || token === "MY_TELEGRAM_BOT_TOKEN") {
+      res.json({ ok: false, chats: [], error: "Telegram Bot Token is not configured on the server." });
+      return;
+    }
+    try {
+      const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const meData = await meRes.json();
+      if (!meData?.ok) {
+        res.json({ ok: false, chats: [], error: meData?.description || "Unauthorized bot token" });
+        return;
+      }
+      const chats = await discoverBotChannelsServer(token);
+      res.json({
+        ok: true,
+        chats,
+        bot: {
+          id: meData.result.id,
+          first_name: meData.result.first_name,
+          username: meData.result.username
+        }
+      });
+    } catch (err) {
+      res.json({ ok: false, chats: [], error: err?.message || String(err) });
     }
   });
   function escapeHtml(text) {
@@ -1531,8 +1798,10 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
 \u{1F530} \u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}
 =>See Detail:- ${baseUrl}`;
   }
-  async function sendTelegramVacancyMessage(token, channel, vacancy, domainOrUrl, dryRun = false) {
-    const cleanChannel = channel.startsWith("@") ? channel : `@${channel}`;
+  async function sendTelegramVacancyMessage(token, channel, vacancy, domainOrUrl, dryRun = false, fallbackChannelId) {
+    const persisted = loadPersistedSettings() || {};
+    const normalizedTarget = normalizeTelegramChatIdServer(channel || persisted.telegramChannelName || persisted.telegramChannelId);
+    const cleanChannel = normalizedTarget.chatId;
     const rawHtml = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel);
     const rawPlain = buildTelegramJobPlainText(vacancy, domainOrUrl, cleanChannel);
     const washCheck = applyAndValidateWashLabelServer(vacancy, rawHtml, rawPlain);
@@ -1552,65 +1821,103 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
       return {
         ok: true,
         messageId: 0,
+        resolvedChatId: cleanChannel,
         formattedMessage: htmlMsg,
         formattedPlain: plainMsg,
         isWashNgo: washCheck.isWashNgo,
         hasWashLabel: washCheck.hasWashLabel
       };
     }
-    try {
+    if (normalizedTarget.isInviteLink) {
+      return {
+        ok: false,
+        error: normalizedTarget.error,
+        formattedMessage: htmlMsg,
+        formattedPlain: plainMsg,
+        isWashNgo: washCheck.isWashNgo,
+        hasWashLabel: washCheck.hasWashLabel
+      };
+    }
+    const chatCandidates = [cleanChannel];
+    const savedChannelId = String(fallbackChannelId || persisted.telegramChannelId || "").trim();
+    if (savedChannelId && /^-?\d+$/.test(savedChannelId) && !chatCandidates.includes(savedChannelId)) {
+      chatCandidates.push(savedChannelId);
+    }
+    if (persisted.telegramChannelUrl) {
+      const urlNorm = normalizeTelegramChatIdServer(persisted.telegramChannelUrl);
+      if (!urlNorm.isInviteLink && !chatCandidates.includes(urlNorm.chatId)) {
+        chatCandidates.push(urlNorm.chatId);
+      }
+    }
+    const trySendToChat = async (targetChatId) => {
       const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: cleanChannel,
+          chat_id: targetChatId,
           text: htmlMsg,
           parse_mode: "HTML",
           disable_web_page_preview: false
         })
       });
-      let data = await res.json();
-      if (!data.ok) {
-        console.warn(`Telegram HTML broadcast attempt returned: ${data.description}. Retrying immediately with safe plain-text mode...`);
+      const data = await res.json();
+      if (data.ok) {
+        return { ok: true, messageId: data.result?.message_id };
+      }
+      const desc = String(data.description || "");
+      if (!isFatalTelegramConfigErrorServer(desc)) {
+        console.warn(`Telegram HTML broadcast attempt returned: ${desc}. Retrying immediately with safe plain-text mode...`);
         try {
           const fallbackRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              chat_id: cleanChannel,
+              chat_id: targetChatId,
               text: plainMsg,
               disable_web_page_preview: false
             })
           });
           const fallbackData = await fallbackRes.json();
           if (fallbackData.ok) {
-            return {
-              ok: true,
-              messageId: fallbackData.result?.message_id,
-              formattedMessage: plainMsg,
-              formattedPlain: plainMsg,
-              isWashNgo: washCheck.isWashNgo,
-              hasWashLabel: washCheck.hasWashLabel
-            };
+            return { ok: true, messageId: fallbackData.result?.message_id, usedPlain: true };
           }
-          data = fallbackData;
+          return { ok: false, description: fallbackData.description || desc };
         } catch (fallbackErr) {
           console.warn("Plain text fallback error:", fallbackErr);
         }
       }
-      if (!data.ok) {
-        return {
-          ok: false,
-          error: data.description || "Telegram rejected broadcast",
-          formattedMessage: htmlMsg,
-          formattedPlain: plainMsg,
-          isWashNgo: washCheck.isWashNgo,
-          hasWashLabel: washCheck.hasWashLabel
-        };
+      return { ok: false, description: desc || "Telegram rejected broadcast" };
+    };
+    try {
+      let lastError = "Telegram rejected broadcast";
+      for (const candidate of chatCandidates) {
+        const attempt = await trySendToChat(candidate);
+        if (attempt.ok) {
+          return {
+            ok: true,
+            messageId: attempt.messageId,
+            resolvedChatId: candidate,
+            formattedMessage: attempt.usedPlain ? plainMsg : htmlMsg,
+            formattedPlain: plainMsg,
+            isWashNgo: washCheck.isWashNgo,
+            hasWashLabel: washCheck.hasWashLabel
+          };
+        }
+        lastError = attempt.description || lastError;
+        if (!lastError.toLowerCase().includes("chat not found")) {
+          break;
+        }
+      }
+      let discoveredChats;
+      if (lastError.toLowerCase().includes("chat not found")) {
+        discoveredChats = await discoverBotChannelsServer(token);
+        const botHandle = persisted.telegramBotUsername ? `@${String(persisted.telegramBotUsername).replace("@", "")}` : "your Telegram bot";
+        lastError = `${lastError} (Target: ${cleanChannel} \u2014 ensure the channel is public with that exact @username, or enter its numeric -100... Channel ID if private, and confirm ${botHandle} is an Administrator with Post Messages permission)`;
       }
       return {
-        ok: true,
-        messageId: data.result?.message_id,
+        ok: false,
+        error: lastError,
+        discoveredChats,
         formattedMessage: htmlMsg,
         formattedPlain: plainMsg,
         isWashNgo: washCheck.isWashNgo,
@@ -1711,7 +2018,7 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
   }
   app.post("/api/admin/telegram-publish", async (req, res) => {
     try {
-      const { vacancy, botToken, channelName, forceRetry, customDomain, contentType, distributionMode, dryRun } = req.body;
+      const { vacancy, botToken, channelName, channelId, forceRetry, customDomain, contentType, distributionMode, dryRun } = req.body;
       if (!vacancy) {
         res.status(400).json({ error: "Vacancy payload is required" });
         return;
@@ -1735,14 +2042,24 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
         });
         return;
       }
-      const targetChannel = (channelName || "@DreamBigJobsEthiopia").trim();
+      const targetChannel = normalizeTelegramChatIdServer(
+        channelName || persisted.telegramChannelName || persisted.telegramChannelId || "@DreamBigJobsEthiopia"
+      ).chatId;
       let effectiveDomain = customDomain || persisted?.customDomain || (process.env.APP_URL ? process.env.APP_URL.replace(/^https?:\/\//i, "").replace(/\/+$/, "") : "") || "hopelandjobs.tech";
       if (effectiveDomain === "healmorin.com") effectiveDomain = "hopelandjobs.tech";
-      const result = await sendTelegramVacancyMessage(effectiveToken || "dry-run", targetChannel, vacancy, effectiveDomain, Boolean(dryRun));
+      const result = await sendTelegramVacancyMessage(
+        effectiveToken || "dry-run",
+        targetChannel,
+        vacancy,
+        effectiveDomain,
+        Boolean(dryRun),
+        channelId
+      );
       if (!result.ok) {
         res.json({
           success: false,
           error: `Telegram API responded: ${result.error}`,
+          discoveredChats: result.discoveredChats,
           formattedMessage: result.formattedMessage,
           formattedPlain: result.formattedPlain,
           isWashNgo: result.isWashNgo,
@@ -1753,7 +2070,8 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
       res.json({
         success: true,
         dryRun: Boolean(dryRun),
-        message: dryRun ? `Validated & formatted preview for ${targetChannel}` : `Successfully broadcasted to ${targetChannel}!`,
+        resolvedChatId: result.resolvedChatId || targetChannel,
+        message: dryRun ? `Validated & formatted preview for ${targetChannel}` : `Successfully broadcasted to ${result.resolvedChatId || targetChannel}!`,
         telegramMessageId: result.messageId,
         telegramPublishedAt: (/* @__PURE__ */ new Date()).toISOString(),
         formattedMessage: result.formattedMessage,
@@ -1768,7 +2086,7 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
   });
   app.post("/api/admin/batch-telegram-publish", async (req, res) => {
     try {
-      const { vacancies = [], channelName, distributionMode, dryRun } = req.body;
+      const { vacancies = [], channelName, channelId, distributionMode, dryRun } = req.body;
       const effectiveToken = getTelegramToken();
       if (!dryRun && !effectiveToken) {
         res.status(400).json({
@@ -1776,12 +2094,16 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
         });
         return;
       }
-      const targetChannel = (channelName || "@DreamBigJobsEthiopia").trim();
       const persisted = loadPersistedSettings() || {};
+      const targetChannel = normalizeTelegramChatIdServer(
+        channelName || persisted.telegramChannelName || persisted.telegramChannelId || "@DreamBigJobsEthiopia"
+      ).chatId;
       let domain = persisted?.customDomain || "hopelandjobs.tech";
       if (domain === "healmorin.com") domain = "hopelandjobs.tech";
       const appUrl = domain.startsWith("http") ? domain.replace(/\/+$/, "") : `https://${domain}`;
       const results = [];
+      let fatalChannelError = null;
+      let discoveredChats;
       for (const v of vacancies) {
         const gate = evaluateTelegramPublishEligibilityServer(v, persisted, false, v?.contentType, distributionMode);
         if (!gate.allowed) {
@@ -1796,7 +2118,26 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
           });
           continue;
         }
-        const postRes = await sendTelegramVacancyMessage(effectiveToken || "dry-run", targetChannel, v, appUrl, Boolean(dryRun));
+        if (fatalChannelError) {
+          results.push({
+            id: v.id,
+            title: v.title,
+            organization: v.organization,
+            broadCategory: classifyBroadCategoryServer(v),
+            isWashNgo: isWashNgoVacancyServer(v),
+            status: "failed",
+            error: fatalChannelError
+          });
+          continue;
+        }
+        const postRes = await sendTelegramVacancyMessage(
+          effectiveToken || "dry-run",
+          targetChannel,
+          v,
+          appUrl,
+          Boolean(dryRun),
+          channelId
+        );
         if (postRes.ok) {
           results.push({
             id: v.id,
@@ -1812,6 +2153,10 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
             telegramPublishedAt: (/* @__PURE__ */ new Date()).toISOString()
           });
         } else {
+          if (!dryRun && isFatalTelegramConfigErrorServer(postRes.error)) {
+            fatalChannelError = postRes.error || "Fatal Telegram configuration error";
+            discoveredChats = postRes.discoveredChats;
+          }
           results.push({
             id: v.id,
             title: v.title,
@@ -1823,13 +2168,15 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
             error: postRes.error
           });
         }
-        if (!dryRun) {
+        if (!dryRun && !fatalChannelError) {
           await new Promise((r) => setTimeout(r, 400));
         }
       }
       res.json({
-        success: true,
+        success: !fatalChannelError,
         dryRun: Boolean(dryRun),
+        fatalError: fatalChannelError || void 0,
+        discoveredChats,
         distributionMode: distributionMode || persisted?.telegramDistributionMode || "all_jobs",
         total: vacancies.length,
         publishedCount: results.filter((r) => r.status === "success").length,

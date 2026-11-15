@@ -48,6 +48,11 @@ import {
   isWashNgoVacancyClient,
   isVacancyDeadlineExpiredClient,
   getTelegramDistributionModeLabel,
+  normalizeTelegramChatId,
+  verifyTelegramChannelClient,
+  isFatalTelegramConfigError,
+  ChannelVerificationResult,
+  DiscoveredTelegramChat,
 } from '../../utils/telegramClient';
 
 interface Props {
@@ -55,6 +60,7 @@ interface Props {
   siteSettings: SiteSettings;
   onUpdateVacancy: (vacancy: Vacancy) => Promise<void>;
   onBatchUpdateVacancies?: (vacancies: Vacancy[]) => Promise<void>;
+  onSaveSettings?: (settings: SiteSettings) => Promise<void>;
   initialSelectedIds?: string[];
 }
 
@@ -63,6 +69,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   siteSettings,
   onUpdateVacancy,
   onBatchUpdateVacancies,
+  onSaveSettings,
   initialSelectedIds,
 }) => {
   // Selected IDs for batch actions
@@ -135,11 +142,119 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     message: string;
   } | null>(null);
 
+  // Channel Diagnostics & Quick Fixer
+  const [channelCheckResult, setChannelCheckResult] = useState<ChannelVerificationResult | null>(null);
+  const [isCheckingChannel, setIsCheckingChannel] = useState(false);
+  const [showChannelFixer, setShowChannelFixer] = useState(false);
+  const [manualChannelInput, setManualChannelInput] = useState(
+    siteSettings.telegramChannelName || '@DreamBigJobsEthiopia'
+  );
+  const [isSavingChannelFix, setIsSavingChannelFix] = useState(false);
+
+  useEffect(() => {
+    if (siteSettings.telegramChannelName) {
+      setManualChannelInput(siteSettings.telegramChannelName);
+    }
+  }, [siteSettings.telegramChannelName]);
+
   useEffect(() => {
     if (siteSettings.telegramDistributionMode) {
       setBatchPublishMode(siteSettings.telegramDistributionMode);
     }
   }, [siteSettings.telegramDistributionMode]);
+
+  const activeNormalizedChannel = useMemo(
+    () => normalizeTelegramChatId(siteSettings.telegramChannelName || siteSettings.telegramChannelId || '@DreamBigJobsEthiopia').chatId,
+    [siteSettings.telegramChannelName, siteSettings.telegramChannelId]
+  );
+
+  const handleVerifyQueueChannel = async (overrideTarget?: string): Promise<ChannelVerificationResult> => {
+    setIsCheckingChannel(true);
+    try {
+      const result = await verifyTelegramChannelClient(
+        overrideTarget ?? activeNormalizedChannel,
+        siteSettings.telegramBotToken
+      );
+      setChannelCheckResult(result);
+      if (!result.ok && !result.unreachableServer) {
+        setShowChannelFixer(true);
+      } else if (result.ok && result.chat) {
+        setNotification({
+          type: 'success',
+          message: `✅ Verified channel "${result.chat.title}" (${result.normalizedChannel}, ID: ${result.chat.id}). Bot @${result.bot?.username || 'verified'} has Admin posting rights.`,
+        });
+      }
+      return result;
+    } finally {
+      setIsCheckingChannel(false);
+    }
+  };
+
+  const handleApplyChannelTarget = async (rawTarget: string, explicitId?: string) => {
+    const normalized = normalizeTelegramChatId(rawTarget);
+    if (normalized.isInviteLink) {
+      setNotification({
+        type: 'error',
+        message: normalized.error || 'Private invite links (t.me/+...) cannot be used as a bot chat_id.',
+      });
+      return;
+    }
+
+    setIsSavingChannelFix(true);
+    try {
+      const cleanTarget = normalized.chatId;
+      const updatedSettings: SiteSettings = {
+        ...siteSettings,
+        telegramChannelName: cleanTarget,
+        ...(explicitId || normalized.isNumeric ? { telegramChannelId: explicitId || cleanTarget } : {}),
+        ...(normalized.slug ? { telegramChannelUrl: `https://t.me/${normalized.slug}` } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (onSaveSettings) {
+        await onSaveSettings(updatedSettings);
+      } else {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedSettings),
+        });
+      }
+
+      setManualChannelInput(cleanTarget);
+      // Clear previous failed status overrides so failed jobs can be retried cleanly
+      setStatusOverrides((prev) => {
+        const next: typeof prev = {};
+        for (const [k, v] of Object.entries(prev)) {
+          if (v.status !== 'failed') next[k] = v;
+        }
+        return next;
+      });
+
+      const verifyRes = await verifyTelegramChannelClient(cleanTarget, siteSettings.telegramBotToken);
+      setChannelCheckResult(verifyRes);
+      if (verifyRes.ok) {
+        setShowChannelFixer(false);
+        setNotification({
+          type: 'success',
+          message: `✅ Target channel updated to ${cleanTarget}${verifyRes.chat?.title ? ` ("${verifyRes.chat.title}")` : ''} and verified! You can now retry posting.`,
+        });
+      } else {
+        setShowChannelFixer(true);
+        setNotification({
+          type: 'error',
+          message: verifyRes.error || `Saved ${cleanTarget}, but Telegram could not verify Admin posting rights yet.`,
+        });
+      }
+    } catch (err: any) {
+      setNotification({
+        type: 'error',
+        message: `Failed to save target channel: ${err?.message || String(err)}`,
+      });
+    } finally {
+      setIsSavingChannelFix(false);
+    }
+  };
 
   const effectiveQueueSettings = useMemo<SiteSettings>(
     () => ({
@@ -306,10 +421,22 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         currentTitle: `Publishing ${eligible.length} jobs under ${getTelegramDistributionModeLabel(batchPublishMode)}...`,
       });
 
-      const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
+      const channel = activeNormalizedChannel;
+      const preCheck = await verifyTelegramChannelClient(channel, siteSettings.telegramBotToken);
+      if (!preCheck.unreachableServer && !preCheck.ok) {
+        setChannelCheckResult(preCheck);
+        setShowChannelFixer(true);
+        setNotification({
+          type: 'error',
+          message: `⛔ Batch paused before posting: ${preCheck.error || 'Target channel verification failed.'}`,
+        });
+        return;
+      }
+
       let successCount = 0;
       let failedCount = 0;
       let washLabeledCount = 0;
+      let stoppedByFatalError: string | null = null;
       const batchJobHistory: TelegramBatchRecord['jobs'] = [];
 
       for (let i = 0; i < eligible.length; i++) {
@@ -354,14 +481,27 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           });
         } else {
           failedCount++;
+          const errMsg = res.error || 'Telegram broadcast error';
           batchJobHistory.push({
             vacancyId: job.id,
             title: job.title,
             organization: job.organization,
             category: job.category,
             status: 'failed',
-            error: res.error || 'Telegram broadcast error',
+            error: errMsg,
           });
+          if (isFatalTelegramConfigError(errMsg)) {
+            stoppedByFatalError = errMsg;
+            setChannelCheckResult({
+              ok: false,
+              chatExists: false,
+              normalizedChannel: channel,
+              error: errMsg,
+              discoveredChats: res.discoveredChats,
+            });
+            setShowChannelFixer(true);
+            break;
+          }
         }
 
         if (i < eligible.length - 1 && !isBatchCancelledRef.current) {
@@ -384,12 +524,19 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         await loadBatches();
       } catch {}
 
-      setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
-      setBulkSelectedIds(new Set());
-      setNotification({
-        type: successCount > 0 ? 'success' : 'error',
-        message: `Completed (${getTelegramDistributionModeLabel(batchPublishMode)}): ${successCount} published to Telegram (${washLabeledCount} with 🟢⭐ WASH JOB), ${failedCount} failed, ${excludedCount} excluded by category filter.`,
-      });
+      if (stoppedByFatalError) {
+        setNotification({
+          type: 'error',
+          message: `⛔ Saved ${selected.length} jobs to Hopeland Website, but Telegram publishing stopped early: ${stoppedByFatalError}`,
+        });
+      } else {
+        setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
+        setBulkSelectedIds(new Set());
+        setNotification({
+          type: successCount > 0 ? 'success' : 'error',
+          message: `Completed (${getTelegramDistributionModeLabel(batchPublishMode)}): ${successCount} published to Telegram (${washLabeledCount} with 🟢⭐ WASH JOB), ${failedCount} failed, ${excludedCount} excluded by category filter.`,
+        });
+      }
     } catch (err: any) {
       setNotification({ type: 'error', message: err?.message || 'Batch import/publish failed.' });
     } finally {
@@ -601,12 +748,15 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   };
 
   // Single Job Post Function
-  const executeSinglePost = async (job: Vacancy, forceRetry = false): Promise<boolean> => {
+  const executeSinglePost = async (
+    job: Vacancy,
+    forceRetry = false
+  ): Promise<{ ok: boolean; error?: string; fatal?: boolean; discoveredChats?: DiscoveredTelegramChat[] }> => {
     setInFlightJobId(job.id);
     setNotification(null);
 
     try {
-      const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
+      const channel = activeNormalizedChannel;
       const data = await broadcastJobToTelegram(
         job,
         channel,
@@ -619,6 +769,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
       if (!data.success) {
         const errorMsg = data.error || 'Telegram broadcast failed';
+        const fatal = isFatalTelegramConfigError(errorMsg);
         setStatusOverrides((prev) => ({
           ...prev,
           [job.id]: { status: 'failed', error: errorMsg },
@@ -630,11 +781,22 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           updatedAt: new Date().toISOString(),
         });
 
+        if (fatal) {
+          setChannelCheckResult({
+            ok: false,
+            chatExists: false,
+            normalizedChannel: channel,
+            error: errorMsg,
+            discoveredChats: data.discoveredChats,
+          });
+          setShowChannelFixer(true);
+        }
+
         setNotification({
           type: 'error',
           message: `❌ Failed to post "${job.title}": ${errorMsg}`,
         });
-        return false;
+        return { ok: false, error: errorMsg, fatal, discoveredChats: data.discoveredChats };
       }
 
       const publishedAt = data.telegramPublishedAt || new Date().toISOString();
@@ -662,9 +824,9 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
       setNotification({
         type: 'success',
-        message: `✅ Successfully posted "${job.title}" to ${channel} (Message #${messageId || 'OK'})!`,
+        message: `✅ Successfully posted "${job.title}" to ${data.resolvedChatId || channel} (Message #${messageId || 'OK'})!`,
       });
-      return true;
+      return { ok: true };
     } catch (err: any) {
       const msg = err.message || 'Network error';
       setStatusOverrides((prev) => ({
@@ -675,7 +837,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         type: 'error',
         message: `❌ Network error posting "${job.title}": ${msg}`,
       });
-      return false;
+      return { ok: false, error: msg };
     } finally {
       setInFlightJobId(null);
     }
@@ -691,9 +853,13 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     }
   };
 
-  // Bulk Publishing Workflow (Sequential with safe rate-limiting delay)
-  const handleBulkPostSelected = async () => {
-    if (selectedIds.size === 0) {
+  // Bulk Publishing Workflow (Sequential with pre-flight channel check, fatal error fail-fast & rate-limiting)
+  const handleBulkPostSelected = async (explicitJobs?: Vacancy[]) => {
+    const jobsToPost = explicitJobs && explicitJobs.length > 0
+      ? explicitJobs
+      : vacancies.filter((v) => selectedIds.has(v.id));
+
+    if (jobsToPost.length === 0) {
       setNotification({
         type: 'error',
         message: 'Please select at least one vacancy using the checkboxes first.',
@@ -701,19 +867,31 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       return;
     }
 
-    const jobsToPost = vacancies.filter((v) => selectedIds.has(v.id));
-    if (jobsToPost.length === 0) return;
-
     setIsBatchRunning(true);
     isBatchCancelledRef.current = false;
     setBatchProgress({
       current: 0,
       total: jobsToPost.length,
-      currentTitle: 'Initializing safe Telegram publishing queue...',
+      currentTitle: `Verifying channel "${activeNormalizedChannel}" before broadcasting...`,
     });
+
+    // Pre-flight check so 33 jobs don't all fail one-by-one if channel or bot admin setup is broken
+    const preCheck = await verifyTelegramChannelClient(activeNormalizedChannel, siteSettings.telegramBotToken);
+    if (!preCheck.unreachableServer && !preCheck.ok) {
+      setIsBatchRunning(false);
+      setBatchProgress(null);
+      setChannelCheckResult(preCheck);
+      setShowChannelFixer(true);
+      setNotification({
+        type: 'error',
+        message: `⛔ Queue paused before posting ${jobsToPost.length} jobs: ${preCheck.error || 'Target channel not reachable.'}`,
+      });
+      return;
+    }
 
     let successCount = 0;
     let failedCount = 0;
+    let stoppedByFatalError: string | null = null;
     const batchJobHistory: TelegramBatchRecord['jobs'] = [];
 
     for (let i = 0; i < jobsToPost.length; i++) {
@@ -733,8 +911,8 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       });
 
       // Post single job sequentially
-      const ok = await executeSinglePost(currentJob, false);
-      if (ok) {
+      const result = await executeSinglePost(currentJob, false);
+      if (result.ok) {
         successCount++;
         batchJobHistory.push({
           vacancyId: currentJob.id,
@@ -752,8 +930,12 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           organization: currentJob.organization,
           category: currentJob.category,
           status: 'failed',
-          error: statusOverrides[currentJob.id]?.error || 'Failed to broadcast',
+          error: result.error || 'Failed to broadcast',
         });
+        if (result.fatal) {
+          stoppedByFatalError = result.error || 'Fatal Telegram channel configuration error';
+          break;
+        }
       }
 
       // Safe delay between posts (1.2s) to respect Telegram API rate limits
@@ -790,10 +972,17 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     setIsBatchRunning(false);
     setBatchProgress(null);
 
-    setNotification({
-      type: successCount > 0 ? 'success' : 'error',
-      message: `🎉 Batch completed: ${successCount} successfully posted, ${failedCount} failed out of ${jobsToPost.length}.`,
-    });
+    if (stoppedByFatalError) {
+      setNotification({
+        type: 'error',
+        message: `⛔ Queue stopped early to prevent repeated failures (${successCount} posted, ${failedCount} failed): ${stoppedByFatalError}`,
+      });
+    } else {
+      setNotification({
+        type: successCount > 0 ? 'success' : 'error',
+        message: `🎉 Batch completed: ${successCount} successfully posted, ${failedCount} failed out of ${jobsToPost.length}.`,
+      });
+    }
   };
 
   // Save Selected Jobs as a Named Batch (e.g. "Morning 20 Jobs")
@@ -897,18 +1086,36 @@ export const TelegramPublishQueue: React.FC<Props> = ({
                     Live Broadcast Manager
                   </span>
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-400">
-                  Target Channel:{' '}
-                  <a
-                    href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-amber-400 font-bold hover:underline inline-flex items-center gap-1"
+                <p className="text-xs sm:text-sm text-slate-400 flex flex-wrap items-center gap-1.5">
+                  <span>Target Channel:</span>
+                  {/^-\d+$/.test(activeNormalizedChannel) ? (
+                    <span className="text-amber-400 font-bold font-mono">{activeNormalizedChannel} (Private Channel ID)</span>
+                  ) : (
+                    <a
+                      href={siteSettings.telegramChannelUrl || `https://t.me/${activeNormalizedChannel.replace('@', '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-400 font-bold hover:underline inline-flex items-center gap-1"
+                    >
+                      {activeNormalizedChannel}
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyQueueChannel()}
+                    disabled={isCheckingChannel}
+                    className="ml-1 px-2.5 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-[11px] font-bold transition-colors"
                   >
-                    {siteSettings.telegramChannelName || '@DreamBigJobsEthiopia'}
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>{' '}
-                  • Review, select, and publish individually or in sequential batches.
+                    {isCheckingChannel ? 'Checking...' : 'Verify Channel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowChannelFixer((v) => !v)}
+                    className="px-2.5 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold transition-colors"
+                  >
+                    {showChannelFixer ? 'Hide Fixer' : 'Change Target'}
+                  </button>
                 </p>
               </div>
             </div>
@@ -1048,6 +1255,83 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           ))}
         </div>
       </div>
+
+      {/* Inline Channel Fixer & Auto-Detect Diagnostics Panel */}
+      {showChannelFixer && (
+        <div className="bg-rose-50/90 border-2 border-rose-300 rounded-3xl p-5 shadow-sm space-y-3 text-xs">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-extrabold text-sm text-rose-950">
+                  Telegram Channel Connection Fixer
+                </h3>
+                <p className="text-rose-800 mt-0.5 leading-relaxed">
+                  {channelCheckResult?.error ||
+                    `Verify or update the target channel for ${siteSettings.telegramBotUsername ? `@${siteSettings.telegramBotUsername.replace('@', '')}` : 'your Telegram bot'}.`}
+                </p>
+                {channelCheckResult?.diagnosis && (
+                  <p className="text-rose-900 font-semibold mt-1">{channelCheckResult.diagnosis}</p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowChannelFixer(false)}
+              className="p-1 rounded-lg hover:bg-rose-100 text-rose-700"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl p-3.5 border border-rose-200 space-y-2.5">
+            <label className="block font-bold text-slate-800">
+              Enter Public <code className="bg-slate-100 px-1 rounded">@username</code>, <code className="bg-slate-100 px-1 rounded">t.me/channel</code> link, or Private Channel ID (<code className="bg-slate-100 px-1 rounded">-100...</code>):
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={manualChannelInput}
+                onChange={(e) => setManualChannelInput(e.target.value)}
+                placeholder="@HopeLandJobs or -1001234567890"
+                className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:border-amber-500 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => handleApplyChannelTarget(manualChannelInput)}
+                disabled={isSavingChannelFix || !manualChannelInput.trim()}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 font-black text-xs whitespace-nowrap"
+              >
+                {isSavingChannelFix ? 'Saving & Verifying...' : 'Save & Verify Channel'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              <strong>Checklist:</strong> In Telegram, open your channel (&ldquo;Hope Land Jobs&rdquo;) &rarr; <strong>Administrators</strong> &rarr; ensure your bot is added as Administrator with <strong>Post Messages</strong> ON. If the channel is <strong>Private</strong>, forward any channel message to <code className="bg-slate-100 px-1 rounded">@userinfobot</code> to get its <code className="bg-slate-100 px-1 rounded">-100...</code> ID and paste it above.
+            </p>
+          </div>
+
+          {channelCheckResult?.discoveredChats && channelCheckResult.discoveredChats.length > 0 && (
+            <div className="bg-white rounded-2xl p-3.5 border border-emerald-300 space-y-2">
+              <div className="font-extrabold text-emerald-900">
+                Auto-Detected Channels for Your Bot (Click to Switch &amp; Save):
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {channelCheckResult.discoveredChats.map((dc) => (
+                  <button
+                    key={dc.id}
+                    type="button"
+                    disabled={isSavingChannelFix}
+                    onClick={() => handleApplyChannelTarget(dc.username || dc.id, dc.id)}
+                    className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-400 text-emerald-950 font-extrabold text-xs transition-colors"
+                  >
+                    Use &ldquo;{dc.title}&rdquo; ({dc.username || dc.id})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Notification Alert */}
       {notification && (
@@ -1413,7 +1697,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           {/* Right: Main Telegram Action Buttons */}
           <div className="flex items-center flex-wrap gap-2.5">
             <button
-              onClick={handleBulkPostSelected}
+              onClick={() => handleBulkPostSelected()}
               disabled={isBatchRunning || selectedIds.size === 0}
               className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-xs sm:text-sm transition-all shadow-md active:scale-95"
             >
@@ -1423,10 +1707,12 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
             <button
               onClick={async () => {
-                handleSelectAllUnpublished();
-                setTimeout(() => {
-                  handleBulkPostSelected();
-                }, 100);
+                const unposted = vacancies.filter((v) => {
+                  const s = getJobStatus(v).status;
+                  return s === 'ready' || s === 'failed';
+                });
+                setSelectedIds(new Set(unposted.map((v) => v.id)));
+                await handleBulkPostSelected(unposted);
               }}
               disabled={isBatchRunning || kpiStats.ready + kpiStats.failed === 0}
               className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#0B132B] hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-xs transition-all shadow-sm"

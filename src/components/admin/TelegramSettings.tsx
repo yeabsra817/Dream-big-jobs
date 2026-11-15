@@ -33,6 +33,10 @@ import {
   LOCAL_STORAGE_TOKEN_KEY,
   isWashNgoVacancyClient,
   getTelegramDistributionModeLabel,
+  normalizeTelegramChatId,
+  verifyTelegramChannelClient,
+  ChannelVerificationResult,
+  DiscoveredTelegramChat,
 } from '../../utils/telegramClient';
 
 interface Props {
@@ -121,6 +125,8 @@ export const TelegramSettings: React.FC<Props> = ({
     Boolean(settings.telegramIncludeScholarships)
   );
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isVerifyingChannel, setIsVerifyingChannel] = useState(false);
+  const [channelVerification, setChannelVerification] = useState<ChannelVerificationResult | null>(null);
 
   // Live Broadcast Testing
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>(
@@ -172,11 +178,10 @@ export const TelegramSettings: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
 
-  // Check current bot connection status on load (cross-user & cross-device persistence)
+  // Check current bot connection status on load (truthful server check)
   const checkStatus = async () => {
     try {
       let tokenToUse = settings.telegramBotToken;
-      let usernameToUse = settings.telegramBotUsername || 'DreamBigJobsEthiopiaBot';
 
       // 1. Check persistent server status endpoint (/api/telegram/status)
       try {
@@ -196,6 +201,20 @@ export const TelegramSettings: React.FC<Props> = ({
             });
             return;
           }
+          if (tData?.configured && tData?.connected === false && tData?.error) {
+            setConnectionStatus({
+              configured: true,
+              connected: false,
+              bot: tData.bot,
+              maskedToken: tData.maskedToken,
+              error: tData.error,
+            });
+            setFeedbackMessage({
+              type: 'error',
+              text: `Telegram Bot API rejected the configured server token: ${tData.error}. Paste a valid Bot Token from @BotFather below.`,
+            });
+            return;
+          }
         }
       } catch {}
 
@@ -206,25 +225,6 @@ export const TelegramSettings: React.FC<Props> = ({
           const sData = await sRes.json();
           if (sData?.telegramBotToken && sData.telegramBotToken.includes(':')) {
             tokenToUse = sData.telegramBotToken;
-            usernameToUse = sData.telegramBotUsername || usernameToUse;
-          }
-          if (sData?.telegramConnected) {
-            const activeUser = (sData.telegramBotUsername || usernameToUse || 'DreamBigJobsEthiopiaBot').replace('@', '');
-            setConnectionStatus({
-              configured: true,
-              connected: true,
-              bot: {
-                id: 9228258664,
-                first_name: 'Hopeland Jobs Bot',
-                username: activeUser,
-              },
-              maskedToken: tokenToUse ? maskTelegramToken(tokenToUse) : 'Connected (Synced Across Devices)',
-            });
-            setFeedbackMessage({
-              type: 'success',
-              text: `Connected to @${activeUser}. Telegram bot is active and synced across all devices.`,
-            });
-            return;
           }
         }
       } catch {}
@@ -246,43 +246,15 @@ export const TelegramSettings: React.FC<Props> = ({
             text: `Connected to @${data.bot.username} (${data.bot.first_name}). Telegram Bot API is active and ready to broadcast.`,
           });
           return;
-        } else if (tokenToUse.includes(':')) {
-          // Keep connected state permanently active using saved credentials
-          const activeUser = (usernameToUse || 'DreamBigJobsEthiopiaBot').replace('@', '');
-          setConnectionStatus({
-            configured: true,
-            connected: true,
-            bot: {
-              id: 9228258664,
-              first_name: 'Hopeland Jobs Bot',
-              username: activeUser,
-            },
-            maskedToken: maskTelegramToken(tokenToUse),
-          });
-          setFeedbackMessage({
-            type: 'success',
-            text: `Connected to @${activeUser}. Telegram bot credentials permanently saved and active.`,
-          });
-          return;
         }
-      }
-
-      // 4. If siteSettings has telegramConnected or bot username, keep active
-      if (settings.telegramAutoPublish !== false || settings.telegramBotUsername) {
-        const activeUser = (settings.telegramBotUsername || 'DreamBigJobsEthiopiaBot').replace('@', '');
         setConnectionStatus({
           configured: true,
-          connected: true,
-          bot: {
-            id: 9228258664,
-            first_name: 'Hopeland Jobs Bot',
-            username: activeUser,
-          },
-          maskedToken: 'Connected & Verified (Active)',
+          connected: false,
+          error: data.error || 'Bot token was rejected by Telegram API.',
         });
         setFeedbackMessage({
-          type: 'success',
-          text: `Connected to @${activeUser}. Telegram channel @DreamBigJobsEthiopia is active and ready.`,
+          type: 'error',
+          text: data.error || 'Bot token was rejected by Telegram API. Please verify in @BotFather.',
         });
         return;
       }
@@ -389,19 +361,74 @@ export const TelegramSettings: React.FC<Props> = ({
     }
   };
 
+  // Verify Channel & Bot Admin permissions via Telegram API
+  const handleVerifyChannel = async (overrideChannel?: string) => {
+    setIsVerifyingChannel(true);
+    setChannelVerification(null);
+    try {
+      const result = await verifyTelegramChannelClient(
+        overrideChannel ?? channelUsername,
+        settings.telegramBotToken
+      );
+      setChannelVerification(result);
+      if (result.ok && result.chat) {
+        const resolvedHandle = result.chat.username ? `@${result.chat.username}` : String(result.chat.id);
+        setChannelUsername(resolvedHandle);
+        setFeedbackMessage({
+          type: 'success',
+          text: `Channel verified: "${result.chat.title}" (${resolvedHandle}, ID: ${result.chat.id}). Bot is Administrator with Post Messages enabled.`,
+        });
+      }
+    } finally {
+      setIsVerifyingChannel(false);
+    }
+  };
+
+  const handleUseDiscoveredChat = async (chat: DiscoveredTelegramChat) => {
+    const target = chat.username || chat.id;
+    setChannelUsername(target);
+    const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
+    const newSettings: SiteSettings = {
+      ...settings,
+      telegramChannelName: target,
+      telegramChannelId: String(chat.id),
+      telegramChannelUrl: chat.username
+        ? `https://t.me/${chat.username.replace('@', '')}`
+        : settings.telegramChannelUrl,
+      telegramAutoPublish: autoPublish,
+      telegramDistributionMode: distributionMode,
+      telegramIncludeInternationalImmigration: includeImmigration,
+      telegramIncludeScholarships: includeScholarships,
+      customDomain: cleanDomain,
+      updatedAt: new Date().toISOString(),
+    };
+    await onSaveSettings(newSettings);
+    await handleVerifyChannel(target);
+  };
+
   // Save Channel and Auto-Publish Settings
   const handleSaveChannelSettings = async () => {
+    const normalized = normalizeTelegramChatId(channelUsername);
+    if (normalized.isInviteLink) {
+      setFeedbackMessage({
+        type: 'error',
+        text: normalized.error || 'Private invite links cannot be used as a bot chat_id.',
+      });
+      return;
+    }
+
     setIsSavingSettings(true);
     try {
-      const cleanChan = channelUsername.trim().startsWith('@')
-        ? channelUsername.trim()
-        : `@${channelUsername.trim()}`;
-      const channelSlug = cleanChan.replace('@', '');
+      const cleanChan = normalized.chatId;
+      setChannelUsername(cleanChan);
       const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
       const newSettings: SiteSettings = {
         ...settings,
         telegramChannelName: cleanChan,
-        telegramChannelUrl: `https://t.me/${channelSlug}`,
+        ...(normalized.isNumeric ? { telegramChannelId: cleanChan } : {}),
+        telegramChannelUrl: normalized.slug
+          ? `https://t.me/${normalized.slug}`
+          : settings.telegramChannelUrl,
         telegramAutoPublish: autoPublish,
         telegramDistributionMode: distributionMode,
         telegramIncludeInternationalImmigration: includeImmigration,
@@ -776,20 +803,64 @@ export const TelegramSettings: React.FC<Props> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">
-                Target Telegram Channel Username:
+                Target Telegram Channel (@username, t.me link, or numeric -100... ID for private channels):
               </label>
-              <div className="relative">
+              <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={channelUsername}
                   onChange={(e) => setChannelUsername(e.target.value)}
-                  placeholder="@DreamBigJobsEthiopia"
-                  className="w-full text-xs font-bold p-3 rounded-xl border border-slate-300 focus:border-amber-500 outline-none bg-white text-slate-900"
+                  placeholder="@DreamBigJobsEthiopia or -1001234567890"
+                  className="flex-1 text-xs font-bold p-3 rounded-xl border border-slate-300 focus:border-amber-500 outline-none bg-white text-slate-900"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleVerifyChannel()}
+                  disabled={isVerifyingChannel}
+                  className="px-3.5 py-3 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-50 text-amber-400 text-xs font-extrabold whitespace-nowrap transition-colors"
+                >
+                  {isVerifyingChannel ? 'Checking...' : 'Verify & Auto-Detect'}
+                </button>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Official channel for visitors: <a href="https://t.me/DreamBigJobsEthiopia" target="_blank" rel="noopener noreferrer" className="text-[#0288D1] underline font-bold">https://t.me/DreamBigJobsEthiopia</a>
+                Public channels use <code className="bg-slate-200 px-1 rounded">@username</code>. Private channels require the numeric <code className="bg-slate-200 px-1 rounded">-100...</code> Channel ID.
               </p>
+
+              {channelVerification && (
+                <div
+                  className={`mt-2.5 p-3 rounded-xl border text-[11px] space-y-2 ${
+                    channelVerification.ok
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-rose-50 border-rose-300 text-rose-900'
+                  }`}
+                >
+                  <div className="font-bold">
+                    {channelVerification.ok && channelVerification.chat
+                      ? `✅ Verified "${channelVerification.chat.title}" (${channelVerification.normalizedChannel}, ID: ${channelVerification.chat.id}) — Bot is Admin & Ready`
+                      : `❌ ${channelVerification.error || 'Channel verification failed'}`}
+                  </div>
+                  {channelVerification.diagnosis && (
+                    <p className="text-rose-800 leading-relaxed">{channelVerification.diagnosis}</p>
+                  )}
+                  {channelVerification.discoveredChats && channelVerification.discoveredChats.length > 0 && (
+                    <div className="pt-1 space-y-1.5">
+                      <div className="font-bold text-slate-800">Discovered Channels for This Bot (Click to Select &amp; Save):</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {channelVerification.discoveredChats.map((dc) => (
+                          <button
+                            key={dc.id}
+                            type="button"
+                            onClick={() => handleUseDiscoveredChat(dc)}
+                            className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:border-amber-500 text-slate-900 font-bold text-[11px] shadow-xs"
+                          >
+                            Use &ldquo;{dc.title}&rdquo; ({dc.username || dc.id})
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between">

@@ -125,6 +125,7 @@ export type { TelegramDistributionMode, ResearchFrequency };
 
 export interface SiteSettings {
   telegramChannelName: string;
+  telegramChannelId?: string;
   telegramChannelUrl: string;
   telegramGroupUrl: string;
   telegramBotToken?: string;

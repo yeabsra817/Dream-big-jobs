@@ -571,6 +571,7 @@ export const AdminDashboard: React.FC<Props> = ({
             siteSettings={siteSettings}
             onUpdateVacancy={onSaveVacancy}
             onBatchUpdateVacancies={onBatchSaveVacancies}
+            onSaveSettings={onSaveSiteSettings}
             initialSelectedIds={queueSelectedJobIds}
           />
         )}

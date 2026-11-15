@@ -185,6 +185,178 @@ export function maskTelegramToken(token: string): string {
   return `${cleaned.substring(0, 6)}••••••••${cleaned.slice(-4)}`;
 }
 
+export interface NormalizedTelegramChat {
+  chatId: string;
+  isNumeric: boolean;
+  isInviteLink: boolean;
+  slug?: string;
+  error?: string;
+}
+
+/**
+ * Canonical Telegram chat_id normalizer:
+ * - Preserves numeric channel/group IDs (e.g. "-1001234567890") WITHOUT prepending "@"
+ * - Heals accidentally mangled "@-1001234567890" -> "-1001234567890"
+ * - Extracts "@username" from full URLs ("https://t.me/HopeLandJobs" or "t.me/HopeLandJobs/12")
+ * - Flags private invite links ("t.me/+...") with an actionable error instead of corrupting into "@https://..."
+ */
+export function normalizeTelegramChatId(input?: string): NormalizedTelegramChat {
+  const raw = (input || '').trim();
+  if (!raw) {
+    return {
+      chatId: '@DreamBigJobsEthiopia',
+      isNumeric: false,
+      isInviteLink: false,
+      slug: 'DreamBigJobsEthiopia',
+    };
+  }
+
+  // Numeric channel/group/chat ID (with or without accidental leading @)
+  const numericCandidate = raw.replace(/^@/, '').trim();
+  if (/^-?\d+$/.test(numericCandidate)) {
+    return {
+      chatId: numericCandidate,
+      isNumeric: true,
+      isInviteLink: false,
+    };
+  }
+
+  // URL forms (including accidentally prefixed "@https://t.me/...")
+  const urlCandidate = raw.replace(/^@/, '').trim();
+  const inviteMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:\+|joinchat\/)([A-Za-z0-9_-]+)/i);
+  if (inviteMatch) {
+    return {
+      chatId: raw,
+      isNumeric: false,
+      isInviteLink: true,
+      error:
+        'Private Telegram invite links (t.me/+...) cannot be used as a bot chat_id. Add your bot as Channel Administrator and enter the numeric -100... Channel ID or click Auto-Detect Channel.',
+    };
+  }
+
+  const publicUrlMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{3,})(?:[/?#].*)?$/i);
+  if (publicUrlMatch) {
+    const slug = publicUrlMatch[1];
+    return {
+      chatId: `@${slug}`,
+      isNumeric: false,
+      isInviteLink: false,
+      slug,
+    };
+  }
+
+  const bare = urlCandidate.replace(/\/+$/, '').trim();
+  return {
+    chatId: `@${bare}`,
+    isNumeric: false,
+    isInviteLink: false,
+    slug: bare,
+  };
+}
+
+export function isFatalTelegramConfigError(errorMsg?: string): boolean {
+  const msg = String(errorMsg || '').toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes('chat not found') ||
+    msg.includes('unauthorized') ||
+    msg.includes('bot was kicked') ||
+    msg.includes('bot is not a member') ||
+    msg.includes('need administrator rights') ||
+    msg.includes('not enough rights') ||
+    msg.includes('bot token is not configured') ||
+    msg.includes('private telegram invite links')
+  );
+}
+
+export interface DiscoveredTelegramChat {
+  id: string;
+  title: string;
+  username?: string;
+  type: string;
+  botStatus?: string;
+}
+
+export interface ChannelVerificationResult {
+  ok: boolean;
+  chatExists?: boolean;
+  normalizedChannel?: string;
+  isAdmin?: boolean;
+  canPost?: boolean;
+  chat?: {
+    id: number | string;
+    title: string;
+    username?: string;
+    type: string;
+  };
+  bot?: {
+    id: number;
+    first_name: string;
+    username: string;
+  };
+  discoveredChats?: DiscoveredTelegramChat[];
+  error?: string;
+  diagnosis?: string;
+  unreachableServer?: boolean;
+}
+
+export async function verifyTelegramChannelClient(
+  channelName?: string,
+  botToken?: string
+): Promise<ChannelVerificationResult> {
+  const normalized = normalizeTelegramChatId(channelName);
+  if (normalized.isInviteLink) {
+    return {
+      ok: false,
+      chatExists: false,
+      normalizedChannel: normalized.chatId,
+      error: normalized.error,
+    };
+  }
+
+  try {
+    const res = await fetch('/api/telegram/verify-channel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channelName: normalized.chatId,
+        botToken: botToken ? cleanTelegramToken(botToken) : undefined,
+      }),
+    });
+    const text = await res.text();
+    if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
+      try {
+        return JSON.parse(text) as ChannelVerificationResult;
+      } catch {}
+    }
+  } catch {}
+
+  return {
+    ok: false,
+    unreachableServer: true,
+    normalizedChannel: normalized.chatId,
+    error: 'Could not reach server channel verification endpoint.',
+  };
+}
+
+export async function discoverTelegramChatsClient(): Promise<{
+  ok: boolean;
+  chats: DiscoveredTelegramChat[];
+  bot?: { id: number; first_name: string; username: string };
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/telegram/discover-chats');
+    const text = await res.text();
+    if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
+      try {
+        return JSON.parse(text);
+      } catch {}
+    }
+  } catch {}
+  return { ok: false, chats: [], error: 'Failed to query discovered chats.' };
+}
+
 /**
  * Escape HTML special characters for Telegram HTML parse mode
  */
@@ -460,7 +632,7 @@ export async function checkTelegramConnectionStatus(savedToken?: string): Promis
     if (res.ok && !text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
       try {
         const data = JSON.parse(text);
-        if (data.configured && data.connected) {
+        if (data.configured) {
           return data;
         }
       } catch {}
@@ -574,10 +746,17 @@ export async function broadcastJobToTelegram(
   error?: string;
   alreadyPublished?: boolean;
   blockedByRule?: boolean;
+  resolvedChatId?: string;
+  discoveredChats?: DiscoveredTelegramChat[];
 }> {
-  const cleanChan = channelName.trim().startsWith('@')
-    ? channelName.trim()
-    : `@${channelName.trim()}`;
+  const normalizedTarget = normalizeTelegramChatId(channelName);
+  if (normalizedTarget.isInviteLink) {
+    return {
+      success: false,
+      error: normalizedTarget.error,
+    };
+  }
+  const cleanChan = normalizedTarget.chatId;
 
   let storedSettings: Partial<SiteSettings> = settingsOverride || {};
   let effectiveDomain = customDomain;
@@ -617,6 +796,7 @@ export async function broadcastJobToTelegram(
       body: JSON.stringify({
         vacancy,
         channelName: cleanChan,
+        channelId: storedSettings.telegramChannelId,
         botToken: botToken ? cleanTelegramToken(botToken) : undefined,
         forceRetry,
         customDomain: effectiveDomain,
@@ -631,7 +811,16 @@ export async function broadcastJobToTelegram(
     if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
       try {
         const data = JSON.parse(text);
-        if (res.ok || data.blockedByRule || data.alreadyPublished) {
+        // Only fall through to browser direct mode if server explicitly lacks a token while browser has one
+        const serverMissingToken =
+          typeof data?.error === 'string' &&
+          data.error.toLowerCase().includes('not configured on the server');
+        const hasBrowserToken = Boolean(
+          cleanTelegramToken(
+            botToken || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || '' : '')
+          )
+        );
+        if (!(serverMissingToken && hasBrowserToken)) {
           return data;
         }
       } catch {}
