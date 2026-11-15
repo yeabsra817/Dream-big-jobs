@@ -1,0 +1,27 @@
+{
+  "internationalJobs": [],
+  "immigrationPathways": [],
+  "experienceScholarships": [],
+  "researchHistory": [
+    {
+      "id": "run_cleanup_1794751750092",
+      "runType": "expired_cleanup",
+      "triggeredBy": "Administrator",
+      "startedAt": "2026-11-15T14:09:10.092Z",
+      "completedAt": "2026-11-15T14:09:10.092Z",
+      "regionsResearched": [
+        "All"
+      ],
+      "countriesResearched": [],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 0,
+      "summary": "Archived 0 expired international jobs & scholarships.",
+      "status": "completed"
+    }
+  ],
+  "verificationLogs": [],
+  "updatedAt": "2026-11-15T14:09:10.092Z"
+}

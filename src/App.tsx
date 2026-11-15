@@ -29,6 +29,9 @@ import {
   UserCheck,
   Loader2,
   BarChart3,
+  Globe,
+  Plane,
+  Landmark,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -38,6 +41,13 @@ import {
   ETHIOPIAN_LOCATIONS,
   CategoryMeta,
 } from './types/job';
+import {
+  ExperienceScholarship,
+  ImmigrationPathway,
+  InternationalJob,
+  ResearchHistoryRun,
+  VerificationReportItem,
+} from './types/international';
 import {
   fetchPublishedVacancies,
   fetchAllVacanciesAdmin,
@@ -63,6 +73,19 @@ import {
   getCachedUserApplications,
   getRedirectResult,
   getAdditionalUserInfo,
+  fetchInternationalJobs,
+  saveBatchInternationalJobs,
+  deleteInternationalJob,
+  fetchImmigrationPathways,
+  saveBatchImmigrationPathways,
+  deleteImmigrationPathway,
+  fetchExperienceScholarships,
+  saveBatchExperienceScholarships,
+  deleteExperienceScholarship,
+  fetchResearchHistory,
+  saveResearchHistoryRun,
+  fetchVerificationLogs,
+  saveBatchVerificationLogs,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
@@ -86,6 +109,9 @@ import { CustomerVisitCountSummary, CustomerVisitAiInsight } from './types/analy
 const CategoryView = lazy(() => import('./components/CategoryView').then((m) => ({ default: m.CategoryView })));
 const LocationJobsView = lazy(() => import('./components/LocationJobsView').then((m) => ({ default: m.LocationJobsView })));
 const AllCategoriesView = lazy(() => import('./components/AllCategoriesView').then((m) => ({ default: m.AllCategoriesView })));
+const InternationalJobsView = lazy(() => import('./components/InternationalJobsView').then((m) => ({ default: m.InternationalJobsView })));
+const ImmigrationResidenceView = lazy(() => import('./components/ImmigrationResidenceView').then((m) => ({ default: m.ImmigrationResidenceView })));
+const ScholarshipsView = lazy(() => import('./components/ScholarshipsView').then((m) => ({ default: m.ScholarshipsView })));
 const SavedJobsDrawer = lazy(() => import('./components/SavedJobsDrawer').then((m) => ({ default: m.SavedJobsDrawer })));
 const VacancyDetailModal = lazy(() => import('./components/VacancyDetailModal').then((m) => ({ default: m.VacancyDetailModal })));
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
@@ -139,6 +165,11 @@ export default function App() {
     );
   });
   const [duplicateReports, setDuplicateReports] = useState<DuplicateReportItem[]>([]);
+  const [internationalJobs, setInternationalJobs] = useState<InternationalJob[]>([]);
+  const [immigrationPathways, setImmigrationPathways] = useState<ImmigrationPathway[]>([]);
+  const [experienceScholarships, setExperienceScholarships] = useState<ExperienceScholarship[]>([]);
+  const [researchHistory, setResearchHistory] = useState<ResearchHistoryRun[]>([]);
+  const [verificationLogs, setVerificationLogs] = useState<VerificationReportItem[]>([]);
 
   // Navigation & View State
   const [selectedCategory, setSelectedCategory] = useState<CategoryMeta | null>(null);
@@ -146,6 +177,14 @@ export default function App() {
   const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(null);
   const [isAdminView, setIsAdminView] = useState(false);
   const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
+  const [activeExpansionView, setActiveExpansionView] = useState<
+    'international-jobs' | 'immigration' | 'scholarships' | null
+  >(() => {
+    if (typeof window === 'undefined') return null;
+    const v = new URLSearchParams(window.location.search).get('view');
+    if (v === 'international-jobs' || v === 'immigration' || v === 'scholarships') return v;
+    return null;
+  });
 
   // Auth States
   const [isAdminAuthModalOpen, setIsAdminAuthModalOpen] = useState(false);
@@ -212,12 +251,24 @@ export default function App() {
 
     async function loadData() {
       try {
-        const [loadedSettings, loadedVacancies] = await Promise.all([
+        const [
+          loadedSettings,
+          loadedVacancies,
+          loadedIntlJobs,
+          loadedPathways,
+          loadedScholarships,
+        ] = await Promise.all([
           getSiteSettings(),
           fetchPublishedVacancies(),
+          fetchInternationalJobs(false),
+          fetchImmigrationPathways(false),
+          fetchExperienceScholarships(false),
         ]);
         setSiteSettings(loadedSettings);
         setVacancies(loadedVacancies);
+        setInternationalJobs(loadedIntlJobs);
+        setImmigrationPathways(loadedPathways);
+        setExperienceScholarships(loadedScholarships);
 
         // Ensure configured GA4 measurement ID from siteSettings is initialized
         if (loadedSettings.gaMeasurementId) {
@@ -416,17 +467,36 @@ export default function App() {
         setSelectedVacancy(null);
         document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
       }
+      const viewParam = urlParams.get('view');
+      if (
+        viewParam === 'international-jobs' ||
+        viewParam === 'immigration' ||
+        viewParam === 'scholarships'
+      ) {
+        setActiveExpansionView(viewParam);
+      } else if (!targetId) {
+        setActiveExpansionView(null);
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [vacancies]);
 
-  // When admin logs in, load ALL vacancies, duplicate reports, and fresh site settings
+  // When admin logs in, load ALL vacancies, duplicate reports, fresh site settings, and international admin datasets
   useEffect(() => {
     if (isOwnerAuthorized) {
-      Promise.all([fetchAllVacanciesAdmin(), fetchDuplicateReports(), getSiteSettings()])
-        .then(([all, dups, freshSettings]) => {
+      Promise.all([
+        fetchAllVacanciesAdmin(),
+        fetchDuplicateReports(),
+        getSiteSettings(),
+        fetchInternationalJobs(true),
+        fetchImmigrationPathways(true),
+        fetchExperienceScholarships(true),
+        fetchResearchHistory(),
+        fetchVerificationLogs(),
+      ])
+        .then(([all, dups, freshSettings, intlJobs, pathways, scholarships, historyRuns, verLogs]) => {
           if (freshSettings) {
             setSiteSettings(freshSettings);
             if (freshSettings.gaMeasurementId) {
@@ -444,6 +514,20 @@ export default function App() {
             }
           }
           if (dups.length > 0) setDuplicateReports(dups);
+          setInternationalJobs(intlJobs);
+          setImmigrationPathways(pathways);
+          setExperienceScholarships(scholarships);
+          setResearchHistory(historyRuns);
+          setVerificationLogs(verLogs);
+
+          const freq = freshSettings?.researchFrequency || siteSettings.researchFrequency || 'manual';
+          if (freq !== 'manual') {
+            fetch('/api/international/auto-run-check', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ researchFrequency: freq }),
+            }).catch(() => {});
+          }
         })
         .catch((err) => console.warn('Admin data load error:', err));
     }
@@ -719,6 +803,23 @@ export default function App() {
     setSelectedLocation(loc);
     setSelectedCategory(null);
     setIsAllCategoriesView(false);
+    setActiveExpansionView(null);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  const handleOpenExpansionView = (
+    view: 'international-jobs' | 'immigration' | 'scholarships' | null
+  ) => {
+    setSelectedCategory(null);
+    setSelectedLocation(null);
+    setIsAllCategoriesView(false);
+    setActiveExpansionView(view);
+    if (typeof window !== 'undefined') {
+      const targetUrl = view
+        ? `${window.location.pathname}?view=${view}`
+        : window.location.pathname;
+      window.history.pushState({ view }, 'HOPELAND JOBS', targetUrl);
+    }
     window.scrollTo({ top: 0, behavior: 'auto' });
   };
 
@@ -900,11 +1001,69 @@ export default function App() {
     if (data.duplicateReports) setDuplicateReports(data.duplicateReports);
   };
 
+  // International Expansion CRUD Handlers
+  const handleSaveInternationalJobs = async (items: InternationalJob[]) => {
+    setInternationalJobs((prev) => {
+      const map = new Map(prev.map((j) => [j.id, j]));
+      items.forEach((j) => map.set(j.id, j));
+      return Array.from(map.values());
+    });
+    await saveBatchInternationalJobs(items);
+  };
+
+  const handleDeleteInternationalJob = async (id: string) => {
+    setInternationalJobs((prev) => prev.filter((j) => j.id !== id));
+    await deleteInternationalJob(id);
+  };
+
+  const handleSaveImmigrationPathways = async (items: ImmigrationPathway[]) => {
+    setImmigrationPathways((prev) => {
+      const map = new Map(prev.map((p) => [p.id, p]));
+      items.forEach((p) => map.set(p.id, p));
+      return Array.from(map.values());
+    });
+    await saveBatchImmigrationPathways(items);
+  };
+
+  const handleDeleteImmigrationPathway = async (id: string) => {
+    setImmigrationPathways((prev) => prev.filter((p) => p.id !== id));
+    await deleteImmigrationPathway(id);
+  };
+
+  const handleSaveExperienceScholarships = async (items: ExperienceScholarship[]) => {
+    setExperienceScholarships((prev) => {
+      const map = new Map(prev.map((s) => [s.id, s]));
+      items.forEach((s) => map.set(s.id, s));
+      return Array.from(map.values());
+    });
+    await saveBatchExperienceScholarships(items);
+  };
+
+  const handleDeleteExperienceScholarship = async (id: string) => {
+    setExperienceScholarships((prev) => prev.filter((s) => s.id !== id));
+    await deleteExperienceScholarship(id);
+  };
+
+  const handleSaveResearchRun = async (run: ResearchHistoryRun) => {
+    setResearchHistory((prev) => [run, ...prev.filter((r) => r.id !== run.id)].slice(0, 100));
+    await saveResearchHistoryRun(run);
+  };
+
+  const handleSaveVerificationLogs = async (logs: VerificationReportItem[]) => {
+    setVerificationLogs((prev) => {
+      const map = new Map(prev.map((l) => [l.id, l]));
+      logs.forEach((l) => map.set(l.id, l));
+      return Array.from(map.values()).slice(0, 300);
+    });
+    await saveBatchVerificationLogs(logs);
+  };
+
   const handleSelectCategoryByName = (categoryName: string) => {
     const meta = OFFICIAL_CATEGORIES.find((c) => c.name === categoryName);
     if (meta) {
       setSelectedCategory(meta);
       setIsAllCategoriesView(false);
+      setActiveExpansionView(null);
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
   };
@@ -934,6 +1093,19 @@ export default function App() {
           onDiscardDuplicate={handleDiscardDuplicate}
           onRestoreDuplicate={handleRestoreDuplicate}
           onRestoreFullBackup={handleRestoreFullBackup}
+          internationalJobs={internationalJobs}
+          immigrationPathways={immigrationPathways}
+          experienceScholarships={experienceScholarships}
+          researchHistory={researchHistory}
+          verificationLogs={verificationLogs}
+          onSaveInternationalJobs={handleSaveInternationalJobs}
+          onDeleteInternationalJob={handleDeleteInternationalJob}
+          onSaveImmigrationPathways={handleSaveImmigrationPathways}
+          onDeleteImmigrationPathway={handleDeleteImmigrationPathway}
+          onSaveExperienceScholarships={handleSaveExperienceScholarships}
+          onDeleteExperienceScholarship={handleDeleteExperienceScholarship}
+          onSaveResearchRun={handleSaveResearchRun}
+          onSaveVerificationLogs={handleSaveVerificationLogs}
         />
       </Suspense>
     );
@@ -957,21 +1129,35 @@ export default function App() {
           setSelectedCategory(null);
           setSelectedLocation(null);
           setIsAllCategoriesView(false);
+          setActiveExpansionView(null);
           setIsJobSeekerDashboardOpen(false);
+          if (typeof window !== 'undefined' && window.location.search.includes('view=')) {
+            window.history.pushState({}, 'HOPELAND JOBS', window.location.pathname);
+          }
           window.scrollTo({ top: 0, behavior: 'auto' });
         }}
         onOpenAllCategories={() => {
           setIsAllCategoriesView(true);
           setSelectedCategory(null);
           setSelectedLocation(null);
+          setActiveExpansionView(null);
           window.scrollTo({ top: 0, behavior: 'auto' });
         }}
+        onOpenInternationalJobs={() => handleOpenExpansionView('international-jobs')}
+        onOpenImmigration={() => handleOpenExpansionView('immigration')}
+        onOpenScholarships={() => handleOpenExpansionView('scholarships')}
         onOpenLocations={() => handleSelectLocation('All')}
         onOpenSavedJobs={() => setIsSavedDrawerOpen(true)}
         savedCount={savedJobIds.size}
         onOpenCvHelp={() => {
-          const el = document.getElementById('cv-assistance-section');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          setActiveExpansionView(null);
+          setSelectedCategory(null);
+          setSelectedLocation(null);
+          setIsAllCategoriesView(false);
+          setTimeout(() => {
+            const el = document.getElementById('cv-assistance-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 50);
         }}
         onOpenAuth={(mode) => {
           setUserAuthModalMode(mode);
@@ -997,7 +1183,28 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {isAllCategoriesView ? (
+        {activeExpansionView === 'international-jobs' ? (
+          <Suspense fallback={<PageLoader />}>
+            <InternationalJobsView
+              jobs={internationalJobs}
+              onBack={() => handleOpenExpansionView(null)}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'immigration' ? (
+          <Suspense fallback={<PageLoader />}>
+            <ImmigrationResidenceView
+              pathways={immigrationPathways}
+              onBack={() => handleOpenExpansionView(null)}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'scholarships' ? (
+          <Suspense fallback={<PageLoader />}>
+            <ScholarshipsView
+              scholarships={experienceScholarships}
+              onBack={() => handleOpenExpansionView(null)}
+            />
+          </Suspense>
+        ) : isAllCategoriesView ? (
           /* DEDICATED FULL CATEGORIES DIRECTORY */
           <Suspense fallback={<PageLoader />}>
             <AllCategoriesView
@@ -1701,6 +1908,107 @@ export default function App() {
               </div>
             </section>
 
+            {/* INTERNATIONAL EXPANSION ACCESS STRIP */}
+            <section className="pb-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-sky-700">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Global Career, Legal Residency &amp; Study Pathways</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-black text-[#0B132B]">
+                    International Expansion Portals
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Strictly verified from official government portals, employers &amp; recognized universities.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-sky-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                        <Globe className="w-5 h-5" />
+                      </div>
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
+                        {internationalJobs.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired').length} Verified
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-slate-900">
+                      International Workforce Jobs
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Europe, Middle East, Far East &amp; global employer-sponsored roles open to Ethiopian applicants with transparent fee &amp; visa sponsorship policies.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenExpansionView('international-jobs')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <span>Explore International Jobs</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-emerald-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                        <Landmark className="w-5 h-5" />
+                      </div>
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {immigrationPathways.filter((p) => p.verificationStatus === 'VERIFIED').length} Verified
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-slate-900">
+                      INTERNATIONAL IMMIGRATION &amp; PERMANENT RESIDENCE
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Official government portals only: work-based residence permits, skilled worker routes, permanent residency rules &amp; Ethiopian eligibility.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenExpansionView('immigration')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <span>View Legal Pathways</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                        <GraduationCap className="w-5 h-5" />
+                      </div>
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        {experienceScholarships.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired').length} Verified
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-slate-900">
+                      EXPERIENCE-BASED SCHOLARSHIPS
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Universities and governments valuing leadership &amp; professional experience, clearly stating verified GPA, recommendation &amp; funding rules.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenExpansionView('scholarships')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <span>Browse Scholarships</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </section>
+
             {/* HOW IT WORKS SECTION */}
             <section className="bg-[#0B132B] text-white py-16 px-4 sm:px-6 lg:px-8 border-y border-slate-800">
               <div className="max-w-7xl mx-auto space-y-10">
@@ -1991,6 +2299,9 @@ export default function App() {
           if (isOwnerAuthorized) setIsAdminView(true);
           else setIsAdminAuthModalOpen(true);
         }}
+        onOpenInternationalJobs={() => handleOpenExpansionView('international-jobs')}
+        onOpenImmigration={() => handleOpenExpansionView('immigration')}
+        onOpenScholarships={() => handleOpenExpansionView('scholarships')}
       />
 
       {/* User Auth Modal (Sign In / Register / Google / Forgot Password) */}

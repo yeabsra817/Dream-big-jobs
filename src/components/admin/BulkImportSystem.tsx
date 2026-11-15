@@ -30,6 +30,7 @@ import {
 } from '../../types/job';
 import { SAMPLE_BULK_PASTE_DATA } from '../../utils/helpers';
 import { VacancyDetailModal } from '../VacancyDetailModal';
+import { evaluateVacancyForTelegramClient } from '../../utils/telegramClient';
 
 interface Props {
   existingVacancies: Vacancy[];
@@ -160,16 +161,20 @@ export const BulkImportSystem: React.FC<Props> = ({
         publishedAt: new Date().toISOString(),
       }));
 
-      // Broadcast to Telegram
+      // Broadcast to Telegram (enforcing active distributionMode + pre-publish gatekeeper)
       let telegramNote = '';
       try {
         const channel = siteSettings?.telegramChannelName || '@DreamBigJobsEthiopia';
+        const eligibleForTelegram = toPublish.filter(
+          (v) => evaluateVacancyForTelegramClient(v, siteSettings, false, 'vacancy').allowed
+        );
         const tgRes = await fetch('/api/admin/batch-telegram-publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            vacancies: toPublish,
+            vacancies: eligibleForTelegram,
             channelName: channel,
+            distributionMode: siteSettings?.telegramDistributionMode || 'all_jobs',
           }),
         });
         const tgData = await tgRes.json();
@@ -338,7 +343,7 @@ export const BulkImportSystem: React.FC<Props> = ({
       }));
 
     if (toPublish.length === 0) {
-      alert('Please select at least one vacancy to publish.');
+      setErrorMessage('Please select at least one vacancy to publish.');
       return;
     }
 
@@ -346,16 +351,20 @@ export const BulkImportSystem: React.FC<Props> = ({
     try {
       let finalToPublish = [...toPublish];
 
-      // Automatically publish to Telegram channel if enabled
+      // Automatically publish to Telegram channel if enabled (enforcing distributionMode)
       if (siteSettings?.telegramAutoPublish) {
         try {
           const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
+          const eligibleForTelegram = toPublish.filter(
+            (v) => evaluateVacancyForTelegramClient(v, siteSettings, false, 'vacancy').allowed
+          );
           const tgRes = await fetch('/api/admin/batch-telegram-publish', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              vacancies: toPublish,
+              vacancies: eligibleForTelegram,
               channelName: channel,
+              distributionMode: siteSettings.telegramDistributionMode || 'all_jobs',
             }),
           });
           const tgData = await tgRes.json();
@@ -396,7 +405,7 @@ export const BulkImportSystem: React.FC<Props> = ({
         }`
       );
     } catch (err: any) {
-      alert('Error publishing vacancies: ' + err.message);
+      setErrorMessage('Error publishing vacancies: ' + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -412,7 +421,7 @@ export const BulkImportSystem: React.FC<Props> = ({
       }));
 
     if (toDraft.length === 0) {
-      alert('Please select vacancies to save as draft.');
+      setErrorMessage('Please select vacancies to save as draft.');
       return;
     }
 
@@ -423,7 +432,7 @@ export const BulkImportSystem: React.FC<Props> = ({
       setSelectedIds(new Set());
       setSuccessMessage(`Saved ${toDraft.length} vacancies as Draft.`);
     } catch (err: any) {
-      alert('Error saving drafts: ' + err.message);
+      setErrorMessage('Error saving drafts: ' + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -661,7 +670,7 @@ export const BulkImportSystem: React.FC<Props> = ({
                 onClick={async () => {
                   const toQueue = extractedVacancies.filter((v) => selectedIds.has(v.id));
                   if (toQueue.length === 0) {
-                    alert('Please select at least one vacancy.');
+                    setErrorMessage('Please select at least one vacancy.');
                     return;
                   }
                   setIsSaving(true);
@@ -671,7 +680,7 @@ export const BulkImportSystem: React.FC<Props> = ({
                       onSendToTelegramQueue(toQueue);
                     }
                   } catch (e: any) {
-                    alert('Failed to save to queue: ' + e.message);
+                    setErrorMessage('Failed to save to queue: ' + e.message);
                   } finally {
                     setIsSaving(false);
                   }

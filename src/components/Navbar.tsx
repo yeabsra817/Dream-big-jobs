@@ -14,6 +14,9 @@ import {
   User,
   LogOut,
   LayoutGrid,
+  Globe,
+  Plane,
+  GraduationCap,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
 import { JobSeekerProfile } from '../types/jobSeeker';
@@ -31,6 +34,9 @@ interface Props {
   onOpenCvHelp: () => void;
   onOpenSavedJobs?: () => void;
   onOpenAllCategories?: () => void;
+  onOpenInternationalJobs?: () => void;
+  onOpenImmigration?: () => void;
+  onOpenScholarships?: () => void;
   onOpenAuth?: (mode: 'signin' | 'signup') => void;
   onOpenDashboard?: () => void;
   onSignOutUser?: () => void;
@@ -52,6 +58,9 @@ export const Navbar: React.FC<Props> = ({
   onOpenCvHelp,
   onOpenSavedJobs,
   onOpenAllCategories,
+  onOpenInternationalJobs,
+  onOpenImmigration,
+  onOpenScholarships,
   onOpenAuth,
   onOpenDashboard,
   onSignOutUser,
@@ -161,6 +170,33 @@ export const Navbar: React.FC<Props> = ({
               <FileText className="w-4 h-4 text-amber-400" />
               <span>CV Assistance</span>
             </button>
+            {onOpenInternationalJobs && (
+              <button
+                onClick={onOpenInternationalJobs}
+                className="text-slate-200 hover:text-amber-400 transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer"
+              >
+                <Globe className="w-4 h-4 text-sky-400" />
+                <span>International Jobs</span>
+              </button>
+            )}
+            {onOpenImmigration && (
+              <button
+                onClick={onOpenImmigration}
+                className="text-slate-200 hover:text-amber-400 transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer"
+              >
+                <Plane className="w-4 h-4 text-emerald-400" />
+                <span>Immigration &amp; PR</span>
+              </button>
+            )}
+            {onOpenScholarships && (
+              <button
+                onClick={onOpenScholarships}
+                className="text-slate-200 hover:text-amber-400 transition-colors flex items-center gap-1 whitespace-nowrap cursor-pointer"
+              >
+                <GraduationCap className="w-4 h-4 text-amber-400" />
+                <span>Scholarships</span>
+              </button>
+            )}
           </nav>
 
           {/* Action CTAs */}
@@ -423,8 +459,47 @@ export const Navbar: React.FC<Props> = ({
             }}
             className="block w-full text-left py-2 text-slate-200 font-medium hover:text-amber-400 text-sm"
           >
-            CV & Cover Letter Assistance
+            CV &amp; Cover Letter Assistance
           </button>
+
+          {onOpenInternationalJobs && (
+            <button
+              onClick={() => {
+                onOpenInternationalJobs();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2 w-full text-left py-2 text-slate-200 font-semibold hover:text-amber-400 text-sm"
+            >
+              <Globe className="w-4 h-4 text-sky-400" />
+              <span>International Workforce Jobs</span>
+            </button>
+          )}
+
+          {onOpenImmigration && (
+            <button
+              onClick={() => {
+                onOpenImmigration();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2 w-full text-left py-2 text-slate-200 font-semibold hover:text-amber-400 text-sm"
+            >
+              <Plane className="w-4 h-4 text-emerald-400" />
+              <span>Immigration &amp; Permanent Residence</span>
+            </button>
+          )}
+
+          {onOpenScholarships && (
+            <button
+              onClick={() => {
+                onOpenScholarships();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2 w-full text-left py-2 text-slate-200 font-semibold hover:text-amber-400 text-sm"
+            >
+              <GraduationCap className="w-4 h-4 text-amber-400" />
+              <span>Experience-Based Scholarships</span>
+            </button>
+          )}
 
           <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
             <a

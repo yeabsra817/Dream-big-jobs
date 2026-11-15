@@ -55,6 +55,11 @@
         "telegramChannelUrl": { "type": "string", "maxLength": 300, "description": "Direct link to Telegram channel" },
         "telegramGroupUrl": { "type": "string", "maxLength": 300, "description": "Direct link to Telegram community group" },
         "telegramAutoPublish": { "type": "boolean", "description": "Preference for auto-sharing approved vacancies to Telegram" },
+        "telegramDistributionMode": { "type": "string", "enum": ["all_jobs", "banking_only", "ngo_only", "banking_and_ngo_only"], "description": "Active Telegram job distribution mode" },
+        "telegramIncludeInternationalImmigration": { "type": "boolean", "description": "Explicit opt-in flag to allow immigration posts to Telegram" },
+        "telegramIncludeScholarships": { "type": "boolean", "description": "Explicit opt-in flag to allow scholarship posts to Telegram" },
+        "researchFrequency": { "type": "string", "enum": ["manual", "daily", "weekly"], "description": "Automatic international research cadence" },
+        "lastResearchRunAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of last international research run" },
         "contactEmail": { "type": "string", "maxLength": 150, "description": "Support and inquiries email" },
         "contactPhone": { "type": "string", "maxLength": 50, "description": "Support telephone number" },
         "aboutText": { "type": "string", "maxLength": 5000, "description": "About DREAM BIG JOBS summary" },
@@ -201,6 +206,139 @@
         "isInternal": { "type": "boolean" }
       },
       "required": ["id", "visitorKey", "sessionId", "eventType", "path", "source", "deviceType", "timestamp", "isInternal"]
+    },
+    "InternationalJob": {
+      "title": "Official International Job Opportunity",
+      "description": "Verified international employment or government foreign recruitment programme with official source tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "region": { "type": "string", "maxLength": 100 },
+        "country": { "type": "string", "maxLength": 100 },
+        "employerOrProgramme": { "type": "string", "maxLength": 250 },
+        "jobTitle": { "type": "string", "maxLength": 250 },
+        "location": { "type": "string", "maxLength": 200 },
+        "directApplicationUrl": { "type": "string", "maxLength": 1000 },
+        "originalSourceUrl": { "type": "string", "maxLength": 1000 },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED", "SUSPENDED_BROKEN_LINK", "EXPIRED", "REJECTED_SUSPICIOUS"]
+        },
+        "applicationStatus": {
+          "type": "string",
+          "enum": ["open", "closed", "expired", "unverified"]
+        },
+        "lastVerifiedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "country", "employerOrProgramme", "jobTitle", "directApplicationUrl", "originalSourceUrl", "verificationStatus"]
+    },
+    "ImmigrationPathway": {
+      "title": "International Immigration & Permanent Residence Pathway",
+      "description": "Official government immigration, work-based residence, and permanent residence routes for Ethiopian citizens.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "country": { "type": "string", "maxLength": 100 },
+        "region": { "type": "string", "maxLength": 100 },
+        "pathwayTitle": { "type": "string", "maxLength": 250 },
+        "ethiopianCitizenEligibility": { "type": "string", "enum": ["eligible", "conditional", "no_confirmed_route", "unverified"] },
+        "officialGovernmentWebsite": { "type": "string", "maxLength": 1000 },
+        "originalSourceUrl": { "type": "string", "maxLength": 1000 },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED", "SUSPENDED_BROKEN_LINK", "EXPIRED", "REJECTED_SUSPICIOUS"]
+        },
+        "lastVerifiedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "country", "pathwayTitle", "officialGovernmentWebsite", "originalSourceUrl", "verificationStatus"]
+    },
+    "ExperienceScholarship": {
+      "title": "Experience-Based International Scholarship",
+      "description": "Verified university, government, or recognized body scholarship prioritizing experience and open to Ethiopians.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "country": { "type": "string", "maxLength": 100 },
+        "universityOrInstitution": { "type": "string", "maxLength": 250 },
+        "scholarshipName": { "type": "string", "maxLength": 250 },
+        "officialApplicationUrl": { "type": "string", "maxLength": 1000 },
+        "originalSourceUrl": { "type": "string", "maxLength": 1000 },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["VERIFIED", "UNVERIFIED", "SUSPENDED_BROKEN_LINK", "EXPIRED", "REJECTED_SUSPICIOUS"]
+        },
+        "applicationStatus": {
+          "type": "string",
+          "enum": ["open", "closed", "expired", "unverified"]
+        },
+        "lastVerifiedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "country", "universityOrInstitution", "scholarshipName", "officialApplicationUrl", "originalSourceUrl", "verificationStatus"]
+    },
+    "ResearchHistoryRun": {
+      "title": "Automated Research Run Log",
+      "description": "Admin audit history of international jobs, immigration, scholarship research, and verification sweeps.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "runType": { "type": "string", "maxLength": 64 },
+        "startedAt": { "type": "string", "maxLength": 100 },
+        "completedAt": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["completed", "partial", "failed"] }
+      },
+      "required": ["id", "runType", "startedAt", "status"]
+    },
+    "VerificationLog": {
+      "title": "Official Source Verification Report Item",
+      "description": "Verification check result and HTTP link audit record for published opportunities.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "entityType": { "type": "string", "maxLength": 64 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "verificationStatus": { "type": "string", "maxLength": 64 },
+        "checkedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "entityType", "entityId", "url", "verificationStatus", "checkedAt"]
+    },
+    "MonitoredSource": {
+      "title": "Official Source Monitor Record",
+      "description": "Registry of official gov, ministry, embassy, employer, and scholarship sources actively polled.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "url": { "type": "string", "maxLength": 1000 },
+        "feedType": { "type": "string", "enum": ["rss_atom", "official_api", "http_poll"] },
+        "verificationStatus": { "type": "string", "enum": ["HEALTHY", "PENDING", "FAILED"] }
+      },
+      "required": ["id", "name", "url", "feedType"]
+    },
+    "DeveloperNotification": {
+      "title": "Private Developer Notification",
+      "description": "Owner-only notification for new verified PR, work visa, scholarship announcements or failed publication alerts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "notificationType": { "type": "string", "maxLength": 64 },
+        "country": { "type": "string", "maxLength": 100 },
+        "programmeOrOpportunityName": { "type": "string", "maxLength": 250 },
+        "detectedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "notificationType", "country", "programmeOrOpportunityName", "detectedAt"]
+    },
+    "TelegramRetryItem": {
+      "title": "Telegram Safe Retry Queue Item",
+      "description": "Failed Telegram post queued for safe administrative retry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vacancyId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 64 },
+        "attempts": { "type": "number" }
+      },
+      "required": ["id", "vacancyId", "status"]
     }
   },
   "firestore": {
@@ -249,6 +387,38 @@
     "/analytics_events/{eventId}": {
       "schema": "AnalyticsEvent",
       "description": "Non-PII engagement and click events"
+    },
+    "/international_jobs/{jobId}": {
+      "schema": "InternationalJob",
+      "description": "Verified international jobs & government workforce programmes"
+    },
+    "/immigration_pathways/{pathwayId}": {
+      "schema": "ImmigrationPathway",
+      "description": "Verified official immigration and permanent residence pathways"
+    },
+    "/experience_scholarships/{scholarshipId}": {
+      "schema": "ExperienceScholarship",
+      "description": "Verified experience-based scholarships"
+    },
+    "/research_history/{runId}": {
+      "schema": "ResearchHistoryRun",
+      "description": "Administrator research execution logs"
+    },
+    "/verification_logs/{logId}": {
+      "schema": "VerificationLog",
+      "description": "Official source verification and failed link audit reports"
+    },
+    "/monitored_sources/{sourceId}": {
+      "schema": "MonitoredSource",
+      "description": "Admin-only official source monitoring registry"
+    },
+    "/developer_notifications/{notifId}": {
+      "schema": "DeveloperNotification",
+      "description": "Private owner-only alerts for PR, visa, scholarship, and failure events"
+    },
+    "/telegram_retry_queue/{retryId}": {
+      "schema": "TelegramRetryItem",
+      "description": "Admin-only failed Telegram broadcast retry queue"
     }
   }
 }

@@ -29,6 +29,13 @@ import {
   SiteSettings,
   DuplicateReportItem,
 } from '../../types/job';
+import {
+  ExperienceScholarship,
+  ImmigrationPathway,
+  InternationalJob,
+  ResearchHistoryRun,
+  VerificationReportItem,
+} from '../../types/international';
 import { AnalyticsSummary } from '../../types/analytics';
 import { BulkImportSystem } from './BulkImportSystem';
 import { ManualPostModal } from './ManualPostModal';
@@ -42,6 +49,7 @@ import { SystemHealth } from './SystemHealth';
 import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './SmartAlerts';
 import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
+import { InternationalControlCenter } from './InternationalControlCenter';
 import { auth, googleProvider, ADMIN_EMAIL, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
@@ -67,6 +75,19 @@ interface Props {
     settings?: SiteSettings;
     duplicateReports?: DuplicateReportItem[];
   }) => Promise<void>;
+  internationalJobs?: InternationalJob[];
+  immigrationPathways?: ImmigrationPathway[];
+  experienceScholarships?: ExperienceScholarship[];
+  researchHistory?: ResearchHistoryRun[];
+  verificationLogs?: VerificationReportItem[];
+  onSaveInternationalJobs?: (items: InternationalJob[]) => Promise<void>;
+  onDeleteInternationalJob?: (id: string) => Promise<void>;
+  onSaveImmigrationPathways?: (items: ImmigrationPathway[]) => Promise<void>;
+  onDeleteImmigrationPathway?: (id: string) => Promise<void>;
+  onSaveExperienceScholarships?: (items: ExperienceScholarship[]) => Promise<void>;
+  onDeleteExperienceScholarship?: (id: string) => Promise<void>;
+  onSaveResearchRun?: (run: ResearchHistoryRun) => Promise<void>;
+  onSaveVerificationLogs?: (logs: VerificationReportItem[]) => Promise<void>;
 }
 
 export const AdminDashboard: React.FC<Props> = ({
@@ -86,9 +107,22 @@ export const AdminDashboard: React.FC<Props> = ({
   onDiscardDuplicate,
   onRestoreDuplicate,
   onRestoreFullBackup,
+  internationalJobs = [],
+  immigrationPathways = [],
+  experienceScholarships = [],
+  researchHistory = [],
+  verificationLogs = [],
+  onSaveInternationalJobs = async () => {},
+  onDeleteInternationalJob = async () => {},
+  onSaveImmigrationPathways = async () => {},
+  onDeleteImmigrationPathway = async () => {},
+  onSaveExperienceScholarships = async () => {},
+  onDeleteExperienceScholarship = async () => {},
+  onSaveResearchRun = async () => {},
+  onSaveVerificationLogs = async () => {},
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'bulk' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'applications' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
+    'bulk' | 'international' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'applications' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
   >('bulk');
 
   const [queueSelectedJobIds, setQueueSelectedJobIds] = useState<string[]>([]);
@@ -319,6 +353,23 @@ export const AdminDashboard: React.FC<Props> = ({
             </button>
 
             <button
+              onClick={() => setActiveTab('international')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                activeTab === 'international'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Globe className="w-4 h-4 text-sky-400" />
+              <span>International &amp; Global</span>
+              {(internationalJobs.length + immigrationPathways.length + experienceScholarships.length) > 0 && (
+                <span className="ml-1 px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[10px] font-black">
+                  {internationalJobs.length + immigrationPathways.length + experienceScholarships.length}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setActiveTab('telegramQueue')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
                 activeTab === 'telegramQueue'
@@ -474,6 +525,28 @@ export const AdminDashboard: React.FC<Props> = ({
           />
         )}
 
+        {activeTab === 'international' && (
+          <InternationalControlCenter
+            siteSettings={siteSettings}
+            onSaveSiteSettings={onSaveSiteSettings}
+            domesticVacancies={vacancies}
+            onUpdateDomesticVacancyStatus={(id, status) => onUpdateVacancyStatus(id, status)}
+            internationalJobs={internationalJobs}
+            immigrationPathways={immigrationPathways}
+            scholarships={experienceScholarships}
+            researchHistory={researchHistory}
+            verificationLogs={verificationLogs}
+            onSaveInternationalJobs={onSaveInternationalJobs}
+            onDeleteInternationalJob={onDeleteInternationalJob}
+            onSaveImmigrationPathways={onSaveImmigrationPathways}
+            onDeleteImmigrationPathway={onDeleteImmigrationPathway}
+            onSaveScholarships={onSaveExperienceScholarships}
+            onDeleteScholarship={onDeleteExperienceScholarship}
+            onSaveResearchRun={onSaveResearchRun}
+            onSaveVerificationLogs={onSaveVerificationLogs}
+          />
+        )}
+
         {activeTab === 'telegramQueue' && (
           <TelegramPublishQueue
             vacancies={vacancies}
@@ -556,6 +629,9 @@ export const AdminDashboard: React.FC<Props> = ({
           <PersonalAutoApply
             vacancies={vacancies}
             adminEmail={adminEmail}
+            internationalJobs={internationalJobs}
+            immigrationPathways={immigrationPathways}
+            scholarships={experienceScholarships}
           />
         )}
 

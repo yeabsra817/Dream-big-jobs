@@ -1097,6 +1097,31 @@ app.get('/api/settings', (req: Request, res: Response): void => {
     telegramGroupUrl: persisted.telegramGroupUrl || 'https://t.me/DreamBigJobsEthiopia',
     telegramBotUsername: persisted.telegramBotUsername || '@DreamBigJobsEthiopiaBot',
     telegramAutoPublish: persisted.telegramAutoPublish ?? true,
+    telegramDistributionMode: persisted.telegramDistributionMode || 'all_jobs',
+    telegramIncludeInternationalImmigration: Boolean(persisted.telegramIncludeInternationalImmigration),
+    telegramIncludeScholarships: Boolean(persisted.telegramIncludeScholarships),
+    researchEnabledRegions: Array.isArray(persisted.researchEnabledRegions)
+      ? persisted.researchEnabledRegions
+      : ['Europe', 'Middle East', 'Far East & Asia', 'Americas & Oceania', 'Africa & Other'],
+    researchEnabledCountries: Array.isArray(persisted.researchEnabledCountries)
+      ? persisted.researchEnabledCountries
+      : [],
+    researchJobCategories: Array.isArray(persisted.researchJobCategories)
+      ? persisted.researchJobCategories
+      : [
+          'Banking & Finance',
+          'NGO & International Organizations',
+          'Government Approved Foreign Recruitment',
+          'IT & Software Engineering',
+          'Healthcare & Medical',
+          'Engineering & Skilled Trades',
+          'Hospitality & Logistics',
+          'Education & Academic',
+          'Agriculture & Manufacturing',
+        ],
+    researchFrequency: persisted.researchFrequency || 'manual',
+    lastResearchRunAt: persisted.lastResearchRunAt || '',
+    nextResearchRunAt: persisted.nextResearchRunAt || '',
     telegramBotToken: currentToken || persisted.telegramBotToken || '',
     telegramConnected: Boolean(currentToken),
     gaMeasurementId: persisted.gaMeasurementId || '',
@@ -1716,21 +1741,119 @@ async function sendTelegramVacancyMessage(
   }
 }
 
+function isVacancyDeadlineExpiredServer(deadline?: string): boolean {
+  if (!deadline) return false;
+  const trimmed = String(deadline).trim();
+  if (!trimmed || /open|ongoing|rolling|until filled|not specified|not stated/i.test(trimmed)) return false;
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) return false;
+  const deadlineEnd = new Date(parsed);
+  deadlineEnd.setHours(23, 59, 59, 999);
+  return Date.now() > deadlineEnd.getTime();
+}
+
+function hasOfficialApplicationMethodServer(v: any): boolean {
+  const url = String(v?.applicationUrl || v?.directApplicationUrl || '').trim();
+  const email = String(v?.applicationEmail || '').trim();
+  const inst = String(v?.applicationInstructions || v?.officialApplicationInstructions || '').trim();
+  if (/^https?:\/\/\S+/i.test(url)) return true;
+  if (email.includes('@')) return true;
+  if (inst && !/^not specified|^not stated|^n\/a$/i.test(inst) && inst.length >= 10) return true;
+  return false;
+}
+
+function isBankingVacancyServer(v: any): boolean {
+  const cat = String(v?.category || '').toLowerCase();
+  if (cat === 'banking and financial institutions' || cat === 'banking & finance') return true;
+  const combined = `${v?.organization || ''} ${v?.title || ''}`;
+  const matchesBank = /(commercial bank|development bank|awash bank|dashen bank|bank of abyssinia|hibret bank|coop bank|cooperative bank of oromia|wegagen|zemen bank|berhan bank|bunna bank|abay bank|enat bank|amhara bank|tsedey bank|siinqee bank|geda bank|oromia bank|nib international bank|lion international bank|global bank|tsehay bank|goh betoch|\bbank\b)/i.test(combined);
+  const isNgo = cat.includes('ngo') || isNgoVacancyServer(v);
+  return matchesBank && !isNgo;
+}
+
+function isNgoVacancyServer(v: any): boolean {
+  const cat = String(v?.category || '').toLowerCase();
+  if (cat === 'ngo and international organizations' || cat === 'ngo & international organizations') return true;
+  const combined = `${v?.organization || ''} ${v?.title || ''}`;
+  return /(\bngo\b|\bingo\b|unicef|undp|unhcr|wfp|\bwho\b|\bfao\b|\bilo\b|\biom\b|icrc|\bmsf\b|doctors without borders|oxfam|care international|international rescue committee|\birc\b|save the children|world vision|plan international|mercy corps|fhi 360|jhpiego|catholic relief|crs|lutheran world|action against hunger|norwegian refugee|danish refugee|helvetas|snv|goal ethiopia|concern worldwide|tearfund|amref|pathfinder|marie stopes)/i.test(combined);
+}
+
+function evaluateTelegramPublishEligibilityServer(
+  vacancy: any,
+  settings: any,
+  forceRetry: boolean,
+  contentType?: string,
+  overrideMode?: string
+): { allowed: boolean; reason?: string; alreadyPublished?: boolean } {
+  if (!vacancy) return { allowed: false, reason: 'Vacancy payload is missing.' };
+  if (vacancy.telegramPublished && !forceRetry) {
+    return {
+      allowed: false,
+      alreadyPublished: true,
+      reason: `Already posted to Telegram (Msg ID #${vacancy.telegramMessageId || 'N/A'}).`,
+    };
+  }
+  const cType = contentType || vacancy.contentType || (vacancy.pathwayType ? 'immigration' : vacancy.scholarshipName ? 'scholarship' : 'job');
+  if (cType === 'immigration' || cType === 'permanent_residence') {
+    if (!settings?.telegramIncludeInternationalImmigration) {
+      return {
+        allowed: false,
+        reason: 'Blocked by Telegram Content Separation Rule: International Immigration & Permanent Residence items are excluded from the Jobs Telegram channel unless explicitly enabled.',
+      };
+    }
+  }
+  if (cType === 'scholarship') {
+    if (!settings?.telegramIncludeScholarships) {
+      return {
+        allowed: false,
+        reason: 'Blocked by Telegram Content Separation Rule: Scholarships are excluded from the Jobs Telegram channel unless explicitly enabled.',
+      };
+    }
+  }
+  const status = String(vacancy.status || '').toLowerCase();
+  if (['draft', 'rejected', 'archived', 'duplicate', 'expired'].includes(status)) {
+    return { allowed: false, reason: `Cannot broadcast vacancy with status "${vacancy.status}". Only verified open vacancies may be posted.` };
+  }
+  if (isVacancyDeadlineExpiredServer(vacancy.applicationDeadline)) {
+    return { allowed: false, reason: `Blocked: Application deadline (${vacancy.applicationDeadline}) has already expired.` };
+  }
+  if (!hasOfficialApplicationMethodServer(vacancy)) {
+    return { allowed: false, reason: 'Blocked: Vacancy is missing a verified official application method (link, email, or official instructions).' };
+  }
+  const mode = overrideMode || settings?.telegramDistributionMode || 'all_jobs';
+  if (mode === 'banking_only' && !isBankingVacancyServer(vacancy)) {
+    return {
+      allowed: false,
+      reason: `Skipped by Telegram Distribution Mode (OPTION B: BANKING JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not classified as a genuine banking vacancy.`,
+    };
+  }
+  if (mode === 'ngo_only' && !isNgoVacancyServer(vacancy)) {
+    return {
+      allowed: false,
+      reason: `Skipped by Telegram Distribution Mode (OPTION C: NGO JOBS ONLY): "${vacancy.title}" at "${vacancy.organization}" is not classified as a genuine NGO/INGO vacancy.`,
+    };
+  }
+  return { allowed: true };
+}
+
 // Telegram Publishing Endpoint
 app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancy, botToken, channelName, forceRetry, customDomain } = req.body;
+    const { vacancy, botToken, channelName, forceRetry, customDomain, contentType, distributionMode } = req.body;
     if (!vacancy) {
       res.status(400).json({ error: 'Vacancy payload is required' });
       return;
     }
 
-    // Duplicate Telegram Post Protection
-    if (vacancy.telegramPublished && !forceRetry) {
+    const persisted = loadPersistedSettings() || {};
+    const gate = evaluateTelegramPublishEligibilityServer(vacancy, persisted, Boolean(forceRetry), contentType, distributionMode);
+    if (!gate.allowed) {
       res.json({
         success: false,
-        alreadyPublished: true,
-        message: `This vacancy was already posted to Telegram (Msg ID #${vacancy.telegramMessageId || 'N/A'}). Use Force Retry to broadcast again.`,
+        alreadyPublished: Boolean(gate.alreadyPublished),
+        blockedByRule: !gate.alreadyPublished,
+        error: gate.reason,
+        message: gate.reason,
       });
       return;
     }
@@ -1744,7 +1867,6 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
     }
 
     const targetChannel = (channelName || '@DreamBigJobsEthiopia').trim();
-    const persisted = loadPersistedSettings();
     let effectiveDomain =
       customDomain ||
       persisted?.customDomain ||
@@ -1779,7 +1901,7 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
 // Batch Telegram Broadcast Endpoint for Auto-Publishing Approved Vacancies
 app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancies = [], channelName } = req.body;
+    const { vacancies = [], channelName, distributionMode } = req.body;
     const effectiveToken = getTelegramToken();
     if (!effectiveToken) {
       res.status(400).json({
@@ -1789,22 +1911,20 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
     }
 
     const targetChannel = (channelName || '@DreamBigJobsEthiopia').trim();
-    const appUrl = (
-      process.env.APP_URL ||
-      (req.headers.origin as string) ||
-      (req.headers.host ? `https://${req.headers.host}` : '') ||
-      'https://dreambigjobs.et'
-    ).replace(/\/+$/, '');
+    const persisted = loadPersistedSettings() || {};
+    let domain = persisted?.customDomain || 'hopelandjobs.tech';
+    if (domain === 'healmorin.com') domain = 'hopelandjobs.tech';
+    const appUrl = domain.startsWith('http') ? domain.replace(/\/+$/, '') : `https://${domain}`;
     const results: any[] = [];
 
     for (const v of vacancies) {
-      // Prevent duplicate Telegram posts
-      if (v.telegramPublished) {
+      const gate = evaluateTelegramPublishEligibilityServer(v, persisted, false, v?.contentType, distributionMode);
+      if (!gate.allowed) {
         results.push({
           id: v.id,
           title: v.title,
           status: 'skipped',
-          reason: 'Already published to Telegram',
+          reason: gate.reason || 'Excluded by Telegram distribution rule',
         });
         continue;
       }
@@ -4733,6 +4853,1475 @@ Return strict JSON:
     res.status(500).json({ error: 'Failed to draft vacancy with AI.' });
   }
 });
+
+  // =========================================================================
+  // INTERNATIONAL WORKFORCE, IMMIGRATION/PR, SCHOLARSHIPS & SOURCE VERIFICATION
+  // =========================================================================
+  const DATA_DIR = path.join(RUNTIME_BASE_DIR, 'data');
+  const INTERNATIONAL_DATA_FILE = path.join(DATA_DIR, 'international_data.json');
+  const OFFICIAL_NOT_STATED = 'NOT STATED IN THE OFFICIAL ANNOUNCEMENT';
+  const OWNER_EMAILS_SET = new Set(['nexusitsoultion@gmail.com', 'yeabsra45@gmail.com']);
+
+  function loadPersistedInternationalData(): {
+    internationalJobs: any[];
+    immigrationPathways: any[];
+    experienceScholarships: any[];
+    researchHistory: any[];
+    verificationLogs: any[];
+    updatedAt: string;
+  } {
+    try {
+      if (fs.existsSync(INTERNATIONAL_DATA_FILE)) {
+        const raw = fs.readFileSync(INTERNATIONAL_DATA_FILE, 'utf-8');
+        const parsed = JSON.parse(raw);
+        return {
+          internationalJobs: Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : [],
+          immigrationPathways: Array.isArray(parsed.immigrationPathways) ? parsed.immigrationPathways : [],
+          experienceScholarships: Array.isArray(parsed.experienceScholarships) ? parsed.experienceScholarships : [],
+          researchHistory: Array.isArray(parsed.researchHistory) ? parsed.researchHistory : [],
+          verificationLogs: Array.isArray(parsed.verificationLogs) ? parsed.verificationLogs : [],
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+        };
+      }
+    } catch {}
+    return {
+      internationalJobs: [],
+      immigrationPathways: [],
+      experienceScholarships: [],
+      researchHistory: [],
+      verificationLogs: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function savePersistedInternationalData(data: any): boolean {
+    try {
+      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(
+        INTERNATIONAL_DATA_FILE,
+        JSON.stringify({ ...data, updatedAt: new Date().toISOString() }, null, 2),
+        'utf-8'
+      );
+      return true;
+    } catch (e) {
+      console.warn('Could not save international_data.json:', e);
+      return false;
+    }
+  }
+
+  function isDisallowedAggregatorHost(hostname: string): boolean {
+    const h = hostname.toLowerCase();
+    const blocked = [
+      'linkedin.com', 'indeed.', 'glassdoor.', 'bayt.com', 'gulftalent.com', 'monster.',
+      'ziprecruiter.', 'simplyhired.', 'jooble.', 'talent.com', 'neuvoo.',
+      'blogspot.', 'wordpress.com', 'medium.com', 'substack.com', 'wixsite.com',
+      't.me', 'telegram.me', 'facebook.com', 'instagram.com', 'twitter.com', 'x.com',
+      'youtube.com', 'tiktok.com', 'ethiojobs.net', 'ezega.com', 'harmeejobs.com',
+      'scholarshippositions.com', 'opportunitiescorners.', 'afterschoolafrica.', 'scholars4dev.',
+      'opportunitiesforafricans.', 'scholarshiproar.', 'globalscholarships.', 'example.com',
+    ];
+    return blocked.some((b) => h === b || h.endsWith(`.${b}`) || h.includes(b));
+  }
+
+  function classifyOfficialSourceAuthority(rawUrl: string, kind: 'job' | 'immigration' | 'scholarship'): {
+    accepted: boolean;
+    authorityType: string;
+    reason?: string;
+  } {
+    try {
+      const u = new URL(rawUrl);
+      if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+        return { accepted: false, authorityType: 'unverified', reason: 'Unsupported URL protocol.' };
+      }
+      const host = u.hostname.toLowerCase();
+      if (isDisallowedAggregatorHost(host)) {
+        return {
+          accepted: false,
+          authorityType: 'unverified',
+          reason: `Third-party job board, blog, or social media domain (${host}) is not accepted as final official proof.`,
+        };
+      }
+
+      // Government & Immigration portals
+      if (
+        /\.gov(\.[a-z]{2})?$|\.gouv\.[a-z]{2}$|\.gv\.[a-z]{2}$|\.gc\.ca$|\.govt\.[a-z]{2}$|europa\.eu$/.test(host) ||
+        [
+          'make-it-in-germany.com', 'migri.fi', 'migrationsverket.se', 'udi.no', 'nyidanmark.dk',
+          'workindenmark.dk', 'workinestonia.com', 'politsei.ee', 'pmlp.gov.lv', 'migracija.lrv.lt',
+          'ind.nl', 'eps.go.kr', 'mofa.go.jp', 'mom.gov.sg', 'mohre.gov.ae', 'qiwa.sa',
+          'madlsa.gov.qa', 'canada.ca', 'homeaffairs.gov.au', 'immigration.govt.nz',
+          'auswaertiges-amt.de', 'diplomatie.gouv.fr', 'esteri.it', 'exteriores.gob.es',
+        ].some((d) => host === d || host.endsWith(`.${d}`))
+      ) {
+        return {
+          accepted: true,
+          authorityType: kind === 'immigration' ? 'immigration_ministry' : 'government_portal',
+        };
+      }
+
+      // Embassies
+      if (/embassy|consulate|diplomat|mfa\.|foreignaffairs/.test(host)) {
+        return { accepted: true, authorityType: 'embassy' };
+      }
+
+      // Universities & official scholarship agencies
+      if (
+        /\.edu(\.[a-z]{2})?$|\.ac\.[a-z]{2}$/.test(host) ||
+        [
+          'daad.de', 'chevening.org', 'commonwealthscholarships.org', 'cscuk.fcdo.gov.uk',
+          'studyinsweden.se', 'si.se', 'studyinfinland.fi', 'stipendiumhungaricum.hu',
+          'tka.hu', 'fulbright', 'erasmus-plus.ec.europa.eu', 'mastercardfdn.org',
+          'ox.ac.uk', 'cam.ac.uk', 'ethz.ch', 'kth.se', 'lunduniversity.lu.se', 'ku.dk',
+          'helsinki.fi', 'aalto.fi', 'tudelft.nl', 'uu.nl', 'uva.nl', 'uni-', 'university',
+        ].some((d) => host.includes(d))
+      ) {
+        return {
+          accepted: true,
+          authorityType: /university|uni-|\.edu|\.ac\./.test(host) ? 'official_university' : 'scholarship_body',
+        };
+      }
+
+      // UN & International Organizations
+      if (
+        [
+          'un.org', 'undp.org', 'unicef.org', 'unhcr.org', 'who.int', 'wfp.org', 'fao.org',
+          'ilo.org', 'iom.int', 'worldbank.org', 'imf.org', 'afdb.org', 'au.int', 'msf.org',
+          'icrc.org', 'oxfam.org', 'savethechildren.net', 'rescue.org', 'mercycorps.org',
+          'plan-international.org', 'care.org', 'wvi.org',
+        ].some((d) => host === d || host.endsWith(`.${d}`))
+      ) {
+        return { accepted: true, authorityType: 'international_org' };
+      }
+
+      if (kind === 'immigration') {
+        return {
+          accepted: false,
+          authorityType: 'unverified',
+          reason: `Immigration/PR sources must be official government, ministry, or embassy domains (rejected ${host}).`,
+        };
+      }
+
+      // Employer direct domain (career page / official company domain)
+      return { accepted: true, authorityType: 'official_employer' };
+    } catch {
+      return { accepted: false, authorityType: 'unverified', reason: 'Malformed URL.' };
+    }
+  }
+
+  async function verifyOfficialUrlLive(
+    rawUrl: string,
+    kind: 'job' | 'immigration' | 'scholarship' = 'job'
+  ): Promise<{
+    ok: boolean;
+    verificationStatus: 'VERIFIED' | 'UNVERIFIED' | 'SUSPENDED_BROKEN_LINK' | 'REJECTED_SUSPICIOUS';
+    httpStatus?: number;
+    finalUrl: string;
+    authorityType: string;
+    reason: string;
+  }> {
+    const trimmed = String(rawUrl || '').trim();
+    if (!trimmed || !/^https?:\/\/\S+/i.test(trimmed)) {
+      return {
+        ok: false,
+        verificationStatus: 'UNVERIFIED',
+        finalUrl: trimmed,
+        authorityType: 'unverified',
+        reason: 'Missing or invalid official http(s) URL.',
+      };
+    }
+
+    const authCheck = classifyOfficialSourceAuthority(trimmed, kind);
+    if (!authCheck.accepted) {
+      return {
+        ok: false,
+        verificationStatus: 'REJECTED_SUSPICIOUS',
+        finalUrl: trimmed,
+        authorityType: authCheck.authorityType,
+        reason: authCheck.reason || 'Unaccepted source domain.',
+      };
+    }
+
+    try {
+      const resp = await fetch(trimmed, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; HopelandVerifier/1.0; +https://hopelandjobs.tech)',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(6500),
+      });
+
+      const finalUrl = resp.url || trimmed;
+      const finalCheck = classifyOfficialSourceAuthority(finalUrl, kind);
+      if (!finalCheck.accepted) {
+        return {
+          ok: false,
+          httpStatus: resp.status,
+          verificationStatus: 'REJECTED_SUSPICIOUS',
+          finalUrl,
+          authorityType: 'unverified',
+          reason: `URL redirected to non-official domain (${finalUrl}).`,
+        };
+      }
+
+      if (resp.status === 404 || resp.status === 410) {
+        return {
+          ok: false,
+          httpStatus: resp.status,
+          verificationStatus: 'SUSPENDED_BROKEN_LINK',
+          finalUrl,
+          authorityType: authCheck.authorityType,
+          reason: `Official page returned HTTP ${resp.status} (Broken / Removed).`,
+        };
+      }
+
+      if (resp.status >= 500) {
+        return {
+          ok: false,
+          httpStatus: resp.status,
+          verificationStatus: 'UNVERIFIED',
+          finalUrl,
+          authorityType: authCheck.authorityType,
+          reason: `Official server returned temporary HTTP ${resp.status}.`,
+        };
+      }
+
+      if (resp.ok) {
+        let snippet = '';
+        try {
+          snippet = (await resp.text()).slice(0, 6000).toLowerCase();
+        } catch {}
+        if (snippet && /<title>[^<]*(404|page not found|not found)[^<]*<\/title>/i.test(snippet)) {
+          return {
+            ok: false,
+            httpStatus: 404,
+            verificationStatus: 'SUSPENDED_BROKEN_LINK',
+            finalUrl,
+            authorityType: authCheck.authorityType,
+            reason: 'Official server rendered a soft-404 Page Not Found page.',
+          };
+        }
+        return {
+          ok: true,
+          httpStatus: resp.status,
+          verificationStatus: 'VERIFIED',
+          finalUrl,
+          authorityType: authCheck.authorityType,
+          reason: `Verified live official ${authCheck.authorityType.replace(/_/g, ' ')} (HTTP ${resp.status}).`,
+        };
+      }
+
+      // Some official government/employer portals use bot protection (401/403/405/429) on automated GETs
+      if (resp.status === 401 || resp.status === 403 || resp.status === 405 || resp.status === 429) {
+        return {
+          ok: true,
+          httpStatus: resp.status,
+          verificationStatus: 'VERIFIED',
+          finalUrl,
+          authorityType: authCheck.authorityType,
+          reason: `Verified official ${authCheck.authorityType.replace(/_/g, ' ')} host (HTTP ${resp.status} bot-shielded).`,
+        };
+      }
+
+      return {
+        ok: false,
+        httpStatus: resp.status,
+        verificationStatus: 'UNVERIFIED',
+        finalUrl,
+        authorityType: authCheck.authorityType,
+        reason: `Unexpected HTTP ${resp.status} from source.`,
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        verificationStatus: 'UNVERIFIED',
+        finalUrl: trimmed,
+        authorityType: authCheck.authorityType,
+        reason: `Live check failed: ${err?.message || 'Unreachable host'}`,
+      };
+    }
+  }
+
+  function extractGroundingUrls(response: any): Set<string> {
+    const urls = new Set<string>();
+    const chunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (Array.isArray(chunks)) {
+      for (const ch of chunks) {
+        if (ch?.web?.uri && typeof ch.web.uri === 'string') {
+          urls.add(ch.web.uri.trim());
+        }
+      }
+    }
+    return urls;
+  }
+
+  function parseJsonBlockFromText(raw: string): any {
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = fenced ? fenced[1].trim() : raw.trim();
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      const startArr = candidate.indexOf('[');
+      const startObj = candidate.indexOf('{');
+      const start = startArr >= 0 && (startObj < 0 || startArr < startObj) ? startArr : startObj;
+      if (start >= 0) {
+        const sliced = candidate.slice(start);
+        try {
+          return JSON.parse(sliced);
+        } catch {}
+      }
+      return null;
+    }
+  }
+
+  function safeNotStated(val: any): string {
+    const s = String(val ?? '').trim();
+    if (!s || /^(n\/a|none|unknown|not specified|not mentioned|tbd|-|null|undefined)$/i.test(s)) {
+      return OFFICIAL_NOT_STATED;
+    }
+    return s;
+  }
+
+  app.get('/api/international/state', (req: Request, res: Response): void => {
+    res.json(loadPersistedInternationalData());
+  });
+
+  app.post('/api/international/state', (req: Request, res: Response): void => {
+    try {
+      const current = loadPersistedInternationalData();
+      const body = req.body || {};
+      const next = {
+        internationalJobs: Array.isArray(body.internationalJobs) ? body.internationalJobs : current.internationalJobs,
+        immigrationPathways: Array.isArray(body.immigrationPathways) ? body.immigrationPathways : current.immigrationPathways,
+        experienceScholarships: Array.isArray(body.experienceScholarships) ? body.experienceScholarships : current.experienceScholarships,
+        researchHistory: Array.isArray(body.researchHistory) ? body.researchHistory : current.researchHistory,
+        verificationLogs: Array.isArray(body.verificationLogs) ? body.verificationLogs : current.verificationLogs,
+      };
+      savePersistedInternationalData(next);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to persist international state' });
+    }
+  });
+
+  app.post('/api/international/verify-url', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { url, kind = 'job' } = req.body || {};
+      const result = await verifyOfficialUrlLive(url, kind);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'URL verification failed' });
+    }
+  });
+
+  app.post('/api/international/verify-all-sources', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const state = loadPersistedInternationalData();
+      const jobs = Array.isArray(req.body?.internationalJobs) ? req.body.internationalJobs : state.internationalJobs;
+      const pathways = Array.isArray(req.body?.immigrationPathways) ? req.body.immigrationPathways : state.immigrationPathways;
+      const scholarships = Array.isArray(req.body?.experienceScholarships) ? req.body.experienceScholarships : state.experienceScholarships;
+
+      const nowIso = new Date().toISOString();
+      const logs: any[] = [];
+      let verifiedCount = 0;
+      let brokenCount = 0;
+      let expiredCount = 0;
+
+      const updatedJobs = await Promise.all(
+        jobs.map(async (j: any) => {
+          if (isVacancyDeadlineExpiredServer(j.applicationDeadline)) {
+            expiredCount++;
+            logs.push({
+              id: `vlog_${j.id}_${Date.now()}`,
+              entityType: 'international_job',
+              entityId: j.id,
+              title: j.jobTitle,
+              countryOrOrg: `${j.country} • ${j.employerOrProgramme}`,
+              url: j.originalSourceUrl || j.directApplicationUrl,
+              verificationStatus: 'EXPIRED',
+              reason: `Deadline (${j.applicationDeadline}) expired.`,
+              checkedAt: nowIso,
+            });
+            return { ...j, verificationStatus: 'EXPIRED', applicationStatus: 'expired', lastVerifiedAt: nowIso, updatedAt: nowIso };
+          }
+          const chk = await verifyOfficialUrlLive(j.originalSourceUrl || j.directApplicationUrl, 'job');
+          if (chk.ok) verifiedCount++;
+          else brokenCount++;
+          logs.push({
+            id: `vlog_${j.id}_${Date.now()}`,
+            entityType: 'international_job',
+            entityId: j.id,
+            title: j.jobTitle,
+            countryOrOrg: `${j.country} • ${j.employerOrProgramme}`,
+            url: j.originalSourceUrl || j.directApplicationUrl,
+            verificationStatus: chk.verificationStatus,
+            httpStatus: chk.httpStatus,
+            reason: chk.reason,
+            checkedAt: nowIso,
+          });
+          return {
+            ...j,
+            verificationStatus: chk.verificationStatus,
+            sourceAuthorityType: chk.authorityType,
+            lastCheckedHttpStatus: chk.httpStatus,
+            verificationNotes: chk.reason,
+            applicationStatus: chk.ok ? 'open' : 'unverified',
+            lastVerifiedAt: nowIso,
+            updatedAt: nowIso,
+          };
+        })
+      );
+
+      const updatedPathways = await Promise.all(
+        pathways.map(async (p: any) => {
+          const chk = await verifyOfficialUrlLive(p.officialGovernmentWebsite || p.originalSourceUrl, 'immigration');
+          if (chk.ok) verifiedCount++;
+          else brokenCount++;
+          logs.push({
+            id: `vlog_${p.id}_${Date.now()}`,
+            entityType: 'immigration',
+            entityId: p.id,
+            title: p.pathwayTitle,
+            countryOrOrg: p.country,
+            url: p.officialGovernmentWebsite || p.originalSourceUrl,
+            verificationStatus: chk.verificationStatus,
+            httpStatus: chk.httpStatus,
+            reason: chk.reason,
+            checkedAt: nowIso,
+          });
+          return {
+            ...p,
+            verificationStatus: chk.verificationStatus,
+            sourceAuthorityType: chk.authorityType,
+            lastCheckedHttpStatus: chk.httpStatus,
+            verificationNotes: chk.reason,
+            lastVerifiedAt: nowIso,
+            updatedAt: nowIso,
+          };
+        })
+      );
+
+      const updatedScholarships = await Promise.all(
+        scholarships.map(async (s: any) => {
+          if (isVacancyDeadlineExpiredServer(s.applicationDeadline)) {
+            expiredCount++;
+            logs.push({
+              id: `vlog_${s.id}_${Date.now()}`,
+              entityType: 'scholarship',
+              entityId: s.id,
+              title: s.scholarshipName,
+              countryOrOrg: `${s.country} • ${s.universityOrInstitution}`,
+              url: s.officialApplicationUrl || s.originalSourceUrl,
+              verificationStatus: 'EXPIRED',
+              reason: `Deadline (${s.applicationDeadline}) expired.`,
+              checkedAt: nowIso,
+            });
+            return { ...s, verificationStatus: 'EXPIRED', applicationStatus: 'expired', lastVerifiedAt: nowIso, updatedAt: nowIso };
+          }
+          const chk = await verifyOfficialUrlLive(s.officialApplicationUrl || s.originalSourceUrl, 'scholarship');
+          if (chk.ok) verifiedCount++;
+          else brokenCount++;
+          logs.push({
+            id: `vlog_${s.id}_${Date.now()}`,
+            entityType: 'scholarship',
+            entityId: s.id,
+            title: s.scholarshipName,
+            countryOrOrg: `${s.country} • ${s.universityOrInstitution}`,
+            url: s.officialApplicationUrl || s.originalSourceUrl,
+            verificationStatus: chk.verificationStatus,
+            httpStatus: chk.httpStatus,
+            reason: chk.reason,
+            checkedAt: nowIso,
+          });
+          return {
+            ...s,
+            verificationStatus: chk.verificationStatus,
+            sourceAuthorityType: chk.authorityType,
+            lastCheckedHttpStatus: chk.httpStatus,
+            verificationNotes: chk.reason,
+            applicationStatus: chk.ok ? 'open' : 'unverified',
+            lastVerifiedAt: nowIso,
+            updatedAt: nowIso,
+          };
+        })
+      );
+
+      const run = {
+        id: `run_verify_${Date.now()}`,
+        runType: 'source_verification',
+        triggeredBy: 'Administrator',
+        startedAt: nowIso,
+        completedAt: new Date().toISOString(),
+        regionsResearched: ['All'],
+        countriesResearched: Array.from(new Set([...updatedJobs.map((j: any) => j.country), ...updatedPathways.map((p: any) => p.country), ...updatedScholarships.map((s: any) => s.country)])),
+        discoveredCount: jobs.length + pathways.length + scholarships.length,
+        verifiedCount,
+        unverifiedCount: brokenCount,
+        rejectedCount: expiredCount,
+        duplicatesSkipped: 0,
+        summary: `Verified ${verifiedCount} official links, flagged ${brokenCount} broken/unverified, archived ${expiredCount} expired.`,
+        status: 'completed',
+      };
+
+      const nextLogs = [...logs, ...(state.verificationLogs || [])].slice(0, 300);
+      const nextHistory = [run, ...(state.researchHistory || [])].slice(0, 100);
+      savePersistedInternationalData({
+        internationalJobs: updatedJobs,
+        immigrationPathways: updatedPathways,
+        experienceScholarships: updatedScholarships,
+        researchHistory: nextHistory,
+        verificationLogs: nextLogs,
+      });
+
+      res.json({
+        success: true,
+        internationalJobs: updatedJobs,
+        immigrationPathways: updatedPathways,
+        experienceScholarships: updatedScholarships,
+        run,
+        newLogs: logs,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Source verification sweep failed' });
+    }
+  });
+
+  app.post('/api/international/cleanup-expired', (req: Request, res: Response): void => {
+    try {
+      const state = loadPersistedInternationalData();
+      const nowIso = new Date().toISOString();
+      let cleanedCount = 0;
+
+      const internationalJobs = state.internationalJobs.map((j: any) => {
+        if (j.verificationStatus !== 'EXPIRED' && isVacancyDeadlineExpiredServer(j.applicationDeadline)) {
+          cleanedCount++;
+          return { ...j, verificationStatus: 'EXPIRED', applicationStatus: 'expired', updatedAt: nowIso };
+        }
+        return j;
+      });
+      const experienceScholarships = state.experienceScholarships.map((s: any) => {
+        if (s.verificationStatus !== 'EXPIRED' && isVacancyDeadlineExpiredServer(s.applicationDeadline)) {
+          cleanedCount++;
+          return { ...s, verificationStatus: 'EXPIRED', applicationStatus: 'expired', updatedAt: nowIso };
+        }
+        return s;
+      });
+
+      const run = {
+        id: `run_cleanup_${Date.now()}`,
+        runType: 'expired_cleanup',
+        triggeredBy: 'Administrator',
+        startedAt: nowIso,
+        completedAt: nowIso,
+        regionsResearched: ['All'],
+        countriesResearched: [],
+        discoveredCount: internationalJobs.length + experienceScholarships.length,
+        verifiedCount: 0,
+        unverifiedCount: 0,
+        rejectedCount: cleanedCount,
+        duplicatesSkipped: 0,
+        summary: `Archived ${cleanedCount} expired international jobs & scholarships.`,
+        status: 'completed',
+      };
+      const researchHistory = [run, ...(state.researchHistory || [])].slice(0, 100);
+      savePersistedInternationalData({ ...state, internationalJobs, experienceScholarships, researchHistory });
+      res.json({ success: true, cleanedCount, internationalJobs, experienceScholarships, run });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Expired cleanup failed' });
+    }
+  });
+
+  app.post('/api/international/research-jobs', async (req: Request, res: Response): Promise<void> => {
+    const startedAt = new Date().toISOString();
+    try {
+      const {
+        countries = ['Germany', 'Finland', 'Estonia', 'United Arab Emirates', 'Japan'],
+        region = 'Europe',
+        categories = ['Banking & Finance', 'NGO & International Organizations', 'Government Approved Foreign Recruitment'],
+        existingJobs = [],
+      } = req.body || {};
+
+      const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 6) : ['Germany'];
+      const client = await getAiClient();
+      if (!client) {
+        res.status(503).json({
+          success: false,
+          error: 'GEMINI_API_KEY is not configured on the server. Configure GEMINI_API_KEY to run automated web discovery, or use Manual Official Record Entry.',
+        });
+        return;
+      }
+
+      const prompt = `Use Google Search to research REAL, currently open official foreign workforce programmes and direct employer career openings recruiting international/foreign workers (and check whether Ethiopian citizens can apply) in: ${countryList.join(', ')} (${region}).
+Priority categories: ${categories.join(', ')}.
+
+CRITICAL ANTI-FABRICATION RULES:
+1. ONLY return opportunities found in your Google Search results with real official URLs (government portals, official ministries, official employer career sites, UN/international organizations). NEVER use job boards (LinkedIn, Indeed, Glassdoor, Bayt, GulfTalent), blogs, or social media.
+2. NEVER invent a salary, deadline, visa fee waiver, URL, or employer. If an official announcement does not publish salary, deadline, or another field, set that exact field to "${OFFICIAL_NOT_STATED}".
+3. NEVER claim a visa is "free" unless the official announcement explicitly states which visa/permit costs are paid by the employer vs government fees still paid by the applicant. Set visaFeePolicy to one of: "employer_paid", "free_recruitment_applicant_pays_gov_fee", "fee_waived_official", or "not_stated".
+4. Return a JSON array of up to 8 opportunities with exact keys:
+[
+  {
+    "country": "string",
+    "region": "Europe | Middle East | Far East & Asia | Americas & Oceania | Africa & Other",
+    "category": "string",
+    "employerOrProgramme": "string",
+    "jobTitle": "string",
+    "location": "string",
+    "requiredEducation": "string",
+    "requiredExperience": "string",
+    "languageRequirements": "string",
+    "salary": "string (ONLY officially published salary or 'NOT STATED IN THE OFFICIAL ANNOUNCEMENT')",
+    "foreignerAndEthiopianEligibility": "string",
+    "ethiopiansEligible": "yes | conditional | no | unconfirmed",
+    "visaSponsorshipInfo": "string",
+    "visaSponsored": true/false,
+    "whoPaysVisaAndRecruitmentCosts": "string",
+    "visaFeePolicy": "employer_paid | free_recruitment_applicant_pays_gov_fee | fee_waived_official | not_stated",
+    "noRecruitmentAgencyFee": true/false,
+    "accommodationAndRelocationSupport": "string",
+    "contractDuration": "string",
+    "applicationDeadline": "string (YYYY-MM-DD or Rolling/Open or 'NOT STATED IN THE OFFICIAL ANNOUNCEMENT')",
+    "requiredDocuments": ["string"],
+    "officialApplicationInstructions": "string",
+    "directApplicationUrl": "https://...",
+    "originalSourceUrl": "https://...",
+    "familyReunification": "string",
+    "permanentResidencePathway": "string"
+  }
+]`;
+
+      const response = (await Promise.race([
+        client.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: prompt,
+          config: { tools: [{ googleSearch: {} }] },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('International jobs research timed out after 25s. Try narrowing selected countries.')), 25000)
+        ),
+      ])) as any;
+
+      const groundingUrls = extractGroundingUrls(response);
+      const parsed = parseJsonBlockFromText(response.text || '');
+      const candidates = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+
+      const state = loadPersistedInternationalData();
+      const allExisting = existingJobs.length > 0 ? existingJobs : state.internationalJobs;
+      const existingFingerprints = new Set(
+        allExisting.map((j: any) => `${String(j.country || '').toLowerCase()}|${String(j.employerOrProgramme || '').toLowerCase()}|${String(j.jobTitle || '').toLowerCase()}`)
+      );
+
+      const nowIso = new Date().toISOString();
+      const createdJobs: any[] = [];
+      const logs: any[] = [];
+      let duplicatesSkipped = 0;
+      let rejectedCount = 0;
+
+      for (const raw of candidates) {
+        const title = String(raw?.jobTitle || '').trim();
+        const employer = String(raw?.employerOrProgramme || '').trim();
+        const country = String(raw?.country || '').trim();
+        if (!title || !employer || !country) continue;
+
+        const fp = `${country.toLowerCase()}|${employer.toLowerCase()}|${title.toLowerCase()}`;
+        if (existingFingerprints.has(fp)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        existingFingerprints.add(fp);
+
+        const directUrl = String(raw?.directApplicationUrl || raw?.originalSourceUrl || '').trim();
+        const sourceUrl = String(raw?.originalSourceUrl || raw?.directApplicationUrl || '').trim();
+        const urlCheck = await verifyOfficialUrlLive(sourceUrl || directUrl, 'job');
+
+        const deadline = safeNotStated(raw?.applicationDeadline);
+        const expired = isVacancyDeadlineExpiredServer(deadline);
+        const finalStatus = expired ? 'EXPIRED' : urlCheck.verificationStatus;
+
+        const isGroundedMatch =
+          groundingUrls.size === 0 ||
+          Array.from(groundingUrls).some((g) => {
+            try {
+              const gHost = new URL(g).hostname.replace(/^www\./, '');
+              const sHost = new URL(sourceUrl || directUrl).hostname.replace(/^www\./, '');
+              return gHost === sHost || sHost.endsWith(`.${gHost}`) || gHost.endsWith(`.${sHost}`);
+            } catch {
+              return false;
+            }
+          });
+
+        const effectiveVerification =
+          finalStatus === 'VERIFIED' && !isGroundedMatch
+            ? 'UNVERIFIED'
+            : finalStatus;
+
+        if (effectiveVerification !== 'VERIFIED') rejectedCount++;
+
+        const id = `intl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const record = {
+          id,
+          region: ['Europe', 'Middle East', 'Far East & Asia', 'Americas & Oceania', 'Africa & Other'].includes(raw?.region)
+            ? raw.region
+            : region,
+          category: String(raw?.category || categories[0] || 'Government Approved Foreign Recruitment'),
+          country,
+          employerOrProgramme: employer,
+          jobTitle: title,
+          location: safeNotStated(raw?.location),
+          requiredEducation: safeNotStated(raw?.requiredEducation),
+          requiredExperience: safeNotStated(raw?.requiredExperience),
+          languageRequirements: safeNotStated(raw?.languageRequirements),
+          salary: safeNotStated(raw?.salary),
+          foreignerAndEthiopianEligibility: safeNotStated(raw?.foreignerAndEthiopianEligibility),
+          ethiopiansEligible: ['yes', 'conditional', 'no', 'unconfirmed'].includes(raw?.ethiopiansEligible)
+            ? raw.ethiopiansEligible
+            : 'unconfirmed',
+          visaSponsorshipInfo: safeNotStated(raw?.visaSponsorshipInfo),
+          visaSponsored: Boolean(raw?.visaSponsored),
+          whoPaysVisaAndRecruitmentCosts: safeNotStated(raw?.whoPaysVisaAndRecruitmentCosts),
+          visaFeePolicy: ['employer_paid', 'free_recruitment_applicant_pays_gov_fee', 'fee_waived_official', 'not_stated'].includes(raw?.visaFeePolicy)
+            ? raw.visaFeePolicy
+            : 'not_stated',
+          noRecruitmentAgencyFee: Boolean(raw?.noRecruitmentAgencyFee),
+          accommodationAndRelocationSupport: safeNotStated(raw?.accommodationAndRelocationSupport),
+          contractDuration: safeNotStated(raw?.contractDuration),
+          applicationDeadline: deadline,
+          requiredDocuments: Array.isArray(raw?.requiredDocuments) && raw.requiredDocuments.length > 0
+            ? raw.requiredDocuments.map((d: any) => String(d))
+            : [OFFICIAL_NOT_STATED],
+          officialApplicationInstructions: safeNotStated(raw?.officialApplicationInstructions),
+          directApplicationUrl: directUrl || sourceUrl,
+          originalSourceUrl: sourceUrl || directUrl,
+          lastVerifiedAt: nowIso,
+          familyReunification: safeNotStated(raw?.familyReunification),
+          permanentResidencePathway: safeNotStated(raw?.permanentResidencePathway),
+          verificationStatus: effectiveVerification,
+          verificationNotes: !isGroundedMatch && finalStatus === 'VERIFIED'
+            ? 'Marked UNVERIFIED: domain not present in grounded search citations.'
+            : urlCheck.reason,
+          sourceAuthorityType: urlCheck.authorityType,
+          lastCheckedHttpStatus: urlCheck.httpStatus,
+          applicationStatus: expired ? 'expired' : effectiveVerification === 'VERIFIED' ? 'open' : 'unverified',
+          isSuspicious: effectiveVerification === 'REJECTED_SUSPICIOUS',
+          suspiciousReason: effectiveVerification === 'REJECTED_SUSPICIOUS' ? urlCheck.reason : undefined,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        createdJobs.push(record);
+        logs.push({
+          id: `vlog_${id}`,
+          entityType: 'international_job',
+          entityId: id,
+          title,
+          countryOrOrg: `${country} • ${employer}`,
+          url: record.originalSourceUrl,
+          verificationStatus: effectiveVerification,
+          httpStatus: urlCheck.httpStatus,
+          reason: record.verificationNotes,
+          checkedAt: nowIso,
+        });
+      }
+
+      const verifiedCount = createdJobs.filter((j) => j.verificationStatus === 'VERIFIED').length;
+      const run = {
+        id: `run_jobs_${Date.now()}`,
+        runType: 'international_jobs',
+        triggeredBy: 'Administrator',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        regionsResearched: [region],
+        countriesResearched: countryList,
+        discoveredCount: createdJobs.length,
+        verifiedCount,
+        unverifiedCount: createdJobs.length - verifiedCount,
+        rejectedCount,
+        duplicatesSkipped,
+        summary: `Researched ${countryList.join(', ')}: ${verifiedCount} VERIFIED official opportunities, ${createdJobs.length - verifiedCount} unverified/rejected, ${duplicatesSkipped} duplicates skipped.`,
+        status: 'completed',
+      };
+
+      const mergedJobs = [...createdJobs, ...state.internationalJobs];
+      const mergedHistory = [run, ...(state.researchHistory || [])].slice(0, 100);
+      const mergedLogs = [...logs, ...(state.verificationLogs || [])].slice(0, 300);
+      savePersistedInternationalData({ ...state, internationalJobs: mergedJobs, researchHistory: mergedHistory, verificationLogs: mergedLogs });
+
+      res.json({ success: true, discovered: createdJobs, run, logs, groundingUrlsCount: groundingUrls.size });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'International job research failed' });
+    }
+  });
+
+  app.post('/api/international/research-immigration', async (req: Request, res: Response): Promise<void> => {
+    const startedAt = new Date().toISOString();
+    try {
+      const { countries = ['Germany', 'Finland', 'Estonia', 'Sweden', 'Canada'], region = 'Europe', existingPathways = [] } = req.body || {};
+      const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 6) : ['Germany'];
+      const client = await getAiClient();
+      if (!client) {
+        res.status(503).json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' });
+        return;
+      }
+
+      const prompt = `Use Google Search to research ONLY OFFICIAL government immigration department, ministry, or embassy websites for legal work residence permits, skilled worker immigration, job-seeker visas, family reunification, and permanent residence pathways available to Ethiopian citizens in: ${countryList.join(', ')}.
+
+CRITICAL ANTI-FABRICATION RULES:
+1. ONLY use official government, immigration ministry, or embassy portals (.gov, .gov.*, europa.eu, migri.fi, make-it-in-germany.com, migrationsverket.se, udi.no, nyidanmark.dk, canada.ca, etc.).
+2. NEVER invent a permanent residence program, government fee, income threshold, or timeline. Write "${OFFICIAL_NOT_STATED}" whenever an official source does not specify a fee/timeline/figure.
+3. Explicitly clarify Temporary Work Permit vs Permanent Residence (do NOT confuse temporary permits with PR).
+4. If a country has no confirmed pathway for Ethiopian citizens, set ethiopianCitizenEligibility to "no_confirmed_route".
+Return JSON array with up to 6 pathways:
+[
+  {
+    "country": "string",
+    "region": "Europe | Middle East | Far East & Asia | Americas & Oceania | Africa & Other",
+    "pathwayTitle": "string",
+    "pathwayType": "Work-Based Residence Permit | Permanent Residence | Long-Term Residence | Skilled Worker Immigration | Employer-Sponsored Immigration | Job-Seeker Visa | Family Reunification | Citizenship Track",
+    "ethiopianCitizenEligibility": "eligible | conditional | no_confirmed_route | unverified",
+    "ethiopianEligibilityDetails": "string",
+    "eligibilityRequirements": "string",
+    "requiredEducationAndExperience": "string",
+    "minimumIncomeOrFinancialRequirement": "string",
+    "languageRequirements": "string",
+    "requiredDocuments": ["string"],
+    "governmentApplicationFees": "string",
+    "processingTimeline": "string",
+    "jobOfferRequired": "yes | no | conditional | not_stated",
+    "yearsToPermanentResidence": "string",
+    "temporaryVsPermanentClarification": "string",
+    "familyReunificationRules": "string",
+    "citizenshipPathwayNotes": "string",
+    "officialGovernmentWebsite": "https://...",
+    "originalSourceUrl": "https://...",
+    "exactApplicationSteps": ["string"]
+  }
+]`;
+
+      const response = (await Promise.race([
+        client.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: prompt,
+          config: { tools: [{ googleSearch: {} }] },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Legal immigration research timed out after 25s. Try narrowing selected countries.')), 25000)
+        ),
+      ])) as any;
+
+      const groundingUrls = extractGroundingUrls(response);
+      const parsed = parseJsonBlockFromText(response.text || '');
+      const candidates = Array.isArray(parsed) ? parsed : [];
+      const state = loadPersistedInternationalData();
+      const allExisting = existingPathways.length > 0 ? existingPathways : state.immigrationPathways;
+      const existingKeys = new Set(allExisting.map((p: any) => `${String(p.country).toLowerCase()}|${String(p.pathwayTitle).toLowerCase()}`));
+
+      const nowIso = new Date().toISOString();
+      const created: any[] = [];
+      const logs: any[] = [];
+      let duplicatesSkipped = 0;
+
+      for (const raw of candidates) {
+        const country = String(raw?.country || '').trim();
+        const title = String(raw?.pathwayTitle || '').trim();
+        if (!country || !title) continue;
+        const fp = `${country.toLowerCase()}|${title.toLowerCase()}`;
+        if (existingKeys.has(fp)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        existingKeys.add(fp);
+
+        const govUrl = String(raw?.officialGovernmentWebsite || raw?.originalSourceUrl || '').trim();
+        const srcUrl = String(raw?.originalSourceUrl || govUrl).trim();
+        const chk = await verifyOfficialUrlLive(govUrl || srcUrl, 'immigration');
+
+        const isGroundedMatch =
+          groundingUrls.size === 0 ||
+          Array.from(groundingUrls).some((g) => {
+            try {
+              const gHost = new URL(g).hostname.replace(/^www\./, '');
+              const sHost = new URL(govUrl || srcUrl).hostname.replace(/^www\./, '');
+              return gHost === sHost || sHost.endsWith(`.${gHost}`) || gHost.endsWith(`.${sHost}`);
+            } catch {
+              return false;
+            }
+          });
+
+        const effectiveVerification =
+          chk.verificationStatus === 'VERIFIED' && !isGroundedMatch
+            ? 'UNVERIFIED'
+            : chk.verificationStatus;
+        const verificationNotes =
+          !isGroundedMatch && chk.verificationStatus === 'VERIFIED'
+            ? 'Marked UNVERIFIED: portal domain not present in grounded search citations.'
+            : chk.reason;
+
+        const id = `imm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        const item = {
+          id,
+          country,
+          region: ['Europe', 'Middle East', 'Far East & Asia', 'Americas & Oceania', 'Africa & Other'].includes(raw?.region) ? raw.region : region,
+          pathwayTitle: title,
+          pathwayType: raw?.pathwayType || 'Work-Based Residence Permit',
+          ethiopianCitizenEligibility: ['eligible', 'conditional', 'no_confirmed_route', 'unverified'].includes(raw?.ethiopianCitizenEligibility)
+            ? raw.ethiopianCitizenEligibility
+            : 'unverified',
+          ethiopianEligibilityDetails: safeNotStated(raw?.ethiopianEligibilityDetails),
+          eligibilityRequirements: safeNotStated(raw?.eligibilityRequirements),
+          requiredEducationAndExperience: safeNotStated(raw?.requiredEducationAndExperience),
+          minimumIncomeOrFinancialRequirement: safeNotStated(raw?.minimumIncomeOrFinancialRequirement),
+          languageRequirements: safeNotStated(raw?.languageRequirements),
+          requiredDocuments: Array.isArray(raw?.requiredDocuments) && raw.requiredDocuments.length > 0
+            ? raw.requiredDocuments.map((d: any) => String(d))
+            : [OFFICIAL_NOT_STATED],
+          governmentApplicationFees: safeNotStated(raw?.governmentApplicationFees),
+          processingTimeline: safeNotStated(raw?.processingTimeline),
+          jobOfferRequired: ['yes', 'no', 'conditional', 'not_stated'].includes(raw?.jobOfferRequired) ? raw.jobOfferRequired : 'not_stated',
+          yearsToPermanentResidence: safeNotStated(raw?.yearsToPermanentResidence),
+          temporaryVsPermanentClarification: safeNotStated(raw?.temporaryVsPermanentClarification),
+          familyReunificationRules: safeNotStated(raw?.familyReunificationRules),
+          citizenshipPathwayNotes: safeNotStated(raw?.citizenshipPathwayNotes),
+          officialGovernmentWebsite: govUrl || srcUrl,
+          originalSourceUrl: srcUrl || govUrl,
+          exactApplicationSteps: Array.isArray(raw?.exactApplicationSteps) && raw.exactApplicationSteps.length > 0
+            ? raw.exactApplicationSteps.map((s: any) => String(s))
+            : [OFFICIAL_NOT_STATED],
+          lastVerifiedAt: nowIso,
+          verificationStatus: effectiveVerification,
+          verificationNotes,
+          sourceAuthorityType: chk.authorityType,
+          lastCheckedHttpStatus: chk.httpStatus,
+          applicationStatus: effectiveVerification === 'VERIFIED' ? 'open' : 'unverified',
+          isSuspicious: effectiveVerification === 'REJECTED_SUSPICIOUS',
+          suspiciousReason: effectiveVerification === 'REJECTED_SUSPICIOUS' ? chk.reason : undefined,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        created.push(item);
+        logs.push({
+          id: `vlog_${id}`,
+          entityType: 'immigration',
+          entityId: id,
+          title,
+          countryOrOrg: country,
+          url: item.officialGovernmentWebsite,
+          verificationStatus: effectiveVerification,
+          httpStatus: chk.httpStatus,
+          reason: verificationNotes,
+          checkedAt: nowIso,
+        });
+      }
+
+      const verifiedCount = created.filter((p) => p.verificationStatus === 'VERIFIED').length;
+      const run = {
+        id: `run_imm_${Date.now()}`,
+        runType: 'immigration_pr',
+        triggeredBy: 'Administrator',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        regionsResearched: [region],
+        countriesResearched: countryList,
+        discoveredCount: created.length,
+        verifiedCount,
+        unverifiedCount: created.length - verifiedCount,
+        rejectedCount: created.filter((p) => p.verificationStatus === 'REJECTED_SUSPICIOUS').length,
+        duplicatesSkipped,
+        summary: `Researched official immigration & PR portals for ${countryList.join(', ')}: ${verifiedCount} VERIFIED.`,
+        status: 'completed',
+      };
+
+      savePersistedInternationalData({
+        ...state,
+        immigrationPathways: [...created, ...state.immigrationPathways],
+        researchHistory: [run, ...(state.researchHistory || [])].slice(0, 100),
+        verificationLogs: [...logs, ...(state.verificationLogs || [])].slice(0, 300),
+      });
+
+      res.json({ success: true, discovered: created, run, logs });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Immigration research failed' });
+    }
+  });
+
+  app.post('/api/international/research-scholarships', async (req: Request, res: Response): Promise<void> => {
+    const startedAt = new Date().toISOString();
+    try {
+      const { region = 'Europe', countries = [], studyLevel = 'Postgraduate / Master', existingScholarships = [] } = req.body || {};
+      const countryList: string[] = Array.isArray(countries) && countries.length > 0 ? countries.slice(0, 8) : [];
+      const client = await getAiClient();
+      if (!client) {
+        res.status(503).json({ success: false, error: 'GEMINI_API_KEY is not configured on the server.' });
+        return;
+      }
+
+      const countryClause = countryList.length > 0 ? ` Target countries: ${countryList.join(', ')}.` : '';
+      const prompt = `Use Google Search to research REAL international scholarships (Master's, Leadership, Professional Development, Short Courses, Undergraduate) from official universities, governments, or recognized scholarship agencies open to Ethiopian applicants where professional/management/leadership experience is valued or can compensate for ordinary academic results. Focus region: ${region},${countryClause} level preference: ${studyLevel}.
+
+CRITICAL ANTI-FABRICATION RULES:
+1. ONLY use official university (.edu, .ac.*, university domains), government, or official scholarship agency URLs (e.g., daad.de, chevening.org, stipendiumhungaricum.hu, si.se, mastercardfdn.org). NEVER use scholarship aggregator blogs!
+2. NEVER claim a scholarship does not require a recommendation letter or high GPA unless the official announcement explicitly confirms it! Default noHighGpaConfirmed = false and noRecommendationLetterConfirmed = false unless explicitly confirmed in the official source.
+3. If GPA, funding breakdown, or deadline is omitted in the official page, write "${OFFICIAL_NOT_STATED}".
+Return JSON array of up to 6 scholarships:
+[
+  {
+    "region": "Europe | Middle East | Far East & Asia | Americas & Oceania | Africa & Other",
+    "studyLevel": "Undergraduate | Postgraduate / Master | Leadership & Executive | Professional Development | Short Course | PhD / Research",
+    "universityOrInstitution": "string",
+    "country": "string",
+    "scholarshipName": "string",
+    "studyProgramme": "string",
+    "eligibilityForEthiopians": "string",
+    "ethiopiansEligible": "yes | conditional | no | unconfirmed",
+    "academicRequirements": "string",
+    "gpaRequirement": "string",
+    "noHighGpaConfirmed": false,
+    "recommendationLetterRequirement": "string",
+    "noRecommendationLetterConfirmed": false,
+    "professionalExperienceCompensates": "confirmed_yes | considered | no | not_stated",
+    "experienceCompensationNotes": "string",
+    "requiredDocuments": ["string"],
+    "fundingCoverage": "string",
+    "coversTuition": true/false,
+    "coversAccommodation": true/false,
+    "coversLivingAllowance": true/false,
+    "coversTravel": true/false,
+    "applicationDeadline": "string",
+    "officialApplicationUrl": "https://...",
+    "originalSourceUrl": "https://...",
+    "exactApplicationProcedure": ["string"]
+  }
+]`;
+
+      const response = (await Promise.race([
+        client.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: prompt,
+          config: { tools: [{ googleSearch: {} }] },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Scholarship research timed out after 25s. Try narrowing selected countries.')), 25000)
+        ),
+      ])) as any;
+
+      const groundingUrls = extractGroundingUrls(response);
+      const parsed = parseJsonBlockFromText(response.text || '');
+      const candidates = Array.isArray(parsed) ? parsed : [];
+      const state = loadPersistedInternationalData();
+      const allExisting = existingScholarships.length > 0 ? existingScholarships : state.experienceScholarships;
+      const existingKeys = new Set(allExisting.map((s: any) => `${String(s.country).toLowerCase()}|${String(s.scholarshipName).toLowerCase()}`));
+
+      const nowIso = new Date().toISOString();
+      const created: any[] = [];
+      const logs: any[] = [];
+      let duplicatesSkipped = 0;
+
+      for (const raw of candidates) {
+        const name = String(raw?.scholarshipName || '').trim();
+        const inst = String(raw?.universityOrInstitution || '').trim();
+        const country = String(raw?.country || '').trim();
+        if (!name || !inst || !country) continue;
+        const fp = `${country.toLowerCase()}|${name.toLowerCase()}`;
+        if (existingKeys.has(fp)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        existingKeys.add(fp);
+
+        const appUrl = String(raw?.officialApplicationUrl || raw?.originalSourceUrl || '').trim();
+        const srcUrl = String(raw?.originalSourceUrl || appUrl).trim();
+        const chk = await verifyOfficialUrlLive(appUrl || srcUrl, 'scholarship');
+        const deadline = safeNotStated(raw?.applicationDeadline);
+        const expired = isVacancyDeadlineExpiredServer(deadline);
+        const rawStatus = expired ? 'EXPIRED' : chk.verificationStatus;
+
+        const isGroundedMatch =
+          groundingUrls.size === 0 ||
+          Array.from(groundingUrls).some((g) => {
+            try {
+              const gHost = new URL(g).hostname.replace(/^www\./, '');
+              const sHost = new URL(appUrl || srcUrl).hostname.replace(/^www\./, '');
+              return gHost === sHost || sHost.endsWith(`.${gHost}`) || gHost.endsWith(`.${sHost}`);
+            } catch {
+              return false;
+            }
+          });
+
+        const finalStatus =
+          rawStatus === 'VERIFIED' && !isGroundedMatch
+            ? 'UNVERIFIED'
+            : rawStatus;
+        const verificationNotes =
+          !isGroundedMatch && rawStatus === 'VERIFIED'
+            ? 'Marked UNVERIFIED: portal domain not present in grounded search citations.'
+            : chk.reason;
+
+        const id = `sch_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        const item = {
+          id,
+          region: ['Europe', 'Middle East', 'Far East & Asia', 'Americas & Oceania', 'Africa & Other'].includes(raw?.region) ? raw.region : region,
+          studyLevel: raw?.studyLevel || studyLevel,
+          universityOrInstitution: inst,
+          country,
+          scholarshipName: name,
+          studyProgramme: safeNotStated(raw?.studyProgramme),
+          eligibilityForEthiopians: safeNotStated(raw?.eligibilityForEthiopians),
+          ethiopiansEligible: ['yes', 'conditional', 'no', 'unconfirmed'].includes(raw?.ethiopiansEligible) ? raw.ethiopiansEligible : 'unconfirmed',
+          academicRequirements: safeNotStated(raw?.academicRequirements),
+          gpaRequirement: safeNotStated(raw?.gpaRequirement),
+          noHighGpaConfirmed: Boolean(raw?.noHighGpaConfirmed),
+          recommendationLetterRequirement: safeNotStated(raw?.recommendationLetterRequirement),
+          noRecommendationLetterConfirmed: Boolean(raw?.noRecommendationLetterConfirmed),
+          professionalExperienceCompensates: ['confirmed_yes', 'considered', 'no', 'not_stated'].includes(raw?.professionalExperienceCompensates)
+            ? raw.professionalExperienceCompensates
+            : 'not_stated',
+          experienceCompensationNotes: safeNotStated(raw?.experienceCompensationNotes),
+          requiredDocuments: Array.isArray(raw?.requiredDocuments) && raw.requiredDocuments.length > 0
+            ? raw.requiredDocuments.map((d: any) => String(d))
+            : [OFFICIAL_NOT_STATED],
+          fundingCoverage: safeNotStated(raw?.fundingCoverage),
+          coversTuition: Boolean(raw?.coversTuition),
+          coversAccommodation: Boolean(raw?.coversAccommodation),
+          coversLivingAllowance: Boolean(raw?.coversLivingAllowance),
+          coversTravel: Boolean(raw?.coversTravel),
+          applicationDeadline: deadline,
+          officialApplicationUrl: appUrl || srcUrl,
+          originalSourceUrl: srcUrl || appUrl,
+          exactApplicationProcedure: Array.isArray(raw?.exactApplicationProcedure) && raw.exactApplicationProcedure.length > 0
+            ? raw.exactApplicationProcedure.map((s: any) => String(s))
+            : [OFFICIAL_NOT_STATED],
+          lastVerifiedAt: nowIso,
+          verificationStatus: finalStatus,
+          verificationNotes,
+          sourceAuthorityType: chk.authorityType,
+          lastCheckedHttpStatus: chk.httpStatus,
+          applicationStatus: expired ? 'expired' : finalStatus === 'VERIFIED' ? 'open' : 'unverified',
+          isSuspicious: finalStatus === 'REJECTED_SUSPICIOUS',
+          suspiciousReason: finalStatus === 'REJECTED_SUSPICIOUS' ? chk.reason : undefined,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        created.push(item);
+        logs.push({
+          id: `vlog_${id}`,
+          entityType: 'scholarship',
+          entityId: id,
+          title: name,
+          countryOrOrg: `${country} • ${inst}`,
+          url: item.officialApplicationUrl,
+          verificationStatus: finalStatus,
+          httpStatus: chk.httpStatus,
+          reason: verificationNotes,
+          checkedAt: nowIso,
+        });
+      }
+
+      const verifiedCount = created.filter((s) => s.verificationStatus === 'VERIFIED').length;
+      const run = {
+        id: `run_sch_${Date.now()}`,
+        runType: 'scholarships',
+        triggeredBy: 'Administrator',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        regionsResearched: [region],
+        countriesResearched: Array.from(new Set([...countryList, ...created.map((c) => c.country)])),
+        discoveredCount: created.length,
+        verifiedCount,
+        unverifiedCount: created.length - verifiedCount,
+        rejectedCount: created.filter((s) => s.verificationStatus === 'REJECTED_SUSPICIOUS').length,
+        duplicatesSkipped,
+        summary: `Researched experience-based scholarships (${region}): ${verifiedCount} VERIFIED official programmes.`,
+        status: 'completed',
+      };
+
+      savePersistedInternationalData({
+        ...state,
+        experienceScholarships: [...created, ...state.experienceScholarships],
+        researchHistory: [run, ...(state.researchHistory || [])].slice(0, 100),
+        verificationLogs: [...logs, ...(state.verificationLogs || [])].slice(0, 300),
+      });
+
+      res.json({ success: true, discovered: created, run, logs });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Scholarship research failed' });
+    }
+  });
+
+  // Private Personal Application Assistant — Strictly Restricted to Owner Developer Account (Yeabsra Only)
+  app.post('/api/private-assistant/analyze', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const callerEmail = String(req.headers['x-admin-email'] || req.body?.adminEmail || '').toLowerCase().trim();
+      if (!OWNER_EMAILS_SET.has(callerEmail)) {
+        res.status(403).json({
+          error: 'Access Denied: Private Personal Application Assistant is strictly restricted to the owner developer account.',
+        });
+        return;
+      }
+
+      const {
+        profile = {},
+        documents = [],
+        domesticVacancies = [],
+        internationalJobs = [],
+        immigrationPathways = [],
+        scholarships = [],
+      } = req.body || {};
+
+      const docSummaryText = (Array.isArray(documents) ? documents : [])
+        .map((d: any) => `${d.title} (${d.type}): ${String(d.extractedText || '').slice(0, 450)}`)
+        .join('\n---\n');
+
+      const allOpportunities: Array<{
+        id: string;
+        type: 'domestic_job' | 'international_job' | 'immigration_pathway' | 'scholarship';
+        title: string;
+        org: string;
+        countryOrLocation: string;
+        deadline: string;
+        url: string;
+        requirementsText: string;
+        docsRequired: string[];
+        steps: string[];
+      }> = [];
+
+      // Domestic banking & NGO & finance vacancies
+      (Array.isArray(domesticVacancies) ? domesticVacancies : [])
+        .filter((v: any) => v.status === 'published' && !isVacancyDeadlineExpiredServer(v.applicationDeadline))
+        .slice(0, 20)
+        .forEach((v: any) => {
+          allOpportunities.push({
+            id: v.id,
+            type: 'domestic_job',
+            title: v.title,
+            org: v.organization,
+            countryOrLocation: v.location || 'Ethiopia',
+            deadline: v.applicationDeadline || OFFICIAL_NOT_STATED,
+            url: v.applicationUrl || (v.applicationEmail ? `mailto:${v.applicationEmail}` : ''),
+            requirementsText: `Category: ${v.category}. Education: ${v.educationQualification}. Experience: ${v.experienceYears}. Skills: ${(v.requiredSkills || []).join(', ')}.`,
+            docsRequired: Array.isArray(v.requiredDocuments) ? v.requiredDocuments : ['Updated CV', 'Degree Certificate', 'Experience Letters'],
+            steps: [v.applicationInstructions || 'Follow official employer submission instructions.'],
+          });
+        });
+
+      // Verified international jobs
+      (Array.isArray(internationalJobs) ? internationalJobs : [])
+        .filter((j: any) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired')
+        .slice(0, 15)
+        .forEach((j: any) => {
+          allOpportunities.push({
+            id: j.id,
+            type: 'international_job',
+            title: j.jobTitle,
+            org: j.employerOrProgramme,
+            countryOrLocation: `${j.location}, ${j.country}`,
+            deadline: j.applicationDeadline || OFFICIAL_NOT_STATED,
+            url: j.directApplicationUrl || j.originalSourceUrl,
+            requirementsText: `Edu: ${j.requiredEducation}. Exp: ${j.requiredExperience}. Lang: ${j.languageRequirements}. Ethiopian eligibility: ${j.foreignerAndEthiopianEligibility}.`,
+            docsRequired: Array.isArray(j.requiredDocuments) ? j.requiredDocuments : ['CV', 'Passport', 'Degree', 'Experience Letters'],
+            steps: [j.officialApplicationInstructions || 'Apply on official employer portal.'],
+          });
+        });
+
+      // Verified immigration pathways
+      (Array.isArray(immigrationPathways) ? immigrationPathways : [])
+        .filter((p: any) => p.verificationStatus === 'VERIFIED')
+        .slice(0, 15)
+        .forEach((p: any) => {
+          allOpportunities.push({
+            id: p.id,
+            type: 'immigration_pathway',
+            title: p.pathwayTitle,
+            org: p.pathwayType,
+            countryOrLocation: p.country,
+            deadline: 'Official Immigration Programme',
+            url: p.officialGovernmentWebsite || p.originalSourceUrl,
+            requirementsText: `Ethiopian eligibility: ${p.ethiopianCitizenEligibility} (${p.ethiopianEligibilityDetails}). Req: ${p.eligibilityRequirements}. Edu/Exp: ${p.requiredEducationAndExperience}. Lang: ${p.languageRequirements}. Job offer req: ${p.jobOfferRequired}.`,
+            docsRequired: Array.isArray(p.requiredDocuments) ? p.requiredDocuments : ['Valid Passport', 'Degree Credential', 'Experience Certificates'],
+            steps: Array.isArray(p.exactApplicationSteps) ? p.exactApplicationSteps : ['Follow official government immigration portal steps.'],
+          });
+        });
+
+      // Verified scholarships
+      (Array.isArray(scholarships) ? scholarships : [])
+        .filter((s: any) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired')
+        .slice(0, 15)
+        .forEach((s: any) => {
+          allOpportunities.push({
+            id: s.id,
+            type: 'scholarship',
+            title: s.scholarshipName,
+            org: s.universityOrInstitution,
+            countryOrLocation: s.country,
+            deadline: s.applicationDeadline || OFFICIAL_NOT_STATED,
+            url: s.officialApplicationUrl || s.originalSourceUrl,
+            requirementsText: `Level: ${s.studyLevel}. Academic: ${s.academicRequirements}. GPA: ${s.gpaRequirement} (NoHighGPA confirmed=${Boolean(s.noHighGpaConfirmed)}). Rec Letters: ${s.recommendationLetterRequirement} (NoRec confirmed=${Boolean(s.noRecommendationLetterConfirmed)}). Exp Compensates: ${s.professionalExperienceCompensates}.`,
+            docsRequired: Array.isArray(s.requiredDocuments) ? s.requiredDocuments : ['CV', 'Degree & Transcript', 'Motivation Letter'],
+            steps: Array.isArray(s.exactApplicationProcedure) ? s.exactApplicationProcedure : ['Apply via official university/scholarship portal.'],
+          });
+        });
+
+      if (allOpportunities.length === 0) {
+        res.json({ success: true, evaluations: [], summary: 'No active verified opportunities found to evaluate.' });
+        return;
+      }
+
+      let evaluations: any[] = [];
+      const client = await getAiClient();
+      if (client) {
+        try {
+          const prompt = `Evaluate Yeabsra Tefera's ACTUAL profile & documents strictly against each opportunity below.
+CRITICAL RULES:
+- Classify each opportunity into EXACTLY one of:
+  1. "Eligible"
+  2. "Potentially eligible; more information required"
+  3. "Not eligible"
+- NEVER fabricate or assume qualifications Yeabsra has not provided (e.g., do NOT invent GPA score, IELTS/TOEFL score, German/local language proficiency, recommendation letters, or Master's degree if not in profile/documents).
+- If a requirement (e.g., GPA, IELTS, local language, recommendation letters, specific nationality/job offer) is not confirmed in Yeabsra's documents, list it in "gapsOrUnverifiedInfo" and classify as "Potentially eligible; more information required" or "Not eligible".
+- Generate concise, factual tailoredCvDraft and tailoredCoverLetterDraft using ONLY facts in the profile/documents.
+
+PROFILE:
+Name: ${profile.name || 'Yeabsra Tefera'}
+Degree: ${profile.degree || "Bachelor's Degree in Accounting and Finance"} (${profile.university || 'Mekelle University'}, ${profile.graduationYear || 2016})
+Total Banking Experience: ${profile.totalBankingExperienceYears || 9} years (${profile.branchManagerExperienceYears || 3} years Branch Manager at ${profile.currentEmployer || 'Tsedey Bank S.C.'})
+Previous Employers: ${(profile.previousEmployers || []).join(', ')}
+
+UPLOADED DOCUMENTS:
+${docSummaryText.slice(0, 3000)}
+
+OPPORTUNITIES TO EVALUATE (JSON):
+${JSON.stringify(allOpportunities.slice(0, 25))}
+
+Return strict JSON array:
+[
+  {
+    "opportunityId": "string",
+    "classification": "Eligible | Potentially eligible; more information required | Not eligible",
+    "strengthsMatched": ["string"],
+    "gapsOrUnverifiedInfo": ["string"],
+    "tailoredCvDraft": "string",
+    "tailoredCoverLetterDraft": "string"
+  }
+]`;
+          const aiResp = await Promise.race([
+            client.models.generateContent({
+              model: 'gemini-4-hydrogen',
+              contents: prompt,
+              config: { responseMimeType: 'application/json' },
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Gemini evaluation timeout (8s)')), 8000)
+            ),
+          ]);
+          const aiParsed = parseJsonBlockFromText(aiResp.text || '');
+          if (Array.isArray(aiParsed)) {
+            const aiMap = new Map<string, any>(aiParsed.map((x: any) => [String(x.opportunityId), x]));
+            evaluations = allOpportunities.map((opp) => {
+              const m = aiMap.get(opp.id);
+              const cls = ['Eligible', 'Potentially eligible; more information required', 'Not eligible'].includes(m?.classification)
+                ? m.classification
+                : 'Potentially eligible; more information required';
+              return {
+                opportunityId: opp.id,
+                opportunityType: opp.type,
+                title: opp.title,
+                organizationOrInstitution: opp.org,
+                countryOrLocation: opp.countryOrLocation,
+                classification: cls,
+                officialUrl: opp.url,
+                deadline: opp.deadline,
+                strengthsMatched: Array.isArray(m?.strengthsMatched) ? m.strengthsMatched : [],
+                gapsOrUnverifiedInfo: Array.isArray(m?.gapsOrUnverifiedInfo) ? m.gapsOrUnverifiedInfo : [],
+                requiredDocumentsChecklist: opp.docsRequired,
+                stepByStepInstructions: opp.steps,
+                tailoredCvDraft: m?.tailoredCvDraft || '',
+                tailoredCoverLetterDraft: m?.tailoredCoverLetterDraft || '',
+                lastEvaluatedAt: new Date().toISOString(),
+              };
+            });
+          }
+        } catch (aiErr) {
+          console.warn('Private assistant Gemini evaluation fallback:', aiErr);
+        }
+      }
+
+      // Deterministic grounded fallback if AI unavailable or empty
+      if (evaluations.length === 0) {
+        const nowIso = new Date().toISOString();
+        evaluations = allOpportunities.map((opp) => {
+          const textLower = `${opp.title} ${opp.requirementsText}`.toLowerCase();
+          const hasFinanceFit = /bank|finance|account|audit|budget|branch|grant|admin|management|leadership|control|credit/i.test(textLower);
+          const needsUnconfirmedLangOrGpa = /ielts|toefl|gpa|c1|b2|german|arabic|french|recommendation letter/i.test(textLower);
+          const ethBlocked = /ethiopian eligibility:\s*(no|no_confirmed_route)/i.test(textLower);
+
+          let classification: 'Eligible' | 'Potentially eligible; more information required' | 'Not eligible' = 'Potentially eligible; more information required';
+          const strengths: string[] = [];
+          const gaps: string[] = [];
+
+          if (hasFinanceFit) {
+            strengths.push(`${profile.totalBankingExperienceYears || 9} years banking & finance experience including ${profile.branchManagerExperienceYears || 3} years Branch Manager`);
+            strengths.push(`${profile.degree || "B.A. in Accounting and Finance"} (${profile.university || 'Mekelle University'})`);
+          }
+          if (ethBlocked) {
+            classification = 'Not eligible';
+            gaps.push('Official criteria indicates Ethiopian citizens are currently not eligible.');
+          } else if (needsUnconfirmedLangOrGpa) {
+            classification = 'Potentially eligible; more information required';
+            gaps.push('Requires official verification of language test, GPA, or recommendation letters not yet confirmed in uploaded documents.');
+          } else if (hasFinanceFit) {
+            classification = 'Eligible';
+          } else {
+            gaps.push('Outside core banking/finance/NGO management background; verify specialized criteria.');
+          }
+
+          return {
+            opportunityId: opp.id,
+            opportunityType: opp.type,
+            title: opp.title,
+            organizationOrInstitution: opp.org,
+            countryOrLocation: opp.countryOrLocation,
+            classification,
+            officialUrl: opp.url,
+            deadline: opp.deadline,
+            strengthsMatched: strengths,
+            gapsOrUnverifiedInfo: gaps,
+            requiredDocumentsChecklist: opp.docsRequired,
+            stepByStepInstructions: opp.steps,
+            tailoredCvDraft: `${profile.name || 'Yeabsra Tefera'} — ${profile.currentPosition || 'Branch Manager'} (${profile.totalBankingExperienceYears || 9} Years Banking & Finance Experience). Degree: ${profile.degree || 'B.A. Accounting & Finance'}. Target: ${opp.title} at ${opp.org}.`,
+            tailoredCoverLetterDraft: `Dear ${opp.org} Selection Team,\n\nI am writing to apply for ${opp.title}. Based strictly on my ${profile.totalBankingExperienceYears || 9} years of banking experience (including ${profile.branchManagerExperienceYears || 3} years as Branch Manager at ${profile.currentEmployer || 'Tsedey Bank S.C.'}) and my B.A. in Accounting & Finance from Mekelle University, I submit my credentials for review.\n\nSincerely,\n${profile.name || 'Yeabsra Tefera'}`,
+            lastEvaluatedAt: nowIso,
+          };
+        });
+      }
+
+      res.json({ success: true, evaluations, totalEvaluated: evaluations.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Private assistant analysis failed' });
+    }
+  });
+
+  app.post('/api/international/auto-run-check', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { frequency = 'manual', lastRunAt } = req.body || {};
+      if (frequency === 'manual') {
+        res.json({ due: false, reason: 'Research frequency is set to manual.' });
+        return;
+      }
+      const nowMs = Date.now();
+      const lastMs = lastRunAt ? new Date(lastRunAt).getTime() : 0;
+      const intervalMs = frequency === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+      const due = !lastMs || Number.isNaN(lastMs) || nowMs - lastMs >= intervalMs;
+      res.json({
+        due,
+        frequency,
+        lastRunAt: lastRunAt || null,
+        nextDueAt: new Date((lastMs || nowMs) + intervalMs).toISOString(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ due: false, error: err?.message || 'Auto-run check failed' });
+    }
+  });
 
   return app;
 }

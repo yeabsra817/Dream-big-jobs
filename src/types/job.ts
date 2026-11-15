@@ -117,6 +117,9 @@ export interface DuplicateReportItem {
   candidateData: Partial<Vacancy>;
 }
 
+import type { TelegramDistributionMode, ResearchFrequency } from './international';
+export type { TelegramDistributionMode, ResearchFrequency };
+
 export interface SiteSettings {
   telegramChannelName: string;
   telegramChannelUrl: string;
@@ -124,6 +127,18 @@ export interface SiteSettings {
   telegramBotToken?: string;
   telegramBotUsername?: string;
   telegramAutoPublish: boolean;
+  telegramDistributionMode?: TelegramDistributionMode;
+  telegramIncludeInternationalImmigration?: boolean;
+  telegramIncludeScholarships?: boolean;
+  researchEnabledRegions?: string[];
+  researchEnabledCountries?: string[];
+  researchJobCategories?: string[];
+  researchFrequency?: ResearchFrequency;
+  lastResearchRunAt?: string;
+  nextResearchRunAt?: string;
+  monitoringEnabled?: boolean;
+  monitoringPollIntervalSeconds?: number;
+  lastMonitorTickAt?: string;
   gaMeasurementId?: string;
   gaTrackingEnabled?: boolean;
   excludeAdminTraffic?: boolean;

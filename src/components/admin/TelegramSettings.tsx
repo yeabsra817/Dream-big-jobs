@@ -21,7 +21,7 @@ import {
   Globe,
   Save,
 } from 'lucide-react';
-import { SiteSettings, Vacancy } from '../../types/job';
+import { SiteSettings, TelegramDistributionMode, Vacancy } from '../../types/job';
 import {
   cleanTelegramToken,
   isValidTelegramTokenFormat,
@@ -109,6 +109,15 @@ export const TelegramSettings: React.FC<Props> = ({
       : 'hopelandjobs.tech'
   );
   const [autoPublish, setAutoPublish] = useState(settings.telegramAutoPublish ?? true);
+  const [distributionMode, setDistributionMode] = useState<TelegramDistributionMode>(
+    settings.telegramDistributionMode || 'all_jobs'
+  );
+  const [includeImmigration, setIncludeImmigration] = useState(
+    Boolean(settings.telegramIncludeInternationalImmigration)
+  );
+  const [includeScholarships, setIncludeScholarships] = useState(
+    Boolean(settings.telegramIncludeScholarships)
+  );
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // Live Broadcast Testing
@@ -392,13 +401,22 @@ export const TelegramSettings: React.FC<Props> = ({
         telegramChannelName: cleanChan,
         telegramChannelUrl: `https://t.me/${channelSlug}`,
         telegramAutoPublish: autoPublish,
+        telegramDistributionMode: distributionMode,
+        telegramIncludeInternationalImmigration: includeImmigration,
+        telegramIncludeScholarships: includeScholarships,
         customDomain: cleanDomain,
         updatedAt: new Date().toISOString(),
       };
       await onSaveSettings(newSettings);
+      const modeLabel =
+        distributionMode === 'banking_only'
+          ? 'OPTION B: BANKING JOBS ONLY'
+          : distributionMode === 'ngo_only'
+          ? 'OPTION C: NGO JOBS ONLY'
+          : 'OPTION A: ALL JOBS';
       setFeedbackMessage({
         type: 'success',
-        text: `Settings saved! Target channel: ${cleanChan}. Domain for links: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
+        text: `Settings saved! Target channel: ${cleanChan}. Mode: ${modeLabel}. Domain: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
       });
     } catch (err: any) {
       setFeedbackMessage({
@@ -410,10 +428,13 @@ export const TelegramSettings: React.FC<Props> = ({
     }
   };
 
-  // Broadcast vacancy to channel with dual-channel resilience
+  // Broadcast vacancy to channel with dual-channel resilience & distribution mode check
   const handleBroadcastToChannel = async () => {
     if (!connectionStatus.connected) {
-      alert('Please connect and verify your bot token first.');
+      setFeedbackMessage({
+        type: 'error',
+        text: 'Please connect and verify your bot token in Step 1 first.',
+      });
       return;
     }
 
@@ -427,7 +448,13 @@ export const TelegramSettings: React.FC<Props> = ({
         channelUsername,
         settings.telegramBotToken,
         forceRetry,
-        cleanDomain
+        cleanDomain,
+        {
+          ...settings,
+          telegramDistributionMode: distributionMode,
+          telegramIncludeInternationalImmigration: includeImmigration,
+          telegramIncludeScholarships: includeScholarships,
+        }
       );
       setBroadcastResult(data);
 
@@ -855,6 +882,114 @@ export const TelegramSettings: React.FC<Props> = ({
               <p className="text-[11px] text-slate-700 leading-relaxed">
                 ✅ When you change or save the domain here, <strong>all Telegram broadcasts, share links, and applicant redirects</strong> automatically use <strong>https://{customDomain || 'hopelandjobs.tech'}</strong> in both <em>👉Read Detail:-</em> and <em>=&gt;See Detail:-</em>.
               </p>
+            </div>
+          </div>
+
+          {/* 3-Option Telegram Job Distribution Control */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
+                  Telegram Job Distribution Mode (Switch Anytime)
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Every broadcast is checked for authenticity, open deadline, non-duplication, and official application method before sending.
+                </p>
+              </div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-[#0B132B] text-amber-300 shrink-0">
+                Active:{' '}
+                {distributionMode === 'banking_only'
+                  ? 'OPTION B: BANKING ONLY'
+                  : distributionMode === 'ngo_only'
+                  ? 'OPTION C: NGO ONLY'
+                  : 'OPTION A: ALL JOBS'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                {
+                  id: 'all_jobs' as TelegramDistributionMode,
+                  code: 'OPTION A',
+                  title: 'ALL JOBS',
+                  desc: 'Publish all verified job vacancies that meet Hopeland website publication standards and have open deadlines.',
+                },
+                {
+                  id: 'banking_only' as TelegramDistributionMode,
+                  code: 'OPTION B',
+                  title: 'BANKING JOBS ONLY',
+                  desc: 'Publish only genuine commercial bank, microfinance, and banking institution vacancies.',
+                },
+                {
+                  id: 'ngo_only' as TelegramDistributionMode,
+                  code: 'OPTION C',
+                  title: 'NGO JOBS ONLY',
+                  desc: 'Publish only genuine local NGO, international NGO, UN agency, and diplomatic mission vacancies.',
+                },
+              ].map((opt) => {
+                const active = distributionMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDistributionMode(opt.id)}
+                    className={`text-left p-4 rounded-xl border transition-all ${
+                      active
+                        ? 'bg-[#0B132B] text-white border-amber-400 ring-2 ring-amber-400/40'
+                        : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className={`text-[10px] font-black uppercase tracking-wider ${
+                          active ? 'text-amber-400' : 'text-slate-500'
+                        }`}
+                      >
+                        {opt.code}
+                      </span>
+                      {active && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                    </div>
+                    <div className="text-xs font-extrabold">{opt.title}</div>
+                    <p
+                      className={`text-[11px] mt-1 leading-relaxed ${
+                        active ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {opt.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Content Separation Rule */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+              <div className="text-[11px] font-bold text-slate-800">
+                Channel Content Separation Rule (Protected by Default)
+              </div>
+              <p className="text-[11px] text-slate-500">
+                International Immigration &amp; Permanent Residence items and Experience-Based Scholarships remain strictly separated on their dedicated website sections unless explicitly enabled below.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <label className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-white border border-slate-200 cursor-pointer text-xs">
+                  <span className="font-semibold text-slate-700">Allow Immigration / PR alerts in Jobs Channel</span>
+                  <input
+                    type="checkbox"
+                    checked={includeImmigration}
+                    onChange={(e) => setIncludeImmigration(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-white border border-slate-200 cursor-pointer text-xs">
+                  <span className="font-semibold text-slate-700">Allow Scholarship alerts in Jobs Channel</span>
+                  <input
+                    type="checkbox"
+                    checked={includeScholarships}
+                    onChange={(e) => setIncludeScholarships(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500"
+                  />
+                </label>
+              </div>
             </div>
           </div>
 

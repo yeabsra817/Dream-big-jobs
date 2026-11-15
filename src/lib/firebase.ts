@@ -45,6 +45,15 @@ import {
   AnalyticsSummary,
   CustomerVisitCountSummary,
 } from '../types/analytics';
+import {
+  InternationalJob,
+  ImmigrationPathway,
+  ExperienceScholarship,
+  ResearchHistoryRun,
+  VerificationReportItem,
+  RESEARCH_REGIONS,
+  INTERNATIONAL_JOB_CATEGORIES,
+} from '../types/international';
 
 // Initialize Firebase SDK with long polling auto-detection for reliable iframe/proxy connectivity
 const app = initializeApp(firebaseConfig);
@@ -537,6 +546,13 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     telegramGroupUrl: 'https://t.me/DreamBigJobsEthiopia',
     telegramBotUsername: '@DreamBigJobsEthiopiaBot',
     telegramAutoPublish: true,
+    telegramDistributionMode: 'all_jobs',
+    telegramIncludeInternationalImmigration: false,
+    telegramIncludeScholarships: false,
+    researchEnabledRegions: RESEARCH_REGIONS.map((r) => r.region),
+    researchEnabledCountries: RESEARCH_REGIONS.flatMap((r) => r.countries),
+    researchJobCategories: INTERNATIONAL_JOB_CATEGORIES,
+    researchFrequency: 'manual',
     contactEmail: 'nexusitsoultion@gmail.com',
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
@@ -2011,6 +2027,396 @@ export async function purgeAnalyticsFromFirestore(internalOnly: boolean): Promis
     console.warn('Firestore analytics purge notice:', err);
   }
 }
+
+/* ============================================================================
+ * 11. INTERNATIONAL EXPANSION PERSISTENCE (Workforce, Immigration/PR, Scholarships, Audit)
+ * Strictly enforces VerificationStatus == 'VERIFIED' for public reads & preserves all existing data.
+ * ============================================================================ */
+
+const LS_INTL_JOBS_KEY = 'hopelandjobs_international_jobs_cache';
+const LS_IMMIGRATION_KEY = 'hopelandjobs_immigration_pathways_cache';
+const LS_SCHOLARSHIPS_KEY = 'hopelandjobs_experience_scholarships_cache';
+const LS_RESEARCH_HISTORY_KEY = 'hopelandjobs_research_history_cache';
+const LS_VERIFICATION_LOGS_KEY = 'hopelandjobs_verification_logs_cache';
+
+function readLocalArray<T>(key: string): T[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalArray<T>(key: string, items: T[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(items));
+  } catch {}
+}
+
+async function fetchInternationalStateFromServer(): Promise<{
+  internationalJobs?: InternationalJob[];
+  immigrationPathways?: ImmigrationPathway[];
+  experienceScholarships?: ExperienceScholarship[];
+  researchHistory?: ResearchHistoryRun[];
+  verificationLogs?: VerificationReportItem[];
+} | null> {
+  try {
+    const res = await withTimeout(fetch('/api/international/state'), 3000, null as any);
+    if (res && res.ok) {
+      const data = await safeResponseJson<any>(res);
+      if (data && typeof data === 'object') return data;
+    }
+  } catch {}
+  return null;
+}
+
+async function syncInternationalStateToServer(payload: {
+  internationalJobs?: InternationalJob[];
+  immigrationPathways?: ImmigrationPathway[];
+  experienceScholarships?: ExperienceScholarship[];
+  researchHistory?: ResearchHistoryRun[];
+  verificationLogs?: VerificationReportItem[];
+}): Promise<void> {
+  try {
+    await fetch('/api/international/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    console.warn('Server international state sync notice:', e);
+  }
+}
+
+export async function fetchInternationalJobs(adminMode = false): Promise<InternationalJob[]> {
+  const path = 'international_jobs';
+  const cached = readLocalArray<InternationalJob>(LS_INTL_JOBS_KEY);
+  try {
+    const q = adminMode && auth.currentUser
+      ? collection(db, path)
+      : query(collection(db, path), where('verificationStatus', '==', 'VERIFIED'));
+    const snap = await withTimeout(getDocs(q), 4500, null as any);
+    if (snap) {
+      const list: InternationalJob[] = [];
+      snap.forEach((d: any) => {
+        list.push({ ...(d.data() as InternationalJob), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      if (list.length > 0 || adminMode) {
+        writeLocalArray(LS_INTL_JOBS_KEY, list);
+        return list;
+      }
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      console.warn('Permission notice during fetchInternationalJobs, falling back to server:', err);
+    }
+  }
+
+  const serverData = await fetchInternationalStateFromServer();
+  if (serverData?.internationalJobs && serverData.internationalJobs.length > 0) {
+    const items = adminMode
+      ? serverData.internationalJobs
+      : serverData.internationalJobs.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired');
+    writeLocalArray(LS_INTL_JOBS_KEY, items);
+    return items;
+  }
+
+  return adminMode ? cached : cached.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired');
+}
+
+export async function saveBatchInternationalJobs(jobs: InternationalJob[]): Promise<void> {
+  const existing = readLocalArray<InternationalJob>(LS_INTL_JOBS_KEY);
+  const map = new Map(existing.map((j) => [j.id, j]));
+  jobs.forEach((j) => map.set(j.id, j));
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+  );
+  writeLocalArray(LS_INTL_JOBS_KEY, merged);
+  syncInternationalStateToServer({ internationalJobs: merged }).catch(() => {});
+
+  if (!auth.currentUser || jobs.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    jobs.slice(0, 150).forEach((job) => {
+      const clean = sanitizeForFirestore(job);
+      batch.set(doc(db, 'international_jobs', job.id), clean, { merge: true });
+    });
+    await Promise.race([
+      batch.commit(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 3000)),
+    ]);
+  } catch (err) {
+    console.warn('Firestore saveBatchInternationalJobs sync notice:', err);
+  }
+}
+
+export async function saveInternationalJob(job: InternationalJob): Promise<void> {
+  await saveBatchInternationalJobs([job]);
+}
+
+export async function deleteInternationalJob(id: string): Promise<void> {
+  const next = readLocalArray<InternationalJob>(LS_INTL_JOBS_KEY).filter((j) => j.id !== id);
+  writeLocalArray(LS_INTL_JOBS_KEY, next);
+  syncInternationalStateToServer({ internationalJobs: next }).catch(() => {});
+  if (!auth.currentUser) return;
+  try {
+    await deleteDoc(doc(db, 'international_jobs', id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `international_jobs/${id}`);
+  }
+}
+
+export async function fetchImmigrationPathways(adminMode = false): Promise<ImmigrationPathway[]> {
+  const path = 'immigration_pathways';
+  const cached = readLocalArray<ImmigrationPathway>(LS_IMMIGRATION_KEY);
+  try {
+    const q = adminMode && auth.currentUser
+      ? collection(db, path)
+      : query(collection(db, path), where('verificationStatus', '==', 'VERIFIED'));
+    const snap = await withTimeout(getDocs(q), 4500, null as any);
+    if (snap) {
+      const list: ImmigrationPathway[] = [];
+      snap.forEach((d: any) => {
+        list.push({ ...(d.data() as ImmigrationPathway), id: d.id });
+      });
+      list.sort((a, b) => a.country.localeCompare(b.country));
+      if (list.length > 0 || adminMode) {
+        writeLocalArray(LS_IMMIGRATION_KEY, list);
+        return list;
+      }
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      console.warn('Permission notice during fetchImmigrationPathways, falling back to server:', err);
+    }
+  }
+
+  const serverData = await fetchInternationalStateFromServer();
+  if (serverData?.immigrationPathways && serverData.immigrationPathways.length > 0) {
+    const items = adminMode
+      ? serverData.immigrationPathways
+      : serverData.immigrationPathways.filter((p) => p.verificationStatus === 'VERIFIED');
+    writeLocalArray(LS_IMMIGRATION_KEY, items);
+    return items;
+  }
+
+  return adminMode ? cached : cached.filter((p) => p.verificationStatus === 'VERIFIED');
+}
+
+export async function saveBatchImmigrationPathways(pathways: ImmigrationPathway[]): Promise<void> {
+  const existing = readLocalArray<ImmigrationPathway>(LS_IMMIGRATION_KEY);
+  const map = new Map(existing.map((p) => [p.id, p]));
+  pathways.forEach((p) => map.set(p.id, p));
+  const merged = Array.from(map.values()).sort((a, b) => a.country.localeCompare(b.country));
+  writeLocalArray(LS_IMMIGRATION_KEY, merged);
+  syncInternationalStateToServer({ immigrationPathways: merged }).catch(() => {});
+
+  if (!auth.currentUser || pathways.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    pathways.slice(0, 150).forEach((p) => {
+      const clean = sanitizeForFirestore(p);
+      batch.set(doc(db, 'immigration_pathways', p.id), clean, { merge: true });
+    });
+    await Promise.race([
+      batch.commit(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 3000)),
+    ]);
+  } catch (err) {
+    console.warn('Firestore saveBatchImmigrationPathways sync notice:', err);
+  }
+}
+
+export async function saveImmigrationPathway(pathway: ImmigrationPathway): Promise<void> {
+  await saveBatchImmigrationPathways([pathway]);
+}
+
+export async function deleteImmigrationPathway(id: string): Promise<void> {
+  const next = readLocalArray<ImmigrationPathway>(LS_IMMIGRATION_KEY).filter((p) => p.id !== id);
+  writeLocalArray(LS_IMMIGRATION_KEY, next);
+  syncInternationalStateToServer({ immigrationPathways: next }).catch(() => {});
+  if (!auth.currentUser) return;
+  try {
+    await deleteDoc(doc(db, 'immigration_pathways', id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `immigration_pathways/${id}`);
+  }
+}
+
+export async function fetchExperienceScholarships(adminMode = false): Promise<ExperienceScholarship[]> {
+  const path = 'experience_scholarships';
+  const cached = readLocalArray<ExperienceScholarship>(LS_SCHOLARSHIPS_KEY);
+  try {
+    const q = adminMode && auth.currentUser
+      ? collection(db, path)
+      : query(collection(db, path), where('verificationStatus', '==', 'VERIFIED'));
+    const snap = await withTimeout(getDocs(q), 4500, null as any);
+    if (snap) {
+      const list: ExperienceScholarship[] = [];
+      snap.forEach((d: any) => {
+        list.push({ ...(d.data() as ExperienceScholarship), id: d.id });
+      });
+      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      if (list.length > 0 || adminMode) {
+        writeLocalArray(LS_SCHOLARSHIPS_KEY, list);
+        return list;
+      }
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      console.warn('Permission notice during fetchExperienceScholarships, falling back to server:', err);
+    }
+  }
+
+  const serverData = await fetchInternationalStateFromServer();
+  if (serverData?.experienceScholarships && serverData.experienceScholarships.length > 0) {
+    const items = adminMode
+      ? serverData.experienceScholarships
+      : serverData.experienceScholarships.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired');
+    writeLocalArray(LS_SCHOLARSHIPS_KEY, items);
+    return items;
+  }
+
+  return adminMode ? cached : cached.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired');
+}
+
+export async function saveBatchExperienceScholarships(scholarships: ExperienceScholarship[]): Promise<void> {
+  const existing = readLocalArray<ExperienceScholarship>(LS_SCHOLARSHIPS_KEY);
+  const map = new Map(existing.map((s) => [s.id, s]));
+  scholarships.forEach((s) => map.set(s.id, s));
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+  );
+  writeLocalArray(LS_SCHOLARSHIPS_KEY, merged);
+  syncInternationalStateToServer({ experienceScholarships: merged }).catch(() => {});
+
+  if (!auth.currentUser || scholarships.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    scholarships.slice(0, 150).forEach((s) => {
+      const clean = sanitizeForFirestore(s);
+      batch.set(doc(db, 'experience_scholarships', s.id), clean, { merge: true });
+    });
+    await Promise.race([
+      batch.commit(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 3000)),
+    ]);
+  } catch (err) {
+    console.warn('Firestore saveBatchExperienceScholarships sync notice:', err);
+  }
+}
+
+export async function saveExperienceScholarship(scholarship: ExperienceScholarship): Promise<void> {
+  await saveBatchExperienceScholarships([scholarship]);
+}
+
+export async function deleteExperienceScholarship(id: string): Promise<void> {
+  const next = readLocalArray<ExperienceScholarship>(LS_SCHOLARSHIPS_KEY).filter((s) => s.id !== id);
+  writeLocalArray(LS_SCHOLARSHIPS_KEY, next);
+  syncInternationalStateToServer({ experienceScholarships: next }).catch(() => {});
+  if (!auth.currentUser) return;
+  try {
+    await deleteDoc(doc(db, 'experience_scholarships', id));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `experience_scholarships/${id}`);
+  }
+}
+
+export async function fetchResearchHistory(): Promise<ResearchHistoryRun[]> {
+  const cached = readLocalArray<ResearchHistoryRun>(LS_RESEARCH_HISTORY_KEY);
+  if (auth.currentUser) {
+    try {
+      const snap = await withTimeout(getDocs(collection(db, 'research_history')), 4000, null as any);
+      if (snap) {
+        const list: ResearchHistoryRun[] = [];
+        snap.forEach((d: any) => list.push({ ...(d.data() as ResearchHistoryRun), id: d.id }));
+        list.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+        if (list.length > 0) {
+          writeLocalArray(LS_RESEARCH_HISTORY_KEY, list);
+          return list;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchResearchHistory notice:', err);
+    }
+  }
+  const serverData = await fetchInternationalStateFromServer();
+  if (serverData?.researchHistory && serverData.researchHistory.length > 0) {
+    writeLocalArray(LS_RESEARCH_HISTORY_KEY, serverData.researchHistory);
+    return serverData.researchHistory;
+  }
+  return cached;
+}
+
+export async function saveResearchHistoryRun(run: ResearchHistoryRun): Promise<void> {
+  const existing = readLocalArray<ResearchHistoryRun>(LS_RESEARCH_HISTORY_KEY);
+  const next = [run, ...existing.filter((r) => r.id !== run.id)].slice(0, 100);
+  writeLocalArray(LS_RESEARCH_HISTORY_KEY, next);
+  syncInternationalStateToServer({ researchHistory: next }).catch(() => {});
+  if (!auth.currentUser) return;
+  try {
+    await setDoc(doc(db, 'research_history', run.id), sanitizeForFirestore(run), { merge: true });
+  } catch (err) {
+    console.warn('saveResearchHistoryRun notice:', err);
+  }
+}
+
+export async function fetchVerificationLogs(): Promise<VerificationReportItem[]> {
+  const cached = readLocalArray<VerificationReportItem>(LS_VERIFICATION_LOGS_KEY);
+  if (auth.currentUser) {
+    try {
+      const snap = await withTimeout(getDocs(collection(db, 'verification_logs')), 4000, null as any);
+      if (snap) {
+        const list: VerificationReportItem[] = [];
+        snap.forEach((d: any) => list.push({ ...(d.data() as VerificationReportItem), id: d.id }));
+        list.sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime());
+        if (list.length > 0) {
+          writeLocalArray(LS_VERIFICATION_LOGS_KEY, list);
+          return list;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchVerificationLogs notice:', err);
+    }
+  }
+  const serverData = await fetchInternationalStateFromServer();
+  if (serverData?.verificationLogs && serverData.verificationLogs.length > 0) {
+    writeLocalArray(LS_VERIFICATION_LOGS_KEY, serverData.verificationLogs);
+    return serverData.verificationLogs;
+  }
+  return cached;
+}
+
+export async function saveBatchVerificationLogs(logs: VerificationReportItem[]): Promise<void> {
+  const existing = readLocalArray<VerificationReportItem>(LS_VERIFICATION_LOGS_KEY);
+  const map = new Map(existing.map((l) => [l.id, l]));
+  logs.forEach((l) => map.set(l.id, l));
+  const next = Array.from(map.values())
+    .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime())
+    .slice(0, 300);
+  writeLocalArray(LS_VERIFICATION_LOGS_KEY, next);
+  syncInternationalStateToServer({ verificationLogs: next }).catch(() => {});
+  if (!auth.currentUser || logs.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    logs.slice(0, 100).forEach((l) => {
+      batch.set(doc(db, 'verification_logs', l.id), sanitizeForFirestore(l), { merge: true });
+    });
+    await Promise.race([
+      batch.commit(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 3000)),
+    ]);
+  } catch (err) {
+    console.warn('saveBatchVerificationLogs notice:', err);
+  }
+}
+
 
 
 

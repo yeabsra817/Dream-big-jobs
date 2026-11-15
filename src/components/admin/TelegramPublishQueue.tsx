@@ -36,7 +36,10 @@ import {
   deleteTelegramBatch,
 } from '../../lib/firebase';
 import { VacancyDetailModal } from '../VacancyDetailModal';
-import { broadcastJobToTelegram } from '../../utils/telegramClient';
+import {
+  broadcastJobToTelegram,
+  evaluateVacancyForTelegramClient,
+} from '../../utils/telegramClient';
 
 interface Props {
   vacancies: Vacancy[];
@@ -307,7 +310,15 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
     try {
       const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
-      const data = await broadcastJobToTelegram(job, channel, siteSettings.telegramBotToken, forceRetry, siteSettings.customDomain);
+      const data = await broadcastJobToTelegram(
+        job,
+        channel,
+        siteSettings.telegramBotToken,
+        forceRetry,
+        siteSettings.customDomain,
+        siteSettings,
+        'vacancy'
+      );
 
       if (!data.success) {
         const errorMsg = data.error || 'Telegram broadcast failed';
@@ -669,6 +680,22 @@ export const TelegramPublishQueue: React.FC<Props> = ({
             <p className="text-xl font-extrabold text-sky-300 mt-0.5">{kpiStats.ready}</p>
           </div>
         </div>
+
+        <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs relative z-10">
+          <div className="flex items-center gap-2 text-slate-300">
+            <span className="font-bold text-amber-400">
+              Active Distribution Rule:{' '}
+              {siteSettings.telegramDistributionMode === 'banking_only'
+                ? 'OPTION B — BANKING JOBS ONLY'
+                : siteSettings.telegramDistributionMode === 'ngo_only'
+                ? 'OPTION C — NGO JOBS ONLY'
+                : 'OPTION A — ALL JOBS'}
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            Pre-publish gatekeeper enforces verified status, open deadline, official application method &amp; duplicate check.
+          </span>
+        </div>
       </div>
 
       {/* Live Notification Alert */}
@@ -989,6 +1016,18 @@ export const TelegramPublishQueue: React.FC<Props> = ({
                           <span>Telegram error: {jobStatus.error}</span>
                         </div>
                       )}
+                      {(() => {
+                        const gate = evaluateVacancyForTelegramClient(job, siteSettings, true, 'vacancy');
+                        if (!gate.allowed && gate.reason) {
+                          return (
+                            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-amber-900 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-600" />
+                              <span>{gate.reason}</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
 

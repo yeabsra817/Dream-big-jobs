@@ -16,6 +16,9 @@ interface Props {
   onSelectCategory: (name: string) => void;
   onSelectLocation?: (city: string) => void;
   onOpenAdmin: () => void;
+  onOpenInternationalJobs?: () => void;
+  onOpenImmigration?: () => void;
+  onOpenScholarships?: () => void;
 }
 
 export const Footer: React.FC<Props> = ({
@@ -23,6 +26,9 @@ export const Footer: React.FC<Props> = ({
   onSelectCategory,
   onSelectLocation,
   onOpenAdmin,
+  onOpenInternationalJobs,
+  onOpenImmigration,
+  onOpenScholarships,
 }) => {
   return (
     <footer className="bg-[#0B132B] text-white border-t border-slate-800">
@@ -153,8 +159,46 @@ export const Footer: React.FC<Props> = ({
           </div>
         </div>
 
+        {/* Global Expansion Quick Strip */}
+        {(onOpenInternationalJobs || onOpenImmigration || onOpenScholarships) && (
+          <div className="mt-10 pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+              Global Opportunities &amp; Legal Pathways
+            </span>
+            <div className="flex flex-wrap items-center gap-4">
+              {onOpenInternationalJobs && (
+                <button
+                  type="button"
+                  onClick={onOpenInternationalJobs}
+                  className="text-slate-300 hover:text-amber-400 font-semibold transition-colors cursor-pointer"
+                >
+                  International Workforce Jobs
+                </button>
+              )}
+              {onOpenImmigration && (
+                <button
+                  type="button"
+                  onClick={onOpenImmigration}
+                  className="text-slate-300 hover:text-amber-400 font-semibold transition-colors cursor-pointer"
+                >
+                  International Immigration &amp; Permanent Residence
+                </button>
+              )}
+              {onOpenScholarships && (
+                <button
+                  type="button"
+                  onClick={onOpenScholarships}
+                  className="text-slate-300 hover:text-amber-400 font-semibold transition-colors cursor-pointer"
+                >
+                  Experience-Based Scholarships
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Verification Guarantee & Admin Link */}
-        <div className="mt-12 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <div className="mt-8 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div className="flex items-center gap-2 text-center md:text-left">
             <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>

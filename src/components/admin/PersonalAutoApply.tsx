@@ -49,6 +49,7 @@ import {
   ADMIN_EMAIL,
   PERSONAL_AUTO_APPLY_EMAIL,
   auth,
+  safeResponseJson,
   fetchAutoApplyProfile,
   saveAutoApplyProfile,
   fetchAutoApplyDocuments,
@@ -58,6 +59,12 @@ import {
   saveAutoApplyApplication,
   deleteAutoApplyApplication,
 } from '../../lib/firebase';
+import {
+  ExperienceScholarship,
+  ImmigrationPathway,
+  InternationalJob,
+  PrivateAssistantOpportunityEvaluation,
+} from '../../types/international';
 import {
   uploadDocumentToCloud,
   uploadBase64PdfToCloud,
@@ -81,6 +88,9 @@ interface Props {
   vacancies: Vacancy[];
   adminEmail: string | null;
   onClose?: () => void;
+  internationalJobs?: InternationalJob[];
+  immigrationPathways?: ImmigrationPathway[];
+  scholarships?: ExperienceScholarship[];
 }
 
 const DEFAULT_PROFILE: PersonalProfile = {
@@ -338,9 +348,12 @@ export const PersonalAutoApply: React.FC<Props> = ({
   vacancies,
   adminEmail,
   onClose,
+  internationalJobs = [],
+  immigrationPathways = [],
+  scholarships = [],
 }) => {
   // Navigation sub-tabs
-  const [activeTab, setActiveTab] = useState<'matches' | 'review' | 'tracker' | 'documents' | 'profile'>('matches');
+  const [activeTab, setActiveTab] = useState<'matches' | 'review' | 'tracker' | 'documents' | 'profile' | 'evaluator'>('matches');
 
   // Profile & State
   const [profile, setProfile] = useState<PersonalProfile>(() => {
@@ -420,6 +433,57 @@ export const PersonalAutoApply: React.FC<Props> = ({
 
   const [isGmailAuthModalOpen, setIsGmailAuthModalOpen] = useState(false);
   const [isBatchPreparing, setIsBatchPreparing] = useState(false);
+
+  // Private Personal Application Assistant – Yeabsra Only (3-bucket evaluator)
+  const [evaluations, setEvaluations] = useState<PrivateAssistantOpportunityEvaluation[]>([]);
+  const [isEvaluatingAssistant, setIsEvaluatingAssistant] = useState(false);
+  const [evaluatorFilter, setEvaluatorFilter] = useState<
+    'all' | 'Eligible' | 'Potentially eligible; more information required' | 'Not eligible'
+  >('all');
+  const [evaluatorError, setEvaluatorError] = useState<string | null>(null);
+  const [selectedEvalDetail, setSelectedEvalDetail] = useState<PrivateAssistantOpportunityEvaluation | null>(null);
+
+  const handleRunPrivateAssistantAnalysis = async () => {
+    setIsEvaluatingAssistant(true);
+    setEvaluatorError(null);
+    try {
+      const callerEmail = (adminEmail || auth.currentUser?.email || PERSONAL_AUTO_APPLY_EMAIL).trim();
+      const res = await fetch('/api/private-assistant/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': callerEmail,
+        },
+        body: JSON.stringify({
+          profile,
+          documents,
+          domesticVacancies: vacancies,
+          internationalJobs,
+          immigrationPathways,
+          scholarships,
+        }),
+      });
+      const data = await safeResponseJson<{
+        success?: boolean;
+        error?: string;
+        evaluations?: PrivateAssistantOpportunityEvaluation[];
+      }>(res);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `Analysis failed with status ${res.status}`);
+      }
+      setEvaluations(Array.isArray(data.evaluations) ? data.evaluations : []);
+      setActionFeedback({
+        type: 'success',
+        message: `Completed Yeabsra-only grounded eligibility evaluation across ${data.evaluations?.length || 0} domestic & verified international opportunities.`,
+      });
+    } catch (err: any) {
+      const msg = err?.message || 'Unable to run Private Assistant evaluation.';
+      setEvaluatorError(msg);
+      setActionFeedback({ type: 'error', message: msg });
+    } finally {
+      setIsEvaluatingAssistant(false);
+    }
+  };
 
   // -------------------------------------------------------------
   // CLOUD SYNCHRONIZATION ON MOUNT (Cross-Device Continuity)
@@ -1197,6 +1261,35 @@ export const PersonalAutoApply: React.FC<Props> = ({
   // Storage usage and capacity metrics (10 GB target capacity)
   const storageMetrics = useMemo(() => calculateStorageMetrics(documents), [documents]);
 
+  // Strict owner-developer guard (visible only to Yeabsra / Admin owner account)
+  const normalizedCallerEmail = (adminEmail || auth.currentUser?.email || '').toLowerCase().trim();
+  const isOwnerAuthorizedEmail =
+    normalizedCallerEmail === PERSONAL_AUTO_APPLY_EMAIL.toLowerCase() ||
+    normalizedCallerEmail === ADMIN_EMAIL.toLowerCase();
+
+  if (!isOwnerAuthorizedEmail) {
+    return (
+      <div className="bg-white rounded-3xl p-8 border border-rose-200 shadow-sm text-center space-y-3 max-w-xl mx-auto my-8">
+        <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+          <Lock className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-black text-slate-900">Private Personal Application Assistant — Restricted</h2>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          This module is exclusively locked to the owner developer account ({PERSONAL_AUTO_APPLY_EMAIL} / {ADMIN_EMAIL}) and is never accessible to regular site visitors.
+        </p>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
+          >
+            Return
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12">
       {/* In-App Action Notification Banner */}
@@ -1350,6 +1443,7 @@ export const PersonalAutoApply: React.FC<Props> = ({
           { id: 'tracker', label: '3. Application Tracker', icon: Clock, count: applications.length },
           { id: 'documents', label: '4. Document Library', icon: FileText, count: documents.length },
           { id: 'profile', label: '5. Profile & Automation Rules', icon: Sliders },
+          { id: 'evaluator', label: '6. AI Eligibility Evaluator (Yeabsra Only)', icon: Shield, count: evaluations.length },
         ].map((t) => (
           <button
             key={t.id}
@@ -2413,6 +2507,274 @@ export const PersonalAutoApply: React.FC<Props> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 6: PRIVATE PERSONAL APPLICATION ASSISTANT (YEABSRA ONLY)   */}
+      {/* ============================================================== */}
+      {activeTab === 'evaluator' && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-[#0B132B] via-slate-900 to-[#1C2541] rounded-3xl p-6 text-white border border-slate-800 shadow-md space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Owner-Only Confidential Assistant • Never Visible to Site Visitors</span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-white">
+                  Private Personal Application Assistant — Yeabsra Only
+                </h2>
+                <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                  Evaluates domestic Banking/NGO/Finance vacancies ({vacancies.length}), verified International Workforce Jobs ({internationalJobs.length}), Immigration &amp; PR Pathways ({immigrationPathways.length}), and Experience-Based Scholarships ({scholarships.length}) strictly against your confirmed profile &amp; {documents.filter((d) => d.approved).length} uploaded credentials. Never invents GPA, test scores, language certificates, or recommendation letters, and never submits automatically without your explicit approval.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRunPrivateAssistantAnalysis}
+                disabled={isEvaluatingAssistant}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-60 text-slate-950 font-black text-xs shadow-md transition-colors shrink-0 cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${isEvaluatingAssistant ? 'animate-spin' : ''}`} />
+                <span>{isEvaluatingAssistant ? 'Evaluating Opportunities...' : 'Run Grounded Eligibility Analysis'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-800 text-xs">
+              <div className="bg-slate-950/60 p-3 rounded-2xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase font-bold">Total Evaluated</div>
+                <div className="text-xl font-black text-white">{evaluations.length}</div>
+              </div>
+              <div className="bg-emerald-950/50 p-3 rounded-2xl border border-emerald-500/30">
+                <div className="text-[10px] text-emerald-300 uppercase font-bold">Eligible</div>
+                <div className="text-xl font-black text-emerald-400">
+                  {evaluations.filter((e) => e.classification === 'Eligible').length}
+                </div>
+              </div>
+              <div className="bg-amber-950/50 p-3 rounded-2xl border border-amber-500/30">
+                <div className="text-[10px] text-amber-300 uppercase font-bold">More Info Required</div>
+                <div className="text-xl font-black text-amber-400">
+                  {evaluations.filter((e) => e.classification === 'Potentially eligible; more information required').length}
+                </div>
+              </div>
+              <div className="bg-rose-950/40 p-3 rounded-2xl border border-rose-500/30">
+                <div className="text-[10px] text-rose-300 uppercase font-bold">Not Eligible</div>
+                <div className="text-xl font-black text-rose-400">
+                  {evaluations.filter((e) => e.classification === 'Not eligible').length}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {evaluatorError && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-800">
+              {evaluatorError}
+            </div>
+          )}
+
+          {/* Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                'all',
+                'Eligible',
+                'Potentially eligible; more information required',
+                'Not eligible',
+              ] as const
+            ).map((bucket) => (
+              <button
+                key={bucket}
+                type="button"
+                onClick={() => setEvaluatorFilter(bucket)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                  evaluatorFilter === bucket
+                    ? 'bg-[#0B132B] text-amber-400 border-[#0B132B]'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {bucket === 'all' ? 'All Evaluated Opportunities' : bucket}
+              </button>
+            ))}
+          </div>
+
+          {evaluations.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 border border-slate-200 text-center space-y-3">
+              <Shield className="w-10 h-10 text-amber-500 mx-auto" />
+              <h3 className="text-sm font-black text-slate-900">Ready to Evaluate Your Confirmed Credentials</h3>
+              <p className="text-xs text-slate-600 max-w-lg mx-auto">
+                Click <strong>Run Grounded Eligibility Analysis</strong> above to cross-check your 9 years banking experience (3 years Branch Manager at Tsedey Bank S.C.), B.A. in Accounting &amp; Finance, and uploaded documents against all active domestic &amp; verified international records.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {evaluations
+                .filter((e) => evaluatorFilter === 'all' || e.classification === evaluatorFilter)
+                .map((item) => {
+                  const badgeStyle =
+                    item.classification === 'Eligible'
+                      ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      : item.classification === 'Potentially eligible; more information required'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-rose-100 text-rose-900 border-rose-300';
+                  return (
+                    <div
+                      key={`${item.opportunityType}_${item.opportunityId}`}
+                      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                            {item.opportunityType.replace(/_/g, ' ')}
+                          </span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${badgeStyle}`}>
+                            {item.classification}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-black text-slate-900">{item.title}</h4>
+                          <p className="text-xs font-semibold text-slate-600">
+                            {item.organizationOrInstitution} • {item.countryOrLocation}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Deadline: <strong>{item.deadline || 'NOT STATED IN THE OFFICIAL ANNOUNCEMENT'}</strong> • Matched Criteria: <strong>{item.strengthsMatched.length}</strong>
+                          </p>
+                        </div>
+
+                        {item.strengthsMatched.length > 0 && (
+                          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5 space-y-1">
+                            <div className="text-[10px] font-black uppercase text-emerald-800">Verified Strengths Matched</div>
+                            <ul className="text-[11px] text-emerald-900 space-y-0.5 list-disc pl-4">
+                              {item.strengthsMatched.slice(0, 3).map((s, idx) => (
+                                <li key={idx}>{s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {item.gapsOrUnverifiedInfo.length > 0 && (
+                          <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 space-y-1">
+                            <div className="text-[10px] font-black uppercase text-amber-900">Gaps / Unverified Info Required</div>
+                            <ul className="text-[11px] text-amber-950 space-y-0.5 list-disc pl-4">
+                              {item.gapsOrUnverifiedInfo.map((g, idx) => (
+                                <li key={idx}>{g}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedEvalDetail(item)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold transition-colors cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Checklist &amp; Tailored Drafts</span>
+                        </button>
+                        {item.officialUrl && item.officialUrl.startsWith('http') && (
+                          <a
+                            href={item.officialUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 underline"
+                          >
+                            <span>Official Portal</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {/* Evaluation Detail Modal (Checklist, Step-by-Step Instructions, Tailored CV & Cover Letter Drafts) */}
+          {selectedEvalDetail && (
+            <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-amber-700">
+                      {selectedEvalDetail.classification} • {selectedEvalDetail.organizationOrInstitution}
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">{selectedEvalDetail.title}</h3>
+                    <p className="text-xs text-slate-500">
+                      Manual Review &amp; Explicit Approval Required Before Submission
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEvalDetail(null)}
+                    className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="font-black text-slate-900">Required Document Checklist</div>
+                    <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                      {selectedEvalDetail.requiredDocumentsChecklist.map((doc, i) => (
+                        <li key={i}>{doc}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="font-black text-slate-900">Step-by-Step Application Instructions</div>
+                    <ol className="list-decimal pl-4 space-y-1 text-slate-700">
+                      {selectedEvalDetail.stepByStepInstructions.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+
+                {selectedEvalDetail.tailoredCvDraft && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-black text-slate-900">Grounded Tailored CV Draft (Read-Only Preview)</div>
+                    <pre className="p-4 rounded-2xl bg-slate-950 text-slate-100 text-[11px] font-mono whitespace-pre-wrap max-h-56 overflow-y-auto">
+                      {selectedEvalDetail.tailoredCvDraft}
+                    </pre>
+                  </div>
+                )}
+
+                {selectedEvalDetail.tailoredCoverLetterDraft && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-black text-slate-900">Grounded Cover Letter Draft</div>
+                    <pre className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-[11px] font-mono whitespace-pre-wrap max-h-56 overflow-y-auto">
+                      {selectedEvalDetail.tailoredCoverLetterDraft}
+                    </pre>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  {selectedEvalDetail.officialUrl && selectedEvalDetail.officialUrl.startsWith('http') && (
+                    <a
+                      href={selectedEvalDetail.officialUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black"
+                    >
+                      <span>Open Official Portal</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEvalDetail(null)}
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

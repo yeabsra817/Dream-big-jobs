@@ -169,6 +169,77 @@ service cloud.firestore {
       allow get, list, update, delete: if isOwnerAdmin();
     }
 
+    function isValidInternationalJobWrite(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.country is string && data.country.size() <= 100
+        && data.employerOrProgramme is string && data.employerOrProgramme.size() <= 250
+        && data.jobTitle is string && data.jobTitle.size() <= 250
+        && data.directApplicationUrl is string && data.directApplicationUrl.size() <= 1000
+        && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+    }
+
+    function isValidImmigrationWrite(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.country is string && data.country.size() <= 100
+        && data.pathwayTitle is string && data.pathwayTitle.size() <= 250
+        && data.officialGovernmentWebsite is string && data.officialGovernmentWebsite.size() <= 1000
+        && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+    }
+
+    function isValidScholarshipWrite(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.country is string && data.country.size() <= 100
+        && data.universityOrInstitution is string && data.universityOrInstitution.size() <= 250
+        && data.scholarshipName is string && data.scholarshipName.size() <= 250
+        && data.officialApplicationUrl is string && data.officialApplicationUrl.size() <= 1000
+        && data.originalSourceUrl is string && data.originalSourceUrl.size() <= 1000
+        && data.verificationStatus is string && data.verificationStatus in ['VERIFIED', 'UNVERIFIED', 'SUSPENDED_BROKEN_LINK', 'EXPIRED', 'REJECTED_SUSPICIOUS'];
+    }
+
+    // International Jobs Collection (Public can only read VERIFIED open entries; expired/broken entries use non-VERIFIED statuses)
+    match /international_jobs/{jobId} {
+      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(jobId) && isValidInternationalJobWrite(request.resource.data);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // International Immigration & Permanent Residence Pathways (Public can only read VERIFIED entries)
+    match /immigration_pathways/{pathwayId} {
+      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(pathwayId) && isValidImmigrationWrite(request.resource.data);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // Experience-Based Scholarships (Public can only read VERIFIED open entries; expired/broken entries use non-VERIFIED statuses)
+    match /experience_scholarships/{scholarshipId} {
+      allow get, list: if (resource.data.verificationStatus == 'VERIFIED') || isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(scholarshipId) && isValidScholarshipWrite(request.resource.data);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // Automated Research History & Official Source Verification Reports (Admin only)
+    match /research_history/{runId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /verification_logs/{logId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /monitored_sources/{sourceId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /developer_notifications/{notifId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /telegram_retry_queue/{retryId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
     // Test Collection (for connectivity verification)
     match /test/{document=**} {
       allow read, write: if true;

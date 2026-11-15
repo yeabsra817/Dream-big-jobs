@@ -27,3 +27,9 @@ All the above 12 attack vectors are blocked by:
 - `isOwnerAdmin()` helper checking verified admin email and admin collection
 - Strict status checking for public read queries: `resource.data.status == 'published'`
 - String length limits and schema validation
+
+## 4. International Expansion & Private Assistant Invariants
+6. **Verified-Only Public Reads for International Expansion**: Public visitors may ONLY read `/international_jobs`, `/immigration_pathways`, and `/experience_scholarships` documents when `resource.data.verificationStatus == 'VERIFIED'` (and `applicationStatus != 'expired'` for jobs & scholarships). Documents marked `UNVERIFIED`, `SUSPENDED_BROKEN_LINK`, `EXPIRED`, or `REJECTED_SUSPICIOUS` are strictly restricted to `isOwnerAdmin()`.
+7. **Admin-Only Research & Audit Logs**: `/research_history` and `/verification_logs` are readable and writable strictly by `isOwnerAdmin()`.
+8. **Strict Private Assistant Isolation**: `/autoApplyProfile`, `/autoApplyDocuments`, and `/autoApplyApplications` remain strictly locked to `isOwnerAdmin()` and are never exposed to public visitors or standard job seekers.
+
