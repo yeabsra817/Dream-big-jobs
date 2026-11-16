@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "algorithm": "scrypt",
+  "passwordHashes": [
+    {
+      "id": "primary",
+      "label": "Primary Developer Access",
+      "salt": "b9d6fe4c3e2292c11539635e84d15f9f",
+      "hashHex": "62b7dec08c4776df97deda5910e29d97143f82406a4a39c5efa7772513b07c49762db90cdc5b900e164126d38163ebdd885ccb51b30fc564e3da579d62e3cf6d",
+      "algorithm": "scrypt",
+      "cost": 16384,
+      "blockSize": 8,
+      "parallelization": 1,
+      "createdAt": "2026-11-16T09:43:19.666Z",
+      "updatedAt": "2026-11-16T09:43:19.666Z"
+    },
+    {
+      "id": "secondary",
+      "label": "Secondary Developer Access",
+      "salt": "766bb11dc3a0e313a9847581c19648ce",
+      "hashHex": "7c9a6294fffb61dcc3f223fc22583b004689dfb99011c59f48ac646b0dd24066d49532b30bd96f1a623cc72be5dac2e6db5eb138465f95505d1fd516d2bbef77",
+      "algorithm": "scrypt",
+      "cost": 16384,
+      "blockSize": 8,
+      "parallelization": 1,
+      "createdAt": "2026-11-16T09:43:19.727Z",
+      "updatedAt": "2026-11-16T09:43:19.727Z"
+    }
+  ],
+  "sessionSigningKey": "52930041322316bcffa808515b47d17f477406b1d471074f2d79e8e57c09292d",
+  "updatedAt": "2026-11-16T09:43:19.727Z"
+}

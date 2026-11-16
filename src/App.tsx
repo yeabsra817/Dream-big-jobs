@@ -87,6 +87,10 @@ import {
   fetchVerificationLogs,
   saveBatchVerificationLogs,
   setActiveAdminSessionEmail,
+  getActiveAdminSessionEmail,
+  fetchDeveloperSessionStatus,
+  establishDeveloperGoogleSession,
+  logoutDeveloperSession,
   fetchInternationalStateFromServer,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -96,6 +100,7 @@ import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegra
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { Footer } from './components/Footer';
+import { HiddenDeveloperLogin } from './components/HiddenDeveloperLogin';
 import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
 import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
 import {
@@ -252,6 +257,16 @@ export default function App() {
       title: typeof document !== 'undefined' ? document.title : 'HOPELAND JOBS',
     });
 
+    // Restore persistent server-signed developer session (survives page refresh & updates)
+    fetchDeveloperSessionStatus().then((devStatus) => {
+      if (devStatus.authenticated) {
+        const email = devStatus.email || ADMIN_EMAIL;
+        setActiveAdminSessionEmail(email);
+        setIsOwnerAuthorized(true);
+        setAdminEmail(email);
+      }
+    });
+
     async function loadData() {
       try {
         const [
@@ -349,13 +364,14 @@ export default function App() {
           if (stats) setVisitStats(stats);
         });
         if (isUserAdmin(user)) {
+          const ownerEmail = user.email || ADMIN_EMAIL;
           setIsOwnerAuthorized(true);
-          setAdminEmail(user.email);
-          setActiveAdminSessionEmail(user.email || ADMIN_EMAIL);
-        } else {
+          setAdminEmail(ownerEmail);
+          setActiveAdminSessionEmail(ownerEmail);
+          establishDeveloperGoogleSession(ownerEmail).catch(() => {});
+        } else if (!getActiveAdminSessionEmail()) {
           setIsOwnerAuthorized(false);
           setAdminEmail(null);
-          setActiveAdminSessionEmail(null);
         }
 
         // Load Job Seeker Profile & Applications
@@ -431,9 +447,16 @@ export default function App() {
         setCurrentUser(null);
         setUserProfile(null);
         setUserApplications([]);
-        setIsOwnerAuthorized(false);
-        setAdminEmail(null);
         setAnalyticsUserId(null);
+        // Preserve password-authenticated developer session if active
+        const activeSessionEmail = getActiveAdminSessionEmail();
+        if (activeSessionEmail) {
+          setIsOwnerAuthorized(true);
+          setAdminEmail(activeSessionEmail);
+        } else {
+          setIsOwnerAuthorized(false);
+          setAdminEmail(null);
+        }
       }
     });
 
@@ -1151,8 +1174,7 @@ export default function App() {
         <AdminDashboard
           adminEmail={adminEmail}
           onLogout={async () => {
-            await signOut(auth);
-            setActiveAdminSessionEmail(null);
+            await Promise.allSettled([signOut(auth), logoutDeveloperSession()]);
             setAdminEmail(null);
             setIsOwnerAuthorized(false);
             setIsAdminView(false);
@@ -2490,6 +2512,24 @@ export default function App() {
           />
         </Suspense>
       )}
+
+      {/* Hidden Blurred Developer Login (Bottom-Left Corner) */}
+      <HiddenDeveloperLogin
+        isOwnerAuthorized={isOwnerAuthorized}
+        onLoginSuccess={(email) => {
+          setActiveAdminSessionEmail(email);
+          setIsOwnerAuthorized(true);
+          setAdminEmail(email);
+          setIsAdminView(true);
+        }}
+        onOpenDashboard={() => setIsAdminView(true)}
+        onLogout={async () => {
+          await Promise.allSettled([signOut(auth), logoutDeveloperSession()]);
+          setAdminEmail(null);
+          setIsOwnerAuthorized(false);
+          setIsAdminView(false);
+        }}
+      />
 
       {/* Admin Login Modal */}
       {isAdminAuthModalOpen && (

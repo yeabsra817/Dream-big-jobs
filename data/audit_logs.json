@@ -1,5 +1,24 @@
 [
   {
+    "id": "aud_1794822421087_8ddd4",
+    "action": "developer_login_success",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "developer_auth",
+    "targetId": "primary",
+    "summary": "Authorized developer authenticated via salted scrypt password verification.",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:47:01.087Z"
+  },
+  {
+    "id": "aud_1794822421013_k3r13",
+    "action": "developer_login_failed",
+    "actorEmail": "unauthenticated",
+    "targetType": "developer_auth",
+    "summary": "Failed developer password attempt from 127.0.0.1 (attempt 1/8).",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:47:01.013Z"
+  },
+  {
     "id": "aud_1794821044110_9cohp",
     "action": "staff_profile_deleted_owner",
     "actorEmail": "nexusitsoultion@gmail.com",

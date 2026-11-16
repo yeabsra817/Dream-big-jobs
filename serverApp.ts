@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 const Type = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -1053,12 +1054,278 @@ const BOT_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'bot_health.json');
 const SYSTEM_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'system_health.json');
 const AUDIT_LOGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'audit_logs.json');
 const ADMIN_NOTIFICATIONS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'admin_notifications.json');
+const DEVELOPER_AUTH_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'developer_auth.json');
 const BACKUPS_DIR = path.join(RUNTIME_BASE_DIR, 'data', 'backups');
 const DEFAULT_GA_MEASUREMENT_ID = 'G-KH6X73105S';
 const PERSISTENT_OWNER_EMAILS = new Set(['nexusitsoultion@gmail.com', 'yeabsra45@gmail.com']);
 const SERVER_BOOT_TIME_MS = Date.now();
+const DEV_SESSION_COOKIE_NAME = 'hopeland_dev_session';
+const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface DeveloperHashRecord {
+  id: string;
+  label: string;
+  salt: string;
+  hashHex: string;
+  algorithm: 'scrypt';
+  cost?: number;
+  blockSize?: number;
+  parallelization?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DeveloperAuthStore {
+  version: number;
+  algorithm: 'scrypt';
+  passwordHashes: DeveloperHashRecord[];
+  sessionSigningKey: string;
+  updatedAt: string;
+}
+
+function hashDeveloperPasswordScrypt(
+  plainText: string,
+  id: string = 'primary',
+  label: string = 'Primary Developer Password'
+): DeveloperHashRecord {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+  const now = new Date().toISOString();
+  return {
+    id,
+    label,
+    salt,
+    hashHex: derived.toString('hex'),
+    algorithm: 'scrypt',
+    cost: 16384,
+    blockSize: 8,
+    parallelization: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function verifyPasswordAgainstScryptRecord(plainText: string, record: DeveloperHashRecord): boolean {
+  try {
+    if (!plainText || !record?.salt || !record?.hashHex) return false;
+    const expectedBuf = Buffer.from(record.hashHex, 'hex');
+    const derivedBuf = crypto.scryptSync(plainText, record.salt, expectedBuf.length, {
+      N: record.cost || 16384,
+      r: record.blockSize || 8,
+      p: record.parallelization || 1,
+    });
+    if (derivedBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+  } catch {
+    return false;
+  }
+}
+
+function ensureDeveloperAuthStore(): DeveloperAuthStore {
+  const existing = loadJsonFileSafe<DeveloperAuthStore | null>(DEVELOPER_AUTH_FILE, null);
+  let mutated = false;
+  const store: DeveloperAuthStore = existing && typeof existing === 'object'
+    ? {
+        version: existing.version || 1,
+        algorithm: 'scrypt',
+        passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
+        sessionSigningKey:
+          typeof existing.sessionSigningKey === 'string' && existing.sessionSigningKey.length >= 32
+            ? existing.sessionSigningKey
+            : (() => {
+                mutated = true;
+                return crypto.randomBytes(32).toString('hex');
+              })(),
+        updatedAt: existing.updatedAt || new Date().toISOString(),
+      }
+    : (() => {
+        mutated = true;
+        return {
+          version: 1,
+          algorithm: 'scrypt' as const,
+          passwordHashes: [],
+          sessionSigningKey: crypto.randomBytes(32).toString('hex'),
+          updatedAt: new Date().toISOString(),
+        };
+      })();
+
+  // If an environment secret password is configured and no hashed credentials exist yet, store its salted scrypt hash
+  const envPass = (process.env.DEVELOPER_PASSWORD || process.env.ADMIN_PASSCODE || '').trim();
+  if (envPass && store.passwordHashes.length === 0) {
+    store.passwordHashes.push(hashDeveloperPasswordScrypt(envPass, 'env_bootstrap', 'Configured Environment Secret'));
+    store.updatedAt = new Date().toISOString();
+    mutated = true;
+  }
+
+  // Support pre-hashed env variable format "salt:hashHex"
+  const envHashPair = (process.env.DEVELOPER_PASSWORD_HASH || '').trim();
+  if (envHashPair.includes(':')) {
+    const [saltPart, hashPart] = envHashPair.split(':');
+    if (saltPart && hashPart && !store.passwordHashes.some((r) => r.hashHex === hashPart)) {
+      store.passwordHashes.push({
+        id: 'env_prehashed',
+        label: 'Environment Scrypt Hash',
+        salt: saltPart.trim(),
+        hashHex: hashPart.trim(),
+        algorithm: 'scrypt',
+        cost: 16384,
+        blockSize: 8,
+        parallelization: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      store.updatedAt = new Date().toISOString();
+      mutated = true;
+    }
+  }
+
+  if (mutated || !fs.existsSync(DEVELOPER_AUTH_FILE)) {
+    writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+  }
+  return store;
+}
+
+function verifyDeveloperPasswordInput(plainPassword: string): { valid: boolean; matchedId?: string } {
+  const trimmed = plainPassword.trim();
+  if (!trimmed) return { valid: false };
+  const store = ensureDeveloperAuthStore();
+
+  for (const record of store.passwordHashes) {
+    if (verifyPasswordAgainstScryptRecord(trimmed, record)) {
+      return { valid: true, matchedId: record.id };
+    }
+  }
+
+  // Constant-time scrypt verification against optional runtime environment secret
+  const envSecrets = [process.env.DEVELOPER_PASSWORD, process.env.ADMIN_PASSCODE]
+    .map((s) => (s || '').trim())
+    .filter(Boolean);
+  for (const secret of envSecrets) {
+    const tempRecord = hashDeveloperPasswordScrypt(secret, 'env_runtime', 'Runtime Secret');
+    if (verifyPasswordAgainstScryptRecord(trimmed, tempRecord)) {
+      return { valid: true, matchedId: 'env_runtime' };
+    }
+  }
+
+  return { valid: false };
+}
+
+function parseCookiesFromHeader(cookieHeader?: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!cookieHeader) return result;
+  for (const part of cookieHeader.split(';')) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = part.slice(0, eqIdx).trim();
+    const val = part.slice(eqIdx + 1).trim();
+    try {
+      result[key] = decodeURIComponent(val);
+    } catch {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+function signDeveloperSessionToken(email: string): string {
+  const store = ensureDeveloperAuthStore();
+  const now = Date.now();
+  const payload = {
+    email: email.toLowerCase().trim(),
+    role: 'owner_developer',
+    iat: now,
+    exp: now + DEV_SESSION_TTL_MS,
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', store.sessionSigningKey)
+    .update(encoded)
+    .digest('base64url');
+  return `${encoded}.${sig}`;
+}
+
+function verifyDeveloperSessionToken(token?: string | null): { valid: boolean; email?: string } {
+  try {
+    if (!token || typeof token !== 'string' || !token.includes('.')) return { valid: false };
+    const [encoded, sig] = token.split('.');
+    if (!encoded || !sig) return { valid: false };
+    const store = ensureDeveloperAuthStore();
+    const expectedSig = crypto
+      .createHmac('sha256', store.sessionSigningKey)
+      .update(encoded)
+      .digest('base64url');
+    const sigBuf = Buffer.from(sig, 'utf-8');
+    const expBuf = Buffer.from(expectedSig, 'utf-8');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return { valid: false };
+    }
+    const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
+    if (!parsed?.email || !PERSISTENT_OWNER_EMAILS.has(String(parsed.email).toLowerCase().trim())) {
+      return { valid: false };
+    }
+    if (typeof parsed.exp !== 'number' || Date.now() > parsed.exp) {
+      return { valid: false };
+    }
+    return { valid: true, email: String(parsed.email).toLowerCase().trim() };
+  } catch {
+    return { valid: false };
+  }
+}
+
+function getDeveloperSessionFromReq(req: Request): { authenticated: boolean; email: string } {
+  const headerToken = String(req.headers['x-developer-token'] || '').trim();
+  if (headerToken) {
+    const res = verifyDeveloperSessionToken(headerToken);
+    if (res.valid && res.email) return { authenticated: true, email: res.email };
+  }
+  const cookies = parseCookiesFromHeader(req.headers.cookie);
+  const cookieToken = cookies[DEV_SESSION_COOKIE_NAME];
+  if (cookieToken) {
+    const res = verifyDeveloperSessionToken(cookieToken);
+    if (res.valid && res.email) return { authenticated: true, email: res.email };
+  }
+  return { authenticated: false, email: '' };
+}
+
+function setDeveloperSessionCookie(req: Request, res: Response, token: string): void {
+  const isHttps =
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').toLowerCase().includes('https') ||
+    process.env.NODE_ENV === 'production';
+  const parts = [
+    `${DEV_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${Math.floor(DEV_SESSION_TTL_MS / 1000)}`,
+  ];
+  if (isHttps) parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearDeveloperSessionCookie(req: Request, res: Response): void {
+  const isHttps =
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').toLowerCase().includes('https') ||
+    process.env.NODE_ENV === 'production';
+  const parts = [
+    `${DEV_SESSION_COOKIE_NAME}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0',
+  ];
+  if (isHttps) parts.push('Secure');
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+const devLoginAttemptMap = new Map<string, { count: number; lockedUntil: number; windowStart: number }>();
 
 function getRequesterEmail(req: Request): string {
+  const session = getDeveloperSessionFromReq(req);
+  if (session.authenticated && session.email) {
+    return session.email;
+  }
   return String(
     req.headers['x-admin-email'] ||
       req.headers['x-user-email'] ||
@@ -1075,6 +1342,8 @@ function getRequesterUid(req: Request): string {
 }
 
 function isPersistentOwnerRequest(req: Request): boolean {
+  const session = getDeveloperSessionFromReq(req);
+  if (session.authenticated) return true;
   const email = getRequesterEmail(req);
   return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
 }
@@ -1481,31 +1750,211 @@ app.post('/api/settings', (req: Request, res: Response): void => {
   }
 });
 
-// Secure Server-Enforced Admin Authentication
+// Secure Server-Enforced Developer Authentication (Salted scrypt + Constant-Time Verification + Signed Session)
 app.post('/api/auth/admin-verify', (req: Request, res: Response): void => {
   try {
-    const { passcode } = req.body || {};
-    if (!passcode || typeof passcode !== 'string') {
-      res.status(400).json({ success: false, error: 'Passcode is required' });
+    const clientIp = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+      .split(',')[0]
+      .trim();
+    const now = Date.now();
+    const attemptEntry = devLoginAttemptMap.get(clientIp);
+    if (attemptEntry && attemptEntry.lockedUntil > now) {
+      const waitMins = Math.max(1, Math.ceil((attemptEntry.lockedUntil - now) / 60000));
+      res.status(429).json({
+        success: false,
+        error: `Too many failed developer login attempts. Please wait ${waitMins} minute(s) before trying again.`,
+      });
       return;
     }
-    const cleanPass = passcode.trim();
-    const envPass = process.env.ADMIN_PASSCODE || 'dreambig2026';
-    const validCodes = [envPass, 'dreambig2026', 'nexus2026'];
 
-    if (validCodes.includes(cleanPass)) {
+    const rawInput = (req.body && (req.body.password ?? req.body.passcode)) || '';
+    if (!rawInput || typeof rawInput !== 'string') {
+      res.status(400).json({ success: false, error: 'Developer password is required.' });
+      return;
+    }
+
+    const check = verifyDeveloperPasswordInput(rawInput);
+    if (check.valid) {
+      devLoginAttemptMap.delete(clientIp);
+      const ownerEmail = 'nexusitsoultion@gmail.com';
+      const sessionToken = signDeveloperSessionToken(ownerEmail);
+      setDeveloperSessionCookie(req, res, sessionToken);
+      appendAuditLog({
+        action: 'developer_login_success',
+        actorEmail: ownerEmail,
+        targetType: 'developer_auth',
+        targetId: check.matchedId || 'primary',
+        summary: 'Authorized developer authenticated via salted scrypt password verification.',
+        severity: 'info',
+      });
       res.json({
         success: true,
-        email: 'nexusitsoultion@gmail.com',
-        role: 'owner',
-        message: 'Administrator authentication successful',
+        email: ownerEmail,
+        role: 'owner_developer',
+        sessionToken,
+        message: 'Developer authentication successful.',
       });
     } else {
-      res.status(401).json({ success: false, error: 'Invalid administrator passcode' });
+      const windowExpired = !attemptEntry || now - attemptEntry.windowStart > 15 * 60 * 1000;
+      const nextCount = windowExpired ? 1 : attemptEntry.count + 1;
+      const lockedUntil = nextCount >= 8 ? now + 15 * 60 * 1000 : 0;
+      devLoginAttemptMap.set(clientIp, {
+        count: nextCount,
+        windowStart: windowExpired ? now : attemptEntry.windowStart,
+        lockedUntil,
+      });
+      appendAuditLog({
+        action: 'developer_login_failed',
+        actorEmail: 'unauthenticated',
+        targetType: 'developer_auth',
+        summary: `Failed developer password attempt from ${clientIp} (attempt ${nextCount}/8).`,
+        severity: nextCount >= 5 ? 'warning' : 'info',
+      });
+      res.status(401).json({ success: false, error: 'Access Denied: Invalid developer password.' });
     }
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Authentication service error' });
+  } catch {
+    res.status(500).json({ success: false, error: 'Developer authentication service error.' });
   }
+});
+
+app.get('/api/auth/developer-status', (req: Request, res: Response): void => {
+  const session = getDeveloperSessionFromReq(req);
+  const store = ensureDeveloperAuthStore();
+  res.json({
+    authenticated: session.authenticated,
+    email: session.authenticated ? session.email : undefined,
+    passwordConfigured: store.passwordHashes.length > 0 || Boolean(process.env.DEVELOPER_PASSWORD || process.env.ADMIN_PASSCODE),
+    hashAlgorithm: 'scrypt',
+    updatedAt: session.authenticated ? store.updatedAt : undefined,
+  });
+});
+
+app.post('/api/auth/developer-google-session', (req: Request, res: Response): void => {
+  const email = getRequesterEmail(req);
+  if (!email || !PERSISTENT_OWNER_EMAILS.has(email)) {
+    res.status(403).json({ success: false, error: 'Only authorized developers can establish a developer session.' });
+    return;
+  }
+  const sessionToken = signDeveloperSessionToken(email);
+  setDeveloperSessionCookie(req, res, sessionToken);
+  res.json({ success: true, email, sessionToken });
+});
+
+app.post('/api/auth/developer-logout', (req: Request, res: Response): void => {
+  clearDeveloperSessionCookie(req, res);
+  res.json({ success: true });
+});
+
+app.post('/api/auth/developer-password', (req: Request, res: Response): void => {
+  if (!isPersistentOwnerRequest(req)) {
+    res.status(403).json({ success: false, error: 'Only authorized developers can update developer password credentials.' });
+    return;
+  }
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 8) {
+    res.status(400).json({
+      success: false,
+      error: 'New developer password must be at least 8 characters long.',
+    });
+    return;
+  }
+  const store = ensureDeveloperAuthStore();
+  const callerEmail = getRequesterEmail(req);
+  const devSession = getDeveloperSessionFromReq(req);
+
+  // If password already configured and caller didn't specify a current password, require valid current password when submitted via password flow
+  if (store.passwordHashes.length > 0 && currentPassword !== undefined && String(currentPassword).trim()) {
+    const currentCheck = verifyDeveloperPasswordInput(String(currentPassword));
+    if (!currentCheck.valid) {
+      res.status(401).json({ success: false, error: 'Current developer password is incorrect.' });
+      return;
+    }
+  } else if (store.passwordHashes.length > 0 && !devSession.authenticated && !PERSISTENT_OWNER_EMAILS.has(callerEmail)) {
+    res.status(401).json({ success: false, error: 'Current developer verification is required.' });
+    return;
+  }
+
+  const nextHashRecord = hashDeveloperPasswordScrypt(newPassword.trim(), 'primary', 'Developer Master Password');
+  store.passwordHashes = [nextHashRecord];
+  store.updatedAt = new Date().toISOString();
+  writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+
+  const actor = callerEmail || devSession.email || 'owner_developer';
+  appendAuditLog({
+    action: 'developer_password_rotated',
+    actorEmail: actor,
+    targetType: 'developer_auth',
+    summary: 'Authorized developer updated the salted scrypt developer password hash.',
+    severity: 'warning',
+  });
+  pushAdminNotification({
+    type: 'security_update',
+    title: 'Developer Password Hash Updated',
+    message: 'Your developer password was securely hashed (scrypt) and saved permanently.',
+    severity: 'info',
+  });
+
+  res.json({
+    success: true,
+    updatedAt: store.updatedAt,
+    hashAlgorithm: 'scrypt',
+    hashRecordCount: store.passwordHashes.length,
+  });
+});
+
+app.get('/api/auth/developer-hash-snapshot', (req: Request, res: Response): void => {
+  if (!isPersistentOwnerRequest(req)) {
+    res.status(403).json({ success: false, error: 'Restricted to authorized developers.' });
+    return;
+  }
+  const store = ensureDeveloperAuthStore();
+  res.json({
+    success: true,
+    version: store.version,
+    algorithm: store.algorithm,
+    passwordHashes: store.passwordHashes,
+    updatedAt: store.updatedAt,
+  });
+});
+
+app.post('/api/auth/developer-hash-restore', (req: Request, res: Response): void => {
+  if (!isPersistentOwnerRequest(req)) {
+    res.status(403).json({ success: false, error: 'Restricted to authorized developers.' });
+    return;
+  }
+  const { passwordHashes, updatedAt } = req.body || {};
+  if (!Array.isArray(passwordHashes) || passwordHashes.length === 0) {
+    res.status(400).json({ success: false, error: 'Valid hashed credentials array is required.' });
+    return;
+  }
+  const sanitizedRecords: DeveloperHashRecord[] = passwordHashes
+    .filter((r: any) => r && typeof r.salt === 'string' && typeof r.hashHex === 'string' && r.salt.length >= 16 && r.hashHex.length >= 64)
+    .map((r: any, i: number) => ({
+      id: String(r.id || `restored_${i}`),
+      label: String(r.label || 'Restored Developer Password'),
+      salt: String(r.salt),
+      hashHex: String(r.hashHex),
+      algorithm: 'scrypt' as const,
+      cost: Number(r.cost) || 16384,
+      blockSize: Number(r.blockSize) || 8,
+      parallelization: Number(r.parallelization) || 1,
+      createdAt: String(r.createdAt || new Date().toISOString()),
+      updatedAt: String(r.updatedAt || new Date().toISOString()),
+    }));
+  if (sanitizedRecords.length === 0) {
+    res.status(400).json({ success: false, error: 'No valid scrypt hash records provided.' });
+    return;
+  }
+  const store = ensureDeveloperAuthStore();
+  // Only overwrite if server has no hashes OR cloud snapshot is newer
+  const localTs = new Date(store.updatedAt || 0).getTime();
+  const cloudTs = new Date(updatedAt || 0).getTime();
+  if (store.passwordHashes.length === 0 || cloudTs > localTs) {
+    store.passwordHashes = sanitizedRecords;
+    store.updatedAt = String(updatedAt || new Date().toISOString());
+    writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+  }
+  res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
 });
 
 // =========================================================================
@@ -6893,6 +7342,10 @@ Return strict JSON:
   const OWNER_EMAILS_SET = new Set(['nexusitsoultion@gmail.com', 'yeabsra45@gmail.com']);
 
   function getCallerEmailFromReq(req: Request): string {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated && session.email) {
+      return session.email;
+    }
     return String(
       req.headers['x-admin-email'] ||
         (req.body && typeof req.body === 'object' ? req.body.adminEmail : '') ||
@@ -6904,6 +7357,8 @@ Return strict JSON:
   }
 
   function isOwnerDeveloperRequest(req: Request): boolean {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated) return true;
     const email = getCallerEmailFromReq(req);
     return Boolean(email && OWNER_EMAILS_SET.has(email));
   }
@@ -9771,7 +10226,7 @@ Return strict JSON:
             console.warn('System 2 startup research cycle notice:', e?.message || e)
           );
         }
-      }, 600);
+      }, 6000);
       schedulerRuntime.timerId = setInterval(() => {
         const latest = loadPersistedInternationalData();
         if (latest.schedulerConfig?.enabled !== false) {

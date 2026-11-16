@@ -207,13 +207,6 @@ export const Footer: React.FC<Props> = ({
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={onOpenAdmin}
-              className="text-slate-400 hover:text-amber-400 text-xs font-semibold flex items-center gap-1"
-            >
-              <span>Administrator Portal</span>
-            </button>
-            <span>•</span>
             <span>© {new Date().getFullYear()} HOPELAND JOBS. All rights reserved.</span>
           </div>
         </div>

@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getApiApp } from './serverApp.ts';
@@ -24,13 +25,62 @@ async function setupServer() {
   const app = await getApiApp();
 
   if (process.env.NODE_ENV !== 'production') {
+    const disableHmr = process.env.DISABLE_HMR === 'true';
+    if (disableHmr) {
+      const noHmrViteClient = [
+        'const sheetsMap = new Map();',
+        'export function updateStyle(id, content) {',
+        '  let style = sheetsMap.get(id);',
+        '  if (!style) {',
+        '    style = document.createElement("style");',
+        '    style.setAttribute("type", "text/css");',
+        '    style.setAttribute("data-vite-dev-id", id);',
+        '    style.textContent = content;',
+        '    document.head.appendChild(style);',
+        '  } else if (style.textContent !== content) {',
+        '    style.textContent = content;',
+        '  }',
+        '  sheetsMap.set(id, style);',
+        '}',
+        'export function removeStyle(id) {',
+        '  const style = sheetsMap.get(id);',
+        '  if (style) {',
+        '    style.remove();',
+        '    sheetsMap.delete(id);',
+        '  }',
+        '}',
+        'export function createHotContext() {',
+        '  return { data: {}, accept() {}, acceptExports() {}, dispose() {}, prune() {}, decline() {}, invalidate() {}, on() {}, off() {}, send() {} };',
+        '}',
+        'export function injectQuery(url, queryToInject) {',
+        '  if (!url || (url[0] !== "." && url[0] !== "/")) return url;',
+        '  const pathname = url.replace(/[?#].*$/, "");',
+        '  const { search, hash } = new URL(url, "http://vite.dev");',
+        '  return `${pathname}?${queryToInject}${search ? "&" + search.slice(1) : ""}${hash || ""}`;',
+        '}',
+        'export class ErrorOverlay extends HTMLElement {',
+        '  close() { this.parentNode?.removeChild(this); }',
+        '}',
+        'if (globalThis.customElements && !globalThis.customElements.get("vite-error-overlay")) {',
+        '  globalThis.customElements.define("vite-error-overlay", ErrorOverlay);',
+        '}',
+      ].join('\n');
+
+      app.get('/@vite/client', (_req: Request, res: Response) => {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.send(noHmrViteClient);
+      });
+    }
+
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: {
         middlewareMode: true,
         allowedHosts: true as const,
-        hmr: process.env.DISABLE_HMR !== 'true',
-        watch: process.env.DISABLE_HMR === 'true' ? null : {},
+        hmr: !disableHmr,
+        ws: disableHmr ? (false as const) : undefined,
+        watch: disableHmr ? null : {},
       },
       appType: 'spa',
     });

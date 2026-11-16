@@ -20,6 +20,9 @@ import {
   ChevronUp,
   X,
   Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   SiteSettings,
@@ -38,6 +41,8 @@ import {
   createSystemBackupAdmin,
   restoreSystemBackupAdmin,
   acknowledgeAdminNotification,
+  fetchDeveloperSessionStatus,
+  updateDeveloperPasswordServer,
 } from '../../lib/firebase';
 import {
   checkGa4Health,
@@ -83,6 +88,15 @@ export const SystemPersistenceCenter: React.FC<Props> = ({
   // Restore Backup Confirmation Modal
   const [restoreTarget, setRestoreTarget] = useState<SystemBackupSummary | null>(null);
 
+  // Developer Password & Hidden Login Security state (Zero plain-text persistence)
+  const [devPasswordConfigured, setDevPasswordConfigured] = useState<boolean>(true);
+  const [devPasswordUpdatedAt, setDevPasswordUpdatedAt] = useState<string | null>(null);
+  const [currentDevPassword, setCurrentDevPassword] = useState('');
+  const [newDevPassword, setNewDevPassword] = useState('');
+  const [confirmDevPassword, setConfirmDevPassword] = useState('');
+  const [showDevPasswords, setShowDevPasswords] = useState(false);
+  const [isUpdatingDevPassword, setIsUpdatingDevPassword] = useState(false);
+
   const gaHealth = checkGa4Health(
     siteSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
     siteSettings.gaTrackingEnabled !== false
@@ -103,6 +117,9 @@ export const SystemPersistenceCenter: React.FC<Props> = ({
       }
       setBackups(bks);
       setStaffProfiles(profiles);
+      const devStat = await fetchDeveloperSessionStatus();
+      setDevPasswordConfigured(Boolean(devStat.passwordConfigured));
+      if (devStat.updatedAt) setDevPasswordUpdatedAt(devStat.updatedAt);
     } catch (err: any) {
       setFeedback({
         type: 'error',
@@ -110,6 +127,49 @@ export const SystemPersistenceCenter: React.FC<Props> = ({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateDeveloperPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newDevPassword.trim().length < 8) {
+      setFeedback({
+        type: 'error',
+        text: 'New developer password must be at least 8 characters long.',
+      });
+      return;
+    }
+    if (newDevPassword.trim() !== confirmDevPassword.trim()) {
+      setFeedback({
+        type: 'error',
+        text: 'New developer password and confirmation do not match.',
+      });
+      return;
+    }
+    setIsUpdatingDevPassword(true);
+    try {
+      const res = await updateDeveloperPasswordServer(
+        newDevPassword.trim(),
+        currentDevPassword.trim() || undefined,
+        adminEmail || undefined
+      );
+      setCurrentDevPassword('');
+      setNewDevPassword('');
+      setConfirmDevPassword('');
+      setDevPasswordConfigured(true);
+      if (res.updatedAt) setDevPasswordUpdatedAt(res.updatedAt);
+      setFeedback({
+        type: 'success',
+        text: 'Developer password securely hashed (scrypt) and saved permanently across restarts & deployments.',
+      });
+      await loadAll();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        text: err?.message || 'Unable to update developer password.',
+      });
+    } finally {
+      setIsUpdatingDevPassword(false);
     }
   };
 
@@ -487,6 +547,100 @@ export const SystemPersistenceCenter: React.FC<Props> = ({
             {isSavingBotInstructions ? 'Saving...' : 'Save Instructions Permanently'}
           </button>
         </div>
+      </div>
+
+      {/* Hidden Developer Login & Scrypt Password Security */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-amber-500" />
+              <span>Hidden Developer Login &amp; Password Security</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Bottom-left blurred login area verified exclusively server-side with salted scrypt password hashing and HMAC sessions. Never stored or exposed in plain text.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                devPasswordConfigured
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-amber-50 border-amber-200 text-amber-700'
+              }`}
+            >
+              {devPasswordConfigured ? 'SCRYPT HASH ACTIVE' : 'SET DEVELOPER PASSWORD'}
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleUpdateDeveloperPassword} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              Current Password (optional if Google verified)
+            </label>
+            <input
+              type={showDevPasswords ? 'text' : 'password'}
+              value={currentDevPassword}
+              onChange={(e) => setCurrentDevPassword(e.target.value)}
+              placeholder="Current developer password"
+              autoComplete="current-password"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-amber-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              New Developer Password (min 8 chars)
+            </label>
+            <input
+              type={showDevPasswords ? 'text' : 'password'}
+              value={newDevPassword}
+              onChange={(e) => setNewDevPassword(e.target.value)}
+              placeholder="Enter strong new password"
+              autoComplete="new-password"
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:border-amber-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              Confirm New Password
+            </label>
+            <div className="relative">
+              <input
+                type={showDevPasswords ? 'text' : 'password'}
+                value={confirmDevPassword}
+                onChange={(e) => setConfirmDevPassword(e.target.value)}
+                placeholder="Repeat new password"
+                autoComplete="new-password"
+                className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs focus:border-amber-500 outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowDevPasswords((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label={showDevPasswords ? 'Hide password fields' : 'Show password fields'}
+              >
+                {showDevPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="md:col-span-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+            <span className="text-[11px] text-slate-500">
+              {devPasswordUpdatedAt
+                ? `Last password hash rotation: ${new Date(devPasswordUpdatedAt).toLocaleString()}`
+                : 'Salted scrypt hash synced for owner accounts across deployments.'}
+            </span>
+            <button
+              type="submit"
+              disabled={isUpdatingDevPassword}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold transition-colors disabled:opacity-60"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>{isUpdatingDevPassword ? 'Hashing & Saving...' : 'Save New Hashed Password'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Backups & Recovery Snapshots */}

@@ -279,19 +279,17 @@ export const Navbar: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Admin Portal Button */}
-            <button
-              onClick={onOpenAdmin}
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-xl border transition-all ${
-                isAdmin
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20'
-                  : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
-              }`}
-              title={isAdmin ? 'Admin Dashboard (Active)' : 'Administrator Access'}
-            >
-              <Shield className={`w-3.5 h-3.5 ${isAdmin ? 'text-emerald-400' : 'text-amber-400'}`} />
-              <span className="hidden md:inline">{isAdmin ? 'Admin' : 'Admin'}</span>
-            </button>
+            {/* Active Developer Dashboard Quick Return (Visible ONLY when Developer is already authenticated) */}
+            {isAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-xl border transition-all bg-emerald-500/10 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/20"
+                title="Developer Dashboard (Active)"
+              >
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden md:inline">Dashboard</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile menu toggle */}
@@ -512,16 +510,18 @@ export const Navbar: React.FC<Props> = ({
               <Send className="w-4 h-4 fill-white" />
               <span>Join Hopeland Jobs on Telegram</span>
             </a>
-            <button
-              onClick={() => {
-                onOpenAdmin();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center justify-center gap-2 bg-slate-800 text-slate-200 font-semibold text-sm py-2.5 rounded-lg border border-slate-700"
-            >
-              <Shield className="w-4 h-4 text-amber-400" />
-              {isAdmin ? 'Admin Dashboard (Active)' : 'Administrator Access'}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  onOpenAdmin();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-slate-800 text-emerald-300 font-semibold text-sm py-2.5 rounded-lg border border-emerald-500/40"
+              >
+                <Shield className="w-4 h-4 text-emerald-400" />
+                Developer Dashboard (Active)
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-16T09:24:21.484Z",
+  "checkedAt": "2026-11-16T10:45:20.557Z",
   "overallStatus": "HEALTHY",
-  "serverUptimeSeconds": 27,
+  "serverUptimeSeconds": 2,
   "storage": {
     "persistentDbWritable": true,
     "filesPresent": {
@@ -23,8 +23,8 @@
     "channelId": "-1004499169829",
     "status": "CONNECTED",
     "statusCode": "connected",
-    "lastCheckedAt": "2026-11-16T09:24:03.776Z",
-    "lastSuccessfulTestAt": "2026-11-16T09:24:03.776Z",
+    "lastCheckedAt": "2026-11-16T10:45:20.518Z",
+    "lastSuccessfulTestAt": "2026-11-16T10:45:20.518Z",
     "lastError": null,
     "consecutiveFailures": 0,
     "reconnectAttempts": 0,
@@ -35,13 +35,13 @@
     "gaMeasurementId": "G-KH6X73105S",
     "gaTrackingEnabled": true,
     "alwaysOnEnforced": true,
-    "totalEventsRecorded": 1
+    "totalEventsRecorded": 5
   },
   "counts": {
     "vacancies": 0,
     "staffProfiles": 2,
     "jobApplications": 1,
-    "auditLogs": 6,
+    "auditLogs": 8,
     "unacknowledgedAlerts": 2
   }
 }

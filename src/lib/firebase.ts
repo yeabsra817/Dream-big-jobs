@@ -270,7 +270,45 @@ export const ADMIN_EMAILS = [
 ];
 
 const ADMIN_SESSION_STORAGE_KEY = 'hopelandjobs_admin_session_email';
+const DEV_TOKEN_STORAGE_KEY = 'hopelandjobs_dev_session_token';
 let activeAdminSessionEmail: string | null = null;
+let activeDevSessionToken: string | null = null;
+
+export function setActiveDeveloperSessionToken(token: string | null): void {
+  activeDevSessionToken = token && token.trim() ? token.trim() : null;
+  if (typeof window !== 'undefined') {
+    try {
+      if (activeDevSessionToken) {
+        sessionStorage.setItem(DEV_TOKEN_STORAGE_KEY, activeDevSessionToken);
+      } else {
+        sessionStorage.removeItem(DEV_TOKEN_STORAGE_KEY);
+      }
+    } catch {}
+  }
+}
+
+export function getActiveDeveloperSessionToken(): string {
+  if (activeDevSessionToken) return activeDevSessionToken;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = sessionStorage.getItem(DEV_TOKEN_STORAGE_KEY);
+      if (saved && saved.trim()) {
+        activeDevSessionToken = saved.trim();
+        return activeDevSessionToken;
+      }
+    } catch {}
+  }
+  return '';
+}
+
+export function getOwnerAuthHeaders(adminEmailOverride?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  const token = getActiveDeveloperSessionToken();
+  if (email) headers['x-admin-email'] = email;
+  if (token) headers['x-developer-token'] = token;
+  return headers;
+}
 
 export function setActiveAdminSessionEmail(email: string | null): void {
   const normalized = email ? String(email).toLowerCase().trim() : null;
@@ -2738,12 +2776,175 @@ export async function acknowledgeAdminNotification(
   if (!email) return [];
   const res = await fetch('/api/admin/notifications/ack', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+    headers: { 'Content-Type': 'application/json', ...getOwnerAuthHeaders(email) },
     body: JSON.stringify({ id, acknowledgeAll, adminEmail: email }),
   });
   const data = await safeResponseJson<any>(res);
   return Array.isArray(data?.notifications) ? data.notifications : [];
 }
+
+/* =========================================================================
+ * 14. HIDDEN DEVELOPER LOGIN, SCRYPT HASH SYNC & SIGNED SESSION HELPERS
+ * ========================================================================= */
+
+export async function verifyDeveloperPasswordServer(password: string): Promise<{
+  success: boolean;
+  email?: string;
+  sessionToken?: string;
+  error?: string;
+}> {
+  const res = await fetch('/api/auth/admin-verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ password }),
+  });
+  const data = await safeResponseJson<{
+    success?: boolean;
+    email?: string;
+    sessionToken?: string;
+    error?: string;
+  }>(res);
+  if (res.ok && data?.success) {
+    const email = data.email || ADMIN_EMAIL;
+    setActiveAdminSessionEmail(email);
+    if (data.sessionToken) setActiveDeveloperSessionToken(data.sessionToken);
+    return { success: true, email, sessionToken: data.sessionToken };
+  }
+  return {
+    success: false,
+    error: data?.error || 'Access Denied: Invalid developer credentials.',
+  };
+}
+
+export async function fetchDeveloperSessionStatus(): Promise<{
+  authenticated: boolean;
+  email?: string;
+  passwordConfigured?: boolean;
+  hashAlgorithm?: string;
+  updatedAt?: string;
+}> {
+  try {
+    const headers: Record<string, string> = {};
+    const token = getActiveDeveloperSessionToken();
+    if (token) headers['x-developer-token'] = token;
+    const res = await withTimeout(
+      fetch('/api/auth/developer-status', { headers, credentials: 'include' }),
+      3500,
+      null as any
+    );
+    if (res && res.ok) {
+      const data = await safeResponseJson<any>(res);
+      if (data && typeof data === 'object') return data;
+    }
+  } catch {}
+  return { authenticated: false };
+}
+
+export async function establishDeveloperGoogleSession(email: string): Promise<void> {
+  try {
+    const res = await fetch('/api/auth/developer-google-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+      credentials: 'include',
+    });
+    if (res.ok) {
+      const data = await safeResponseJson<{ sessionToken?: string }>(res);
+      if (data?.sessionToken) setActiveDeveloperSessionToken(data.sessionToken);
+    }
+  } catch {}
+  await syncDeveloperAuthHashesWithFirestore(email);
+}
+
+export async function logoutDeveloperSession(): Promise<void> {
+  setActiveAdminSessionEmail(null);
+  setActiveDeveloperSessionToken(null);
+  try {
+    await fetch('/api/auth/developer-logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {}
+}
+
+export async function syncDeveloperAuthHashesWithFirestore(adminEmailOverride?: string): Promise<void> {
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) return;
+  const ref = doc(db, 'admins', 'developer_auth');
+  let cloudData: any = null;
+  try {
+    const snap = await withTimeout(getDoc(ref), 3500, null as any);
+    if (snap && snap.exists()) {
+      cloudData = snap.data();
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.GET, 'admins/developer_auth');
+    }
+  }
+
+  try {
+    const headers = getOwnerAuthHeaders(adminEmailOverride);
+    const localSnapRes = await fetch('/api/auth/developer-hash-snapshot', {
+      headers,
+      credentials: 'include',
+    });
+    const localSnap = localSnapRes.ok ? await safeResponseJson<any>(localSnapRes) : null;
+
+    if (cloudData?.passwordHashes?.length) {
+      const cloudTs = new Date(cloudData.updatedAt || 0).getTime();
+      const localTs = new Date(localSnap?.updatedAt || 0).getTime();
+      if (!localSnap?.passwordHashes?.length || cloudTs > localTs) {
+        await fetch('/api/auth/developer-hash-restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          credentials: 'include',
+          body: JSON.stringify({
+            passwordHashes: cloudData.passwordHashes,
+            updatedAt: cloudData.updatedAt,
+          }),
+        });
+        return;
+      }
+    }
+
+    if (localSnap?.passwordHashes?.length) {
+      await setDoc(
+        ref,
+        sanitizeForFirestore({
+          version: localSnap.version || 1,
+          algorithm: localSnap.algorithm || 'scrypt',
+          passwordHashes: localSnap.passwordHashes,
+          updatedAt: localSnap.updatedAt || new Date().toISOString(),
+        })
+      );
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, 'admins/developer_auth');
+    }
+  }
+}
+
+export async function updateDeveloperPasswordServer(
+  newPassword: string,
+  currentPassword?: string,
+  adminEmailOverride?: string
+): Promise<{ success: boolean; updatedAt?: string }> {
+  const headers = getOwnerAuthHeaders(adminEmailOverride);
+  const res = await fetch('/api/auth/developer-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    credentials: 'include',
+    body: JSON.stringify({ newPassword, currentPassword }),
+  });
+  const data = await safeResponseJson<any>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Failed to update developer password.');
+  }
+  await syncDeveloperAuthHashesWithFirestore(adminEmailOverride);
+  return { success: true, updatedAt: data.updatedAt };
+}
+
 
 
 

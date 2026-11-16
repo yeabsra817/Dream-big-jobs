@@ -1,6 +1,7 @@
 // serverApp.ts
 import * as path from "path";
 import * as fs from "fs";
+import * as crypto from "crypto";
 var Type = {
   TYPE_UNSPECIFIED: "TYPE_UNSPECIFIED",
   STRING: "STRING",
@@ -898,15 +899,333 @@ ${text}`;
   const TELEGRAM_CONFIG_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
   const TELEGRAM_QUEUE_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
   const TELEGRAM_LOGS_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const BOT_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path.join(RUNTIME_BASE_DIR, "data", "backups");
+  const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
+  const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
+  const SERVER_BOOT_TIME_MS = Date.now();
+  const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
+  const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
+  function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const derived = crypto.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    return {
+      id,
+      label,
+      salt,
+      hashHex: derived.toString("hex"),
+      algorithm: "scrypt",
+      cost: 16384,
+      blockSize: 8,
+      parallelization: 1,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+  function verifyPasswordAgainstScryptRecord(plainText, record) {
+    try {
+      if (!plainText || !record?.salt || !record?.hashHex) return false;
+      const expectedBuf = Buffer.from(record.hashHex, "hex");
+      const derivedBuf = crypto.scryptSync(plainText, record.salt, expectedBuf.length, {
+        N: record.cost || 16384,
+        r: record.blockSize || 8,
+        p: record.parallelization || 1
+      });
+      if (derivedBuf.length !== expectedBuf.length) return false;
+      return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+    } catch {
+      return false;
+    }
+  }
+  function ensureDeveloperAuthStore() {
+    const existing = loadJsonFileSafe(DEVELOPER_AUTH_FILE, null);
+    let mutated = false;
+    const store = existing && typeof existing === "object" ? {
+      version: existing.version || 1,
+      algorithm: "scrypt",
+      passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
+      sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
+        mutated = true;
+        return crypto.randomBytes(32).toString("hex");
+      })(),
+      updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+    } : (() => {
+      mutated = true;
+      return {
+        version: 1,
+        algorithm: "scrypt",
+        passwordHashes: [],
+        sessionSigningKey: crypto.randomBytes(32).toString("hex"),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    })();
+    const envPass = (process.env.DEVELOPER_PASSWORD || process.env.ADMIN_PASSCODE || "").trim();
+    if (envPass && store.passwordHashes.length === 0) {
+      store.passwordHashes.push(hashDeveloperPasswordScrypt(envPass, "env_bootstrap", "Configured Environment Secret"));
+      store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      mutated = true;
+    }
+    const envHashPair = (process.env.DEVELOPER_PASSWORD_HASH || "").trim();
+    if (envHashPair.includes(":")) {
+      const [saltPart, hashPart] = envHashPair.split(":");
+      if (saltPart && hashPart && !store.passwordHashes.some((r) => r.hashHex === hashPart)) {
+        store.passwordHashes.push({
+          id: "env_prehashed",
+          label: "Environment Scrypt Hash",
+          salt: saltPart.trim(),
+          hashHex: hashPart.trim(),
+          algorithm: "scrypt",
+          cost: 16384,
+          blockSize: 8,
+          parallelization: 1,
+          createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+        store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        mutated = true;
+      }
+    }
+    if (mutated || !fs.existsSync(DEVELOPER_AUTH_FILE)) {
+      writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+    }
+    return store;
+  }
+  function verifyDeveloperPasswordInput(plainPassword) {
+    const trimmed = plainPassword.trim();
+    if (!trimmed) return { valid: false };
+    const store = ensureDeveloperAuthStore();
+    for (const record of store.passwordHashes) {
+      if (verifyPasswordAgainstScryptRecord(trimmed, record)) {
+        return { valid: true, matchedId: record.id };
+      }
+    }
+    const envSecrets = [process.env.DEVELOPER_PASSWORD, process.env.ADMIN_PASSCODE].map((s) => (s || "").trim()).filter(Boolean);
+    for (const secret of envSecrets) {
+      const tempRecord = hashDeveloperPasswordScrypt(secret, "env_runtime", "Runtime Secret");
+      if (verifyPasswordAgainstScryptRecord(trimmed, tempRecord)) {
+        return { valid: true, matchedId: "env_runtime" };
+      }
+    }
+    return { valid: false };
+  }
+  function parseCookiesFromHeader(cookieHeader) {
+    const result = {};
+    if (!cookieHeader) return result;
+    for (const part of cookieHeader.split(";")) {
+      const eqIdx = part.indexOf("=");
+      if (eqIdx <= 0) continue;
+      const key = part.slice(0, eqIdx).trim();
+      const val = part.slice(eqIdx + 1).trim();
+      try {
+        result[key] = decodeURIComponent(val);
+      } catch {
+        result[key] = val;
+      }
+    }
+    return result;
+  }
+  function signDeveloperSessionToken(email) {
+    const store = ensureDeveloperAuthStore();
+    const now = Date.now();
+    const payload = {
+      email: email.toLowerCase().trim(),
+      role: "owner_developer",
+      iat: now,
+      exp: now + DEV_SESSION_TTL_MS
+    };
+    const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
+    const sig = crypto.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    return `${encoded}.${sig}`;
+  }
+  function verifyDeveloperSessionToken(token) {
+    try {
+      if (!token || typeof token !== "string" || !token.includes(".")) return { valid: false };
+      const [encoded, sig] = token.split(".");
+      if (!encoded || !sig) return { valid: false };
+      const store = ensureDeveloperAuthStore();
+      const expectedSig = crypto.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const sigBuf = Buffer.from(sig, "utf-8");
+      const expBuf = Buffer.from(expectedSig, "utf-8");
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        return { valid: false };
+      }
+      const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
+      if (!parsed?.email || !PERSISTENT_OWNER_EMAILS.has(String(parsed.email).toLowerCase().trim())) {
+        return { valid: false };
+      }
+      if (typeof parsed.exp !== "number" || Date.now() > parsed.exp) {
+        return { valid: false };
+      }
+      return { valid: true, email: String(parsed.email).toLowerCase().trim() };
+    } catch {
+      return { valid: false };
+    }
+  }
+  function getDeveloperSessionFromReq(req) {
+    const headerToken = String(req.headers["x-developer-token"] || "").trim();
+    if (headerToken) {
+      const res = verifyDeveloperSessionToken(headerToken);
+      if (res.valid && res.email) return { authenticated: true, email: res.email };
+    }
+    const cookies = parseCookiesFromHeader(req.headers.cookie);
+    const cookieToken = cookies[DEV_SESSION_COOKIE_NAME];
+    if (cookieToken) {
+      const res = verifyDeveloperSessionToken(cookieToken);
+      if (res.valid && res.email) return { authenticated: true, email: res.email };
+    }
+    return { authenticated: false, email: "" };
+  }
+  function setDeveloperSessionCookie(req, res, token) {
+    const isHttps = req.secure || String(req.headers["x-forwarded-proto"] || "").toLowerCase().includes("https") || process.env.NODE_ENV === "production";
+    const parts = [
+      `${DEV_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+      "Path=/",
+      "HttpOnly",
+      "SameSite=Lax",
+      `Max-Age=${Math.floor(DEV_SESSION_TTL_MS / 1e3)}`
+    ];
+    if (isHttps) parts.push("Secure");
+    res.setHeader("Set-Cookie", parts.join("; "));
+  }
+  function clearDeveloperSessionCookie(req, res) {
+    const isHttps = req.secure || String(req.headers["x-forwarded-proto"] || "").toLowerCase().includes("https") || process.env.NODE_ENV === "production";
+    const parts = [
+      `${DEV_SESSION_COOKIE_NAME}=`,
+      "Path=/",
+      "HttpOnly",
+      "SameSite=Lax",
+      "Max-Age=0"
+    ];
+    if (isHttps) parts.push("Secure");
+    res.setHeader("Set-Cookie", parts.join("; "));
+  }
+  const devLoginAttemptMap = /* @__PURE__ */ new Map();
+  function getRequesterEmail(req) {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated && session.email) {
+      return session.email;
+    }
+    return String(
+      req.headers["x-admin-email"] || req.headers["x-user-email"] || (req.body && typeof req.body === "object" ? req.body.adminEmail : "") || (req.query && typeof req.query === "object" ? req.query.adminEmail : "") || ""
+    ).toLowerCase().trim();
+  }
+  function getRequesterUid(req) {
+    return String(req.headers["x-user-uid"] || "").trim();
+  }
+  function isPersistentOwnerRequest(req) {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated) return true;
+    const email = getRequesterEmail(req);
+    return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
+  }
   function ensureRuntimeDataDir() {
     const dataDir = path.join(RUNTIME_BASE_DIR, "data");
     try {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
+      if (!fs.existsSync(BACKUPS_DIR)) {
+        fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+      }
     } catch {
     }
     return dataDir;
+  }
+  function loadJsonFileSafe(filePath, fallback) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        if (raw && raw.trim()) {
+          return JSON.parse(raw);
+        }
+      }
+    } catch {
+    }
+    return fallback;
+  }
+  function writeJsonFileAtomic(filePath, data) {
+    try {
+      ensureRuntimeDataDir();
+      const tmpPath = `${filePath}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+      fs.renameSync(tmpPath, filePath);
+      return true;
+    } catch (e) {
+      console.warn(`Notice: Failed writing ${path.basename(filePath)}:`, e);
+      return false;
+    }
+  }
+  function loadAuditLogs() {
+    const logs = loadJsonFileSafe(AUDIT_LOGS_FILE, []);
+    return Array.isArray(logs) ? logs : [];
+  }
+  function appendAuditLog(entry) {
+    const logs = loadAuditLogs();
+    const nextEntry = {
+      id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      action: entry.action,
+      actorEmail: entry.actorEmail || "system",
+      actorUid: entry.actorUid,
+      targetType: entry.targetType,
+      targetId: entry.targetId,
+      summary: entry.summary,
+      severity: entry.severity || "info",
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const updated = [nextEntry, ...logs].slice(0, 500);
+    writeJsonFileAtomic(AUDIT_LOGS_FILE, updated);
+    return nextEntry;
+  }
+  function loadAdminNotifications() {
+    const items = loadJsonFileSafe(ADMIN_NOTIFICATIONS_FILE, []);
+    return Array.isArray(items) ? items : [];
+  }
+  function pushAdminNotification(item) {
+    const list = loadAdminNotifications();
+    const latestSame = list.find((n) => n.type === item.type && !n.acknowledged);
+    if (latestSame && Date.now() - new Date(latestSame.createdAt).getTime() < 10 * 60 * 1e3) {
+      return latestSame;
+    }
+    const next = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: item.type,
+      title: item.title,
+      message: item.message,
+      severity: item.severity || "info",
+      acknowledged: false,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    writeJsonFileAtomic(ADMIN_NOTIFICATIONS_FILE, [next, ...list].slice(0, 200));
+    return next;
+  }
+  function loadBotHealthState() {
+    return loadJsonFileSafe(BOT_HEALTH_FILE, {
+      status: "UNCONFIGURED",
+      statusCode: "api_connection_failed",
+      lastCheckedAt: null,
+      lastSuccessfulTestAt: null,
+      lastError: null,
+      consecutiveFailures: 0,
+      reconnectAttempts: 0,
+      botUsername: "@DreamBigJobsEthiopiaBot",
+      channelName: "@DreamBigJobsEthiopia",
+      channelId: ""
+    });
+  }
+  function saveBotHealthState(patch) {
+    const cur = loadBotHealthState();
+    const next = {
+      ...cur,
+      ...patch,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    writeJsonFileAtomic(BOT_HEALTH_FILE, next);
+    return next;
   }
   function maskTelegramTokenServer(token) {
     const cleaned = String(token || "").replace(/[\s\u200B-\u200D\uFEFF]/g, "").trim();
@@ -936,22 +1255,45 @@ ${text}`;
           if (tgData?.customDomain) {
             settings.customDomain = tgData.customDomain;
           }
+          if (tgData?.botInstructions) {
+            settings.botInstructions = tgData.botInstructions;
+          }
+          if (tgData?.botLastVerifiedAt) {
+            settings.botLastVerifiedAt = tgData.botLastVerifiedAt;
+          }
+          if (tgData?.botLastVerificationStatus) {
+            settings.botLastVerificationStatus = tgData.botLastVerificationStatus;
+          }
         } catch {
         }
+      }
+      if (!settings.gaMeasurementId) {
+        settings.gaMeasurementId = DEFAULT_GA_MEASUREMENT_ID;
+      }
+      if (settings.gaTrackingEnabled === void 0 || settings.gaTrackingEnabled === null) {
+        settings.gaTrackingEnabled = true;
       }
       return settings;
     } catch (e) {
       console.warn("Notice: Failed reading persisted settings from disk:", e);
     }
-    return null;
+    return {
+      gaMeasurementId: DEFAULT_GA_MEASUREMENT_ID,
+      gaTrackingEnabled: true
+    };
   }
   function sanitizeSettingsForClient(settings, activeToken) {
     const { telegramBotToken: _omitted, ...safe } = settings || {};
     const token = activeToken || getTelegramToken();
+    const botHealth = loadBotHealthState();
     return {
       ...safe,
+      gaMeasurementId: safe.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+      gaTrackingEnabled: safe.gaTrackingEnabled ?? true,
       telegramBotTokenConfigured: Boolean(token),
-      telegramConnected: Boolean(token),
+      telegramConnected: Boolean(token) && botHealth.status === "CONNECTED",
+      botLastVerifiedAt: safe.botLastVerifiedAt || botHealth.lastSuccessfulTestAt || botHealth.lastCheckedAt || "",
+      botLastVerificationStatus: safe.botLastVerificationStatus || botHealth.statusCode || "",
       maskedBotToken: token ? maskTelegramTokenServer(token) : ""
     };
   }
@@ -959,10 +1301,16 @@ ${text}`;
     try {
       ensureRuntimeDataDir();
       const current = loadPersistedSettings() || {};
-      const merged = { ...current, ...settings, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+      const merged = {
+        ...current,
+        ...settings,
+        gaMeasurementId: settings.gaMeasurementId && String(settings.gaMeasurementId).trim() ? String(settings.gaMeasurementId).trim().toUpperCase() : current.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+        gaTrackingEnabled: settings.gaTrackingEnabled !== void 0 ? Boolean(settings.gaTrackingEnabled) : current.gaTrackingEnabled ?? true,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
       const { telegramBotToken: rawTokenToStore, ...settingsWithoutRawToken } = merged;
-      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settingsWithoutRawToken, null, 2), "utf-8");
-      if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId) {
+      writeJsonFileAtomic(SETTINGS_FILE, settingsWithoutRawToken);
+      if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId || merged.botInstructions !== void 0 || merged.botLastVerifiedAt !== void 0) {
         let existingTg = {};
         try {
           if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
@@ -975,10 +1323,13 @@ ${text}`;
           ...rawTokenToStore ? { telegramBotToken: rawTokenToStore } : {},
           ...merged.telegramBotUsername ? { telegramBotUsername: merged.telegramBotUsername } : {},
           ...merged.telegramChannelId ? { telegramChannelId: merged.telegramChannelId } : {},
+          ...merged.botInstructions !== void 0 ? { botInstructions: merged.botInstructions } : {},
+          ...merged.botLastVerifiedAt !== void 0 ? { botLastVerifiedAt: merged.botLastVerifiedAt } : {},
+          ...merged.botLastVerificationStatus !== void 0 ? { botLastVerificationStatus: merged.botLastVerificationStatus } : {},
           customDomain: merged.customDomain && merged.customDomain !== "healmorin.com" ? merged.customDomain : "hopelandjobs.tech",
           updatedAt: (/* @__PURE__ */ new Date()).toISOString()
         };
-        fs.writeFileSync(TELEGRAM_CONFIG_FILE, JSON.stringify(tgPayload, null, 2), "utf-8");
+        writeJsonFileAtomic(TELEGRAM_CONFIG_FILE, tgPayload);
       }
       return merged;
     } catch (e) {
@@ -1022,6 +1373,7 @@ ${text}`;
   app.get("/api/settings", (req, res) => {
     const persisted = loadPersistedSettings() || {};
     const currentToken = getTelegramToken();
+    const botHealth = loadBotHealthState();
     const effectiveDomain = persisted.customDomain && persisted.customDomain !== "healmorin.com" ? persisted.customDomain : "hopelandjobs.tech";
     res.json({
       telegramChannelName: persisted.telegramChannelName || "@DreamBigJobsEthiopia",
@@ -1051,9 +1403,12 @@ ${text}`;
       nextResearchRunAt: persisted.nextResearchRunAt || "",
       telegramBotTokenConfigured: Boolean(currentToken),
       maskedBotToken: currentToken ? maskTelegramTokenServer(currentToken) : "",
-      telegramConnected: Boolean(currentToken),
-      gaMeasurementId: persisted.gaMeasurementId || "",
-      gaTrackingEnabled: persisted.gaTrackingEnabled ?? Boolean(persisted.gaMeasurementId),
+      telegramConnected: Boolean(currentToken) && botHealth.status === "CONNECTED",
+      botInstructions: persisted.botInstructions || "",
+      botLastVerifiedAt: persisted.botLastVerifiedAt || botHealth.lastSuccessfulTestAt || botHealth.lastCheckedAt || "",
+      botLastVerificationStatus: persisted.botLastVerificationStatus || botHealth.statusCode || "",
+      gaMeasurementId: persisted.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+      gaTrackingEnabled: persisted.gaTrackingEnabled ?? true,
       contactEmail: persisted.contactEmail || "nexusitsoultion@gmail.com",
       contactPhone: persisted.contactPhone || "+251 91 123 4567",
       contactAddress: persisted.contactAddress || "Bole Subcity, Addis Ababa, Ethiopia",
@@ -1088,6 +1443,14 @@ ${text}`;
         }
       }
       const saved = savePersistedSettings(merged);
+      appendAuditLog({
+        action: "settings_updated",
+        actorEmail: getRequesterEmail(req) || "admin",
+        targetType: "settings",
+        targetId: "site_settings",
+        summary: `Updated platform settings (channel: ${saved.telegramChannelName || "@DreamBigJobsEthiopia"}, GA4: ${saved.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID})`,
+        severity: "info"
+      });
       res.json({ success: true, settings: sanitizeSettingsForClient(saved, getTelegramToken()) });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message || String(err) });
@@ -1095,27 +1458,190 @@ ${text}`;
   });
   app.post("/api/auth/admin-verify", (req, res) => {
     try {
-      const { passcode } = req.body || {};
-      if (!passcode || typeof passcode !== "string") {
-        res.status(400).json({ success: false, error: "Passcode is required" });
+      const clientIp = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
+      const now = Date.now();
+      const attemptEntry = devLoginAttemptMap.get(clientIp);
+      if (attemptEntry && attemptEntry.lockedUntil > now) {
+        const waitMins = Math.max(1, Math.ceil((attemptEntry.lockedUntil - now) / 6e4));
+        res.status(429).json({
+          success: false,
+          error: `Too many failed developer login attempts. Please wait ${waitMins} minute(s) before trying again.`
+        });
         return;
       }
-      const cleanPass = passcode.trim();
-      const envPass = process.env.ADMIN_PASSCODE || "dreambig2026";
-      const validCodes = [envPass, "dreambig2026", "nexus2026"];
-      if (validCodes.includes(cleanPass)) {
+      const rawInput = req.body && (req.body.password ?? req.body.passcode) || "";
+      if (!rawInput || typeof rawInput !== "string") {
+        res.status(400).json({ success: false, error: "Developer password is required." });
+        return;
+      }
+      const check = verifyDeveloperPasswordInput(rawInput);
+      if (check.valid) {
+        devLoginAttemptMap.delete(clientIp);
+        const ownerEmail = "nexusitsoultion@gmail.com";
+        const sessionToken = signDeveloperSessionToken(ownerEmail);
+        setDeveloperSessionCookie(req, res, sessionToken);
+        appendAuditLog({
+          action: "developer_login_success",
+          actorEmail: ownerEmail,
+          targetType: "developer_auth",
+          targetId: check.matchedId || "primary",
+          summary: "Authorized developer authenticated via salted scrypt password verification.",
+          severity: "info"
+        });
         res.json({
           success: true,
-          email: "nexusitsoultion@gmail.com",
-          role: "owner",
-          message: "Administrator authentication successful"
+          email: ownerEmail,
+          role: "owner_developer",
+          sessionToken,
+          message: "Developer authentication successful."
         });
       } else {
-        res.status(401).json({ success: false, error: "Invalid administrator passcode" });
+        const windowExpired = !attemptEntry || now - attemptEntry.windowStart > 15 * 60 * 1e3;
+        const nextCount = windowExpired ? 1 : attemptEntry.count + 1;
+        const lockedUntil = nextCount >= 8 ? now + 15 * 60 * 1e3 : 0;
+        devLoginAttemptMap.set(clientIp, {
+          count: nextCount,
+          windowStart: windowExpired ? now : attemptEntry.windowStart,
+          lockedUntil
+        });
+        appendAuditLog({
+          action: "developer_login_failed",
+          actorEmail: "unauthenticated",
+          targetType: "developer_auth",
+          summary: `Failed developer password attempt from ${clientIp} (attempt ${nextCount}/8).`,
+          severity: nextCount >= 5 ? "warning" : "info"
+        });
+        res.status(401).json({ success: false, error: "Access Denied: Invalid developer password." });
       }
-    } catch (err) {
-      res.status(500).json({ success: false, error: "Authentication service error" });
+    } catch {
+      res.status(500).json({ success: false, error: "Developer authentication service error." });
     }
+  });
+  app.get("/api/auth/developer-status", (req, res) => {
+    const session = getDeveloperSessionFromReq(req);
+    const store = ensureDeveloperAuthStore();
+    res.json({
+      authenticated: session.authenticated,
+      email: session.authenticated ? session.email : void 0,
+      passwordConfigured: store.passwordHashes.length > 0 || Boolean(process.env.DEVELOPER_PASSWORD || process.env.ADMIN_PASSCODE),
+      hashAlgorithm: "scrypt",
+      updatedAt: session.authenticated ? store.updatedAt : void 0
+    });
+  });
+  app.post("/api/auth/developer-google-session", (req, res) => {
+    const email = getRequesterEmail(req);
+    if (!email || !PERSISTENT_OWNER_EMAILS.has(email)) {
+      res.status(403).json({ success: false, error: "Only authorized developers can establish a developer session." });
+      return;
+    }
+    const sessionToken = signDeveloperSessionToken(email);
+    setDeveloperSessionCookie(req, res, sessionToken);
+    res.json({ success: true, email, sessionToken });
+  });
+  app.post("/api/auth/developer-logout", (req, res) => {
+    clearDeveloperSessionCookie(req, res);
+    res.json({ success: true });
+  });
+  app.post("/api/auth/developer-password", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Only authorized developers can update developer password credentials." });
+      return;
+    }
+    const { currentPassword, newPassword } = req.body || {};
+    if (!newPassword || typeof newPassword !== "string" || newPassword.trim().length < 8) {
+      res.status(400).json({
+        success: false,
+        error: "New developer password must be at least 8 characters long."
+      });
+      return;
+    }
+    const store = ensureDeveloperAuthStore();
+    const callerEmail = getRequesterEmail(req);
+    const devSession = getDeveloperSessionFromReq(req);
+    if (store.passwordHashes.length > 0 && currentPassword !== void 0 && String(currentPassword).trim()) {
+      const currentCheck = verifyDeveloperPasswordInput(String(currentPassword));
+      if (!currentCheck.valid) {
+        res.status(401).json({ success: false, error: "Current developer password is incorrect." });
+        return;
+      }
+    } else if (store.passwordHashes.length > 0 && !devSession.authenticated && !PERSISTENT_OWNER_EMAILS.has(callerEmail)) {
+      res.status(401).json({ success: false, error: "Current developer verification is required." });
+      return;
+    }
+    const nextHashRecord = hashDeveloperPasswordScrypt(newPassword.trim(), "primary", "Developer Master Password");
+    store.passwordHashes = [nextHashRecord];
+    store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+    const actor = callerEmail || devSession.email || "owner_developer";
+    appendAuditLog({
+      action: "developer_password_rotated",
+      actorEmail: actor,
+      targetType: "developer_auth",
+      summary: "Authorized developer updated the salted scrypt developer password hash.",
+      severity: "warning"
+    });
+    pushAdminNotification({
+      type: "security_update",
+      title: "Developer Password Hash Updated",
+      message: "Your developer password was securely hashed (scrypt) and saved permanently.",
+      severity: "info"
+    });
+    res.json({
+      success: true,
+      updatedAt: store.updatedAt,
+      hashAlgorithm: "scrypt",
+      hashRecordCount: store.passwordHashes.length
+    });
+  });
+  app.get("/api/auth/developer-hash-snapshot", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Restricted to authorized developers." });
+      return;
+    }
+    const store = ensureDeveloperAuthStore();
+    res.json({
+      success: true,
+      version: store.version,
+      algorithm: store.algorithm,
+      passwordHashes: store.passwordHashes,
+      updatedAt: store.updatedAt
+    });
+  });
+  app.post("/api/auth/developer-hash-restore", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Restricted to authorized developers." });
+      return;
+    }
+    const { passwordHashes, updatedAt } = req.body || {};
+    if (!Array.isArray(passwordHashes) || passwordHashes.length === 0) {
+      res.status(400).json({ success: false, error: "Valid hashed credentials array is required." });
+      return;
+    }
+    const sanitizedRecords = passwordHashes.filter((r) => r && typeof r.salt === "string" && typeof r.hashHex === "string" && r.salt.length >= 16 && r.hashHex.length >= 64).map((r, i) => ({
+      id: String(r.id || `restored_${i}`),
+      label: String(r.label || "Restored Developer Password"),
+      salt: String(r.salt),
+      hashHex: String(r.hashHex),
+      algorithm: "scrypt",
+      cost: Number(r.cost) || 16384,
+      blockSize: Number(r.blockSize) || 8,
+      parallelization: Number(r.parallelization) || 1,
+      createdAt: String(r.createdAt || (/* @__PURE__ */ new Date()).toISOString()),
+      updatedAt: String(r.updatedAt || (/* @__PURE__ */ new Date()).toISOString())
+    }));
+    if (sanitizedRecords.length === 0) {
+      res.status(400).json({ success: false, error: "No valid scrypt hash records provided." });
+      return;
+    }
+    const store = ensureDeveloperAuthStore();
+    const localTs = new Date(store.updatedAt || 0).getTime();
+    const cloudTs = new Date(updatedAt || 0).getTime();
+    if (store.passwordHashes.length === 0 || cloudTs > localTs) {
+      store.passwordHashes = sanitizedRecords;
+      store.updatedAt = String(updatedAt || (/* @__PURE__ */ new Date()).toISOString());
+      writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
+    }
+    res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
   const USER_PROFILES_FILE = path.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
   const JOB_APPLICATIONS_FILE = path.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
@@ -1130,15 +1656,30 @@ ${text}`;
     return {};
   }
   function saveUserProfile(profile) {
-    try {
-      const dataDir = path.join(RUNTIME_BASE_DIR, "data");
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      const all = loadUserProfiles();
-      all[profile.uid] = { ...all[profile.uid], ...profile, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-      fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(all, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("Failed to save user profile to disk:", e);
-    }
+    ensureRuntimeDataDir();
+    const all = loadUserProfiles();
+    const existing = all[profile.uid] || null;
+    const isNewRegistration = !existing;
+    const { isAdmin: _stripAdmin, role: _stripRole, ...safeIncoming } = profile || {};
+    const merged = {
+      ...existing || {},
+      ...safeIncoming,
+      uid: profile.uid,
+      accountRole: safeIncoming.accountRole || existing?.accountRole || "staff",
+      areasOfExpertise: Array.isArray(safeIncoming.areasOfExpertise) ? safeIncoming.areasOfExpertise : existing?.areasOfExpertise || [],
+      professionalInterests: Array.isArray(safeIncoming.professionalInterests) ? safeIncoming.professionalInterests : existing?.professionalInterests || [],
+      previousPositions: Array.isArray(safeIncoming.previousPositions) ? safeIncoming.previousPositions : existing?.previousPositions || [],
+      certifications: Array.isArray(safeIncoming.certifications) ? safeIncoming.certifications : existing?.certifications || [],
+      skills: Array.isArray(safeIncoming.skills) ? safeIncoming.skills : existing?.skills || [],
+      education: Array.isArray(safeIncoming.education) ? safeIncoming.education : existing?.education || [],
+      experience: Array.isArray(safeIncoming.experience) ? safeIncoming.experience : existing?.experience || [],
+      documents: Array.isArray(safeIncoming.documents) ? safeIncoming.documents : existing?.documents || [],
+      createdAt: existing?.createdAt || safeIncoming.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    all[profile.uid] = merged;
+    writeJsonFileAtomic(USER_PROFILES_FILE, all);
+    return { savedProfile: merged, isNewRegistration };
   }
   function loadJobApplications() {
     try {
@@ -1151,16 +1692,20 @@ ${text}`;
     return [];
   }
   function saveJobApplications(apps) {
-    try {
-      const dataDir = path.join(RUNTIME_BASE_DIR, "data");
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(JOB_APPLICATIONS_FILE, JSON.stringify(apps, null, 2), "utf-8");
-    } catch (e) {
-      console.warn("Failed to save job applications to disk:", e);
-    }
+    writeJsonFileAtomic(JOB_APPLICATIONS_FILE, apps);
+  }
+  function isSelfOrOwnerProfileRequest(req, targetUid) {
+    const reqUid = getRequesterUid(req);
+    if (reqUid && reqUid === targetUid) return true;
+    if (isPersistentOwnerRequest(req)) return true;
+    return false;
   }
   app.get("/api/user-profile/:uid", (req, res) => {
     const { uid } = req.params;
+    if (!isSelfOrOwnerProfileRequest(req, uid)) {
+      res.status(403).json({ error: "Access denied: You can only view your own profile." });
+      return;
+    }
     const all = loadUserProfiles();
     const profile = all[uid];
     if (profile) {
@@ -1169,19 +1714,66 @@ ${text}`;
       res.status(404).json({ error: "Profile not found" });
     }
   });
-  app.post("/api/user-profile", (req, res) => {
+  app.get("/api/staff/profile/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwnerProfileRequest(req, uid)) {
+      res.status(403).json({ error: "Access denied: You can only view your own staff profile." });
+      return;
+    }
+    const all = loadUserProfiles();
+    const profile = all[uid];
+    if (profile) {
+      res.json(profile);
+    } else {
+      res.status(404).json({ error: "Staff profile not found" });
+    }
+  });
+  function handleSaveProfileRequest(req, res) {
     try {
       const profile = req.body;
       if (!profile || !profile.uid) {
         res.status(400).json({ error: "Valid uid is required" });
         return;
       }
-      saveUserProfile(profile);
-      res.json({ success: true, profile });
+      if (!isSelfOrOwnerProfileRequest(req, profile.uid)) {
+        res.status(403).json({ error: "Access denied: You can only create or update your own profile." });
+        return;
+      }
+      const { savedProfile, isNewRegistration } = saveUserProfile(profile);
+      if (isNewRegistration) {
+        appendAuditLog({
+          action: "staff_registered",
+          actorEmail: savedProfile.email || getRequesterEmail(req) || savedProfile.uid,
+          actorUid: savedProfile.uid,
+          targetType: "staff_profile",
+          targetId: savedProfile.uid,
+          summary: `New ${savedProfile.accountRole || "staff"} profile registered: ${savedProfile.fullName || savedProfile.email}`,
+          severity: "info"
+        });
+        pushAdminNotification({
+          type: "staff_registered",
+          title: "New Staff Profile Registered",
+          message: `${savedProfile.fullName || savedProfile.email} (${savedProfile.currentPosition || savedProfile.desiredJobTitle || "Profile saved"}) joined permanently.`,
+          severity: "info"
+        });
+      } else {
+        appendAuditLog({
+          action: "staff_profile_updated",
+          actorEmail: savedProfile.email || getRequesterEmail(req) || savedProfile.uid,
+          actorUid: savedProfile.uid,
+          targetType: "staff_profile",
+          targetId: savedProfile.uid,
+          summary: `Updated permanent profile for ${savedProfile.fullName || savedProfile.email}`,
+          severity: "info"
+        });
+      }
+      res.json({ success: true, profile: savedProfile, isNewRegistration });
     } catch (err) {
       res.status(500).json({ error: err.message || "Failed to save profile" });
     }
-  });
+  }
+  app.post("/api/user-profile", handleSaveProfileRequest);
+  app.post("/api/staff/profile", handleSaveProfileRequest);
   app.get("/api/applications", (req, res) => {
     const { userId } = req.query;
     const all = loadJobApplications();
@@ -1323,7 +1915,18 @@ ${text}`;
         savePersistedSettings({
           telegramBotToken: token,
           telegramBotUsername: data.result?.username,
-          telegramConnected: true
+          telegramConnected: true,
+          botLastVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          botLastVerificationStatus: "connected"
+        });
+        saveBotHealthState({
+          status: "CONNECTED",
+          statusCode: "connected",
+          lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastSuccessfulTestAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastError: null,
+          consecutiveFailures: 0,
+          botUsername: data.result?.username ? `@${data.result.username}` : void 0
         });
         res.json({
           configured: true,
@@ -1339,6 +1942,12 @@ ${text}`;
           maskedToken
         });
       } else {
+        saveBotHealthState({
+          status: "DISCONNECTED",
+          statusCode: "invalid_token",
+          lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastError: data.description || "Telegram API rejected bot token."
+        });
         res.json({
           configured: true,
           connected: false,
@@ -1352,6 +1961,12 @@ ${text}`;
         });
       }
     } catch (err) {
+      saveBotHealthState({
+        status: "DISCONNECTED",
+        statusCode: "api_connection_failed",
+        lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: `Could not reach Telegram Bot API: ${err?.message || "Timeout"}`
+      });
       res.json({
         configured: true,
         connected: false,
@@ -1395,7 +2010,26 @@ ${text}`;
       savePersistedSettings({
         telegramBotToken: cleanToken,
         telegramBotUsername: bot.username,
-        telegramConnected: true
+        telegramConnected: true,
+        botLastVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        botLastVerificationStatus: "connected"
+      });
+      saveBotHealthState({
+        status: "CONNECTED",
+        statusCode: "connected",
+        lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastSuccessfulTestAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: null,
+        consecutiveFailures: 0,
+        botUsername: `@${bot.username}`
+      });
+      appendAuditLog({
+        action: "telegram_bot_configured",
+        actorEmail: getRequesterEmail(req) || "admin",
+        targetType: "bot",
+        targetId: `@${bot.username}`,
+        summary: `Saved and verified permanent Telegram bot credentials for @${bot.username}`,
+        severity: "info"
       });
       res.json({
         success: true,
@@ -1421,6 +2055,12 @@ ${text}`;
   app.post("/api/telegram/test-connection", async (req, res) => {
     const token = getTelegramToken();
     if (!token || token === "MY_TELEGRAM_BOT_TOKEN") {
+      saveBotHealthState({
+        status: "UNCONFIGURED",
+        statusCode: "api_connection_failed",
+        lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: "TELEGRAM_BOT_TOKEN is not configured on the server yet."
+      });
       res.status(400).json({
         success: false,
         error: "TELEGRAM_BOT_TOKEN is not configured on the server yet."
@@ -1433,6 +2073,20 @@ ${text}`;
       const latency = Date.now() - startTime;
       const data = await tgRes.json();
       if (data.ok) {
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        saveBotHealthState({
+          status: "CONNECTED",
+          statusCode: "connected",
+          lastCheckedAt: nowIso,
+          lastSuccessfulTestAt: nowIso,
+          lastError: null,
+          consecutiveFailures: 0,
+          botUsername: data.result?.username ? `@${data.result.username}` : void 0
+        });
+        savePersistedSettings({
+          botLastVerifiedAt: nowIso,
+          botLastVerificationStatus: "connected"
+        });
         res.json({
           success: true,
           latencyMs: latency,
@@ -1440,12 +2094,24 @@ ${text}`;
           status: "Connected & Verified with Telegram Bot API"
         });
       } else {
+        saveBotHealthState({
+          status: "DISCONNECTED",
+          statusCode: "invalid_token",
+          lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastError: `Telegram API error: ${data.description}`
+        });
         res.status(400).json({
           success: false,
           error: `Telegram API error: ${data.description}`
         });
       }
     } catch (err) {
+      saveBotHealthState({
+        status: "DISCONNECTED",
+        statusCode: "api_connection_failed",
+        lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        lastError: `Failed to connect to Telegram servers: ${err.message || String(err)}`
+      });
       res.status(500).json({
         success: false,
         error: `Failed to connect to Telegram servers: ${err.message || String(err)}`
@@ -1769,24 +2435,93 @@ ${text}`;
       error: memberError
     };
   }
+  function recordBotVerificationOutcome(result, source = "manual_verify") {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const prev = loadBotHealthState();
+    const persisted = loadPersistedSettings() || {};
+    if (result?.ok) {
+      saveBotHealthState({
+        status: "CONNECTED",
+        statusCode: result.statusCode || "connected",
+        lastCheckedAt: nowIso,
+        lastSuccessfulTestAt: nowIso,
+        lastError: null,
+        consecutiveFailures: 0,
+        reconnectAttempts: prev.status === "DISCONNECTED" ? prev.reconnectAttempts || 0 : 0,
+        botUsername: result.bot?.username ? `@${result.bot.username}` : persisted.telegramBotUsername || prev.botUsername,
+        channelName: result.normalizedChannel || persisted.telegramChannelName || prev.channelName,
+        channelId: result.chat?.id ? String(result.chat.id) : persisted.telegramChannelId || prev.channelId,
+        lastSource: source
+      });
+      savePersistedSettings({
+        botLastVerifiedAt: nowIso,
+        botLastVerificationStatus: result.statusCode || "connected",
+        telegramBotUsername: result.bot?.username ? `@${String(result.bot.username).replace(/^@/, "")}` : persisted.telegramBotUsername,
+        ...result.chat?.id ? { telegramChannelId: String(result.chat.id) } : {}
+      });
+      if (prev.status === "DISCONNECTED") {
+        pushAdminNotification({
+          type: "bot_reconnected",
+          title: "Telegram Bot Reconnected",
+          message: `Bot connection to ${result.normalizedChannel || persisted.telegramChannelName} restored successfully (${source}).`,
+          severity: "info"
+        });
+        appendAuditLog({
+          action: "bot_reconnected",
+          actorEmail: "system",
+          targetType: "bot",
+          summary: `Telegram bot automatically reconnected (${result.normalizedChannel || "channel verified"})`,
+          severity: "info"
+        });
+      }
+    } else {
+      const failures = (prev.consecutiveFailures || 0) + 1;
+      saveBotHealthState({
+        status: getTelegramToken() ? "DISCONNECTED" : "UNCONFIGURED",
+        statusCode: result?.statusCode || "api_connection_failed",
+        lastCheckedAt: nowIso,
+        lastError: result?.error || result?.statusLabel || "Bot verification failed",
+        consecutiveFailures: failures,
+        reconnectAttempts: (prev.reconnectAttempts || 0) + (source === "auto_monitor" ? 1 : 0),
+        lastSource: source
+      });
+      savePersistedSettings({
+        botLastVerifiedAt: nowIso,
+        botLastVerificationStatus: result?.statusCode || "disconnected"
+      });
+      if (getTelegramToken() && (prev.status === "CONNECTED" || failures === 1 || failures % 5 === 0)) {
+        pushAdminNotification({
+          type: "bot_disconnected",
+          title: "Telegram Bot Attention Required",
+          message: result?.error || `Telegram API returned ${result?.statusCode || "error"}. Auto-reconnect will continue monitoring.`,
+          severity: "warning"
+        });
+      }
+    }
+    return result;
+  }
   app.get("/api/telegram/verify-connection", async (req, res) => {
     const channel = typeof req.query.channel === "string" ? req.query.channel : void 0;
     const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
+    recordBotVerificationOutcome(result, "manual_verify_get");
     res.json(result);
   });
   app.post("/api/telegram/verify-connection", async (req, res) => {
     const { channelName } = req.body || {};
     const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
+    recordBotVerificationOutcome(result, "manual_verify_post");
     res.json(result);
   });
   app.get("/api/telegram/verify-channel", async (req, res) => {
     const channel = typeof req.query.channel === "string" ? req.query.channel : void 0;
     const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
+    recordBotVerificationOutcome(result, "verify_channel_get");
     res.json(result);
   });
   app.post("/api/telegram/verify-channel", async (req, res) => {
     const { channelName } = req.body || {};
     const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
+    recordBotVerificationOutcome(result, "verify_channel_post");
     res.json(result);
   });
   app.get("/api/telegram/discover-chats", async (req, res) => {
@@ -5396,11 +6131,17 @@ Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated && session.email) {
+      return session.email;
+    }
     return String(
       req.headers["x-admin-email"] || (req.body && typeof req.body === "object" ? req.body.adminEmail : "") || (req.query && typeof req.query === "object" ? req.query.adminEmail : "") || ""
     ).toLowerCase().trim();
   }
   function isOwnerDeveloperRequest(req) {
+    const session = getDeveloperSessionFromReq(req);
+    if (session.authenticated) return true;
     const email = getCallerEmailFromReq(req);
     return Boolean(email && OWNER_EMAILS_SET.has(email));
   }
@@ -8167,6 +8908,387 @@ Return strict JSON:
       mode: "automatic_30s_server_scheduler",
       schedulerStatus: buildSchedulerStatusSnapshot()
     });
+  });
+  function listPersistentBackups() {
+    ensureRuntimeDataDir();
+    try {
+      const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
+      return files.map((filename) => {
+        const fullPath = path.join(BACKUPS_DIR, filename);
+        const stat = fs.statSync(fullPath);
+        const parsed = loadJsonFileSafe(fullPath, {});
+        return {
+          id: parsed.id || filename.replace(/\.json$/, ""),
+          filename,
+          trigger: parsed.trigger || "manual",
+          createdAt: parsed.createdAt || stat.mtime.toISOString(),
+          sizeBytes: stat.size,
+          counts: parsed.counts || {
+            vacancies: 0,
+            staffProfiles: 0,
+            applications: 0,
+            internationalJobs: 0,
+            immigrationPathways: 0,
+            scholarships: 0
+          }
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+  function createPersistentSystemBackup(trigger, actorEmail = "system") {
+    ensureRuntimeDataDir();
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = nowIso.replace(/[:.]/g, "-");
+    const id = `bkp_${safeTs}_${trigger}`;
+    const filename = `${id}.json`;
+    const siteSettings = loadPersistedSettings() || {};
+    const { telegramBotToken: _omitRawTok, ...safeSettings } = siteSettings;
+    const telegramConfig = loadJsonFileSafe(TELEGRAM_CONFIG_FILE, {});
+    const userProfiles = loadUserProfiles();
+    const jobApplications = loadJobApplications();
+    const intlData = loadPersistedInternationalData();
+    const analyticsEvents2 = loadJsonFileSafe(ANALYTICS_FILE, []);
+    const telegramLogs = loadJsonFileSafe(TELEGRAM_LOGS_FILE, []);
+    const botHealth = loadBotHealthState();
+    const payload = {
+      id,
+      version: "3.0.0",
+      trigger,
+      actorEmail,
+      createdAt: nowIso,
+      counts: {
+        vacancies: 0,
+        staffProfiles: Object.keys(userProfiles || {}).length,
+        applications: Array.isArray(jobApplications) ? jobApplications.length : 0,
+        internationalJobs: Array.isArray(intlData?.internationalJobs) ? intlData.internationalJobs.length : 0,
+        immigrationPathways: Array.isArray(intlData?.immigrationPathways) ? intlData.immigrationPathways.length : 0,
+        scholarships: Array.isArray(intlData?.experienceScholarships) ? intlData.experienceScholarships.length : 0
+      },
+      data: {
+        siteSettings: safeSettings,
+        telegramConfig,
+        userProfiles,
+        jobApplications,
+        internationalData: intlData,
+        analyticsEventsCount: Array.isArray(analyticsEvents2) ? analyticsEvents2.length : 0,
+        telegramLogs: Array.isArray(telegramLogs) ? telegramLogs.slice(0, 300) : [],
+        botHealth
+      }
+    };
+    const fullPath = path.join(BACKUPS_DIR, filename);
+    writeJsonFileAtomic(fullPath, payload);
+    try {
+      const autoFiles = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
+      for (const old of autoFiles.slice(20)) {
+        fs.unlinkSync(path.join(BACKUPS_DIR, old));
+      }
+    } catch {
+    }
+    appendAuditLog({
+      action: "backup_created",
+      actorEmail,
+      targetType: "backup",
+      targetId: id,
+      summary: `Created ${trigger} persistent database backup (${payload.counts.staffProfiles} profiles, ${payload.counts.applications} apps)`,
+      severity: "info"
+    });
+    const stat = fs.existsSync(fullPath) ? fs.statSync(fullPath) : { size: 0 };
+    return {
+      id,
+      filename,
+      trigger,
+      createdAt: nowIso,
+      sizeBytes: stat.size,
+      counts: payload.counts
+    };
+  }
+  function buildSystemHealthSnapshot() {
+    ensureRuntimeDataDir();
+    let writable = false;
+    try {
+      const probeFile = path.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      fs.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
+      fs.unlinkSync(probeFile);
+      writable = true;
+    } catch {
+    }
+    const settings = loadPersistedSettings() || {};
+    const token = getTelegramToken();
+    const botHealth = loadBotHealthState();
+    const profiles = loadUserProfiles();
+    const apps = loadJobApplications();
+    const analyticsEvents2 = loadJsonFileSafe(ANALYTICS_FILE, []);
+    const logs = loadAuditLogs();
+    const notifs = loadAdminNotifications();
+    const backups = listPersistentBackups();
+    const unackAlerts = notifs.filter((n) => !n.acknowledged).length;
+    const filesPresent = {
+      site_settings: fs.existsSync(SETTINGS_FILE),
+      telegram_config: fs.existsSync(TELEGRAM_CONFIG_FILE),
+      user_profiles: fs.existsSync(USER_PROFILES_FILE),
+      job_applications: fs.existsSync(JOB_APPLICATIONS_FILE),
+      international_data: fs.existsSync(INTERNATIONAL_DATA_FILE),
+      analytics_events: fs.existsSync(ANALYTICS_FILE)
+    };
+    const botStatus = !token ? "UNCONFIGURED" : botHealth.status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
+    const gaId = settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
+    const gaEnabled = settings.gaTrackingEnabled ?? true;
+    const overallStatus = !writable ? "ATTENTION_REQUIRED" : botStatus === "DISCONNECTED" || !gaEnabled ? "DEGRADED" : "HEALTHY";
+    const snapshot = {
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      overallStatus,
+      serverUptimeSeconds: Math.floor((Date.now() - SERVER_BOOT_TIME_MS) / 1e3),
+      storage: {
+        persistentDbWritable: writable,
+        filesPresent,
+        backupCount: backups.length,
+        latestBackupAt: backups[0]?.createdAt || null
+      },
+      telegramBot: {
+        configured: Boolean(token),
+        tokenSaved: Boolean(token),
+        botUsername: settings.telegramBotUsername || botHealth.botUsername || "@DreamBigJobsEthiopiaBot",
+        channelName: settings.telegramChannelName || botHealth.channelName || "@DreamBigJobsEthiopia",
+        channelId: settings.telegramChannelId || botHealth.channelId || "",
+        status: botStatus,
+        statusCode: botHealth.statusCode || "",
+        lastCheckedAt: botHealth.lastCheckedAt || null,
+        lastSuccessfulTestAt: botHealth.lastSuccessfulTestAt || null,
+        lastError: botHealth.lastError || null,
+        consecutiveFailures: botHealth.consecutiveFailures || 0,
+        reconnectAttempts: botHealth.reconnectAttempts || 0,
+        autoPublishEnabled: settings.telegramAutoPublish ?? true,
+        botInstructions: settings.botInstructions || ""
+      },
+      analytics: {
+        gaMeasurementId: gaId,
+        gaTrackingEnabled: gaEnabled,
+        alwaysOnEnforced: true,
+        totalEventsRecorded: Array.isArray(analyticsEvents2) ? analyticsEvents2.length : 0
+      },
+      counts: {
+        vacancies: 0,
+        staffProfiles: Object.keys(profiles || {}).length,
+        jobApplications: Array.isArray(apps) ? apps.length : 0,
+        auditLogs: logs.length,
+        unacknowledgedAlerts: unackAlerts
+      }
+    };
+    writeJsonFileAtomic(SYSTEM_HEALTH_FILE, snapshot);
+    return snapshot;
+  }
+  let healthCycleActive = false;
+  async function runSystemHealthAndBotRecoveryCycle(source = "auto_monitor") {
+    if (healthCycleActive) {
+      return buildSystemHealthSnapshot();
+    }
+    healthCycleActive = true;
+    try {
+      const currentSettings = loadPersistedSettings() || {};
+      if (!currentSettings.gaMeasurementId || currentSettings.gaTrackingEnabled === void 0) {
+        savePersistedSettings({
+          gaMeasurementId: currentSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+          gaTrackingEnabled: currentSettings.gaTrackingEnabled ?? true
+        });
+      }
+      const token = getTelegramToken();
+      if (token) {
+        const tgResult = await verifyTelegramConnectionServer(
+          token,
+          currentSettings.telegramChannelId || currentSettings.telegramChannelName
+        );
+        recordBotVerificationOutcome(tgResult, source);
+      } else {
+        saveBotHealthState({
+          status: "UNCONFIGURED",
+          lastCheckedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      }
+      const existingBackups = listPersistentBackups();
+      const latestMs = existingBackups[0]?.createdAt ? new Date(existingBackups[0].createdAt).getTime() : 0;
+      if (!latestMs || Date.now() - latestMs > 12 * 60 * 60 * 1e3) {
+        createPersistentSystemBackup(source === "startup" ? "startup" : "scheduled", "system");
+      }
+      return buildSystemHealthSnapshot();
+    } finally {
+      healthCycleActive = false;
+    }
+  }
+  if (!IS_VERCEL) {
+    const bootTimer = setTimeout(() => {
+      runSystemHealthAndBotRecoveryCycle("startup").catch(
+        (e) => console.warn("Startup health & recovery notice:", e?.message || e)
+      );
+    }, 2e3);
+    if (typeof bootTimer?.unref === "function") bootTimer.unref();
+    const intervalTimer = setInterval(() => {
+      runSystemHealthAndBotRecoveryCycle("auto_monitor").catch(
+        (e) => console.warn("Scheduled health monitor notice:", e?.message || e)
+      );
+    }, 60 * 1e3);
+    if (typeof intervalTimer?.unref === "function") intervalTimer.unref();
+  }
+  app.get("/api/system/health", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      success: true,
+      health: buildSystemHealthSnapshot(),
+      notifications: loadAdminNotifications().slice(0, 50),
+      auditLogs: loadAuditLogs().slice(0, 80)
+    });
+  });
+  app.post("/api/system/recover", async (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const actor = getRequesterEmail(req) || "owner";
+    const health = await runSystemHealthAndBotRecoveryCycle("manual_recovery");
+    appendAuditLog({
+      action: "system_recovery_run",
+      actorEmail: actor,
+      targetType: "system",
+      summary: `Manual system recovery & live connection check completed (Bot: ${health.telegramBot.status}, DB writable: ${health.storage.persistentDbWritable})`,
+      severity: "info"
+    });
+    res.json({
+      success: true,
+      health,
+      notifications: loadAdminNotifications().slice(0, 50),
+      auditLogs: loadAuditLogs().slice(0, 80)
+    });
+  });
+  app.get("/api/admin/staff-profiles", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const all = loadUserProfiles();
+    const list = Object.values(all || {}).sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+    );
+    res.json({ success: true, profiles: list, total: list.length });
+  });
+  app.delete("/api/admin/staff-profiles/:uid", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { uid } = req.params;
+    const { confirmDelete, confirmationText } = req.body || {};
+    if (confirmDelete !== true || String(confirmationText || "").trim().toUpperCase() !== "DELETE") {
+      res.status(400).json({
+        success: false,
+        error: 'Explicit owner confirmation required (confirmDelete: true and confirmationText: "DELETE").'
+      });
+      return;
+    }
+    const all = loadUserProfiles();
+    const existing = all[uid];
+    if (!existing) {
+      res.status(404).json({ success: false, error: "Staff profile not found." });
+      return;
+    }
+    createPersistentSystemBackup("pre_restore", getRequesterEmail(req) || "owner");
+    delete all[uid];
+    writeJsonFileAtomic(USER_PROFILES_FILE, all);
+    appendAuditLog({
+      action: "staff_profile_deleted_owner",
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "staff_profile",
+      targetId: uid,
+      summary: `Owner permanently deleted staff profile for ${existing.fullName || existing.email || uid}`,
+      severity: "warning"
+    });
+    res.json({ success: true, deletedUid: uid });
+  });
+  app.get("/api/admin/backups", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({ success: true, backups: listPersistentBackups() });
+  });
+  app.post("/api/admin/backups/create", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const backup = createPersistentSystemBackup("manual", getRequesterEmail(req) || "owner");
+    pushAdminNotification({
+      type: "backup_created",
+      title: "Manual Database Backup Saved",
+      message: `Backup snapshot ${backup.filename} saved permanently on server storage.`,
+      severity: "info"
+    });
+    res.json({ success: true, backup, backups: listPersistentBackups() });
+  });
+  app.post("/api/admin/backups/restore", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { backupId, confirmRestore } = req.body || {};
+    if (!backupId || confirmRestore !== true) {
+      res.status(400).json({
+        success: false,
+        error: "Explicit backupId and confirmRestore: true are required before restoring."
+      });
+      return;
+    }
+    const backups = listPersistentBackups();
+    const target = backups.find((b) => b.id === backupId || b.filename === backupId);
+    if (!target) {
+      res.status(404).json({ success: false, error: "Backup snapshot not found." });
+      return;
+    }
+    const fullPath = path.join(BACKUPS_DIR, target.filename);
+    const parsed = loadJsonFileSafe(fullPath, null);
+    if (!parsed || !parsed.data) {
+      res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });
+      return;
+    }
+    const actor = getRequesterEmail(req) || "owner";
+    createPersistentSystemBackup("pre_restore", actor);
+    const d = parsed.data;
+    if (d.siteSettings) savePersistedSettings(d.siteSettings);
+    if (d.telegramConfig && Object.keys(d.telegramConfig).length > 0) {
+      writeJsonFileAtomic(TELEGRAM_CONFIG_FILE, d.telegramConfig);
+      if (d.telegramConfig.telegramBotToken) {
+        serverTelegramBotToken = d.telegramConfig.telegramBotToken;
+        process.env.TELEGRAM_BOT_TOKEN = d.telegramConfig.telegramBotToken;
+      }
+    }
+    if (d.userProfiles && typeof d.userProfiles === "object") {
+      const currentProfiles = loadUserProfiles();
+      writeJsonFileAtomic(USER_PROFILES_FILE, { ...currentProfiles, ...d.userProfiles });
+    }
+    if (Array.isArray(d.jobApplications)) {
+      writeJsonFileAtomic(JOB_APPLICATIONS_FILE, d.jobApplications);
+    }
+    if (d.internationalData && typeof d.internationalData === "object") {
+      savePersistedInternationalData(d.internationalData);
+    }
+    appendAuditLog({
+      action: "backup_restored",
+      actorEmail: actor,
+      targetType: "backup",
+      targetId: target.id,
+      summary: `Restored persistent database snapshot ${target.filename} (pre-restore safety snapshot saved automatically)`,
+      severity: "warning"
+    });
+    res.json({
+      success: true,
+      restoredBackupId: target.id,
+      backups: listPersistentBackups(),
+      health: buildSystemHealthSnapshot()
+    });
+  });
+  app.get("/api/admin/audit-logs", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      success: true,
+      auditLogs: loadAuditLogs().slice(0, 150),
+      notifications: loadAdminNotifications().slice(0, 100)
+    });
+  });
+  app.post("/api/admin/notifications/ack", (req, res) => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { id, acknowledgeAll } = req.body || {};
+    const actor = getRequesterEmail(req) || "owner";
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const list = loadAdminNotifications().map((n) => {
+      if (acknowledgeAll || n.id === id) {
+        return { ...n, acknowledged: true, acknowledgedAt: nowIso, acknowledgedBy: actor };
+      }
+      return n;
+    });
+    writeJsonFileAtomic(ADMIN_NOTIFICATIONS_FILE, list);
+    res.json({ success: true, notifications: list });
   });
   return app;
 }
