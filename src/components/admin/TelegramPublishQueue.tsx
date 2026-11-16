@@ -49,11 +49,17 @@ import {
   isVacancyDeadlineExpiredClient,
   getTelegramDistributionModeLabel,
   normalizeTelegramChatId,
-  verifyTelegramChannelClient,
+  verifyTelegramConnectionClient,
+  fetchTelegramQueueStatusClient,
+  startServerTelegramQueueClient,
+  retryFailedServerQueueClient,
+  cancelServerTelegramQueueClient,
   isFatalTelegramConfigError,
+  ServerQueueStatusResponse,
   ChannelVerificationResult,
   DiscoveredTelegramChat,
 } from '../../utils/telegramClient';
+import { TelegramStatusPanel } from './TelegramStatusPanel';
 
 interface Props {
   vacancies: Vacancy[];
@@ -142,6 +148,10 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     message: string;
   } | null>(null);
 
+  // Persistent Server Queue State (survives page refresh & server restarts)
+  const [serverQueueStatus, setServerQueueStatus] = useState<ServerQueueStatusResponse | null>(null);
+  const syncedQueueOutcomeRef = useRef<Set<string>>(new Set());
+
   // Channel Diagnostics & Quick Fixer
   const [channelCheckResult, setChannelCheckResult] = useState<ChannelVerificationResult | null>(null);
   const [isCheckingChannel, setIsCheckingChannel] = useState(false);
@@ -150,6 +160,121 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     siteSettings.telegramChannelName || '@DreamBigJobsEthiopia'
   );
   const [isSavingChannelFix, setIsSavingChannelFix] = useState(false);
+
+  const syncServerQueueStateToUi = async (data: ServerQueueStatusResponse | null) => {
+    if (!data) return;
+    setServerQueueStatus(data);
+
+    const qs = data.queueState;
+    if (qs?.items && qs.items.length > 0) {
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        for (const it of qs.items) {
+          if (it.status === 'published') {
+            next[it.vacancyId] = {
+              status: 'success',
+              messageId: it.telegramMessageId,
+              postedAt: it.publishedAt,
+            };
+          } else if (it.status === 'failed') {
+            next[it.vacancyId] = { status: 'failed', error: it.error };
+          } else if (it.status === 'processing') {
+            next[it.vacancyId] = { status: 'posting' };
+          } else if (it.status === 'retrying') {
+            next[it.vacancyId] = { status: 'retrying', error: it.error };
+          }
+        }
+        return next;
+      });
+
+      const activeItem = qs.items.find((it) => it.status === 'processing' || it.status === 'retrying');
+      if (activeItem) {
+        setInFlightJobId(activeItem.vacancyId);
+      } else {
+        setInFlightJobId(null);
+      }
+
+      if (qs.status === 'running') {
+        setIsBatchRunning(true);
+        const done = (data.summary.published || 0) + (data.summary.failed || 0);
+        setBatchProgress({
+          current: Math.min(data.summary.total, done + (activeItem ? 1 : 0)),
+          total: data.summary.total,
+          currentTitle: activeItem
+            ? `${activeItem.status === 'retrying' ? 'Retrying' : 'Posting'}: ${activeItem.title} — ${activeItem.organization}`
+            : qs.currentTitle || 'Processing sequential Telegram queue...',
+        });
+      } else {
+        setIsBatchRunning(false);
+        setBatchProgress(null);
+      }
+
+      // Sync newly settled outcomes back to vacancy records once per outcome signature
+      const updatesToPersist: Vacancy[] = [];
+      for (const it of qs.items) {
+        if (it.status !== 'published' && it.status !== 'failed') continue;
+        const sig = `${it.vacancyId}:${it.status}:${it.telegramMessageId || ''}:${it.error || ''}`;
+        if (syncedQueueOutcomeRef.current.has(sig)) continue;
+        syncedQueueOutcomeRef.current.add(sig);
+
+        const existing = vacancies.find((v) => v.id === it.vacancyId);
+        if (!existing) continue;
+        if (it.status === 'published' && (!existing.telegramPublished || existing.telegramMessageId !== it.telegramMessageId)) {
+          updatesToPersist.push({
+            ...existing,
+            telegramPublished: true,
+            telegramMessageId: it.telegramMessageId,
+            telegramPublishedAt: it.publishedAt || new Date().toISOString(),
+            telegramPublishError: '',
+            status: 'published',
+            publishedAt: existing.publishedAt || it.publishedAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else if (it.status === 'failed' && !existing.telegramPublished && existing.telegramPublishError !== it.error) {
+          updatesToPersist.push({
+            ...existing,
+            telegramPublishError: it.error || 'Telegram broadcast failed',
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      if (updatesToPersist.length > 0) {
+        try {
+          if (onBatchUpdateVacancies) {
+            await onBatchUpdateVacancies(updatesToPersist);
+          } else {
+            for (const u of updatesToPersist) {
+              await onUpdateVacancy(u);
+            }
+          }
+        } catch {}
+      }
+    } else if (qs?.status !== 'running') {
+      setIsBatchRunning(false);
+      setBatchProgress(null);
+      setInFlightJobId(null);
+    }
+  };
+
+  const refreshQueueStatus = async () => {
+    const data = await fetchTelegramQueueStatusClient();
+    await syncServerQueueStateToUi(data);
+  };
+
+  useEffect(() => {
+    refreshQueueStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (serverQueueStatus?.queueState?.status !== 'running') return;
+    const timer = setInterval(() => {
+      refreshQueueStatus();
+    }, 1200);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverQueueStatus?.queueState?.status]);
 
   useEffect(() => {
     if (siteSettings.telegramChannelName) {
@@ -171,17 +296,14 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   const handleVerifyQueueChannel = async (overrideTarget?: string): Promise<ChannelVerificationResult> => {
     setIsCheckingChannel(true);
     try {
-      const result = await verifyTelegramChannelClient(
-        overrideTarget ?? activeNormalizedChannel,
-        siteSettings.telegramBotToken
-      );
+      const result = await verifyTelegramConnectionClient(overrideTarget ?? activeNormalizedChannel);
       setChannelCheckResult(result);
       if (!result.ok && !result.unreachableServer) {
         setShowChannelFixer(true);
       } else if (result.ok && result.chat) {
         setNotification({
           type: 'success',
-          message: `✅ Verified channel "${result.chat.title}" (${result.normalizedChannel}, ID: ${result.chat.id}). Bot @${result.bot?.username || 'verified'} has Admin posting rights.`,
+          message: `✅ ${result.statusLabel || 'Connected successfully'}: "${result.chat.title}" (${result.normalizedChannel}, ID: ${result.chat.id}). Bot @${result.bot?.username || 'verified'} has Admin posting rights.`,
         });
       }
       return result;
@@ -222,7 +344,6 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       }
 
       setManualChannelInput(cleanTarget);
-      // Clear previous failed status overrides so failed jobs can be retried cleanly
       setStatusOverrides((prev) => {
         const next: typeof prev = {};
         for (const [k, v] of Object.entries(prev)) {
@@ -231,13 +352,13 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         return next;
       });
 
-      const verifyRes = await verifyTelegramChannelClient(cleanTarget, siteSettings.telegramBotToken);
+      const verifyRes = await verifyTelegramConnectionClient(cleanTarget);
       setChannelCheckResult(verifyRes);
       if (verifyRes.ok) {
         setShowChannelFixer(false);
         setNotification({
           type: 'success',
-          message: `✅ Target channel updated to ${cleanTarget}${verifyRes.chat?.title ? ` ("${verifyRes.chat.title}")` : ''} and verified! You can now retry posting.`,
+          message: `✅ ${verifyRes.statusLabel || 'Connected successfully'} to ${cleanTarget}${verifyRes.chat?.title ? ` ("${verifyRes.chat.title}")` : ''}! You can now publish or retry failed jobs.`,
         });
       } else {
         setShowChannelFixer(true);
@@ -422,126 +543,40 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       });
 
       const channel = activeNormalizedChannel;
-      const preCheck = await verifyTelegramChannelClient(channel, siteSettings.telegramBotToken);
+      const preCheck = await verifyTelegramConnectionClient(channel);
       if (!preCheck.unreachableServer && !preCheck.ok) {
         setChannelCheckResult(preCheck);
         setShowChannelFixer(true);
+        setIsBatchRunning(false);
+        setBatchProgress(null);
         setNotification({
           type: 'error',
-          message: `⛔ Batch paused before posting: ${preCheck.error || 'Target channel verification failed.'}`,
+          message: `⛔ Batch paused before posting: ${preCheck.statusLabel ? `${preCheck.statusLabel} — ` : ''}${preCheck.error || 'Target channel verification failed.'}`,
         });
         return;
       }
 
-      let successCount = 0;
-      let failedCount = 0;
-      let washLabeledCount = 0;
-      let stoppedByFatalError: string | null = null;
-      const batchJobHistory: TelegramBatchRecord['jobs'] = [];
+      const startRes = await startServerTelegramQueueClient({
+        vacancies: eligible,
+        channelName: channel,
+        distributionMode: batchPublishMode,
+      });
 
-      for (let i = 0; i < eligible.length; i++) {
-        if (isBatchCancelledRef.current) break;
-        const job = eligible[i];
-        setBatchProgress({
-          current: i + 1,
-          total: eligible.length,
-          currentTitle: `Posting (${i + 1}/${eligible.length}): ${isWashNgoVacancyClient(job) ? '🟢⭐ WASH JOB — ' : ''}${job.title}`,
-        });
-
-        const res = await broadcastJobToTelegram(
-          job,
-          channel,
-          siteSettings.telegramBotToken,
-          false,
-          siteSettings.customDomain,
-          effectiveQueueSettings,
-          'vacancy'
-        );
-
-        if (res.success) {
-          successCount++;
-          if (isWashNgoVacancyClient(job)) washLabeledCount++;
-          const publishedAt = res.telegramPublishedAt || new Date().toISOString();
-          await onUpdateVacancy({
-            ...job,
-            telegramPublished: true,
-            telegramMessageId: res.telegramMessageId,
-            telegramPublishedAt: publishedAt,
-            telegramPublishError: '',
-            updatedAt: new Date().toISOString(),
-          });
-          batchJobHistory.push({
-            vacancyId: job.id,
-            title: job.title,
-            organization: job.organization,
-            category: job.category,
-            status: 'success',
-            telegramMessageId: res.telegramMessageId,
-            postedAt: publishedAt,
-          });
-        } else {
-          failedCount++;
-          const errMsg = res.error || 'Telegram broadcast error';
-          batchJobHistory.push({
-            vacancyId: job.id,
-            title: job.title,
-            organization: job.organization,
-            category: job.category,
-            status: 'failed',
-            error: errMsg,
-          });
-          if (isFatalTelegramConfigError(errMsg)) {
-            stoppedByFatalError = errMsg;
-            setChannelCheckResult({
-              ok: false,
-              chatExists: false,
-              normalizedChannel: channel,
-              error: errMsg,
-              discoveredChats: res.discoveredChats,
-            });
-            setShowChannelFixer(true);
-            break;
-          }
-        }
-
-        if (i < eligible.length - 1 && !isBatchCancelledRef.current) {
-          await new Promise((r) => setTimeout(r, 1100));
-        }
+      if (!startRes.success) {
+        throw new Error(startRes.error || 'Failed to enqueue bulk batch on server.');
       }
 
-      try {
-        await saveTelegramBatch({
-          id: `batch_tg_import_${Date.now()}`,
-          name: `${getTelegramDistributionModeLabel(batchPublishMode)} (${eligible.length} Jobs)`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          totalCount: eligible.length,
-          successCount,
-          failedCount,
-          status: failedCount === 0 ? 'completed' : successCount > 0 ? 'partially_failed' : 'draft',
-          jobs: batchJobHistory,
-        });
-        await loadBatches();
-      } catch {}
-
-      if (stoppedByFatalError) {
-        setNotification({
-          type: 'error',
-          message: `⛔ Saved ${selected.length} jobs to Hopeland Website, but Telegram publishing stopped early: ${stoppedByFatalError}`,
-        });
-      } else {
-        setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
-        setBulkSelectedIds(new Set());
-        setNotification({
-          type: successCount > 0 ? 'success' : 'error',
-          message: `Completed (${getTelegramDistributionModeLabel(batchPublishMode)}): ${successCount} published to Telegram (${washLabeledCount} with 🟢⭐ WASH JOB), ${failedCount} failed, ${excludedCount} excluded by category filter.`,
-        });
-      }
+      await syncServerQueueStateToUi(startRes);
+      setBulkParsedVacancies((prev) => prev.filter((v) => !bulkSelectedIds.has(v.id)));
+      setBulkSelectedIds(new Set());
+      setNotification({
+        type: 'success',
+        message: `Saved ${selected.length} jobs to Hopeland Website and launched persistent sequential Telegram queue for ${eligible.length} eligible jobs (${excludedCount} excluded by ${getTelegramDistributionModeLabel(batchPublishMode)}). Progress is preserved across page refreshes.`,
+      });
     } catch (err: any) {
-      setNotification({ type: 'error', message: err?.message || 'Batch import/publish failed.' });
-    } finally {
       setIsBatchRunning(false);
       setBatchProgress(null);
+      setNotification({ type: 'error', message: err?.message || 'Batch import/publish failed.' });
     }
   };
 
@@ -588,6 +623,21 @@ export const TelegramPublishQueue: React.FC<Props> = ({
 
     const override = statusOverrides[job.id];
     if (override) {
+      if (override.status === 'posting') {
+        return {
+          status: 'posting',
+          label: 'PROCESSING...',
+          badgeClass: 'bg-blue-100 text-blue-800 border-blue-300 animate-pulse',
+        };
+      }
+      if (override.status === 'retrying') {
+        return {
+          status: 'retrying',
+          label: 'RETRYING...',
+          badgeClass: 'bg-amber-100 text-amber-900 border-amber-400 animate-pulse',
+          error: override.error,
+        };
+      }
       if (override.status === 'success') {
         return {
           status: 'success',
@@ -717,13 +767,56 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     });
   };
 
-  const handleSelectAllFailed = () => {
-    const failed = vacancies.filter((v) => getJobStatus(v).status === 'failed');
-    setSelectedIds(new Set(failed.map((v) => v.id)));
+  // Retry ONLY failed vacancies (never resends already-published vacancies)
+  const handleRetryFailedQueue = async () => {
+    const failedJobs = vacancies.filter((v) => !v.telegramPublished && getJobStatus(v).status === 'failed');
+    setSelectedIds(new Set(failedJobs.map((v) => v.id)));
+
+    const preCheck = await verifyTelegramConnectionClient(activeNormalizedChannel);
+    if (!preCheck.unreachableServer && !preCheck.ok) {
+      setChannelCheckResult(preCheck);
+      setShowChannelFixer(true);
+      setNotification({
+        type: 'error',
+        message: `⛔ Cannot retry failed jobs: ${preCheck.statusLabel ? `${preCheck.statusLabel} — ` : ''}${preCheck.error || 'Target channel not verified.'}`,
+      });
+      return;
+    }
+
+    const serverFailedCount = serverQueueStatus?.summary?.failed || 0;
+    if (serverFailedCount > 0) {
+      const retryRes = await retryFailedServerQueueClient();
+      await syncServerQueueStateToUi(retryRes);
+      setNotification({
+        type: 'info',
+        message: `Retrying ONLY ${retryRes.requeuedCount || serverFailedCount} failed vacancies in the background queue. Already published jobs are untouched.`,
+      });
+      return;
+    }
+
+    if (failedJobs.length === 0) {
+      setNotification({
+        type: 'info',
+        message: 'No failed vacancies found to retry.',
+      });
+      return;
+    }
+
+    const startRes = await startServerTelegramQueueClient({
+      vacancies: failedJobs,
+      channelName: activeNormalizedChannel,
+      distributionMode: batchPublishMode,
+      forceRetry: false,
+    });
+    await syncServerQueueStateToUi(startRes);
     setNotification({
       type: 'info',
-      message: `Selected ${failed.length} failed vacancies to retry posting.`,
+      message: `Retrying ONLY ${failedJobs.length} failed vacancies sequentially. Published vacancies remain untouched.`,
     });
+  };
+
+  const handleSelectAllFailed = () => {
+    handleRetryFailedQueue();
   };
 
   const handleToggleSelectAllVisible = () => {
@@ -747,12 +840,16 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     });
   };
 
-  // Single Job Post Function
+  // Single Job Post Function (never marks published until Telegram confirms)
   const executeSinglePost = async (
     job: Vacancy,
     forceRetry = false
   ): Promise<{ ok: boolean; error?: string; fatal?: boolean; discoveredChats?: DiscoveredTelegramChat[] }> => {
     setInFlightJobId(job.id);
+    setStatusOverrides((prev) => ({
+      ...prev,
+      [job.id]: { status: 'posting' },
+    }));
     setNotification(null);
 
     try {
@@ -760,11 +857,11 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       const data = await broadcastJobToTelegram(
         job,
         channel,
-        siteSettings.telegramBotToken,
         forceRetry,
         siteSettings.customDomain,
         effectiveQueueSettings,
-        'vacancy'
+        'vacancy',
+        forceRetry ? 'retry' : 'manual_publish'
       );
 
       if (!data.success) {
@@ -796,6 +893,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
           type: 'error',
           message: `❌ Failed to post "${job.title}": ${errorMsg}`,
         });
+        await refreshQueueStatus();
         return { ok: false, error: errorMsg, fatal, discoveredChats: data.discoveredChats };
       }
 
@@ -826,6 +924,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         type: 'success',
         message: `✅ Successfully posted "${job.title}" to ${data.resolvedChatId || channel} (Message #${messageId || 'OK'})!`,
       });
+      await refreshQueueStatus();
       return { ok: true };
     } catch (err: any) {
       const msg = err.message || 'Network error';
@@ -849,11 +948,21 @@ export const TelegramPublishQueue: React.FC<Props> = ({
     if (currentStatus === 'success' || currentStatus === 'already') {
       setDuplicateWarningJob(job);
     } else {
-      executeSinglePost(job, false);
+      executeSinglePost(job, currentStatus === 'failed');
     }
   };
 
-  // Bulk Publishing Workflow (Sequential with pre-flight channel check, fatal error fail-fast & rate-limiting)
+  const handleCancelActiveQueue = async () => {
+    isBatchCancelledRef.current = true;
+    const cancelRes = await cancelServerTelegramQueueClient();
+    await syncServerQueueStateToUi(cancelRes);
+    setNotification({
+      type: 'info',
+      message: 'Telegram publishing queue paused/cancelled.',
+    });
+  };
+
+  // Bulk Publishing Workflow backed by Persistent Server Sequential Queue
   const handleBulkPostSelected = async (explicitJobs?: Vacancy[]) => {
     const jobsToPost = explicitJobs && explicitJobs.length > 0
       ? explicitJobs
@@ -875,8 +984,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       currentTitle: `Verifying channel "${activeNormalizedChannel}" before broadcasting...`,
     });
 
-    // Pre-flight check so 33 jobs don't all fail one-by-one if channel or bot admin setup is broken
-    const preCheck = await verifyTelegramChannelClient(activeNormalizedChannel, siteSettings.telegramBotToken);
+    const preCheck = await verifyTelegramConnectionClient(activeNormalizedChannel);
     if (!preCheck.unreachableServer && !preCheck.ok) {
       setIsBatchRunning(false);
       setBatchProgress(null);
@@ -884,103 +992,66 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       setShowChannelFixer(true);
       setNotification({
         type: 'error',
-        message: `⛔ Queue paused before posting ${jobsToPost.length} jobs: ${preCheck.error || 'Target channel not reachable.'}`,
+        message: `⛔ Queue paused before posting ${jobsToPost.length} jobs: ${preCheck.statusLabel ? `${preCheck.statusLabel} — ` : ''}${preCheck.error || 'Target channel not reachable.'}`,
       });
       return;
     }
 
-    let successCount = 0;
-    let failedCount = 0;
-    let stoppedByFatalError: string | null = null;
-    const batchJobHistory: TelegramBatchRecord['jobs'] = [];
-
-    for (let i = 0; i < jobsToPost.length; i++) {
-      if (isBatchCancelledRef.current) {
-        setNotification({
-          type: 'info',
-          message: `Batch posting stopped by user. Processed ${i} of ${jobsToPost.length}.`,
-        });
-        break;
-      }
-
-      const currentJob = jobsToPost[i];
-      setBatchProgress({
-        current: i + 1,
-        total: jobsToPost.length,
-        currentTitle: `Posting (${i + 1}/${jobsToPost.length}): ${currentJob.title} - ${currentJob.organization}`,
+    try {
+      const startRes = await startServerTelegramQueueClient({
+        vacancies: jobsToPost,
+        channelName: activeNormalizedChannel,
+        distributionMode: batchPublishMode,
+        forceRetry: false,
       });
 
-      // Post single job sequentially
-      const result = await executeSinglePost(currentJob, false);
-      if (result.ok) {
-        successCount++;
-        batchJobHistory.push({
-          vacancyId: currentJob.id,
-          title: currentJob.title,
-          organization: currentJob.organization,
-          category: currentJob.category,
-          status: 'success',
-          postedAt: new Date().toISOString(),
+      if (!startRes.success) {
+        setIsBatchRunning(false);
+        setBatchProgress(null);
+        setNotification({
+          type: 'error',
+          message: startRes.error || 'Failed to enqueue jobs on the server.',
         });
-      } else {
-        failedCount++;
-        batchJobHistory.push({
-          vacancyId: currentJob.id,
-          title: currentJob.title,
-          organization: currentJob.organization,
-          category: currentJob.category,
-          status: 'failed',
-          error: result.error || 'Failed to broadcast',
-        });
-        if (result.fatal) {
-          stoppedByFatalError = result.error || 'Fatal Telegram channel configuration error';
-          break;
-        }
+        return;
       }
 
-      // Safe delay between posts (1.2s) to respect Telegram API rate limits
-      if (i < jobsToPost.length - 1 && !isBatchCancelledRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-      }
-    }
+      await syncServerQueueStateToUi(startRes);
+      setNotification({
+        type: 'info',
+        message: `🚀 Started persistent sequential queue for ${jobsToPost.length} vacancies. Safe across page refreshes & automatic retries enabled.`,
+      });
 
-    // Auto-record session in batch history
-    const batchRecord: TelegramBatchRecord = {
-      id: `batch_${Date.now()}`,
-      name: `Telegram Session - ${new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })} (${jobsToPost.length} Jobs)`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      totalCount: jobsToPost.length,
-      successCount,
-      failedCount,
-      status: failedCount === 0 ? 'completed' : successCount > 0 ? 'partially_failed' : 'draft',
-      jobs: batchJobHistory,
-    };
-
-    try {
-      await saveTelegramBatch(batchRecord);
-      await loadBatches();
-    } catch (saveErr) {
-      console.warn('Failed to auto-save batch history record:', saveErr);
-    }
-
-    setIsBatchRunning(false);
-    setBatchProgress(null);
-
-    if (stoppedByFatalError) {
+      const batchRecord: TelegramBatchRecord = {
+        id: `batch_${Date.now()}`,
+        name: `Telegram Session - ${new Date().toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })} (${jobsToPost.length} Jobs)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        totalCount: jobsToPost.length,
+        successCount: startRes.summary?.published || 0,
+        failedCount: startRes.summary?.failed || 0,
+        status: 'draft',
+        jobs: jobsToPost.map((j) => ({
+          vacancyId: j.id,
+          title: j.title,
+          organization: j.organization,
+          category: j.category,
+          status: j.telegramPublished ? 'success' : 'pending',
+        })),
+      };
+      saveTelegramBatch(batchRecord)
+        .then(() => loadBatches())
+        .catch(() => {});
+    } catch (err: any) {
+      setIsBatchRunning(false);
+      setBatchProgress(null);
       setNotification({
         type: 'error',
-        message: `⛔ Queue stopped early to prevent repeated failures (${successCount} posted, ${failedCount} failed): ${stoppedByFatalError}`,
-      });
-    } else {
-      setNotification({
-        type: successCount > 0 ? 'success' : 'error',
-        message: `🎉 Batch completed: ${successCount} successfully posted, ${failedCount} failed out of ${jobsToPost.length}.`,
+        message: `Failed to start Telegram queue: ${err?.message || String(err)}`,
       });
     }
   };
@@ -1197,6 +1268,18 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Unified Admin Telegram Status & Controls Panel */}
+      <TelegramStatusPanel
+        siteSettings={siteSettings}
+        vacancies={vacancies}
+        queueStatus={serverQueueStatus}
+        onSaveSettings={onSaveSettings}
+        onRetryFailed={handleRetryFailedQueue}
+        onCancelQueue={handleCancelActiveQueue}
+        onRefreshQueueStatus={refreshQueueStatus}
+        onChannelVerified={(res) => setChannelCheckResult(res)}
+      />
+
       {/* Sub-Tabs inside Telegram Posting Section */}
       <div className="bg-white rounded-2xl p-2 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -1306,7 +1389,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
               </button>
             </div>
             <p className="text-[11px] text-slate-600">
-              <strong>Checklist:</strong> In Telegram, open your channel (&ldquo;Hope Land Jobs&rdquo;) &rarr; <strong>Administrators</strong> &rarr; ensure your bot is added as Administrator with <strong>Post Messages</strong> ON. If the channel is <strong>Private</strong>, forward any channel message to <code className="bg-slate-100 px-1 rounded">@userinfobot</code> to get its <code className="bg-slate-100 px-1 rounded">-100...</code> ID and paste it above.
+              <strong>Checklist:</strong> In Telegram, open your channel (&ldquo;Hopeland Jobs&rdquo;) &rarr; <strong>Administrators</strong> &rarr; ensure your bot is added as Administrator with <strong>Post Messages</strong> ON. If the channel is <strong>Private</strong>, copy any channel message link (<code className="bg-slate-100 px-1 rounded">https://t.me/c/...</code>) or forward a message to <code className="bg-slate-100 px-1 rounded">@userinfobot</code> to get its <code className="bg-slate-100 px-1 rounded">-100...</code> ID and paste it above.
             </p>
           </div>
 
@@ -1363,9 +1446,9 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Batch In-Progress Banner */}
+      {/* Persistent Server Batch Progress Banner */}
       {isBatchRunning && batchProgress && (
-        <div className="bg-amber-500 text-slate-950 p-5 rounded-3xl shadow-lg border-2 border-amber-600 animate-pulse">
+        <div className="bg-amber-500 text-slate-950 p-5 rounded-3xl shadow-lg border-2 border-amber-600">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2.5">
               <RefreshCw className="w-5 h-5 animate-spin text-slate-950" />
@@ -1374,9 +1457,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
               </span>
             </div>
             <button
-              onClick={() => {
-                isBatchCancelledRef.current = true;
-              }}
+              onClick={handleCancelActiveQueue}
               className="px-3 py-1 rounded-xl bg-slate-950 text-amber-400 text-xs font-black hover:bg-slate-900 transition-colors"
             >
               Cancel Queue
@@ -1387,15 +1468,17 @@ export const TelegramPublishQueue: React.FC<Props> = ({
             <div
               className="bg-slate-950 h-3 rounded-full transition-all duration-300"
               style={{
-                width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%`,
+                width: `${serverQueueStatus?.summary?.progressPercent ?? Math.round((batchProgress.current / batchProgress.total) * 100)}%`,
               }}
             />
           </div>
-          <div className="flex justify-between items-center text-[11px] font-bold text-slate-900 mt-2">
+          <div className="flex flex-wrap justify-between items-center gap-2 text-[11px] font-bold text-slate-900 mt-2">
             <span>
-              Processing {batchProgress.current} of {batchProgress.total} vacancies
+              Total: {serverQueueStatus?.summary?.total ?? batchProgress.total} • Published: {serverQueueStatus?.summary?.published ?? 0} • Failed: {serverQueueStatus?.summary?.failed ?? 0} • Pending: {(serverQueueStatus?.summary?.pending ?? 0) + (serverQueueStatus?.summary?.processing ?? 0) + (serverQueueStatus?.summary?.retrying ?? 0)}
             </span>
-            <span>{Math.round((batchProgress.current / batchProgress.total) * 100)}% Complete</span>
+            <span>
+              {serverQueueStatus?.summary?.progressPercent ?? Math.round((batchProgress.current / batchProgress.total) * 100)}% Complete
+            </span>
           </div>
         </div>
       )}

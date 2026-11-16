@@ -42,6 +42,8 @@ export interface Vacancy {
   telegramMessageId?: number;
   telegramPublishedAt?: string;
   telegramPublishError?: string;
+  imageUrl?: string;
+  organizationLogo?: string;
   broadCategory?: 'Banking' | 'NGO' | 'Other';
   isWashNgo?: boolean;
   isExpired?: boolean;
@@ -50,9 +52,61 @@ export interface Vacancy {
 export type TelegramPostStatus =
   | 'ready'       // Yellow: READY TO POST (Waiting)
   | 'posting'     // Blue: POSTING (Currently sending)
+  | 'retrying'    // Orange: RETRYING (Temporary backoff retry)
   | 'success'     // Green: SUCCESSFULLY POSTED (Telegram confirmed)
   | 'failed'      // Red: FAILED (Telegram error)
   | 'already';    // Grey: ALREADY POSTED (Previously sent)
+
+export type TelegramVerificationStatusCode =
+  | 'connected'
+  | 'bot_not_found'
+  | 'invalid_token'
+  | 'channel_not_found'
+  | 'not_admin'
+  | 'missing_post_permission'
+  | 'api_connection_failed';
+
+export type TelegramQueueItemStatus = 'pending' | 'processing' | 'retrying' | 'published' | 'failed';
+
+export interface TelegramQueueItem {
+  vacancyId: string;
+  title: string;
+  organization: string;
+  category?: string;
+  status: TelegramQueueItemStatus;
+  attempts: number;
+  telegramMessageId?: number;
+  publishedAt?: string;
+  error?: string;
+  updatedAt: string;
+  vacancy?: Vacancy;
+}
+
+export interface TelegramQueueState {
+  id: string;
+  status: 'idle' | 'running' | 'completed' | 'cancelled';
+  channel: string;
+  distributionMode: TelegramDistributionMode;
+  startedAt?: string;
+  updatedAt: string;
+  completedAt?: string;
+  currentVacancyId?: string;
+  currentTitle?: string;
+  items: TelegramQueueItem[];
+}
+
+export interface TelegramPublishLogEntry {
+  id: string;
+  vacancyId: string;
+  title: string;
+  organization?: string;
+  action: 'auto_publish' | 'queue_publish' | 'manual_publish' | 'retry' | 'test_message';
+  status: 'published' | 'failed' | 'skipped';
+  telegramMessageId?: number;
+  channel: string;
+  error?: string;
+  timestamp: string;
+}
 
 export interface TelegramBatchRecord {
   id: string;
@@ -129,6 +183,8 @@ export interface SiteSettings {
   telegramChannelUrl: string;
   telegramGroupUrl: string;
   telegramBotToken?: string;
+  telegramBotTokenConfigured?: boolean;
+  maskedBotToken?: string;
   telegramBotUsername?: string;
   telegramAutoPublish: boolean;
   telegramDistributionMode?: TelegramDistributionMode;

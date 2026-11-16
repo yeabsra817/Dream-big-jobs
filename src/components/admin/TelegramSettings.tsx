@@ -24,20 +24,21 @@ import {
 import { SiteSettings, TelegramDistributionMode, Vacancy } from '../../types/job';
 import {
   cleanTelegramToken,
-  isValidTelegramTokenFormat,
   verifyTelegramBotToken,
   checkTelegramConnectionStatus,
   testTelegramPing,
   broadcastJobToTelegram,
-  maskTelegramToken,
-  LOCAL_STORAGE_TOKEN_KEY,
   isWashNgoVacancyClient,
   getTelegramDistributionModeLabel,
   normalizeTelegramChatId,
-  verifyTelegramChannelClient,
+  verifyTelegramConnectionClient,
+  fetchTelegramQueueStatusClient,
+  sendTelegramTestMessageClient,
+  ServerQueueStatusResponse,
   ChannelVerificationResult,
   DiscoveredTelegramChat,
 } from '../../utils/telegramClient';
+import { TelegramStatusPanel } from './TelegramStatusPanel';
 
 interface Props {
   settings: SiteSettings;
@@ -59,12 +60,14 @@ export const TelegramSettings: React.FC<Props> = ({
   allVacancies = [],
   onUpdateVacancyTelegramStatus,
 }) => {
-  // Bot Connection State
+  // Bot Connection State (tokens are strictly stored and read on the backend server)
   const [tokenInput, setTokenInput] = useState('');
   const [showToken, setShowToken] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isTestingPing, setIsTestingPing] = useState(false);
+  const [isSendingTestMessage, setIsSendingTestMessage] = useState(false);
   const [isEditingToken, setIsEditingToken] = useState(false);
+  const [queueStatus, setQueueStatus] = useState<ServerQueueStatusResponse | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<{
     configured: boolean;
     connected: boolean;
@@ -78,32 +81,18 @@ export const TelegramSettings: React.FC<Props> = ({
     maskedToken?: string;
     error?: string;
     latencyMs?: number;
-  }>(() => {
-    // Check if token or verified bot is already configured in settings or localStorage
-    const localToken = typeof window !== 'undefined'
-      ? (localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || localStorage.getItem('dreambigjobs_telegram_bot_token') || '')
-      : '';
-    const activeToken = settings.telegramBotToken || localToken;
-    const activeUsername = settings.telegramBotUsername || (activeToken ? 'DreamBigJobsEthiopiaBot' : '');
-
-    if (activeToken || activeUsername) {
-      return {
-        configured: true,
-        connected: true,
-        bot: {
-          id: 9228258664,
+  }>(() => ({
+    configured: Boolean(settings.telegramBotTokenConfigured),
+    connected: false,
+    bot: settings.telegramBotUsername
+      ? {
+          id: 0,
           first_name: 'Hopeland Jobs Bot',
-          username: (activeUsername || 'DreamBigJobsEthiopiaBot').replace('@', ''),
-        },
-        maskedToken: activeToken ? maskTelegramToken(activeToken) : 'Configured (Active)',
-      };
-    }
-
-    return {
-      configured: false,
-      connected: false,
-    };
-  });
+          username: settings.telegramBotUsername.replace('@', ''),
+        }
+      : undefined,
+    maskedToken: settings.maskedBotToken || (settings.telegramBotTokenConfigured ? 'Configured on Server' : undefined),
+  }));
 
   // Channel & Broadcast Settings State
   const [channelUsername, setChannelUsername] = useState(
@@ -178,92 +167,47 @@ export const TelegramSettings: React.FC<Props> = ({
       updatedAt: new Date().toISOString(),
     };
 
-  // Check current bot connection status on load (truthful server check)
+  // Check current bot connection status on load (truthful server-only check)
   const checkStatus = async () => {
     try {
-      let tokenToUse = settings.telegramBotToken;
+      const [tData, qData] = await Promise.all([
+        checkTelegramConnectionStatus(),
+        fetchTelegramQueueStatusClient(),
+      ]);
+      if (qData) setQueueStatus(qData);
 
-      // 1. Check persistent server status endpoint (/api/telegram/status)
-      try {
-        const tRes = await fetch('/api/telegram/status');
-        if (tRes.ok) {
-          const tData = await tRes.json();
-          if (tData?.connected && tData?.bot) {
-            setConnectionStatus({
-              configured: true,
-              connected: true,
-              bot: tData.bot,
-              maskedToken: tData.maskedToken || 'Connected (Synced Across Devices)',
-            });
-            setFeedbackMessage({
-              type: 'success',
-              text: `Connected to @${tData.bot.username} (${tData.bot.first_name}). Telegram Bot API is active and synced across all user sessions.`,
-            });
-            return;
-          }
-          if (tData?.configured && tData?.connected === false && tData?.error) {
-            setConnectionStatus({
-              configured: true,
-              connected: false,
-              bot: tData.bot,
-              maskedToken: tData.maskedToken,
-              error: tData.error,
-            });
-            setFeedbackMessage({
-              type: 'error',
-              text: `Telegram Bot API rejected the configured server token: ${tData.error}. Paste a valid Bot Token from @BotFather below.`,
-            });
-            return;
-          }
-        }
-      } catch {}
-
-      // 2. Check persistent server settings (/api/settings)
-      try {
-        const sRes = await fetch('/api/settings');
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          if (sData?.telegramBotToken && sData.telegramBotToken.includes(':')) {
-            tokenToUse = sData.telegramBotToken;
-          }
-        }
-      } catch {}
-
-      // 3. Check client localStorage fallback
-      if (!tokenToUse && typeof window !== 'undefined') {
-        const local = localStorage.getItem('dreambigjobs_telegram_bot_token');
-        if (local && local.includes(':')) {
-          tokenToUse = local;
-        }
+      if (tData?.connected && tData?.bot) {
+        setConnectionStatus({
+          configured: true,
+          connected: true,
+          bot: tData.bot,
+          maskedToken: tData.maskedToken || 'Configured on Server (Masked)',
+        });
+        setFeedbackMessage({
+          type: 'success',
+          text: `Connected to @${tData.bot.username} (${tData.bot.first_name}). Telegram Bot API is active and secured on the server.`,
+        });
+        return;
       }
-
-      if (tokenToUse) {
-        const data = await checkTelegramConnectionStatus(tokenToUse);
-        if (data.connected && data.bot) {
-          setConnectionStatus(data as any);
-          setFeedbackMessage({
-            type: 'success',
-            text: `Connected to @${data.bot.username} (${data.bot.first_name}). Telegram Bot API is active and ready to broadcast.`,
-          });
-          return;
-        }
+      if (tData?.configured && tData?.connected === false) {
         setConnectionStatus({
           configured: true,
           connected: false,
-          error: data.error || 'Bot token was rejected by Telegram API.',
+          bot: tData.bot,
+          maskedToken: tData.maskedToken,
+          error: tData.error,
         });
         setFeedbackMessage({
           type: 'error',
-          text: data.error || 'Bot token was rejected by Telegram API. Please verify in @BotFather.',
+          text: `Telegram Bot API rejected the server token: ${tData.error || 'Unauthorized'}. Paste a valid Bot Token from @BotFather below.`,
         });
         return;
       }
 
-      // No token configured
-      setConnectionStatus({ configured: false, connected: false });
+      setConnectionStatus({ configured: false, connected: false, error: tData?.error });
       setFeedbackMessage({
         type: 'info',
-        text: 'Telegram bot is not connected yet. Paste your Bot Token from @BotFather below and click "Connect & Authenticate Token".',
+        text: 'Telegram bot token is not configured on the server yet. Paste your Bot Token from @BotFather below to save it securely on the server.',
       });
     } catch (err: any) {
       console.warn('Status check notice:', err);
@@ -272,9 +216,9 @@ export const TelegramSettings: React.FC<Props> = ({
 
   useEffect(() => {
     checkStatus();
-  }, [settings.telegramBotToken]);
+  }, []);
 
-  // Securely configure Bot Token (auto-sanitizes spaces and supports dual-channel verification)
+  // Securely configure Bot Token on the server (never saved to browser storage or Firestore)
   const handleConfigureToken = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanToken = cleanTelegramToken(tokenInput);
@@ -302,18 +246,19 @@ export const TelegramSettings: React.FC<Props> = ({
           bot: data.bot,
           maskedToken: data.maskedToken,
         });
-        setTokenInput(''); // Clear raw token from client input
+        setTokenInput('');
         setIsEditingToken(false);
         setFeedbackMessage({
           type: 'success',
-          text: `Success! Telegram Bot API verified @${data.bot.username} (${data.bot.first_name}). Ready to broadcast vacancies!`,
+          text: `Success! Server verified @${data.bot.username} (${data.bot.first_name}) via getMe. Token is stored securely on the backend.`,
         });
 
-        // Save bot username and token to settings
         await onSaveSettings({
           ...settings,
-          telegramBotToken: cleanToken,
+          telegramBotTokenConfigured: true,
+          maskedBotToken: data.maskedToken,
           telegramBotUsername: data.bot.username,
+          updatedAt: new Date().toISOString(),
         });
       }
     } catch (err: any) {
@@ -332,7 +277,7 @@ export const TelegramSettings: React.FC<Props> = ({
     setFeedbackMessage(null);
 
     try {
-      const data = await testTelegramPing(settings.telegramBotToken);
+      const data = await testTelegramPing();
 
       if (!data.success) {
         setFeedbackMessage({
@@ -361,26 +306,60 @@ export const TelegramSettings: React.FC<Props> = ({
     }
   };
 
-  // Verify Channel & Bot Admin permissions via Telegram API
+  // Verify Connection (Bot + Channel + Admin + Post Messages permission)
   const handleVerifyChannel = async (overrideChannel?: string) => {
     setIsVerifyingChannel(true);
     setChannelVerification(null);
     try {
-      const result = await verifyTelegramChannelClient(
-        overrideChannel ?? channelUsername,
-        settings.telegramBotToken
-      );
+      const result = await verifyTelegramConnectionClient(overrideChannel ?? channelUsername);
       setChannelVerification(result);
       if (result.ok && result.chat) {
         const resolvedHandle = result.chat.username ? `@${result.chat.username}` : String(result.chat.id);
         setChannelUsername(resolvedHandle);
         setFeedbackMessage({
           type: 'success',
-          text: `Channel verified: "${result.chat.title}" (${resolvedHandle}, ID: ${result.chat.id}). Bot is Administrator with Post Messages enabled.`,
+          text: `${result.statusLabel || 'Connected successfully'}: "${result.chat.title}" (${resolvedHandle}, ID: ${result.chat.id}). Bot is Administrator with Post Messages enabled.`,
+        });
+      } else {
+        setFeedbackMessage({
+          type: 'error',
+          text: `${result.statusLabel || 'Verification failed'}: ${result.error || 'Could not verify channel.'}`,
         });
       }
     } finally {
       setIsVerifyingChannel(false);
+    }
+  };
+
+  const handleSendTestMessageDirect = async () => {
+    setIsSendingTestMessage(true);
+    setBroadcastResult(null);
+    try {
+      const res = await sendTelegramTestMessageClient(channelUsername);
+      if (res.success) {
+        setBroadcastResult({
+          success: true,
+          telegramMessageId: res.telegramMessageId,
+          message: res.message,
+        });
+        setFeedbackMessage({
+          type: 'success',
+          text: res.message || `Real test message sent (Msg #${res.telegramMessageId})`,
+        });
+      } else {
+        setBroadcastResult({
+          success: false,
+          error: res.error || res.statusLabel || 'Failed to send test message.',
+        });
+        setFeedbackMessage({
+          type: 'error',
+          text: `${res.statusLabel ? `${res.statusLabel}: ` : ''}${res.error || 'Test message failed.'}`,
+        });
+      }
+      const qData = await fetchTelegramQueueStatusClient();
+      if (qData) setQueueStatus(qData);
+    } finally {
+      setIsSendingTestMessage(false);
     }
   };
 
@@ -452,12 +431,12 @@ export const TelegramSettings: React.FC<Props> = ({
     }
   };
 
-  // Broadcast vacancy to channel with dual-channel resilience & distribution mode check
+  // Broadcast vacancy to channel via server API with distribution mode check
   const handleBroadcastToChannel = async () => {
     if (!connectionStatus.connected) {
       setFeedbackMessage({
         type: 'error',
-        text: 'Please connect and verify your bot token in Step 1 first.',
+        text: 'Please ensure a valid Telegram Bot Token is connected in Step 1 first.',
       });
       return;
     }
@@ -470,7 +449,6 @@ export const TelegramSettings: React.FC<Props> = ({
       const data = await broadcastJobToTelegram(
         activeBroadcastVacancy,
         channelUsername,
-        settings.telegramBotToken,
         forceRetry,
         cleanDomain,
         {
@@ -478,19 +456,21 @@ export const TelegramSettings: React.FC<Props> = ({
           telegramDistributionMode: distributionMode,
           telegramIncludeInternationalImmigration: includeImmigration,
           telegramIncludeScholarships: includeScholarships,
-        }
+        },
+        'vacancy',
+        'manual_publish'
       );
       setBroadcastResult(data);
 
-      if (data.success) {
-        if (onUpdateVacancyTelegramStatus && activeBroadcastVacancy.id !== 'sample_test_job') {
-          await onUpdateVacancyTelegramStatus(
-            activeBroadcastVacancy.id,
-            true,
-            data.telegramMessageId
-          );
-        }
+      if (data.success && onUpdateVacancyTelegramStatus && activeBroadcastVacancy.id !== 'sample_test_job') {
+        await onUpdateVacancyTelegramStatus(
+          activeBroadcastVacancy.id,
+          true,
+          data.telegramMessageId
+        );
       }
+      const qData = await fetchTelegramQueueStatusClient();
+      if (qData) setQueueStatus(qData);
     } catch (err: any) {
       setBroadcastResult({
         success: false,
@@ -503,6 +483,28 @@ export const TelegramSettings: React.FC<Props> = ({
 
   return (
     <div className="space-y-8">
+      <TelegramStatusPanel
+        siteSettings={settings}
+        vacancies={allVacancies}
+        queueStatus={queueStatus}
+        onSaveSettings={onSaveSettings}
+        onRefreshQueueStatus={async () => {
+          const qData = await fetchTelegramQueueStatusClient();
+          if (qData) setQueueStatus(qData);
+        }}
+        onChannelVerified={(res) => {
+          setChannelVerification(res);
+          if (res.bot) {
+            setConnectionStatus((prev) => ({
+              ...prev,
+              configured: true,
+              connected: res.statusCode !== 'invalid_token' && res.statusCode !== 'bot_not_found' && res.statusCode !== 'api_connection_failed',
+              bot: res.bot,
+            }));
+          }
+        }}
+      />
+
       {/* Step Indicator Header */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
@@ -819,11 +821,11 @@ export const TelegramSettings: React.FC<Props> = ({
                   disabled={isVerifyingChannel}
                   className="px-3.5 py-3 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-50 text-amber-400 text-xs font-extrabold whitespace-nowrap transition-colors"
                 >
-                  {isVerifyingChannel ? 'Checking...' : 'Verify & Auto-Detect'}
+                  {isVerifyingChannel ? 'Checking...' : 'VERIFY TELEGRAM CONNECTION'}
                 </button>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Public channels use <code className="bg-slate-200 px-1 rounded">@username</code>. Private channels require the numeric <code className="bg-slate-200 px-1 rounded">-100...</code> Channel ID.
+                Public channels use <code className="bg-slate-200 px-1 rounded">@username</code>. Private channels require a private post link (<code className="bg-slate-200 px-1 rounded">t.me/c/...</code>) or numeric <code className="bg-slate-200 px-1 rounded">-100...</code> Channel ID.
               </p>
 
               {channelVerification && (
@@ -836,8 +838,8 @@ export const TelegramSettings: React.FC<Props> = ({
                 >
                   <div className="font-bold">
                     {channelVerification.ok && channelVerification.chat
-                      ? `✅ Verified "${channelVerification.chat.title}" (${channelVerification.normalizedChannel}, ID: ${channelVerification.chat.id}) — Bot is Admin & Ready`
-                      : `❌ ${channelVerification.error || 'Channel verification failed'}`}
+                      ? `✅ ${channelVerification.statusLabel || 'Connected successfully'}: "${channelVerification.chat.title}" (${channelVerification.normalizedChannel}, ID: ${channelVerification.chat.id})`
+                      : `❌ ${channelVerification.statusLabel ? `${channelVerification.statusLabel} — ` : ''}${channelVerification.error || 'Channel verification failed'}`}
                   </div>
                   {channelVerification.diagnosis && (
                     <p className="text-rose-800 leading-relaxed">{channelVerification.diagnosis}</p>
@@ -1203,10 +1205,26 @@ export const TelegramSettings: React.FC<Props> = ({
                 <p className="text-slate-200">
                   🔰 <strong>{activeBroadcastVacancy.organization || 'Employer'}</strong> invites qualified applicants for the <strong>{activeBroadcastVacancy.title || 'Various'}</strong> position.
                 </p>
+                {activeBroadcastVacancy.location && (
+                  <p className="text-slate-200">📍 <strong>Location:</strong> {activeBroadcastVacancy.location}</p>
+                )}
+                {activeBroadcastVacancy.employmentType && (
+                  <p className="text-slate-200">💼 <strong>Employment Type:</strong> {activeBroadcastVacancy.employmentType}</p>
+                )}
+                {activeBroadcastVacancy.applicationDeadline && (
+                  <p className="text-slate-200">⏳ <strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}</p>
+                )}
                 <p className="text-slate-200">
-                  ✅ <strong>Education field:</strong> {activeBroadcastVacancy.requiredFieldOfStudy || activeBroadcastVacancy.educationQualification || activeBroadcastVacancy.category || 'Accounting & Finance / Banking / Business and related fields'}
+                  ✅ <strong>Education &amp; Experience:</strong> {activeBroadcastVacancy.requiredFieldOfStudy || activeBroadcastVacancy.educationQualification || activeBroadcastVacancy.category || 'Accounting & Finance / Banking / Business and related fields'}
                   {activeBroadcastVacancy.experienceYears ? ` (${activeBroadcastVacancy.experienceYears} experience)` : ''}
                 </p>
+                {(activeBroadcastVacancy.applicationUrl || activeBroadcastVacancy.applicationEmail) && (
+                  <p className="text-[#64B5F6] break-all">
+                    {activeBroadcastVacancy.applicationUrl
+                      ? `🔗 Apply Online: ${activeBroadcastVacancy.applicationUrl}`
+                      : `✉️ Apply via Email: ${activeBroadcastVacancy.applicationEmail}`}
+                  </p>
+                )}
                 <div className="pt-1">
                   <p className="font-bold text-slate-100">📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</p>
                   <p className="text-[#64B5F6] break-all">
@@ -1229,7 +1247,7 @@ export const TelegramSettings: React.FC<Props> = ({
                   Send to {channelUsername}
                 </h4>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Click the button below to send this vacancy to your Telegram channel via your bot.
+                  Click below to publish the selected vacancy or send a standalone connection test message.
                 </p>
               </div>
 
@@ -1263,9 +1281,19 @@ export const TelegramSettings: React.FC<Props> = ({
                 </span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleSendTestMessageDirect}
+                disabled={isSendingTestMessage}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-amber-400 font-extrabold text-xs transition-colors shadow-xs disabled:opacity-50"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>{isSendingTestMessage ? 'Sending Test Message...' : 'Send Test Message'}</span>
+              </button>
+
               {!connectionStatus.connected && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                  ⚠️ Configure and authenticate your Bot Token in Step 1 before broadcasting.
+                  ⚠️ Configure and verify your Bot Token on the server in Step 1 before broadcasting.
                 </p>
               )}
             </div>

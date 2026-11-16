@@ -2984,6 +2984,117 @@
   ],
   "researchHistory": [
     {
+      "id": "run_auto_1794816326088",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-16T08:05:25.239Z",
+      "completedAt": "2026-11-16T08:05:26.088Z",
+      "regionsResearched": [
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "Saudi Arabia",
+        "Qatar",
+        "Bahrain"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #22 (interval_30s): polled 3 official sources (Saudi Arabia, Qatar, Bahrain), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1794816301952",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-16T08:04:55.251Z",
+      "completedAt": "2026-11-16T08:05:01.952Z",
+      "regionsResearched": [
+        "Europe",
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "Georgia",
+        "United Kingdom",
+        "United Arab Emirates"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 2,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 1,
+      "summary": "Cycle #21 (interval_30s): polled 3 official sources (Georgia, United Kingdom, United Arab Emirates), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1794816274965",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (startup)",
+      "startedAt": "2026-11-16T08:04:26.312Z",
+      "completedAt": "2026-11-16T08:04:34.965Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Norway",
+        "Denmark",
+        "Serbia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #20 (startup): polled 3 official sources (Norway, Denmark, Serbia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1794765397343",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-15T17:56:35.737Z",
+      "completedAt": "2026-11-15T17:56:37.343Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Romania",
+        "Croatia",
+        "Sweden"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #19 (interval_30s): polled 3 official sources (Romania, Croatia, Sweden), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1794765368836",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (startup)",
+      "startedAt": "2026-11-15T17:56:06.597Z",
+      "completedAt": "2026-11-15T17:56:08.836Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Estonia",
+        "Latvia",
+        "Lithuania"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #18 (startup): polled 3 official sources (Estonia, Latvia, Lithuania), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
       "id": "run_auto_1794761773843",
       "runType": "international_jobs",
       "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
@@ -4258,7 +4369,7 @@
       "checkedAt": "2026-11-15T14:34:50.023Z"
     }
   ],
-  "updatedAt": "2026-11-15T16:56:13.848Z",
+  "updatedAt": "2026-11-16T08:05:26.091Z",
   "monitoredSources": [
     {
       "id": "src_ebrd_jobs",
@@ -4364,9 +4475,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-15T15:05:34.479Z",
-      "nextScheduledCheck": "2026-11-15T15:06:05.271Z",
-      "lastSuccessfulCheck": "2026-11-15T15:05:34.479Z"
+      "lastCheckedAt": "2026-11-15T17:56:06.601Z",
+      "nextScheduledCheck": "2026-11-15T17:56:37.769Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:06.601Z"
     },
     {
       "id": "src_lv_pmlp",
@@ -4382,9 +4493,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T15:05:49.705Z",
-      "nextScheduledCheck": "2026-11-15T15:06:20.008Z",
-      "lastSuccessfulCheck": "2026-11-15T15:05:49.705Z"
+      "lastCheckedAt": "2026-11-15T17:56:08.081Z",
+      "nextScheduledCheck": "2026-11-15T17:56:38.316Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:08.081Z"
     },
     {
       "id": "src_lt_migracija",
@@ -4400,9 +4511,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T15:05:57.008Z",
-      "nextScheduledCheck": "2026-11-15T15:06:27.206Z",
-      "lastSuccessfulCheck": "2026-11-15T15:05:57.008Z"
+      "lastCheckedAt": "2026-11-15T17:56:08.500Z",
+      "nextScheduledCheck": "2026-11-15T17:56:38.705Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:08.500Z"
     },
     {
       "id": "src_ro_igi",
@@ -4418,9 +4529,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T15:06:04.208Z",
-      "nextScheduledCheck": "2026-11-15T15:06:34.735Z",
-      "lastSuccessfulCheck": "2026-11-15T15:06:04.208Z"
+      "lastCheckedAt": "2026-11-15T17:56:35.742Z",
+      "nextScheduledCheck": "2026-11-15T17:57:06.284Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:35.742Z"
     },
     {
       "id": "src_hr_mup",
@@ -4436,9 +4547,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:49:42.982Z",
-      "nextScheduledCheck": "2026-11-15T16:50:13.374Z",
-      "lastSuccessfulCheck": "2026-11-15T16:49:42.982Z"
+      "lastCheckedAt": "2026-11-15T17:56:36.465Z",
+      "nextScheduledCheck": "2026-11-15T17:57:06.598Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:36.465Z"
     },
     {
       "id": "src_se_mig",
@@ -4454,9 +4565,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:49:44.037Z",
-      "nextScheduledCheck": "2026-11-15T16:50:14.526Z",
-      "lastSuccessfulCheck": "2026-11-15T16:49:44.037Z"
+      "lastCheckedAt": "2026-11-15T17:56:36.730Z",
+      "nextScheduledCheck": "2026-11-15T17:57:07.215Z",
+      "lastSuccessfulCheck": "2026-11-15T17:56:36.730Z"
     },
     {
       "id": "src_no_udi",
@@ -4472,9 +4583,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:49:44.704Z",
-      "nextScheduledCheck": "2026-11-15T16:50:14.806Z",
-      "lastSuccessfulCheck": "2026-11-15T16:49:44.704Z"
+      "lastCheckedAt": "2026-11-16T08:04:26.316Z",
+      "nextScheduledCheck": "2026-11-16T08:04:56.919Z",
+      "lastSuccessfulCheck": "2026-11-16T08:04:26.316Z"
     },
     {
       "id": "src_dk_siri",
@@ -4490,9 +4601,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:50:12.171Z",
-      "nextScheduledCheck": "2026-11-15T16:50:42.454Z",
-      "lastSuccessfulCheck": "2026-11-15T16:50:12.171Z"
+      "lastCheckedAt": "2026-11-16T08:04:34.189Z",
+      "nextScheduledCheck": "2026-11-16T08:05:04.482Z",
+      "lastSuccessfulCheck": "2026-11-16T08:04:34.189Z"
     },
     {
       "id": "src_rs_welcome",
@@ -4508,9 +4619,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:50:12.631Z",
-      "nextScheduledCheck": "2026-11-15T16:50:42.913Z",
-      "lastSuccessfulCheck": "2026-11-15T16:50:12.631Z"
+      "lastCheckedAt": "2026-11-16T08:04:34.598Z",
+      "nextScheduledCheck": "2026-11-16T08:05:04.788Z",
+      "lastSuccessfulCheck": "2026-11-16T08:04:34.598Z"
     },
     {
       "id": "src_ge_migration",
@@ -4523,10 +4634,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 1,
+      "failedChecks": 2,
       "verificationStatus": "FAILED",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:50:13.090Z",
+      "lastCheckedAt": "2026-11-16T08:04:55.256Z",
       "lastError": "fetch failed"
     },
     {
@@ -4543,9 +4654,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-15T16:50:42.173Z",
-      "nextScheduledCheck": "2026-11-15T16:51:12.252Z",
-      "lastSuccessfulCheck": "2026-11-15T16:50:42.173Z"
+      "lastCheckedAt": "2026-11-16T08:04:55.263Z",
+      "nextScheduledCheck": "2026-11-16T08:05:25.287Z",
+      "lastSuccessfulCheck": "2026-11-16T08:04:55.263Z"
     },
     {
       "id": "src_ae_mohre",
@@ -4558,10 +4669,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 1,
+      "failedChecks": 2,
       "verificationStatus": "FAILED",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-15T16:50:42.380Z",
+      "lastCheckedAt": "2026-11-16T08:04:55.451Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -4578,9 +4689,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:50:48.881Z",
-      "nextScheduledCheck": "2026-11-15T16:51:18.999Z",
-      "lastSuccessfulCheck": "2026-11-15T16:50:48.881Z"
+      "lastCheckedAt": "2026-11-16T08:05:25.245Z",
+      "nextScheduledCheck": "2026-11-16T08:05:55.359Z",
+      "lastSuccessfulCheck": "2026-11-16T08:05:25.245Z"
     },
     {
       "id": "src_qa_hukoomi",
@@ -4596,9 +4707,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:51:12.174Z",
-      "nextScheduledCheck": "2026-11-15T16:51:42.336Z",
-      "lastSuccessfulCheck": "2026-11-15T16:51:12.174Z"
+      "lastCheckedAt": "2026-11-16T08:05:25.489Z",
+      "nextScheduledCheck": "2026-11-16T08:05:55.643Z",
+      "lastSuccessfulCheck": "2026-11-16T08:05:25.489Z"
     },
     {
       "id": "src_bh_lmra",
@@ -4614,9 +4725,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-15T16:51:12.548Z",
-      "nextScheduledCheck": "2026-11-15T16:51:42.616Z",
-      "lastSuccessfulCheck": "2026-11-15T16:51:12.548Z"
+      "lastCheckedAt": "2026-11-16T08:05:25.799Z",
+      "nextScheduledCheck": "2026-11-16T08:05:55.946Z",
+      "lastSuccessfulCheck": "2026-11-16T08:05:25.799Z"
     },
     {
       "id": "src_om_rop",
@@ -5901,12 +6012,12 @@
   "schedulerConfig": {
     "enabled": true,
     "intervalSeconds": 30,
-    "cycleCount": 17,
-    "sourceCursorIndex": 5,
-    "lastRunAt": "2026-11-15T16:56:13.843Z",
-    "lastSuccessfulRunAt": "2026-11-15T16:56:13.843Z",
+    "cycleCount": 22,
+    "sourceCursorIndex": 20,
+    "lastRunAt": "2026-11-16T08:05:26.088Z",
+    "lastSuccessfulRunAt": "2026-11-16T08:05:26.088Z",
     "lastError": null,
     "aiProviderStatus": "degraded (Gemini 429 quota exceeded) — Live Official Crawler active",
-    "lastCycleSummary": "Cycle #17 (interval_30s): polled 3 official sources (Switzerland / International, Germany, Finland), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered."
+    "lastCycleSummary": "Cycle #22 (interval_30s): polled 3 official sources (Saudi Arabia, Qatar, Bahrain), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered."
   }
 }

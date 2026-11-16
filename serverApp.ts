@@ -1047,6 +1047,24 @@ app.post('/api/admin/scan-existing-duplicates', (req: Request, res: Response) =>
 // Persistent Site Settings & Telegram Credentials Storage (survives rebuilds & server restarts)
 const SETTINGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'site_settings.json');
 const TELEGRAM_CONFIG_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_config.json');
+const TELEGRAM_QUEUE_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_queue.json');
+const TELEGRAM_LOGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_logs.json');
+
+function ensureRuntimeDataDir(): string {
+  const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
+  try {
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+  } catch {}
+  return dataDir;
+}
+
+function maskTelegramTokenServer(token: string): string {
+  const cleaned = String(token || '').replace(/[\s\u200B-\u200D\uFEFF]/g, '').trim();
+  if (!cleaned || cleaned.length < 10) return '';
+  return `${cleaned.substring(0, 6)}••••••••${cleaned.slice(-4)}`;
+}
 
 function loadPersistedSettings(): any {
   try {
@@ -1055,7 +1073,7 @@ function loadPersistedSettings(): any {
       const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
       settings = JSON.parse(raw) || {};
     }
-    // Also read dedicated telegram config if present
+    // Also read dedicated telegram config if present (strictly server-side)
     if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
       try {
         const tgRaw = fs.readFileSync(TELEGRAM_CONFIG_FILE, 'utf-8');
@@ -1065,6 +1083,9 @@ function loadPersistedSettings(): any {
         }
         if (tgData?.telegramBotUsername) {
           settings.telegramBotUsername = tgData.telegramBotUsername;
+        }
+        if (tgData?.telegramChannelId) {
+          settings.telegramChannelId = tgData.telegramChannelId;
         }
         if (tgData?.customDomain) {
           settings.customDomain = tgData.customDomain;
@@ -1078,21 +1099,40 @@ function loadPersistedSettings(): any {
   return null;
 }
 
+function sanitizeSettingsForClient(settings: any, activeToken?: string): any {
+  const { telegramBotToken: _omitted, ...safe } = settings || {};
+  const token = activeToken || getTelegramToken();
+  return {
+    ...safe,
+    telegramBotTokenConfigured: Boolean(token),
+    telegramConnected: Boolean(token),
+    maskedBotToken: token ? maskTelegramTokenServer(token) : '',
+  };
+}
+
 function savePersistedSettings(settings: any): any {
   try {
-    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
+    ensureRuntimeDataDir();
     const current = loadPersistedSettings() || {};
     const merged = { ...current, ...settings, updatedAt: new Date().toISOString() };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf-8');
 
-    // If telegram token or domain is included, also save to dedicated telegram_config.json
-    if (merged.telegramBotToken || merged.customDomain || merged.telegramBotUsername) {
+    // Keep secret token strictly in dedicated server-only TELEGRAM_CONFIG_FILE; omit raw token from public settings JSON
+    const { telegramBotToken: rawTokenToStore, ...settingsWithoutRawToken } = merged;
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settingsWithoutRawToken, null, 2), 'utf-8');
+
+    // Save server-only Telegram credentials
+    if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId) {
+      let existingTg: any = {};
+      try {
+        if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
+          existingTg = JSON.parse(fs.readFileSync(TELEGRAM_CONFIG_FILE, 'utf-8')) || {};
+        }
+      } catch {}
       const tgPayload = {
-        telegramBotToken: merged.telegramBotToken,
-        telegramBotUsername: merged.telegramBotUsername,
+        ...existingTg,
+        ...(rawTokenToStore ? { telegramBotToken: rawTokenToStore } : {}),
+        ...(merged.telegramBotUsername ? { telegramBotUsername: merged.telegramBotUsername } : {}),
+        ...(merged.telegramChannelId ? { telegramChannelId: merged.telegramChannelId } : {}),
         customDomain: (merged.customDomain && merged.customDomain !== 'healmorin.com') ? merged.customDomain : 'hopelandjobs.tech',
         updatedAt: new Date().toISOString(),
       };
@@ -1142,7 +1182,7 @@ function getTelegramToken(): string {
   return '';
 }
 
-// Universal Site Settings Endpoint (serves settings across all admin logins and device sessions)
+// Universal Site Settings Endpoint (serves safe settings across sessions; never exposes raw TELEGRAM_BOT_TOKEN)
 app.get('/api/settings', (req: Request, res: Response): void => {
   const persisted = loadPersistedSettings() || {};
   const currentToken = getTelegramToken();
@@ -1153,6 +1193,7 @@ app.get('/api/settings', (req: Request, res: Response): void => {
 
   res.json({
     telegramChannelName: persisted.telegramChannelName || '@DreamBigJobsEthiopia',
+    telegramChannelId: persisted.telegramChannelId || '',
     telegramChannelUrl: persisted.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia',
     telegramGroupUrl: persisted.telegramGroupUrl || 'https://t.me/DreamBigJobsEthiopia',
     telegramBotUsername: persisted.telegramBotUsername || '@DreamBigJobsEthiopiaBot',
@@ -1182,7 +1223,8 @@ app.get('/api/settings', (req: Request, res: Response): void => {
     researchFrequency: persisted.researchFrequency || 'manual',
     lastResearchRunAt: persisted.lastResearchRunAt || '',
     nextResearchRunAt: persisted.nextResearchRunAt || '',
-    telegramBotToken: currentToken || persisted.telegramBotToken || '',
+    telegramBotTokenConfigured: Boolean(currentToken),
+    maskedBotToken: currentToken ? maskTelegramTokenServer(currentToken) : '',
     telegramConnected: Boolean(currentToken),
     gaMeasurementId: persisted.gaMeasurementId || '',
     gaTrackingEnabled: persisted.gaTrackingEnabled ?? Boolean(persisted.gaMeasurementId),
@@ -1202,7 +1244,8 @@ app.post('/api/settings', (req: Request, res: Response): void => {
   try {
     const incoming = req.body || {};
     const current = loadPersistedSettings() || {};
-    const merged = { ...current, ...incoming };
+    const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
+    const merged = { ...current, ...incomingWithoutRaw };
 
     if (typeof incoming.telegramChannelName === 'string' && incoming.telegramChannelName.trim()) {
       const normalized = normalizeTelegramChatIdServer(incoming.telegramChannelName);
@@ -1216,9 +1259,10 @@ app.post('/api/settings', (req: Request, res: Response): void => {
       }
     }
 
-    if (incoming.telegramBotToken) {
+    // Never persist empty/undefined token overwrite; keep server token untouched unless explicitly submitted via /api/telegram/configure-token
+    if (incoming.telegramBotToken && typeof incoming.telegramBotToken === 'string' && incoming.telegramBotToken.includes(':')) {
       const clean = String(incoming.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, '');
-      if (clean && clean.includes(':')) {
+      if (clean && !clean.includes('••••')) {
         serverTelegramBotToken = clean;
         process.env.TELEGRAM_BOT_TOKEN = clean;
         merged.telegramBotToken = clean;
@@ -1226,7 +1270,7 @@ app.post('/api/settings', (req: Request, res: Response): void => {
     }
 
     const saved = savePersistedSettings(merged);
-    res.json({ success: true, settings: saved });
+    res.json({ success: true, settings: sanitizeSettingsForClient(saved, getTelegramToken()) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || String(err) });
   }
@@ -1647,8 +1691,27 @@ app.post('/api/telegram/test-connection', async (req: Request, res: Response): P
 });
 
 // =========================================================================
-// Canonical Telegram Channel Normalization, Verification & Auto-Discovery
+// Canonical Telegram Channel Normalization, 7-State Verification, Queue & Logs
 // =========================================================================
+type TelegramVerificationStatusCode =
+  | 'connected'
+  | 'bot_not_found'
+  | 'invalid_token'
+  | 'channel_not_found'
+  | 'not_admin'
+  | 'missing_post_permission'
+  | 'api_connection_failed';
+
+const TELEGRAM_STATUS_LABELS: Record<TelegramVerificationStatusCode, string> = {
+  connected: 'Connected successfully',
+  bot_not_found: 'Bot not found',
+  invalid_token: 'Invalid bot token',
+  channel_not_found: 'Channel not found',
+  not_admin: 'Bot is not an administrator',
+  missing_post_permission: 'Missing Post Messages permission',
+  api_connection_failed: 'Telegram API connection failed',
+};
+
 function normalizeTelegramChatIdServer(input?: string): {
   chatId: string;
   isNumeric: boolean;
@@ -1676,6 +1739,17 @@ function normalizeTelegramChatIdServer(input?: string): {
   }
 
   const urlCandidate = raw.replace(/^@/, '').trim();
+
+  // Extract -100<id> from private channel post URLs: https://t.me/c/1234567890/45 -> -1001234567890
+  const privatePostMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/c\/(\d+)(?:\/\d+)?(?:[/?#].*)?$/i);
+  if (privatePostMatch) {
+    return {
+      chatId: `-100${privatePostMatch[1]}`,
+      isNumeric: true,
+      isInviteLink: false,
+    };
+  }
+
   const inviteMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:\+|joinchat\/)([A-Za-z0-9_-]+)/i);
   if (inviteMatch) {
     return {
@@ -1683,7 +1757,7 @@ function normalizeTelegramChatIdServer(input?: string): {
       isNumeric: false,
       isInviteLink: true,
       error:
-        'Private Telegram invite links (t.me/+...) cannot be used as a bot chat_id. Add your bot as Channel Administrator and enter the numeric -100... Channel ID or click Auto-Detect Channel.',
+        'Private Telegram invite links (t.me/+...) cannot be resolved directly by bots. Add your bot as Channel Administrator and enter the numeric -100... Channel ID or paste a t.me/c/<id>/<msg> link from any post in that channel.',
     };
   }
 
@@ -1722,65 +1796,75 @@ function isFatalTelegramConfigErrorServer(errorMsg?: string): boolean {
   );
 }
 
-async function discoverBotChannelsServer(token: string): Promise<Array<{
-  id: string;
-  title: string;
-  username?: string;
-  type: string;
-  botStatus?: string;
-}>> {
+async function discoverBotChannelsServer(token: string): Promise<{
+  chats: Array<{ id: string; title: string; username?: string; type: string; botStatus?: string }>;
+  webhookActive?: boolean;
+}> {
   const seen = new Map<string, { id: string; title: string; username?: string; type: string; botStatus?: string }>();
-  if (!token || token === 'dry-run') return [];
+  if (!token || token === 'dry-run') return { chats: [] };
+  let webhookActive = false;
 
   try {
-    const allowed = encodeURIComponent(
-      JSON.stringify(['channel_post', 'edited_channel_post', 'my_chat_member', 'chat_member', 'message'])
-    );
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4500);
-    const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&allowed_updates=${allowed}`, {
-      signal: controller.signal,
+    const whRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`, {
+      signal: AbortSignal.timeout(3500),
     });
-    clearTimeout(timeout);
-    const data = (await res.json()) as any;
-    if (data?.ok && Array.isArray(data.result)) {
-      for (const upd of data.result) {
-        const chats = [
-          upd?.channel_post?.chat,
-          upd?.edited_channel_post?.chat,
-          upd?.my_chat_member?.chat,
-          upd?.chat_member?.chat,
-          upd?.message?.chat,
-          upd?.message?.forward_from_chat,
-        ].filter(Boolean);
-        for (const c of chats) {
-          if (c?.id && (c.type === 'channel' || c.type === 'supergroup' || c.type === 'group')) {
-            const key = String(c.id);
-            const botStatus =
-              upd?.my_chat_member?.new_chat_member?.status ||
-              seen.get(key)?.botStatus;
-            seen.set(key, {
-              id: key,
-              title: c.title || c.username || key,
-              username: c.username ? `@${c.username}` : undefined,
-              type: c.type,
-              botStatus,
-            });
-          }
-        }
-      }
+    const whData = (await whRes.json()) as any;
+    if (whData?.ok && whData?.result?.url) {
+      webhookActive = true;
     }
   } catch {}
 
-  return Array.from(seen.values());
+  if (!webhookActive) {
+    try {
+      const allowed = encodeURIComponent(
+        JSON.stringify(['channel_post', 'edited_channel_post', 'my_chat_member', 'chat_member', 'message'])
+      );
+      const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100&allowed_updates=${allowed}`, {
+        signal: AbortSignal.timeout(4500),
+      });
+      const data = (await res.json()) as any;
+      if (data?.ok && Array.isArray(data.result)) {
+        for (const upd of data.result) {
+          const chats = [
+            upd?.channel_post?.chat,
+            upd?.edited_channel_post?.chat,
+            upd?.my_chat_member?.chat,
+            upd?.chat_member?.chat,
+            upd?.message?.chat,
+            upd?.message?.forward_from_chat,
+          ].filter(Boolean);
+          for (const c of chats) {
+            if (c?.id && (c.type === 'channel' || c.type === 'supergroup' || c.type === 'group')) {
+              const key = String(c.id);
+              const botStatus =
+                upd?.my_chat_member?.new_chat_member?.status ||
+                seen.get(key)?.botStatus;
+              seen.set(key, {
+                id: key,
+                title: c.title || c.username || key,
+                username: c.username ? `@${c.username}` : undefined,
+                type: c.type,
+                botStatus,
+              });
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { chats: Array.from(seen.values()), webhookActive };
 }
 
-async function verifyTelegramChannelServer(token: string, rawChannel?: string): Promise<{
+async function verifyTelegramConnectionServer(token: string, rawChannel?: string): Promise<{
   ok: boolean;
+  statusCode: TelegramVerificationStatusCode;
+  statusLabel: string;
   chatExists: boolean;
   normalizedChannel: string;
   isAdmin?: boolean;
   canPost?: boolean;
+  webhookActive?: boolean;
   chat?: { id: number | string; title: string; username?: string; type: string };
   bot?: { id: number; first_name: string; username: string };
   discoveredChats?: Array<{ id: string; title: string; username?: string; type: string; botStatus?: string }>;
@@ -1790,25 +1874,38 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
   const persisted = loadPersistedSettings() || {};
   const normalized = normalizeTelegramChatIdServer(rawChannel || persisted.telegramChannelName || persisted.telegramChannelId);
 
-  if (!token || token === 'MY_TELEGRAM_BOT_TOKEN') {
+  if (!token || token === 'MY_TELEGRAM_BOT_TOKEN' || !/^\d{5,15}:[A-Za-z0-9_-]{15,}$/.test(token)) {
     return {
       ok: false,
+      statusCode: 'invalid_token',
+      statusLabel: TELEGRAM_STATUS_LABELS.invalid_token,
       chatExists: false,
       normalizedChannel: normalized.chatId,
-      error: 'Telegram Bot Token is not configured on the server.',
+      error: !token ? 'Telegram Bot Token is not configured on the server.' : 'Invalid Telegram Bot Token format.',
+      diagnosis: 'Verify the Bot Token from @BotFather on the server.',
     };
   }
 
   let botInfo: { id: number; first_name: string; username: string } | undefined;
   try {
-    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+      signal: AbortSignal.timeout(5000),
+    });
     const meData = (await meRes.json()) as any;
     if (!meData?.ok || !meData?.result) {
+      const desc = String(meData?.description || '');
+      const isNotFound = meRes.status === 404 || desc.toLowerCase().includes('not found');
+      const code: TelegramVerificationStatusCode = isNotFound ? 'bot_not_found' : 'invalid_token';
       return {
         ok: false,
+        statusCode: code,
+        statusLabel: TELEGRAM_STATUS_LABELS[code],
         chatExists: false,
         normalizedChannel: normalized.chatId,
-        error: `Bot token rejected by Telegram: ${meData?.description || 'Unauthorized'}`,
+        error: `${TELEGRAM_STATUS_LABELS[code]}: ${desc || 'Rejected by Telegram getMe'}`,
+        diagnosis: isNotFound
+          ? 'Telegram could not find a bot matching this token.'
+          : 'Telegram rejected this bot token (401 Unauthorized). Generate or copy the active token in @BotFather.',
       };
     }
     botInfo = {
@@ -1819,25 +1916,31 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
   } catch (err: any) {
     return {
       ok: false,
+      statusCode: 'api_connection_failed',
+      statusLabel: TELEGRAM_STATUS_LABELS.api_connection_failed,
       chatExists: false,
       normalizedChannel: normalized.chatId,
-      error: `Could not connect to Telegram API: ${err?.message || String(err)}`,
+      error: `Telegram API connection failed: ${err?.message || String(err)}`,
+      diagnosis: 'Network timeout or TLS error reaching api.telegram.org from server.',
     };
   }
 
   if (normalized.isInviteLink) {
-    const discoveredChats = await discoverBotChannelsServer(token);
+    const disc = await discoverBotChannelsServer(token);
     return {
       ok: false,
+      statusCode: 'channel_not_found',
+      statusLabel: TELEGRAM_STATUS_LABELS.channel_not_found,
       chatExists: false,
       normalizedChannel: normalized.chatId,
       bot: botInfo,
-      discoveredChats,
+      discoveredChats: disc.chats,
+      webhookActive: disc.webhookActive,
       error: normalized.error,
     };
   }
 
-  // Try normalized target first, then fallback to saved numeric telegramChannelId or URL slug if distinct
+  // Try normalized target first, then saved numeric telegramChannelId or URL slug
   const candidates: string[] = [normalized.chatId];
   if (persisted.telegramChannelId && !candidates.includes(String(persisted.telegramChannelId))) {
     candidates.push(String(persisted.telegramChannelId));
@@ -1851,12 +1954,14 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
 
   let foundChat: any = null;
   let lastChatError = 'Bad Request: chat not found';
+  let sawNetworkError = false;
   let matchedTarget = normalized.chatId;
 
   for (const candidate of candidates) {
     try {
       const chatRes = await fetch(
-        `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(candidate)}`
+        `https://api.telegram.org/bot${token}/getChat?chat_id=${encodeURIComponent(candidate)}`,
+        { signal: AbortSignal.timeout(5000) }
       );
       const chatData = (await chatRes.json()) as any;
       if (chatData?.ok && chatData?.result) {
@@ -1867,27 +1972,42 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
         lastChatError = chatData?.description || lastChatError;
       }
     } catch (err: any) {
+      sawNetworkError = true;
       lastChatError = err?.message || lastChatError;
     }
   }
 
   if (!foundChat) {
-    const discoveredChats = await discoverBotChannelsServer(token);
+    if (sawNetworkError && lastChatError.toLowerCase().includes('fetch')) {
+      return {
+        ok: false,
+        statusCode: 'api_connection_failed',
+        statusLabel: TELEGRAM_STATUS_LABELS.api_connection_failed,
+        chatExists: false,
+        normalizedChannel: normalized.chatId,
+        bot: botInfo,
+        error: `Telegram API connection failed: ${lastChatError}`,
+      };
+    }
+    const disc = await discoverBotChannelsServer(token);
     return {
       ok: false,
+      statusCode: 'channel_not_found',
+      statusLabel: TELEGRAM_STATUS_LABELS.channel_not_found,
       chatExists: false,
       normalizedChannel: normalized.chatId,
       bot: botInfo,
-      discoveredChats,
-      error: `Telegram API responded: ${lastChatError}`,
+      discoveredChats: disc.chats,
+      webhookActive: disc.webhookActive,
+      error: `Channel not found: Telegram API responded "${lastChatError}"`,
       diagnosis:
-        discoveredChats.length > 0
-          ? `Target "${normalized.chatId}" was not found, but bot @${botInfo.username} has access to ${discoveredChats.length} other channel(s). Select the correct channel below or make sure @${botInfo.username} is added as Administrator.`
-          : `Telegram cannot find "${normalized.chatId}". This happens if the channel was turned Private (requiring its numeric -100... Channel ID), its @username was changed, or @${botInfo.username} has not been added as Channel Administrator yet.`,
+        disc.chats.length > 0
+          ? `Target "${normalized.chatId}" could not be resolved, but @${botInfo.username} can access ${disc.chats.length} discovered channel(s). Select the matching channel below.`
+          : `Telegram cannot resolve "${normalized.chatId}". Note: If your channel is Private (no active public @username link) or its @username changed, paste a private post link (https://t.me/c/<id>/<msg>) or numeric -100... Channel ID, and confirm @${botInfo.username} is added as Channel Administrator.`,
     };
   }
 
-  // Persist verified numeric channel ID so future broadcasts keep working if @username changes
+  // Persist verified numeric channel ID and handle so broadcasts stay reliable
   try {
     savePersistedSettings({
       telegramChannelId: String(foundChat.id),
@@ -1902,31 +2022,56 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
 
   let isAdmin = false;
   let canPost = false;
+  let memberStatus = 'unknown';
   let memberError: string | undefined;
 
   try {
     const memberRes = await fetch(
-      `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(String(foundChat.id))}&user_id=${botInfo.id}`
+      `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(String(foundChat.id))}&user_id=${botInfo.id}`,
+      { signal: AbortSignal.timeout(5000) }
     );
     const memberData = (await memberRes.json()) as any;
     if (memberData?.ok && memberData?.result) {
-      const st = memberData.result.status;
-      isAdmin = st === 'administrator' || st === 'creator';
-      canPost = st === 'creator' || (isAdmin && memberData.result.can_post_messages !== false);
+      memberStatus = String(memberData.result.status || '');
+      isAdmin = memberStatus === 'administrator' || memberStatus === 'creator';
+      canPost = memberStatus === 'creator' || (isAdmin && memberData.result.can_post_messages !== false);
       if (!isAdmin) {
-        memberError = `Bot @${botInfo.username} found "${foundChat.title}", but its status is "${st}". Promote @${botInfo.username} to Channel Administrator with "Post Messages" enabled.`;
+        memberError = `Bot @${botInfo.username} resolved "${foundChat.title}", but its status is "${memberStatus}". Promote @${botInfo.username} to Channel Administrator.`;
       } else if (!canPost) {
-        memberError = `Bot @${botInfo.username} is Administrator in "${foundChat.title}", but "Post Messages" permission is disabled.`;
+        memberError = `Bot @${botInfo.username} is Administrator in "${foundChat.title}", but the "Post Messages" permission is OFF.`;
       }
     } else {
-      memberError = memberData?.description;
+      memberError = memberData?.description || 'Failed to inspect bot membership rights.';
     }
   } catch (err: any) {
-    memberError = err?.message;
+    return {
+      ok: false,
+      statusCode: 'api_connection_failed',
+      statusLabel: TELEGRAM_STATUS_LABELS.api_connection_failed,
+      chatExists: true,
+      normalizedChannel: foundChat.username ? `@${foundChat.username}` : String(foundChat.id),
+      chat: {
+        id: foundChat.id,
+        title: foundChat.title || foundChat.username || String(foundChat.id),
+        username: foundChat.username,
+        type: foundChat.type,
+      },
+      bot: botInfo,
+      error: `Telegram API connection failed during permission check: ${err?.message || String(err)}`,
+    };
+  }
+
+  let statusCode: TelegramVerificationStatusCode = 'connected';
+  if (!isAdmin) {
+    statusCode = 'not_admin';
+  } else if (!canPost) {
+    statusCode = 'missing_post_permission';
   }
 
   return {
-    ok: isAdmin && canPost,
+    ok: statusCode === 'connected',
+    statusCode,
+    statusLabel: TELEGRAM_STATUS_LABELS[statusCode],
     chatExists: true,
     normalizedChannel: foundChat.username ? `@${foundChat.username}` : String(foundChat.id),
     isAdmin,
@@ -1942,16 +2087,27 @@ async function verifyTelegramChannelServer(token: string, rawChannel?: string): 
   };
 }
 
+app.get('/api/telegram/verify-connection', async (req: Request, res: Response): Promise<void> => {
+  const channel = typeof req.query.channel === 'string' ? req.query.channel : undefined;
+  const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
+  res.json(result);
+});
+
+app.post('/api/telegram/verify-connection', async (req: Request, res: Response): Promise<void> => {
+  const { channelName } = req.body || {};
+  const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
+  res.json(result);
+});
+
 app.get('/api/telegram/verify-channel', async (req: Request, res: Response): Promise<void> => {
   const channel = typeof req.query.channel === 'string' ? req.query.channel : undefined;
-  const result = await verifyTelegramChannelServer(getTelegramToken(), channel);
+  const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
   res.json(result);
 });
 
 app.post('/api/telegram/verify-channel', async (req: Request, res: Response): Promise<void> => {
-  const { channelName, botToken } = req.body || {};
-  const token = (botToken && String(botToken).includes(':')) ? String(botToken).trim() : getTelegramToken();
-  const result = await verifyTelegramChannelServer(token, channelName);
+  const { channelName } = req.body || {};
+  const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
   res.json(result);
 });
 
@@ -1962,16 +2118,19 @@ app.get('/api/telegram/discover-chats', async (req: Request, res: Response): Pro
     return;
   }
   try {
-    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+      signal: AbortSignal.timeout(4500),
+    });
     const meData = (await meRes.json()) as any;
     if (!meData?.ok) {
       res.json({ ok: false, chats: [], error: meData?.description || 'Unauthorized bot token' });
       return;
     }
-    const chats = await discoverBotChannelsServer(token);
+    const disc = await discoverBotChannelsServer(token);
     res.json({
       ok: true,
-      chats,
+      chats: disc.chats,
+      webhookActive: disc.webhookActive,
       bot: {
         id: meData.result.id,
         first_name: meData.result.first_name,
@@ -1983,6 +2142,127 @@ app.get('/api/telegram/discover-chats', async (req: Request, res: Response): Pro
   }
 });
 
+// =========================================================================
+// Persistent Queue State, DB Duplicate Records & Timestamped Publishing Logs
+// =========================================================================
+interface ServerTelegramPublishedRecord {
+  vacancyId: string;
+  telegramMessageId: number;
+  publishedAt: string;
+  channel: string;
+  title: string;
+  organization?: string;
+}
+
+interface ServerTelegramQueueItem {
+  vacancyId: string;
+  title: string;
+  organization: string;
+  category?: string;
+  status: 'pending' | 'processing' | 'retrying' | 'published' | 'failed';
+  attempts: number;
+  telegramMessageId?: number;
+  publishedAt?: string;
+  error?: string;
+  updatedAt: string;
+  vacancy: any;
+}
+
+interface ServerTelegramQueueState {
+  id: string;
+  status: 'idle' | 'running' | 'completed' | 'cancelled';
+  channel: string;
+  distributionMode: string;
+  startedAt?: string;
+  updatedAt: string;
+  completedAt?: string;
+  currentVacancyId?: string;
+  currentTitle?: string;
+  items: ServerTelegramQueueItem[];
+}
+
+interface ServerTelegramLogEntry {
+  id: string;
+  vacancyId: string;
+  title: string;
+  organization?: string;
+  action: 'auto_publish' | 'queue_publish' | 'manual_publish' | 'retry' | 'test_message';
+  status: 'published' | 'failed' | 'skipped';
+  telegramMessageId?: number;
+  channel: string;
+  error?: string;
+  timestamp: string;
+}
+
+function loadTelegramQueueDisk(): {
+  queueState: ServerTelegramQueueState;
+  publishedRecords: Record<string, ServerTelegramPublishedRecord>;
+} {
+  const defaultState: ServerTelegramQueueState = {
+    id: 'queue_default',
+    status: 'idle',
+    channel: '@DreamBigJobsEthiopia',
+    distributionMode: 'all_jobs',
+    updatedAt: new Date().toISOString(),
+    items: [],
+  };
+  try {
+    if (fs.existsSync(TELEGRAM_QUEUE_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(TELEGRAM_QUEUE_FILE, 'utf-8'));
+      return {
+        queueState: parsed?.queueState || defaultState,
+        publishedRecords: parsed?.publishedRecords || {},
+      };
+    }
+  } catch {}
+  return { queueState: defaultState, publishedRecords: {} };
+}
+
+function saveTelegramQueueDisk(data: {
+  queueState: ServerTelegramQueueState;
+  publishedRecords: Record<string, ServerTelegramPublishedRecord>;
+}): void {
+  try {
+    ensureRuntimeDataDir();
+    fs.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Notice: Failed writing telegram_queue.json:', e);
+  }
+}
+
+function loadTelegramLogsDisk(): ServerTelegramLogEntry[] {
+  try {
+    if (fs.existsSync(TELEGRAM_LOGS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(TELEGRAM_LOGS_FILE, 'utf-8'));
+      if (Array.isArray(parsed?.logs)) return parsed.logs;
+    }
+  } catch {}
+  return [];
+}
+
+function appendTelegramLogServer(entry: Omit<ServerTelegramLogEntry, 'id' | 'timestamp'> & { timestamp?: string }): ServerTelegramLogEntry {
+  const full: ServerTelegramLogEntry = {
+    id: `tglog_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: entry.timestamp || new Date().toISOString(),
+    ...entry,
+  };
+  try {
+    ensureRuntimeDataDir();
+    const logs = loadTelegramLogsDisk();
+    const updated = [full, ...logs].slice(0, 500);
+    fs.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('Notice: Failed writing telegram_logs.json:', e);
+  }
+  return full;
+}
+
+function recordPublishedVacancyServer(record: ServerTelegramPublishedRecord): void {
+  const store = loadTelegramQueueDisk();
+  store.publishedRecords[record.vacancyId] = record;
+  saveTelegramQueueDisk(store);
+}
+
 // Telegram Message Formatting Helpers
 function escapeHtml(text: string | null | undefined): string {
   if (!text) return '';
@@ -1992,10 +2272,34 @@ function escapeHtml(text: string | null | undefined): string {
     .replace(/>/g, '&gt;');
 }
 
+function truncateText(value: string | null | undefined, maxLen: number): string {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
+
+function isMeaningfulField(val?: string | null): boolean {
+  const s = String(val || '').trim();
+  if (!s) return false;
+  return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
+}
+
 function normalizeWebsiteDomain(domainOrUrl?: string): string {
   if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
   let clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   return `https://${clean}`;
+}
+
+function resolveVacancyImageUrl(vacancy: any): string | null {
+  const candidates = [vacancy?.imageUrl, vacancy?.organizationLogo, vacancy?.bannerUrl, vacancy?.posterUrl];
+  for (const c of candidates) {
+    const url = String(c || '').trim();
+    if (/^https:\/\/[^\s]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s]*)?$/i.test(url) || /^https:\/\/[^\s]+/i.test(url)) {
+      if (/^https:\/\//i.test(url) && url.length < 1000) return url;
+    }
+  }
+  return null;
 }
 
 function applyAndValidateWashLabelServer(
@@ -2051,76 +2355,119 @@ function applyAndValidateWashLabelServer(
   };
 }
 
-function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
+function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia', compactForCaption = false): string {
   const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || '')}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 
-  const orgName = escapeHtml(vacancy.organization || 'Employer');
-  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : '';
-  const positionTitle = escapeHtml(vacancy.title || 'Various Positions');
+  const orgName = escapeHtml(truncateText(vacancy.organization || 'Employer', 140));
+  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateText(vacancy.organizationAmharic, 80))})` : '';
+  const positionTitle = escapeHtml(truncateText(vacancy.title || 'Various Positions', 180));
 
   const eduParts: string[] = [];
-  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
-  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
-  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(vacancy.requiredSkills.join(' / '));
+  if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
+  if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
+  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0 && !compactForCaption) {
+    eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
   }
   if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+    eduParts.push(vacancy.category || 'Related academic & professional fields');
   }
-  if (vacancy.experienceYears) {
-    eduParts.push(`${vacancy.experienceYears} experience`);
+  if (isMeaningfulField(vacancy.experienceYears)) {
+    eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
   }
-  const educationFieldText = escapeHtml(eduParts.join(', '));
+  const educationFieldText = escapeHtml(truncateText(eduParts.join(', '), compactForCaption ? 220 : 480));
+
+  const metaLines: string[] = [];
+  if (isMeaningfulField(vacancy.location)) {
+    metaLines.push(`📍 <b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
+  }
+  if (isMeaningfulField(vacancy.employmentType)) {
+    metaLines.push(`💼 <b>Employment Type:</b> ${escapeHtml(vacancy.employmentType)}`);
+  }
+  if (isMeaningfulField(vacancy.salary)) {
+    metaLines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateText(vacancy.salary, 100))}`);
+  }
+  if (isMeaningfulField(vacancy.applicationDeadline)) {
+    metaLines.push(`⏳ <b>Deadline:</b> ${escapeHtml(truncateText(vacancy.applicationDeadline, 80))}`);
+  }
+  const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
+  const applyEmail = String(vacancy.applicationEmail || '').trim();
+  if (/^https?:\/\/\S+/i.test(directApplyUrl)) {
+    const safeHref = escapeHtml(directApplyUrl);
+    metaLines.push(`📝 <b>Apply Direct:</b> <a href="${safeHref}">${safeHref}</a>`);
+  } else if (applyEmail.includes('@')) {
+    metaLines.push(`📧 <b>Apply Email:</b> ${escapeHtml(applyEmail)}`);
+  } else if (!compactForCaption && isMeaningfulField(vacancy.applicationInstructions)) {
+    metaLines.push(`📝 <b>How to Apply:</b> ${escapeHtml(truncateText(vacancy.applicationInstructions, 180))}`);
+  }
+
+  const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  return `${washPrefix}<b>Vacancy at ${orgName}</b>
+  const fullText = `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
-✅ <b>Education field:</b> ${educationFieldText}
+✅ <b>Education field:</b> ${educationFieldText}${detailsBlock}
 
 📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
-👉<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
+👉<b>Read Detail:-</b> <a href="${escapeHtml(vacancyLink)}">${escapeHtml(vacancyLink)}</a>
 
 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
-=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>`;
+=&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
+
+  return fullText.length > 4000 ? fullText.slice(0, 3990) + '…' : fullText;
 }
 
 function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
   const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || '')}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 
-  const orgName = vacancy.organization || 'Employer';
-  const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : '';
-  const positionTitle = vacancy.title || 'Various Positions';
+  const orgName = truncateText(vacancy.organization || 'Employer', 140);
+  const orgAmharic = vacancy.organizationAmharic ? ` (${truncateText(vacancy.organizationAmharic, 80)})` : '';
+  const positionTitle = truncateText(vacancy.title || 'Various Positions', 180);
 
   const eduParts: string[] = [];
-  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
-  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
+  if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
+  if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
   if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(vacancy.requiredSkills.join(' / '));
+    eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
   }
   if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+    eduParts.push(vacancy.category || 'Related academic & professional fields');
   }
-  if (vacancy.experienceYears) {
-    eduParts.push(`${vacancy.experienceYears} experience`);
+  if (isMeaningfulField(vacancy.experienceYears)) {
+    eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
   }
-  const educationFieldText = eduParts.join(', ');
+  const educationFieldText = truncateText(eduParts.join(', '), 480);
+
+  const metaLines: string[] = [];
+  if (isMeaningfulField(vacancy.location)) metaLines.push(`📍 Location: ${truncateText(vacancy.location, 100)}`);
+  if (isMeaningfulField(vacancy.employmentType)) metaLines.push(`💼 Employment Type: ${vacancy.employmentType}`);
+  if (isMeaningfulField(vacancy.salary)) metaLines.push(`💰 Salary: ${truncateText(vacancy.salary, 100)}`);
+  if (isMeaningfulField(vacancy.applicationDeadline)) metaLines.push(`⏳ Deadline: ${truncateText(vacancy.applicationDeadline, 80)}`);
+  const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
+  const applyEmail = String(vacancy.applicationEmail || '').trim();
+  if (/^https?:\/\/\S+/i.test(directApplyUrl)) metaLines.push(`📝 Apply Direct: ${directApplyUrl}`);
+  else if (applyEmail.includes('@')) metaLines.push(`📧 Apply Email: ${applyEmail}`);
+  else if (isMeaningfulField(vacancy.applicationInstructions)) metaLines.push(`📝 How to Apply: ${truncateText(vacancy.applicationInstructions, 180)}`);
+
+  const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  return `${washPrefix}Vacancy at ${orgName}
+  const fullText = `${washPrefix}Vacancy at ${orgName}
 
 🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
-✅ Education field: ${educationFieldText}
+✅ Education field: ${educationFieldText}${detailsBlock}
 
 📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
 👉Read Detail:- ${vacancyLink}
 
 🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
 =>See Detail:- ${baseUrl}`;
+
+  return fullText.length > 4000 ? fullText.slice(0, 3990) + '…' : fullText;
 }
 
 async function sendTelegramVacancyMessage(
@@ -2129,7 +2476,11 @@ async function sendTelegramVacancyMessage(
   vacancy: any,
   domainOrUrl: string,
   dryRun = false,
-  fallbackChannelId?: string
+  fallbackChannelId?: string,
+  options?: {
+    maxRetries?: number;
+    onRetry?: (attempt: number, reason: string, waitMs: number) => void;
+  }
 ): Promise<{
   ok: boolean;
   messageId?: number;
@@ -2140,12 +2491,13 @@ async function sendTelegramVacancyMessage(
   formattedPlain: string;
   isWashNgo: boolean;
   hasWashLabel: boolean;
+  usedPhoto?: boolean;
 }> {
   const persisted = loadPersistedSettings() || {};
   const normalizedTarget = normalizeTelegramChatIdServer(channel || persisted.telegramChannelName || persisted.telegramChannelId);
   const cleanChannel = normalizedTarget.chatId;
 
-  const rawHtml = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel);
+  const rawHtml = buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel, false);
   const rawPlain = buildTelegramJobPlainText(vacancy, domainOrUrl, cleanChannel);
   const washCheck = applyAndValidateWashLabelServer(vacancy, rawHtml, rawPlain);
 
@@ -2172,6 +2524,7 @@ async function sendTelegramVacancyMessage(
       formattedPlain: plainMsg,
       isWashNgo: washCheck.isWashNgo,
       hasWashLabel: washCheck.hasWashLabel,
+      usedPhoto: Boolean(resolveVacancyImageUrl(vacancy)),
     };
   }
 
@@ -2186,7 +2539,6 @@ async function sendTelegramVacancyMessage(
     };
   }
 
-  // Build ordered chat_id candidates: primary target -> saved numeric channel ID -> URL slug
   const chatCandidates: string[] = [cleanChannel];
   const savedChannelId = String(fallbackChannelId || persisted.telegramChannelId || '').trim();
   if (savedChannelId && /^-?\d+$/.test(savedChannelId) && !chatCandidates.includes(savedChannelId)) {
@@ -2199,43 +2551,74 @@ async function sendTelegramVacancyMessage(
     }
   }
 
-  const trySendToChat = async (targetChatId: string): Promise<{ ok: boolean; messageId?: number; description?: string; usedPlain?: boolean }> => {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const photoUrl = resolveVacancyImageUrl(vacancy);
+  const captionHtmlRaw = photoUrl ? buildTelegramJobHtml(vacancy, domainOrUrl, cleanChannel, true) : '';
+  const captionWash = photoUrl ? applyAndValidateWashLabelServer(vacancy, captionHtmlRaw, plainMsg) : null;
+  const maxRetries = options?.maxRetries ?? 2;
+
+  const callTelegramSend = async (method: 'sendMessage' | 'sendPhoto', payload: Record<string, any>): Promise<any> => {
+    const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: targetChatId,
-        text: htmlMsg,
-        parse_mode: 'HTML',
-        disable_web_page_preview: false,
-      }),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(9000),
     });
-    const data = (await res.json()) as any;
-    if (data.ok) {
-      return { ok: true, messageId: data.result?.message_id };
+    return (await res.json()) as any;
+  };
+
+  const trySendOnce = async (targetChatId: string): Promise<{ ok: boolean; messageId?: number; description?: string; retryAfterSec?: number; usedPlain?: boolean; usedPhoto?: boolean }> => {
+    // Attempt image post first when a valid HTTPS image exists and caption fits Telegram's 1024-char caption limit
+    if (photoUrl && captionWash?.valid && captionWash.html.length <= 1024) {
+      try {
+        const photoRes = await callTelegramSend('sendPhoto', {
+          chat_id: targetChatId,
+          photo: photoUrl,
+          caption: captionWash.html,
+          parse_mode: 'HTML',
+        });
+        if (photoRes?.ok) {
+          return { ok: true, messageId: photoRes.result?.message_id, usedPhoto: true };
+        }
+        if (photoRes?.error_code === 429 && photoRes?.parameters?.retry_after) {
+          return { ok: false, description: photoRes.description, retryAfterSec: Number(photoRes.parameters.retry_after) };
+        }
+        if (isFatalTelegramConfigErrorServer(photoRes?.description)) {
+          return { ok: false, description: photoRes.description };
+        }
+        // If remote image URL failed to fetch by Telegram, transparently fall back to rich text sendMessage below
+      } catch {}
     }
 
-    // Only retry plain-text when failure is likely HTML formatting (never retry "chat not found" / "Unauthorized")
-    const desc = String(data.description || '');
+    const data = await callTelegramSend('sendMessage', {
+      chat_id: targetChatId,
+      text: htmlMsg,
+      parse_mode: 'HTML',
+      disable_web_page_preview: false,
+    });
+    if (data?.ok) {
+      return { ok: true, messageId: data.result?.message_id };
+    }
+    if (data?.error_code === 429 && data?.parameters?.retry_after) {
+      return { ok: false, description: data.description, retryAfterSec: Number(data.parameters.retry_after) };
+    }
+
+    const desc = String(data?.description || '');
     if (!isFatalTelegramConfigErrorServer(desc)) {
-      console.warn(`Telegram HTML broadcast attempt returned: ${desc}. Retrying immediately with safe plain-text mode...`);
       try {
-        const fallbackRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: targetChatId,
-            text: plainMsg,
-            disable_web_page_preview: false,
-          }),
+        const fallbackData = await callTelegramSend('sendMessage', {
+          chat_id: targetChatId,
+          text: plainMsg,
+          disable_web_page_preview: false,
         });
-        const fallbackData = (await fallbackRes.json()) as any;
-        if (fallbackData.ok) {
+        if (fallbackData?.ok) {
           return { ok: true, messageId: fallbackData.result?.message_id, usedPlain: true };
         }
-        return { ok: false, description: fallbackData.description || desc };
+        if (fallbackData?.error_code === 429 && fallbackData?.parameters?.retry_after) {
+          return { ok: false, description: fallbackData.description, retryAfterSec: Number(fallbackData.parameters.retry_after) };
+        }
+        return { ok: false, description: fallbackData?.description || desc };
       } catch (fallbackErr: any) {
-        console.warn('Plain text fallback error:', fallbackErr);
+        return { ok: false, description: fallbackErr?.message || desc };
       }
     }
     return { ok: false, description: desc || 'Telegram rejected broadcast' };
@@ -2244,31 +2627,51 @@ async function sendTelegramVacancyMessage(
   try {
     let lastError = 'Telegram rejected broadcast';
 
-    for (const candidate of chatCandidates) {
-      const attempt = await trySendToChat(candidate);
-      if (attempt.ok) {
-        return {
-          ok: true,
-          messageId: attempt.messageId,
-          resolvedChatId: candidate,
-          formattedMessage: attempt.usedPlain ? plainMsg : htmlMsg,
-          formattedPlain: plainMsg,
-          isWashNgo: washCheck.isWashNgo,
-          hasWashLabel: washCheck.hasWashLabel,
-        };
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let attemptHitRateLimitWaitMs = 0;
+      let attemptHitTransientError = false;
+
+      for (const candidate of chatCandidates) {
+        const resAttempt = await trySendOnce(candidate);
+        if (resAttempt.ok) {
+          return {
+            ok: true,
+            messageId: resAttempt.messageId,
+            resolvedChatId: candidate,
+            formattedMessage: resAttempt.usedPlain ? plainMsg : htmlMsg,
+            formattedPlain: plainMsg,
+            isWashNgo: washCheck.isWashNgo,
+            hasWashLabel: washCheck.hasWashLabel,
+            usedPhoto: resAttempt.usedPhoto,
+          };
+        }
+        lastError = resAttempt.description || lastError;
+        if (resAttempt.retryAfterSec) {
+          attemptHitRateLimitWaitMs = Math.min(15000, Math.max(1500, resAttempt.retryAfterSec * 1000 + 250));
+          break;
+        }
+        if (/timeout|network|econnreset|etimedout|502|503|504/i.test(lastError)) {
+          attemptHitTransientError = true;
+          break;
+        }
+        if (!lastError.toLowerCase().includes('chat not found')) {
+          break;
+        }
       }
-      lastError = attempt.description || lastError;
-      // Only fall through to secondary candidates if the error is specifically "chat not found"
-      if (!lastError.toLowerCase().includes('chat not found')) {
-        break;
-      }
+
+      const canBackoff = attempt < maxRetries && (attemptHitRateLimitWaitMs > 0 || attemptHitTransientError);
+      if (!canBackoff) break;
+      const waitMs = attemptHitRateLimitWaitMs || (attempt + 1) * 1800;
+      if (options?.onRetry) options.onRetry(attempt + 1, lastError, waitMs);
+      await new Promise((r) => setTimeout(r, waitMs));
     }
 
     let discoveredChats: Array<{ id: string; title: string; username?: string; type: string; botStatus?: string }> | undefined;
     if (lastError.toLowerCase().includes('chat not found')) {
-      discoveredChats = await discoverBotChannelsServer(token);
+      const disc = await discoverBotChannelsServer(token);
+      discoveredChats = disc.chats;
       const botHandle = persisted.telegramBotUsername ? `@${String(persisted.telegramBotUsername).replace('@', '')}` : 'your Telegram bot';
-      lastError = `${lastError} (Target: ${cleanChannel} — ensure the channel is public with that exact @username, or enter its numeric -100... Channel ID if private, and confirm ${botHandle} is an Administrator with Post Messages permission)`;
+      lastError = `${lastError} (Target: ${cleanChannel} — ensure public @username matches or enter numeric -100... Channel ID / t.me/c/... post link if Private, and confirm ${botHandle} is Administrator with Post Messages ON)`;
     }
 
     return {
@@ -2327,15 +2730,24 @@ function evaluateTelegramPublishEligibilityServer(
   forceRetry: boolean,
   contentType?: string,
   overrideMode?: string
-): { allowed: boolean; reason?: string; alreadyPublished?: boolean } {
+): { allowed: boolean; reason?: string; alreadyPublished?: boolean; existingRecord?: ServerTelegramPublishedRecord } {
   if (!vacancy) return { allowed: false, reason: 'Vacancy payload is missing.' };
-  if (vacancy.telegramPublished && !forceRetry) {
-    return {
-      allowed: false,
-      alreadyPublished: true,
-      reason: `Already posted to Telegram (Msg ID #${vacancy.telegramMessageId || 'N/A'}).`,
-    };
+
+  // Server-side DB duplicate protection
+  if (!forceRetry) {
+    const queueStore = loadTelegramQueueDisk();
+    const dbRec = vacancy.id ? queueStore.publishedRecords[String(vacancy.id)] : undefined;
+    if (vacancy.telegramPublished || dbRec) {
+      const msgId = dbRec?.telegramMessageId || vacancy.telegramMessageId || 'N/A';
+      return {
+        allowed: false,
+        alreadyPublished: true,
+        existingRecord: dbRec,
+        reason: `Already posted to Telegram (Msg ID #${msgId}).`,
+      };
+    }
   }
+
   const cType = contentType || vacancy.contentType || (vacancy.pathwayType ? 'immigration' : vacancy.scholarshipName ? 'scholarship' : 'job');
   if (cType === 'immigration' || cType === 'permanent_residence') {
     if (!settings?.telegramIncludeInternationalImmigration) {
@@ -2385,29 +2797,541 @@ function evaluateTelegramPublishEligibilityServer(
   return { allowed: true };
 }
 
+// Explicit Test Message Endpoint (sends real test post ONLY when user explicitly clicks Send Test Message)
+app.post('/api/telegram/send-test-message', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { channelName } = req.body || {};
+    const persisted = loadPersistedSettings() || {};
+    const token = getTelegramToken();
+    const targetChannel = normalizeTelegramChatIdServer(
+      channelName || persisted.telegramChannelName || persisted.telegramChannelId || '@DreamBigJobsEthiopia'
+    ).chatId;
+
+    const verification = await verifyTelegramConnectionServer(token, targetChannel);
+    if (!verification.ok) {
+      appendTelegramLogServer({
+        vacancyId: 'test_message',
+        title: 'Test Telegram Channel Message',
+        action: 'test_message',
+        status: 'failed',
+        channel: targetChannel,
+        error: verification.error || verification.statusLabel,
+      });
+      res.json({
+        success: false,
+        statusCode: verification.statusCode,
+        statusLabel: verification.statusLabel,
+        error: verification.error || verification.statusLabel,
+        diagnosis: verification.diagnosis,
+        discoveredChats: verification.discoveredChats,
+      });
+      return;
+    }
+
+    const baseDomain = normalizeWebsiteDomain(persisted.customDomain);
+    const ts = new Date().toISOString();
+    const testHtml = `✅ <b>HOPELAND JOBS — Telegram Channel Test Message</b>
+
+🤖 <b>Bot:</b> @${escapeHtml(verification.bot?.username || 'DreamBigJobsEthiopiaBot')}
+📣 <b>Channel:</b> ${escapeHtml(verification.chat?.title || targetChannel)} (<code>${escapeHtml(String(verification.chat?.id || targetChannel))}</code>)
+🌐 <b>Portal:</b> <a href="${escapeHtml(baseDomain)}">${escapeHtml(baseDomain)}</a>
+🕒 <b>Timestamp:</b> ${escapeHtml(ts)}
+
+<i>Connection, administrator rights, and Post Messages permission verified successfully.</i>`;
+
+    const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: String(verification.chat?.id || targetChannel),
+        text: testHtml,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+      signal: AbortSignal.timeout(7000),
+    });
+    const tgData = (await tgRes.json()) as any;
+    if (!tgData?.ok) {
+      const errMsg = tgData?.description || 'Telegram API rejected test message.';
+      appendTelegramLogServer({
+        vacancyId: 'test_message',
+        title: 'Test Telegram Channel Message',
+        action: 'test_message',
+        status: 'failed',
+        channel: targetChannel,
+        error: errMsg,
+      });
+      res.json({
+        success: false,
+        statusCode: verification.statusCode,
+        statusLabel: verification.statusLabel,
+        error: `Telegram API responded: ${errMsg}`,
+      });
+      return;
+    }
+
+    appendTelegramLogServer({
+      vacancyId: 'test_message',
+      title: 'Test Telegram Channel Message',
+      action: 'test_message',
+      status: 'published',
+      telegramMessageId: tgData.result?.message_id,
+      channel: verification.normalizedChannel,
+    });
+
+    res.json({
+      success: true,
+      statusCode: 'connected',
+      statusLabel: TELEGRAM_STATUS_LABELS.connected,
+      telegramMessageId: tgData.result?.message_id,
+      resolvedChatId: String(verification.chat?.id || verification.normalizedChannel),
+      normalizedChannel: verification.normalizedChannel,
+      timestamp: ts,
+      message: `Real test message delivered to "${verification.chat?.title || verification.normalizedChannel}" (Msg #${tgData.result?.message_id})!`,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      statusCode: 'api_connection_failed',
+      statusLabel: TELEGRAM_STATUS_LABELS.api_connection_failed,
+      error: err?.message || 'Failed to send test message.',
+    });
+  }
+});
+
+// Background Sequential Server Queue Worker (survives page refresh & server restarts)
+let isServerQueueWorkerRunning = false;
+
+async function processServerTelegramQueue(): Promise<void> {
+  if (isServerQueueWorkerRunning) return;
+  isServerQueueWorkerRunning = true;
+
+  try {
+    while (true) {
+      const store = loadTelegramQueueDisk();
+      const qs = store.queueState;
+      if (!qs || qs.status !== 'running') break;
+
+      const nextIdx = qs.items.findIndex((it) => it.status === 'pending');
+      if (nextIdx === -1) {
+        qs.status = 'completed';
+        qs.completedAt = new Date().toISOString();
+        qs.updatedAt = qs.completedAt;
+        qs.currentVacancyId = undefined;
+        qs.currentTitle = undefined;
+        saveTelegramQueueDisk(store);
+        break;
+      }
+
+      const item = qs.items[nextIdx];
+      item.status = 'processing';
+      item.attempts = (item.attempts || 0) + 1;
+      item.updatedAt = new Date().toISOString();
+      qs.currentVacancyId = item.vacancyId;
+      qs.currentTitle = item.title;
+      qs.updatedAt = item.updatedAt;
+      saveTelegramQueueDisk(store);
+
+      const persisted = loadPersistedSettings() || {};
+      const token = getTelegramToken();
+      let domain = persisted?.customDomain || 'hopelandjobs.tech';
+      if (domain === 'healmorin.com') domain = 'hopelandjobs.tech';
+      const targetChannel = normalizeTelegramChatIdServer(
+        qs.channel || persisted.telegramChannelName || persisted.telegramChannelId || '@DreamBigJobsEthiopia'
+      ).chatId;
+
+      if (!token) {
+        item.status = 'failed';
+        item.error = 'Telegram bot token is not configured on the server.';
+        item.updatedAt = new Date().toISOString();
+        saveTelegramQueueDisk(store);
+        appendTelegramLogServer({
+          vacancyId: item.vacancyId,
+          title: item.title,
+          organization: item.organization,
+          action: item.attempts > 1 ? 'retry' : 'queue_publish',
+          status: 'failed',
+          channel: targetChannel,
+          error: item.error,
+        });
+      } else {
+        const forceRetry = item.attempts > 1;
+        const gate = evaluateTelegramPublishEligibilityServer(
+          item.vacancy,
+          persisted,
+          forceRetry,
+          item.vacancy?.contentType,
+          qs.distributionMode
+        );
+
+        if (!gate.allowed) {
+          if (gate.alreadyPublished && gate.existingRecord) {
+            item.status = 'published';
+            item.telegramMessageId = gate.existingRecord.telegramMessageId;
+            item.publishedAt = gate.existingRecord.publishedAt;
+            item.error = undefined;
+            item.updatedAt = new Date().toISOString();
+            saveTelegramQueueDisk(store);
+            appendTelegramLogServer({
+              vacancyId: item.vacancyId,
+              title: item.title,
+              organization: item.organization,
+              action: 'queue_publish',
+              status: 'skipped',
+              telegramMessageId: gate.existingRecord.telegramMessageId,
+              channel: targetChannel,
+              error: gate.reason,
+            });
+          } else {
+            item.status = 'failed';
+            item.error = gate.reason || 'Excluded by publishing rules.';
+            item.updatedAt = new Date().toISOString();
+            saveTelegramQueueDisk(store);
+            appendTelegramLogServer({
+              vacancyId: item.vacancyId,
+              title: item.title,
+              organization: item.organization,
+              action: item.attempts > 1 ? 'retry' : 'queue_publish',
+              status: 'failed',
+              channel: targetChannel,
+              error: item.error,
+            });
+          }
+        } else {
+          const sendRes = await sendTelegramVacancyMessage(
+            token,
+            targetChannel,
+            item.vacancy,
+            domain,
+            false,
+            persisted.telegramChannelId,
+            {
+              maxRetries: 2,
+              onRetry: (_attemptNum, reason) => {
+                const retryStore = loadTelegramQueueDisk();
+                const targetItem = retryStore.queueState.items[nextIdx];
+                if (targetItem && targetItem.vacancyId === item.vacancyId) {
+                  targetItem.status = 'retrying';
+                  targetItem.error = `Retrying: ${reason}`;
+                  targetItem.updatedAt = new Date().toISOString();
+                  retryStore.queueState.updatedAt = targetItem.updatedAt;
+                  saveTelegramQueueDisk(retryStore);
+                }
+              },
+            }
+          );
+
+          // Reload latest store in case cancel was called while sending
+          const afterStore = loadTelegramQueueDisk();
+          const afterItem = afterStore.queueState.items[nextIdx];
+          if (afterItem && afterItem.vacancyId === item.vacancyId) {
+            const nowIso = new Date().toISOString();
+            if (sendRes.ok) {
+              afterItem.status = 'published';
+              afterItem.telegramMessageId = sendRes.messageId;
+              afterItem.publishedAt = nowIso;
+              afterItem.error = undefined;
+              afterItem.updatedAt = nowIso;
+              afterStore.publishedRecords[item.vacancyId] = {
+                vacancyId: item.vacancyId,
+                telegramMessageId: Number(sendRes.messageId || 0),
+                publishedAt: nowIso,
+                channel: sendRes.resolvedChatId || targetChannel,
+                title: item.title,
+                organization: item.organization,
+              };
+              afterStore.queueState.updatedAt = nowIso;
+              saveTelegramQueueDisk(afterStore);
+
+              appendTelegramLogServer({
+                vacancyId: item.vacancyId,
+                title: item.title,
+                organization: item.organization,
+                action: item.attempts > 1 ? 'retry' : 'queue_publish',
+                status: 'published',
+                telegramMessageId: sendRes.messageId,
+                channel: sendRes.resolvedChatId || targetChannel,
+              });
+            } else {
+              afterItem.status = 'failed';
+              afterItem.error = sendRes.error || 'Telegram broadcast error';
+              afterItem.updatedAt = nowIso;
+              afterStore.queueState.updatedAt = nowIso;
+              saveTelegramQueueDisk(afterStore);
+
+              appendTelegramLogServer({
+                vacancyId: item.vacancyId,
+                title: item.title,
+                organization: item.organization,
+                action: item.attempts > 1 ? 'retry' : 'queue_publish',
+                status: 'failed',
+                channel: targetChannel,
+                error: afterItem.error,
+              });
+            }
+          }
+        }
+      }
+
+      // Check if cancelled before sleeping
+      const checkCancel = loadTelegramQueueDisk();
+      if (checkCancel.queueState.status !== 'running') break;
+
+      // Respect Telegram channel rate limits safely (1.2s between sequential posts)
+      const remainingPending = checkCancel.queueState.items.some((it) => it.status === 'pending');
+      if (remainingPending) {
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+  } finally {
+    isServerQueueWorkerRunning = false;
+  }
+}
+
+function buildQueueStatusResponse() {
+  const store = loadTelegramQueueDisk();
+  const logs = loadTelegramLogsDisk();
+  const items = store.queueState.items || [];
+  const total = items.length;
+  const pending = items.filter((i) => i.status === 'pending').length;
+  const processing = items.filter((i) => i.status === 'processing').length;
+  const retrying = items.filter((i) => i.status === 'retrying').length;
+  const published = items.filter((i) => i.status === 'published').length;
+  const failed = items.filter((i) => i.status === 'failed').length;
+  const doneCount = published + failed;
+  const progressPercent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+
+  const publishedList = Object.values(store.publishedRecords || {}).sort(
+    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+  );
+  const lastLogPub = logs.find((l) => l.status === 'published' && l.action !== 'test_message');
+  const lastSuccessfulPublication = publishedList[0]?.publishedAt || lastLogPub?.timestamp || '';
+
+  return {
+    success: true,
+    queueState: store.queueState,
+    summary: {
+      total,
+      pending,
+      processing,
+      retrying,
+      published,
+      failed,
+      progressPercent,
+    },
+    lastSuccessfulPublication,
+    totalPublishedAllTime: Math.max(publishedList.length, logs.filter((l) => l.status === 'published' && l.action !== 'test_message').length),
+    totalFailedLogs: logs.filter((l) => l.status === 'failed').length,
+    publishedRecords: store.publishedRecords,
+    logs: logs.slice(0, 60),
+  };
+}
+
+app.get('/api/telegram/queue/status', (req: Request, res: Response): void => {
+  res.json(buildQueueStatusResponse());
+});
+
+app.get('/api/telegram/logs', (req: Request, res: Response): void => {
+  const logs = loadTelegramLogsDisk();
+  const store = loadTelegramQueueDisk();
+  res.json({
+    success: true,
+    logs: logs.slice(0, 150),
+    totalPublished: Object.keys(store.publishedRecords || {}).length,
+  });
+});
+
+app.post('/api/telegram/queue/start', (req: Request, res: Response): void => {
+  try {
+    const { vacancies = [], channelName, distributionMode, forceRetry } = req.body || {};
+    if (!Array.isArray(vacancies) || vacancies.length === 0) {
+      res.status(400).json({ success: false, error: 'At least one vacancy is required to start the queue.' });
+      return;
+    }
+
+    const store = loadTelegramQueueDisk();
+    const persisted = loadPersistedSettings() || {};
+    const targetChannel = normalizeTelegramChatIdServer(
+      channelName || persisted.telegramChannelName || persisted.telegramChannelId || '@DreamBigJobsEthiopia'
+    ).chatId;
+    const nowIso = new Date().toISOString();
+
+    const items: ServerTelegramQueueItem[] = vacancies.map((v: any) => {
+      const existingRec = !forceRetry && v?.id ? store.publishedRecords[String(v.id)] : undefined;
+      if ((v?.telegramPublished || existingRec) && !forceRetry) {
+        return {
+          vacancyId: String(v.id),
+          title: String(v.title || 'Untitled Vacancy'),
+          organization: String(v.organization || 'Employer'),
+          category: v.category,
+          status: 'published',
+          attempts: 1,
+          telegramMessageId: existingRec?.telegramMessageId || v.telegramMessageId,
+          publishedAt: existingRec?.publishedAt || v.telegramPublishedAt || nowIso,
+          updatedAt: nowIso,
+          vacancy: v,
+        };
+      }
+      return {
+        vacancyId: String(v.id),
+        title: String(v.title || 'Untitled Vacancy'),
+        organization: String(v.organization || 'Employer'),
+        category: v.category,
+        status: 'pending',
+        attempts: 0,
+        updatedAt: nowIso,
+        vacancy: v,
+      };
+    });
+
+    const hasPending = items.some((it) => it.status === 'pending');
+    store.queueState = {
+      id: `tgq_${Date.now()}`,
+      status: hasPending ? 'running' : 'completed',
+      channel: targetChannel,
+      distributionMode: distributionMode || persisted.telegramDistributionMode || 'all_jobs',
+      startedAt: nowIso,
+      updatedAt: nowIso,
+      ...(hasPending ? {} : { completedAt: nowIso }),
+      items,
+    };
+    saveTelegramQueueDisk(store);
+
+    if (hasPending) {
+      setTimeout(() => {
+        processServerTelegramQueue().catch((e) => console.warn('Queue worker error:', e));
+      }, 20);
+    }
+
+    res.json(buildQueueStatusResponse());
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Failed to start Telegram queue.' });
+  }
+});
+
+app.post('/api/telegram/queue/retry-failed', (req: Request, res: Response): void => {
+  try {
+    const { vacancyIds } = req.body || {};
+    const targetIdsSet = Array.isArray(vacancyIds) && vacancyIds.length > 0 ? new Set(vacancyIds.map(String)) : null;
+
+    const store = loadTelegramQueueDisk();
+    const qs = store.queueState;
+    const nowIso = new Date().toISOString();
+    let requeuedCount = 0;
+
+    // Strictly retry ONLY failed items; never touch published items!
+    qs.items = (qs.items || []).map((item) => {
+      if (item.status === 'failed' && (!targetIdsSet || targetIdsSet.has(item.vacancyId))) {
+        requeuedCount++;
+        return {
+          ...item,
+          status: 'pending',
+          error: undefined,
+          updatedAt: nowIso,
+        };
+      }
+      return item;
+    });
+
+    if (requeuedCount === 0) {
+      res.json({
+        ...buildQueueStatusResponse(),
+        requeuedCount: 0,
+        message: 'No failed vacancies found in the queue to retry.',
+      });
+      return;
+    }
+
+    qs.status = 'running';
+    qs.completedAt = undefined;
+    qs.updatedAt = nowIso;
+    saveTelegramQueueDisk(store);
+
+    setTimeout(() => {
+      processServerTelegramQueue().catch((e) => console.warn('Retry queue worker error:', e));
+    }, 20);
+
+    res.json({
+      ...buildQueueStatusResponse(),
+      requeuedCount,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Failed to retry failed queue items.' });
+  }
+});
+
+app.post('/api/telegram/queue/cancel', (req: Request, res: Response): void => {
+  const store = loadTelegramQueueDisk();
+  if (store.queueState) {
+    store.queueState.status = 'cancelled';
+    store.queueState.updatedAt = new Date().toISOString();
+    store.queueState.currentVacancyId = undefined;
+    store.queueState.currentTitle = undefined;
+    saveTelegramQueueDisk(store);
+  }
+  res.json(buildQueueStatusResponse());
+});
+
+// Resume interrupted persistent queue automatically on server startup
+try {
+  const bootQueue = loadTelegramQueueDisk();
+  if (bootQueue?.queueState?.status === 'running') {
+    let changed = false;
+    bootQueue.queueState.items = bootQueue.queueState.items.map((it) => {
+      if (it.status === 'processing' || it.status === 'retrying') {
+        changed = true;
+        return { ...it, status: 'pending', updatedAt: new Date().toISOString() };
+      }
+      return it;
+    });
+    if (changed) saveTelegramQueueDisk(bootQueue);
+    setTimeout(() => {
+      processServerTelegramQueue().catch((e) => console.warn('Auto-resume queue error:', e));
+    }, 1000);
+  }
+} catch {}
+
 // Telegram Publishing Endpoint
 app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancy, botToken, channelName, channelId, forceRetry, customDomain, contentType, distributionMode, dryRun } = req.body;
+    const { vacancy, channelName, channelId, forceRetry, customDomain, contentType, distributionMode, dryRun, action } = req.body;
     if (!vacancy) {
       res.status(400).json({ error: 'Vacancy payload is required' });
       return;
     }
 
     const persisted = loadPersistedSettings() || {};
+    const targetChannel = normalizeTelegramChatIdServer(
+      channelName || persisted.telegramChannelName || persisted.telegramChannelId || '@DreamBigJobsEthiopia'
+    ).chatId;
+
     const gate = evaluateTelegramPublishEligibilityServer(vacancy, persisted, Boolean(forceRetry), contentType, distributionMode);
     if (!gate.allowed) {
+      if (!dryRun) {
+        appendTelegramLogServer({
+          vacancyId: String(vacancy.id || 'unknown'),
+          title: String(vacancy.title || 'Vacancy'),
+          organization: vacancy.organization,
+          action: action === 'auto_publish' ? 'auto_publish' : 'manual_publish',
+          status: gate.alreadyPublished ? 'skipped' : 'failed',
+          telegramMessageId: gate.existingRecord?.telegramMessageId || vacancy.telegramMessageId,
+          channel: targetChannel,
+          error: gate.reason,
+        });
+      }
       res.json({
         success: false,
         alreadyPublished: Boolean(gate.alreadyPublished),
         blockedByRule: !gate.alreadyPublished,
+        telegramMessageId: gate.existingRecord?.telegramMessageId || vacancy.telegramMessageId,
         error: gate.reason,
         message: gate.reason,
       });
       return;
     }
 
-    const effectiveToken = botToken || getTelegramToken();
+    // Strict server-side token usage (never trust or require token from browser)
+    const effectiveToken = getTelegramToken();
     if (!dryRun && !effectiveToken) {
       res.status(400).json({
         error: 'Telegram bot token is not configured on the server. Please configure TELEGRAM_BOT_TOKEN first.',
@@ -2415,9 +3339,6 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
       return;
     }
 
-    const targetChannel = normalizeTelegramChatIdServer(
-      channelName || persisted.telegramChannelName || persisted.telegramChannelId || '@DreamBigJobsEthiopia'
-    ).chatId;
     let effectiveDomain =
       customDomain ||
       persisted?.customDomain ||
@@ -2435,6 +3356,17 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
     );
 
     if (!result.ok) {
+      if (!dryRun) {
+        appendTelegramLogServer({
+          vacancyId: String(vacancy.id || 'unknown'),
+          title: String(vacancy.title || 'Vacancy'),
+          organization: vacancy.organization,
+          action: action === 'auto_publish' ? 'auto_publish' : forceRetry ? 'retry' : 'manual_publish',
+          status: 'failed',
+          channel: targetChannel,
+          error: result.error,
+        });
+      }
       res.json({
         success: false,
         error: `Telegram API responded: ${result.error}`,
@@ -2447,17 +3379,40 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
       return;
     }
 
+    const publishedAt = new Date().toISOString();
+    if (!dryRun && vacancy.id) {
+      recordPublishedVacancyServer({
+        vacancyId: String(vacancy.id),
+        telegramMessageId: Number(result.messageId || 0),
+        publishedAt,
+        channel: result.resolvedChatId || targetChannel,
+        title: String(vacancy.title || 'Vacancy'),
+        organization: vacancy.organization,
+      });
+      appendTelegramLogServer({
+        vacancyId: String(vacancy.id),
+        title: String(vacancy.title || 'Vacancy'),
+        organization: vacancy.organization,
+        action: action === 'auto_publish' ? 'auto_publish' : forceRetry ? 'retry' : 'manual_publish',
+        status: 'published',
+        telegramMessageId: result.messageId,
+        channel: result.resolvedChatId || targetChannel,
+        timestamp: publishedAt,
+      });
+    }
+
     res.json({
       success: true,
       dryRun: Boolean(dryRun),
       resolvedChatId: result.resolvedChatId || targetChannel,
       message: dryRun ? `Validated & formatted preview for ${targetChannel}` : `Successfully broadcasted to ${result.resolvedChatId || targetChannel}!`,
       telegramMessageId: result.messageId,
-      telegramPublishedAt: new Date().toISOString(),
+      telegramPublishedAt: publishedAt,
       formattedMessage: result.formattedMessage,
       formattedPlain: result.formattedPlain,
       isWashNgo: result.isWashNgo,
       hasWashLabel: result.hasWashLabel,
+      usedPhoto: result.usedPhoto,
     });
   } catch (err: any) {
     console.error('Telegram publish error:', err);
@@ -2465,10 +3420,10 @@ app.post('/api/admin/telegram-publish', async (req: Request, res: Response): Pro
   }
 });
 
-// Batch Telegram Broadcast Endpoint for Auto-Publishing Approved Vacancies
+// Batch Telegram Broadcast Endpoint (independent item processing — never drops remaining items on single failure)
 app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { vacancies = [], channelName, channelId, distributionMode, dryRun } = req.body;
+    const { vacancies = [], channelName, channelId, distributionMode, dryRun, forceRetry } = req.body;
     const effectiveToken = getTelegramToken();
     if (!dryRun && !effectiveToken) {
       res.status(400).json({
@@ -2485,12 +3440,23 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
     if (domain === 'healmorin.com') domain = 'hopelandjobs.tech';
     const appUrl = domain.startsWith('http') ? domain.replace(/\/+$/, '') : `https://${domain}`;
     const results: any[] = [];
-    let fatalChannelError: string | null = null;
     let discoveredChats: any[] | undefined;
 
     for (const v of vacancies) {
-      const gate = evaluateTelegramPublishEligibilityServer(v, persisted, false, v?.contentType, distributionMode);
+      const gate = evaluateTelegramPublishEligibilityServer(v, persisted, Boolean(forceRetry), v?.contentType, distributionMode);
       if (!gate.allowed) {
+        if (!dryRun) {
+          appendTelegramLogServer({
+            vacancyId: String(v?.id || 'unknown'),
+            title: String(v?.title || 'Vacancy'),
+            organization: v?.organization,
+            action: 'queue_publish',
+            status: 'skipped',
+            telegramMessageId: gate.existingRecord?.telegramMessageId || v?.telegramMessageId,
+            channel: targetChannel,
+            error: gate.reason,
+          });
+        }
         results.push({
           id: v.id,
           title: v.title,
@@ -2498,20 +3464,8 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
           broadCategory: classifyBroadCategoryServer(v),
           isWashNgo: isWashNgoVacancyServer(v),
           status: 'skipped',
+          alreadyPublished: Boolean(gate.alreadyPublished),
           reason: gate.reason || 'Excluded by Telegram distribution rule',
-        });
-        continue;
-      }
-
-      if (fatalChannelError) {
-        results.push({
-          id: v.id,
-          title: v.title,
-          organization: v.organization,
-          broadCategory: classifyBroadCategoryServer(v),
-          isWashNgo: isWashNgoVacancyServer(v),
-          status: 'failed',
-          error: fatalChannelError,
         });
         continue;
       }
@@ -2525,6 +3479,27 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
         channelId
       );
       if (postRes.ok) {
+        const publishedAt = new Date().toISOString();
+        if (!dryRun && v.id) {
+          recordPublishedVacancyServer({
+            vacancyId: String(v.id),
+            telegramMessageId: Number(postRes.messageId || 0),
+            publishedAt,
+            channel: postRes.resolvedChatId || targetChannel,
+            title: String(v.title || 'Vacancy'),
+            organization: v.organization,
+          });
+          appendTelegramLogServer({
+            vacancyId: String(v.id),
+            title: String(v.title || 'Vacancy'),
+            organization: v.organization,
+            action: 'queue_publish',
+            status: 'published',
+            telegramMessageId: postRes.messageId,
+            channel: postRes.resolvedChatId || targetChannel,
+            timestamp: publishedAt,
+          });
+        }
         results.push({
           id: v.id,
           title: v.title,
@@ -2536,12 +3511,22 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
           formattedPlain: postRes.formattedPlain,
           status: 'success',
           telegramMessageId: postRes.messageId,
-          telegramPublishedAt: new Date().toISOString(),
+          telegramPublishedAt: publishedAt,
         });
       } else {
-        if (!dryRun && isFatalTelegramConfigErrorServer(postRes.error)) {
-          fatalChannelError = postRes.error || 'Fatal Telegram configuration error';
+        if (!discoveredChats && postRes.discoveredChats) {
           discoveredChats = postRes.discoveredChats;
+        }
+        if (!dryRun) {
+          appendTelegramLogServer({
+            vacancyId: String(v?.id || 'unknown'),
+            title: String(v?.title || 'Vacancy'),
+            organization: v?.organization,
+            action: 'queue_publish',
+            status: 'failed',
+            channel: targetChannel,
+            error: postRes.error,
+          });
         }
         results.push({
           id: v.id,
@@ -2555,20 +3540,24 @@ app.post('/api/admin/batch-telegram-publish', async (req: Request, res: Response
         });
       }
 
-      if (!dryRun && !fatalChannelError) {
-        await new Promise((r) => setTimeout(r, 400));
+      if (!dryRun) {
+        await new Promise((r) => setTimeout(r, 1100));
       }
     }
 
+    const publishedCount = results.filter((r) => r.status === 'success').length;
+    const failedCount = results.filter((r) => r.status === 'failed').length;
+    const skippedCount = results.filter((r) => r.status === 'skipped').length;
+
     res.json({
-      success: !fatalChannelError,
+      success: failedCount === 0,
       dryRun: Boolean(dryRun),
-      fatalError: fatalChannelError || undefined,
       discoveredChats,
       distributionMode: distributionMode || persisted?.telegramDistributionMode || 'all_jobs',
       total: vacancies.length,
-      publishedCount: results.filter((r) => r.status === 'success').length,
-      skippedCount: results.filter((r) => r.status === 'skipped').length,
+      publishedCount,
+      failedCount,
+      skippedCount,
       results,
     });
   } catch (err: any) {

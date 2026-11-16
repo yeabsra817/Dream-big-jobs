@@ -643,29 +643,28 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     fetchFirestoreSettings(),
   ]);
 
+  // Security: Raw TELEGRAM_BOT_TOKEN must NEVER be persisted or returned in browser storage/Firestore.
+  const { telegramBotToken: _stripFs, ...safeFsSettings } = firestoreSettings as Partial<SiteSettings>;
+  const { telegramBotToken: _stripSrv, ...safeSrvSettings } = serverSettings as Partial<SiteSettings>;
+  const { telegramBotToken: _stripCache, ...safeCached } = cached as Partial<SiteSettings>;
+
   // Merge with highest priority: Firestore > Server > Local Cache > Defaults
   const merged: SiteSettings = {
     ...defaultSettings,
-    ...cached,
-    ...serverSettings,
-    ...firestoreSettings,
+    ...safeCached,
+    ...safeSrvSettings,
+    ...safeFsSettings,
+    telegramBotTokenConfigured: Boolean(
+      safeSrvSettings.telegramBotTokenConfigured ?? safeFsSettings.telegramBotTokenConfigured ?? safeCached.telegramBotTokenConfigured
+    ),
+    maskedBotToken:
+      safeSrvSettings.maskedBotToken || safeFsSettings.maskedBotToken || safeCached.maskedBotToken,
   };
 
-  // Ensure any valid bot token, custom domain, or GA4 ID found in any layer is strictly preserved
-  const resolvedToken =
-    (firestoreSettings.telegramBotToken && firestoreSettings.telegramBotToken.includes(':') ? firestoreSettings.telegramBotToken : '') ||
-    (serverSettings.telegramBotToken && serverSettings.telegramBotToken.includes(':') ? serverSettings.telegramBotToken : '') ||
-    (cached.telegramBotToken && cached.telegramBotToken.includes(':') ? cached.telegramBotToken : '') ||
-    (typeof window !== 'undefined' ? (localStorage.getItem('dreambigjobs_telegram_bot_token') || '') : '');
-
-  if (resolvedToken) {
-    merged.telegramBotToken = resolvedToken;
-  }
-
   let resolvedDomain =
-    firestoreSettings.customDomain ||
-    serverSettings.customDomain ||
-    cached.customDomain ||
+    safeFsSettings.customDomain ||
+    safeSrvSettings.customDomain ||
+    safeCached.customDomain ||
     'hopelandjobs.tech';
   // Migrate legacy healmorin.com to hopelandjobs.tech automatically
   if (resolvedDomain === 'healmorin.com') {
@@ -676,25 +675,23 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   }
 
   const resolvedUsername =
-    firestoreSettings.telegramBotUsername ||
-    serverSettings.telegramBotUsername ||
-    cached.telegramBotUsername ||
+    safeFsSettings.telegramBotUsername ||
+    safeSrvSettings.telegramBotUsername ||
+    safeCached.telegramBotUsername ||
     '@DreamBigJobsEthiopiaBot';
   if (resolvedUsername) {
     merged.telegramBotUsername = resolvedUsername;
   }
 
   if (!merged.gaMeasurementId) {
-    if (firestoreSettings.gaMeasurementId) merged.gaMeasurementId = firestoreSettings.gaMeasurementId;
-    else if (serverSettings.gaMeasurementId) merged.gaMeasurementId = serverSettings.gaMeasurementId;
-    else if (cached.gaMeasurementId) merged.gaMeasurementId = cached.gaMeasurementId;
+    if (safeFsSettings.gaMeasurementId) merged.gaMeasurementId = safeFsSettings.gaMeasurementId;
+    else if (safeSrvSettings.gaMeasurementId) merged.gaMeasurementId = safeSrvSettings.gaMeasurementId;
+    else if (safeCached.gaMeasurementId) merged.gaMeasurementId = safeCached.gaMeasurementId;
   }
 
   try {
     localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(merged));
-    if (merged.telegramBotToken) {
-      localStorage.setItem('dreambigjobs_telegram_bot_token', merged.telegramBotToken);
-    }
+    localStorage.removeItem('dreambigjobs_telegram_bot_token');
   } catch {}
 
   return merged;
@@ -702,29 +699,31 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   const path = 'siteSettings/general';
+  // Security: strip raw bot token before saving to client cache or Firestore
+  const { telegramBotToken: rawTokenOnlyForServerSync, ...safeSettings } = settings;
 
-  // 1. Update localStorage immediately
+  // 1. Update localStorage immediately (never storing raw bot token)
   try {
-    localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(settings));
-    if (settings.telegramBotToken) {
-      localStorage.setItem('dreambigjobs_telegram_bot_token', settings.telegramBotToken);
-    }
+    localStorage.setItem(LOCAL_STORAGE_SETTINGS_KEY, JSON.stringify(safeSettings));
+    localStorage.removeItem('dreambigjobs_telegram_bot_token');
   } catch {}
 
-  // 2. Persist to server backend disk
+  // 2. Persist to server backend disk (server strips token out of public settings and isolates it in server-only config)
   try {
     await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(
+        rawTokenOnlyForServerSync ? { ...safeSettings, telegramBotToken: rawTokenOnlyForServerSync } : safeSettings
+      ),
     });
   } catch (e) {
     console.warn('Server settings sync notice:', e);
   }
 
-  // 3. Persist to Cloud Firestore
+  // 3. Persist sanitized metadata to Cloud Firestore (never saving raw bot token)
   try {
-    const cleanPayload = sanitizeForFirestore(settings);
+    const cleanPayload = sanitizeForFirestore(safeSettings);
     await setDoc(doc(db, 'siteSettings', 'general'), cleanPayload, { merge: true });
   } catch (err) {
     if (isPermissionError(err)) {

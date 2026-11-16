@@ -92,6 +92,7 @@ import {
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
+import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { Footer } from './components/Footer';
@@ -891,14 +892,65 @@ export default function App() {
     setIsApplicationModalOpen(true);
   };
 
+  // Automatic Telegram Publishing when a vacancy is newly published or approved
+  const maybeAutoPublishVacancyToTelegram = async (savedVacancy: Vacancy, previousVacancy?: Vacancy) => {
+    if (siteSettings.telegramAutoPublish === false) return;
+    if (savedVacancy.status !== 'published') return;
+    if (savedVacancy.telegramPublished) return;
+
+    const wasAlreadyPublishedOnSite = previousVacancy?.status === 'published';
+    if (wasAlreadyPublishedOnSite) return;
+
+    const targetChannel = normalizeTelegramChatId(
+      siteSettings.telegramChannelName || siteSettings.telegramChannelId || '@DreamBigJobsEthiopia'
+    ).chatId;
+
+    try {
+      const res = await broadcastJobToTelegram(
+        savedVacancy,
+        targetChannel,
+        false,
+        siteSettings.customDomain,
+        siteSettings,
+        'vacancy',
+        'auto_publish'
+      );
+
+      if (res.success) {
+        const synced: Vacancy = {
+          ...savedVacancy,
+          telegramPublished: true,
+          telegramMessageId: res.telegramMessageId,
+          telegramPublishedAt: res.telegramPublishedAt || new Date().toISOString(),
+          telegramPublishError: '',
+          updatedAt: new Date().toISOString(),
+        };
+        setVacancies((prev) => prev.map((v) => (v.id === synced.id ? synced : v)));
+        await saveVacancy(synced);
+      } else if (!res.alreadyPublished && !res.blockedByRule && res.error) {
+        const failedSync: Vacancy = {
+          ...savedVacancy,
+          telegramPublishError: res.error,
+          updatedAt: new Date().toISOString(),
+        };
+        setVacancies((prev) => prev.map((v) => (v.id === failedSync.id ? failedSync : v)));
+        await saveVacancy(failedSync);
+      }
+    } catch (err: any) {
+      console.warn('Auto-publish Telegram notice:', err?.message || err);
+    }
+  };
+
   // Admin Actions
   const handleSaveVacancy = async (updated: Vacancy) => {
+    const existing = vacancies.find((v) => v.id === updated.id);
     setVacancies((prev) => {
       const exists = prev.some((v) => v.id === updated.id);
       if (exists) return prev.map((v) => (v.id === updated.id ? updated : v));
       return [updated, ...prev];
     });
     await saveVacancy(updated);
+    void maybeAutoPublishVacancyToTelegram(updated, existing);
   };
 
   const handleBatchSaveVacancies = async (newVacancies: Vacancy[]) => {
@@ -932,12 +984,14 @@ export default function App() {
       ...target,
       status,
       applicationDeadline: deadline || target.applicationDeadline,
+      publishedAt: status === 'published' ? (target.publishedAt || new Date().toISOString()) : target.publishedAt,
       updatedAt: new Date().toISOString(),
     };
 
     setVacancies((prev) => prev.map((v) => (v.id === id ? updated : v)));
     try {
       await saveVacancy(updated);
+      void maybeAutoPublishVacancyToTelegram(updated, target);
     } catch (err) {
       console.warn('Update vacancy status note:', err);
     }

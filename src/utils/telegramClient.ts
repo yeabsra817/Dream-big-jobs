@@ -1,6 +1,11 @@
-import { SiteSettings, TelegramDistributionMode, Vacancy } from '../types/job';
-
-export const LOCAL_STORAGE_TOKEN_KEY = 'dreambigjobs_telegram_bot_token';
+import {
+  SiteSettings,
+  TelegramDistributionMode,
+  TelegramPublishLogEntry,
+  TelegramQueueState,
+  TelegramVerificationStatusCode,
+  Vacancy,
+} from '../types/job';
 
 /**
  * Determine whether a vacancy is genuinely a Banking / Financial Institution job.
@@ -197,6 +202,7 @@ export interface NormalizedTelegramChat {
  * Canonical Telegram chat_id normalizer:
  * - Preserves numeric channel/group IDs (e.g. "-1001234567890") WITHOUT prepending "@"
  * - Heals accidentally mangled "@-1001234567890" -> "-1001234567890"
+ * - Converts private post links ("https://t.me/c/1234567890/45") -> "-1001234567890"
  * - Extracts "@username" from full URLs ("https://t.me/HopeLandJobs" or "t.me/HopeLandJobs/12")
  * - Flags private invite links ("t.me/+...") with an actionable error instead of corrupting into "@https://..."
  */
@@ -230,7 +236,17 @@ export function normalizeTelegramChatId(input?: string): NormalizedTelegramChat 
       isNumeric: false,
       isInviteLink: true,
       error:
-        'Private Telegram invite links (t.me/+...) cannot be used as a bot chat_id. Add your bot as Channel Administrator and enter the numeric -100... Channel ID or click Auto-Detect Channel.',
+        'Private Telegram invite links (t.me/+...) cannot be used as a bot chat_id. Paste a private post link (https://t.me/c/<id>/<msg>), enter the numeric -100... Channel ID, or verify a public @username.',
+    };
+  }
+
+  // Private supergroup/channel message link: https://t.me/c/1234567890/45 -> -1001234567890
+  const privatePostMatch = urlCandidate.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/c\/(\d+)(?:\/\d+)?(?:[/?#].*)?$/i);
+  if (privatePostMatch) {
+    return {
+      chatId: `-100${privatePostMatch[1]}`,
+      isNumeric: true,
+      isInviteLink: false,
     };
   }
 
@@ -279,10 +295,13 @@ export interface DiscoveredTelegramChat {
 
 export interface ChannelVerificationResult {
   ok: boolean;
+  statusCode?: TelegramVerificationStatusCode;
+  statusLabel?: string;
   chatExists?: boolean;
   normalizedChannel?: string;
   isAdmin?: boolean;
   canPost?: boolean;
+  webhookActive?: boolean;
   chat?: {
     id: number | string;
     title: string;
@@ -300,14 +319,44 @@ export interface ChannelVerificationResult {
   unreachableServer?: boolean;
 }
 
-export async function verifyTelegramChannelClient(
-  channelName?: string,
-  botToken?: string
-): Promise<ChannelVerificationResult> {
+export interface ServerQueueStatusResponse {
+  success: boolean;
+  queueState: TelegramQueueState;
+  summary: {
+    total: number;
+    pending: number;
+    processing: number;
+    retrying: number;
+    published: number;
+    failed: number;
+    progressPercent: number;
+  };
+  lastSuccessfulPublication?: string;
+  totalPublishedAllTime: number;
+  totalFailedLogs: number;
+  publishedRecords?: Record<
+    string,
+    {
+      vacancyId: string;
+      telegramMessageId: number;
+      publishedAt: string;
+      channel: string;
+      title: string;
+    }
+  >;
+  logs: TelegramPublishLogEntry[];
+  requeuedCount?: number;
+  message?: string;
+  error?: string;
+}
+
+export async function verifyTelegramConnectionClient(channelName?: string): Promise<ChannelVerificationResult> {
   const normalized = normalizeTelegramChatId(channelName);
   if (normalized.isInviteLink) {
     return {
       ok: false,
+      statusCode: 'channel_not_found',
+      statusLabel: 'Channel not found',
       chatExists: false,
       normalizedChannel: normalized.chatId,
       error: normalized.error,
@@ -315,34 +364,148 @@ export async function verifyTelegramChannelClient(
   }
 
   try {
-    const res = await fetch('/api/telegram/verify-channel', {
+    const res = await fetch('/api/telegram/verify-connection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        channelName: normalized.chatId,
-        botToken: botToken ? cleanTelegramToken(botToken) : undefined,
-      }),
+      body: JSON.stringify({ channelName: normalized.chatId }),
     });
     const text = await res.text();
     if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
-      try {
-        return JSON.parse(text) as ChannelVerificationResult;
-      } catch {}
+      return JSON.parse(text) as ChannelVerificationResult;
     }
-  } catch {}
+  } catch (err: any) {
+    return {
+      ok: false,
+      statusCode: 'api_connection_failed',
+      statusLabel: 'Telegram API connection failed',
+      unreachableServer: true,
+      normalizedChannel: normalized.chatId,
+      error: `Could not reach verification endpoint: ${err?.message || String(err)}`,
+    };
+  }
 
   return {
     ok: false,
+    statusCode: 'api_connection_failed',
+    statusLabel: 'Telegram API connection failed',
     unreachableServer: true,
     normalizedChannel: normalized.chatId,
     error: 'Could not reach server channel verification endpoint.',
   };
 }
 
+export async function verifyTelegramChannelClient(channelName?: string): Promise<ChannelVerificationResult> {
+  return verifyTelegramConnectionClient(channelName);
+}
+
+export async function sendTelegramTestMessageClient(channelName?: string): Promise<{
+  success: boolean;
+  statusCode?: TelegramVerificationStatusCode;
+  statusLabel?: string;
+  telegramMessageId?: number;
+  resolvedChatId?: string;
+  normalizedChannel?: string;
+  timestamp?: string;
+  message?: string;
+  error?: string;
+  diagnosis?: string;
+  discoveredChats?: DiscoveredTelegramChat[];
+}> {
+  const normalized = normalizeTelegramChatId(channelName);
+  if (normalized.isInviteLink) {
+    return {
+      success: false,
+      statusCode: 'channel_not_found',
+      statusLabel: 'Channel not found',
+      error: normalized.error,
+    };
+  }
+
+  try {
+    const res = await fetch('/api/telegram/send-test-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelName: normalized.chatId }),
+    });
+    const text = await res.text();
+    if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
+      return JSON.parse(text);
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      statusCode: 'api_connection_failed',
+      statusLabel: 'Telegram API connection failed',
+      error: err?.message || 'Could not reach test message endpoint.',
+    };
+  }
+  return {
+    success: false,
+    statusCode: 'api_connection_failed',
+    statusLabel: 'Telegram API connection failed',
+    error: 'Server returned invalid response.',
+  };
+}
+
+export async function fetchTelegramQueueStatusClient(): Promise<ServerQueueStatusResponse | null> {
+  try {
+    const res = await fetch('/api/telegram/queue/status');
+    if (res.ok) {
+      return (await res.json()) as ServerQueueStatusResponse;
+    }
+  } catch {}
+  return null;
+}
+
+export async function fetchTelegramLogsClient(): Promise<TelegramPublishLogEntry[]> {
+  try {
+    const res = await fetch('/api/telegram/logs');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.logs)) return data.logs;
+    }
+  } catch {}
+  return [];
+}
+
+export async function startServerTelegramQueueClient(params: {
+  vacancies: Vacancy[];
+  channelName?: string;
+  distributionMode?: TelegramDistributionMode;
+  forceRetry?: boolean;
+}): Promise<ServerQueueStatusResponse> {
+  const res = await fetch('/api/telegram/queue/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      vacancies: params.vacancies,
+      channelName: params.channelName ? normalizeTelegramChatId(params.channelName).chatId : undefined,
+      distributionMode: params.distributionMode || 'all_jobs',
+      forceRetry: Boolean(params.forceRetry),
+    }),
+  });
+  return (await res.json()) as ServerQueueStatusResponse;
+}
+
+export async function retryFailedServerQueueClient(vacancyIds?: string[]): Promise<ServerQueueStatusResponse> {
+  const res = await fetch('/api/telegram/queue/retry-failed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vacancyIds }),
+  });
+  return (await res.json()) as ServerQueueStatusResponse;
+}
+
+export async function cancelServerTelegramQueueClient(): Promise<ServerQueueStatusResponse> {
+  const res = await fetch('/api/telegram/queue/cancel', { method: 'POST' });
+  return (await res.json()) as ServerQueueStatusResponse;
+}
+
 export async function discoverTelegramChatsClient(): Promise<{
   ok: boolean;
   chats: DiscoveredTelegramChat[];
   bot?: { id: number; first_name: string; username: string };
+  webhookActive?: boolean;
   error?: string;
 }> {
   try {
@@ -368,12 +531,25 @@ function escapeHtml(str: any): string {
     .replace(/>/g, '&gt;');
 }
 
+function truncateTextClient(val: string | null | undefined, maxLen: number): string {
+  const s = String(val || '').trim();
+  if (!s) return '';
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
+
+function isMeaningfulClientField(val?: string | null): boolean {
+  const s = String(val || '').trim();
+  if (!s) return false;
+  return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
+}
+
 /**
  * Normalizes user-configured domain or URL into a clean base URL (default: hopelandjobs.tech)
  */
 export function normalizeWebsiteDomain(domainOrUrl?: string): string {
   if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
-  let clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   return `https://${clean}`;
 }
 
@@ -385,36 +561,63 @@ export function buildTelegramJobHtml(
   const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 
-  const orgName = escapeHtml(vacancy.organization || 'Employer');
-  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(vacancy.organizationAmharic)})` : '';
-  const positionTitle = escapeHtml(vacancy.title || 'Various Positions');
+  const orgName = escapeHtml(truncateTextClient(vacancy.organization || 'Employer', 140));
+  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateTextClient(vacancy.organizationAmharic, 90))})` : '';
+  const positionTitle = escapeHtml(truncateTextClient(vacancy.title || 'Various Positions', 180));
 
   const eduParts: string[] = [];
-  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
-  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
-  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(vacancy.requiredSkills.join(' / '));
+  if (isMeaningfulClientField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateTextClient(vacancy.requiredFieldOfStudy, 160));
+  if (isMeaningfulClientField(vacancy.educationQualification)) eduParts.push(truncateTextClient(vacancy.educationQualification, 180));
+  if (Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(truncateTextClient(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
   }
   if (eduParts.length === 0) {
     eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
   }
-  if (vacancy.experienceYears) {
-    eduParts.push(`${vacancy.experienceYears} experience`);
+  if (isMeaningfulClientField(vacancy.experienceYears)) {
+    eduParts.push(`${truncateTextClient(vacancy.experienceYears, 60)} experience`);
   }
-  const educationFieldText = escapeHtml(eduParts.join(', '));
+  const educationFieldText = escapeHtml(truncateTextClient(eduParts.join(', '), 340));
+
+  const detailLines: string[] = [];
+  if (isMeaningfulClientField(vacancy.location)) {
+    detailLines.push(`📍 <b>Location:</b> ${escapeHtml(truncateTextClient(vacancy.location, 100))}`);
+  }
+  if (isMeaningfulClientField(vacancy.employmentType)) {
+    detailLines.push(`💼 <b>Employment Type:</b> ${escapeHtml(truncateTextClient(vacancy.employmentType, 60))}`);
+  }
+  if (isMeaningfulClientField(vacancy.salary)) {
+    detailLines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateTextClient(vacancy.salary, 90))}`);
+  }
+  if (isMeaningfulClientField(vacancy.applicationDeadline)) {
+    detailLines.push(`⏳ <b>Deadline:</b> ${escapeHtml(truncateTextClient(vacancy.applicationDeadline, 60))}`);
+  }
+
+  let applyLine = '';
+  const appUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
+  const appEmail = String(vacancy.applicationEmail || '').trim();
+  const appInst = String(vacancy.applicationInstructions || vacancy.officialApplicationInstructions || '').trim();
+  if (/^https?:\/\/\S+/i.test(appUrl)) {
+    applyLine = `🔗 <b>Apply Online:</b> <a href="${escapeHtml(appUrl)}">${escapeHtml(truncateTextClient(appUrl, 120))}</a>`;
+  } else if (appEmail.includes('@')) {
+    applyLine = `✉️ <b>Apply via Email:</b> ${escapeHtml(appEmail)}`;
+  } else if (isMeaningfulClientField(appInst)) {
+    applyLine = `📝 <b>How to Apply:</b> ${escapeHtml(truncateTextClient(appInst, 180))}`;
+  }
+
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
   return `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
-✅ <b>Education field:</b> ${educationFieldText}
-
+${detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : ''}✅ <b>Education &amp; Experience:</b> ${educationFieldText}
+${applyLine ? `${applyLine}\n` : ''}
 📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
-👉<b>Read Detail:-</b> <a href="${vacancyLink}">${vacancyLink}</a>
+👉<b>Read Detail:-</b> <a href="${escapeHtml(vacancyLink)}">${escapeHtml(vacancyLink)}</a>
 
 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
-=&gt;<b>See Detail:-</b> <a href="${baseUrl}">${baseUrl}</a>`;
+=&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
 }
 
 export function buildTelegramJobPlainText(
@@ -425,31 +628,46 @@ export function buildTelegramJobPlainText(
   const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 
-  const orgName = vacancy.organization || 'Employer';
-  const orgAmharic = vacancy.organizationAmharic ? ` (${vacancy.organizationAmharic})` : '';
-  const positionTitle = vacancy.title || 'Various Positions';
+  const orgName = truncateTextClient(vacancy.organization || 'Employer', 140);
+  const orgAmharic = vacancy.organizationAmharic ? ` (${truncateTextClient(vacancy.organizationAmharic, 90)})` : '';
+  const positionTitle = truncateTextClient(vacancy.title || 'Various Positions', 180);
 
   const eduParts: string[] = [];
-  if (vacancy.requiredFieldOfStudy) eduParts.push(vacancy.requiredFieldOfStudy);
-  if (vacancy.educationQualification) eduParts.push(vacancy.educationQualification);
-  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(vacancy.requiredSkills.join(' / '));
+  if (isMeaningfulClientField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateTextClient(vacancy.requiredFieldOfStudy, 160));
+  if (isMeaningfulClientField(vacancy.educationQualification)) eduParts.push(truncateTextClient(vacancy.educationQualification, 180));
+  if (Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    eduParts.push(truncateTextClient(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
   }
   if (eduParts.length === 0) {
     eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
   }
-  if (vacancy.experienceYears) {
-    eduParts.push(`${vacancy.experienceYears} experience`);
+  if (isMeaningfulClientField(vacancy.experienceYears)) {
+    eduParts.push(`${truncateTextClient(vacancy.experienceYears, 60)} experience`);
   }
-  const educationFieldText = eduParts.join(', ');
+  const educationFieldText = truncateTextClient(eduParts.join(', '), 340);
+
+  const detailLines: string[] = [];
+  if (isMeaningfulClientField(vacancy.location)) detailLines.push(`📍 Location: ${truncateTextClient(vacancy.location, 100)}`);
+  if (isMeaningfulClientField(vacancy.employmentType)) detailLines.push(`💼 Employment Type: ${truncateTextClient(vacancy.employmentType, 60)}`);
+  if (isMeaningfulClientField(vacancy.salary)) detailLines.push(`💰 Salary: ${truncateTextClient(vacancy.salary, 90)}`);
+  if (isMeaningfulClientField(vacancy.applicationDeadline)) detailLines.push(`⏳ Deadline: ${truncateTextClient(vacancy.applicationDeadline, 60)}`);
+
+  let applyLine = '';
+  const appUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
+  const appEmail = String(vacancy.applicationEmail || '').trim();
+  const appInst = String(vacancy.applicationInstructions || vacancy.officialApplicationInstructions || '').trim();
+  if (/^https?:\/\/\S+/i.test(appUrl)) applyLine = `🔗 Apply Online: ${truncateTextClient(appUrl, 120)}`;
+  else if (appEmail.includes('@')) applyLine = `✉️ Apply via Email: ${appEmail}`;
+  else if (isMeaningfulClientField(appInst)) applyLine = `📝 How to Apply: ${truncateTextClient(appInst, 180)}`;
+
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
   return `${washPrefix}Vacancy at ${orgName}
 
 🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
-✅ Education field: ${educationFieldText}
-
+${detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : ''}✅ Education & Experience: ${educationFieldText}
+${applyLine ? `${applyLine}\n` : ''}
 📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
 👉Read Detail:- ${vacancyLink}
 
@@ -515,43 +733,20 @@ export function applyAndValidateWashLabelClient(
   };
 }
 
-export async function directTelegramApiCall(token: string, method: string, payload?: Record<string, any>): Promise<any> {
-  const clean = cleanTelegramToken(token);
-  const url = `https://api.telegram.org/bot${clean}/${method}`;
-
-  const options: RequestInit = {
-    method: payload ? 'POST' : 'GET',
-    headers: payload ? { 'Content-Type': 'application/json' } : undefined,
-    body: payload ? JSON.stringify(payload) : undefined,
-  };
-
-  const res = await fetch(url, options);
-  const text = await res.text();
-
-  let data: any;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Telegram API returned non-JSON response (${res.status}): ${text.substring(0, 100)}`);
-  }
-
-  return data;
-}
-
+/**
+ * Server-only token configuration & verification (never persists raw token in browser storage).
+ */
 export async function verifyTelegramBotToken(rawToken: string): Promise<{
   success: boolean;
   bot?: { id: number; first_name: string; username: string };
   maskedToken?: string;
-  cleanToken: string;
   error?: string;
-  directMode?: boolean;
 }> {
   const clean = cleanTelegramToken(rawToken);
 
   if (!isValidTelegramTokenFormat(clean)) {
     return {
       success: false,
-      cleanToken: clean,
       error: 'Invalid Telegram bot token format. Token must follow <id>:<secret> without spaces (e.g. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ).',
     };
   }
@@ -564,181 +759,84 @@ export async function verifyTelegramBotToken(rawToken: string): Promise<{
     });
 
     const text = await res.text();
-    if (res.ok && !text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
-      try {
-        const data = JSON.parse(text);
-        if (data.success && data.bot) {
-          try {
-            localStorage.setItem(LOCAL_STORAGE_TOKEN_KEY, clean);
-          } catch {}
-          return {
-            success: true,
-            bot: data.bot,
-            maskedToken: data.maskedToken || maskTelegramToken(clean),
-            cleanToken: clean,
-            directMode: false,
-          };
-        } else if (data.error) {
-          return { success: false, cleanToken: clean, error: data.error };
-        }
-      } catch {}
-    }
-  } catch {}
-
-  try {
-    const data = await directTelegramApiCall(clean, 'getMe');
-    if (data.ok && data.result) {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_TOKEN_KEY, clean);
-      } catch {}
-      return {
-        success: true,
-        bot: {
-          id: data.result.id,
-          first_name: data.result.first_name,
-          username: data.result.username,
-        },
-        maskedToken: maskTelegramToken(clean),
-        cleanToken: clean,
-        directMode: true,
-      };
-    } else {
+    if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
+      const data = JSON.parse(text);
+      if (res.ok && data.success && data.bot) {
+        return {
+          success: true,
+          bot: data.bot,
+          maskedToken: data.maskedToken || maskTelegramToken(clean),
+        };
+      }
       return {
         success: false,
-        cleanToken: clean,
-        error: `Telegram authentication rejected: ${data.description || 'Invalid token. Please check @BotFather.'}`,
+        error: data.error || 'Telegram rejected the provided Bot Token.',
       };
     }
+    return { success: false, error: 'Invalid response from server token configuration endpoint.' };
   } catch (err: any) {
     return {
       success: false,
-      cleanToken: clean,
-      error: `Could not reach Telegram: ${err.message || String(err)}`,
+      error: `Could not reach server Telegram endpoint: ${err?.message || String(err)}`,
     };
   }
 }
 
-export async function checkTelegramConnectionStatus(savedToken?: string): Promise<{
+export async function checkTelegramConnectionStatus(): Promise<{
   configured: boolean;
   connected: boolean;
   bot?: { id: number; first_name: string; username: string };
   maskedToken?: string;
   error?: string;
-  directMode?: boolean;
 }> {
   try {
     const res = await fetch('/api/telegram/status');
     const text = await res.text();
     if (res.ok && !text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
-      try {
-        const data = JSON.parse(text);
-        if (data.configured) {
-          return data;
-        }
-      } catch {}
-    }
-  } catch {}
-
-  const token = cleanTelegramToken(
-    savedToken || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || '' : '')
-  );
-
-  if (!token) {
-    return {
-      configured: false,
-      connected: false,
-      error: 'TELEGRAM_BOT_TOKEN is not configured yet.',
-    };
-  }
-
-  try {
-    const data = await directTelegramApiCall(token, 'getMe');
-    if (data.ok && data.result) {
-      return {
-        configured: true,
-        connected: true,
-        bot: {
-          id: data.result.id,
-          first_name: data.result.first_name,
-          username: data.result.username,
-        },
-        maskedToken: maskTelegramToken(token),
-        directMode: true,
-      };
-    } else {
-      return {
-        configured: true,
-        connected: false,
-        error: data.description || 'Bot token was rejected by Telegram API.',
-      };
+      return JSON.parse(text);
     }
   } catch (err: any) {
     return {
-      configured: true,
+      configured: false,
       connected: false,
-      error: `Connection error: ${err.message || String(err)}`,
+      error: `Connection error: ${err?.message || String(err)}`,
     };
   }
+
+  return {
+    configured: false,
+    connected: false,
+    error: 'TELEGRAM_BOT_TOKEN is not configured on the server.',
+  };
 }
 
-export async function testTelegramPing(token?: string): Promise<{
+export async function testTelegramPing(): Promise<{
   success: boolean;
   latencyMs: number;
   bot?: { id: number; first_name: string; username: string };
   error?: string;
 }> {
   const start = Date.now();
-
   try {
     const res = await fetch('/api/telegram/test-connection', { method: 'POST' });
     const text = await res.text();
-    if (res.ok && !text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
-      try {
-        const data = JSON.parse(text);
-        if (data.success) {
-          return data;
-        }
-      } catch {}
+    if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
+      return JSON.parse(text);
     }
-  } catch {}
-
-  const effectiveToken = cleanTelegramToken(
-    token || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || '' : '')
-  );
-
-  if (!effectiveToken) {
-    return { success: false, latencyMs: 0, error: 'No token configured to ping.' };
-  }
-
-  try {
-    const data = await directTelegramApiCall(effectiveToken, 'getMe');
-    const latencyMs = Date.now() - start;
-    if (data.ok && data.result) {
-      return {
-        success: true,
-        latencyMs,
-        bot: {
-          id: data.result.id,
-          first_name: data.result.first_name,
-          username: data.result.username,
-        },
-      };
-    } else {
-      return { success: false, latencyMs, error: data.description || 'Ping test failed' };
-    }
+    return { success: false, latencyMs: Date.now() - start, error: 'Invalid server response.' };
   } catch (err: any) {
-    return { success: false, latencyMs: Date.now() - start, error: err.message || String(err) };
+    return { success: false, latencyMs: Date.now() - start, error: err?.message || String(err) };
   }
 }
 
 export async function broadcastJobToTelegram(
   vacancy: Vacancy,
   channelName: string,
-  botToken?: string,
   forceRetry = false,
   customDomain?: string,
   settingsOverride?: Partial<SiteSettings>,
-  contentType: 'vacancy' | 'international_job' | 'immigration' | 'scholarship' = 'vacancy'
+  contentType: 'vacancy' | 'international_job' | 'immigration' | 'scholarship' = 'vacancy',
+  action: 'auto_publish' | 'manual_publish' | 'retry' = 'manual_publish'
 ): Promise<{
   success: boolean;
   telegramMessageId?: number;
@@ -747,6 +845,7 @@ export async function broadcastJobToTelegram(
   alreadyPublished?: boolean;
   blockedByRule?: boolean;
   resolvedChatId?: string;
+  usedPhoto?: boolean;
   discoveredChats?: DiscoveredTelegramChat[];
 }> {
   const normalizedTarget = normalizeTelegramChatId(channelName);
@@ -778,7 +877,6 @@ export async function broadcastJobToTelegram(
 
   const distributionMode: TelegramDistributionMode = storedSettings.telegramDistributionMode || 'all_jobs';
 
-  // Local client pre-publish guard matching server gatekeeper
   const gateCheck = evaluateVacancyForTelegramClient(vacancy, storedSettings, forceRetry, contentType);
   if (!gateCheck.allowed) {
     return {
@@ -788,7 +886,6 @@ export async function broadcastJobToTelegram(
     };
   }
 
-  // Channel 1: Try server backend proxy
   try {
     const res = await fetch('/api/admin/telegram-publish', {
       method: 'POST',
@@ -797,11 +894,11 @@ export async function broadcastJobToTelegram(
         vacancy,
         channelName: cleanChan,
         channelId: storedSettings.telegramChannelId,
-        botToken: botToken ? cleanTelegramToken(botToken) : undefined,
         forceRetry,
         customDomain: effectiveDomain,
         distributionMode,
         contentType,
+        action: forceRetry ? 'retry' : action,
         includeImmigration: Boolean(storedSettings.telegramIncludeInternationalImmigration),
         includeScholarships: Boolean(storedSettings.telegramIncludeScholarships),
       }),
@@ -809,87 +906,16 @@ export async function broadcastJobToTelegram(
 
     const text = await res.text();
     if (!text.trim().startsWith('<') && !text.trim().startsWith('The page')) {
-      try {
-        const data = JSON.parse(text);
-        // Only fall through to browser direct mode if server explicitly lacks a token while browser has one
-        const serverMissingToken =
-          typeof data?.error === 'string' &&
-          data.error.toLowerCase().includes('not configured on the server');
-        const hasBrowserToken = Boolean(
-          cleanTelegramToken(
-            botToken || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || '' : '')
-          )
-        );
-        if (!(serverMissingToken && hasBrowserToken)) {
-          return data;
-        }
-      } catch {}
+      return JSON.parse(text);
     }
-  } catch {}
-
-  // Channel 2: Direct browser-to-Telegram broadcast
-  const effectiveToken = cleanTelegramToken(
-    botToken || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY) || '' : '')
-  );
-
-  if (!effectiveToken) {
     return {
       success: false,
-      error: 'Telegram Bot Token is not configured. Please paste your token in Bot Config & Test.',
-    };
-  }
-
-  const rawHtmlMsg = buildTelegramJobHtml(vacancy, effectiveDomain, cleanChan);
-  const rawPlainMsg = buildTelegramJobPlainText(vacancy, effectiveDomain, cleanChan);
-  const washValidation = applyAndValidateWashLabelClient(vacancy, rawHtmlMsg, rawPlainMsg);
-  if (!washValidation.valid) {
-    return {
-      success: false,
-      blockedByRule: true,
-      error: washValidation.reason || 'Blocked by pre-publish WASH classification check.',
-    };
-  }
-  const htmlMsg = washValidation.html;
-  const plainMsg = washValidation.plainText;
-
-  try {
-    const data = await directTelegramApiCall(effectiveToken, 'sendMessage', {
-      chat_id: cleanChan,
-      text: htmlMsg,
-      parse_mode: 'HTML',
-      disable_web_page_preview: false,
-    });
-
-    if (data.ok && data.result) {
-      return {
-        success: true,
-        telegramMessageId: data.result.message_id,
-        telegramPublishedAt: new Date().toISOString(),
-      };
-    }
-
-    const fallbackData = await directTelegramApiCall(effectiveToken, 'sendMessage', {
-      chat_id: cleanChan,
-      text: plainMsg,
-      disable_web_page_preview: false,
-    });
-
-    if (fallbackData.ok && fallbackData.result) {
-      return {
-        success: true,
-        telegramMessageId: fallbackData.result.message_id,
-        telegramPublishedAt: new Date().toISOString(),
-      };
-    }
-
-    return {
-      success: false,
-      error: fallbackData.description || data.description || 'Telegram channel broadcast failed. Check bot channel admin rights.',
+      error: 'Telegram publishing server returned an unexpected non-JSON response.',
     };
   } catch (err: any) {
     return {
       success: false,
-      error: `Telegram broadcast error: ${err.message || String(err)}`,
+      error: `Failed to reach server Telegram publisher: ${err?.message || String(err)}`,
     };
   }
 }
