@@ -89,10 +89,11 @@ self.addEventListener('fetch', (event) => {
 // Real Web Push Handler
 self.addEventListener('push', (event) => {
   let payload = {
-    title: 'HOPELAND JOBS — New Matching Vacancy',
-    body: 'A verified job matching your professional profile has just been published.',
+    title: 'HOPELAND JOBS — New Job Recommendation for You!',
+    body: 'A new job matching your profile and qualifications has been published. Open Hopeland Jobs to view the details and apply.',
     url: '/',
     jobId: '',
+    notificationId: '',
     tag: 'hopelandjobs-alert',
     badge: '/pwa-192x192.png',
     icon: '/pwa-192x192.png',
@@ -110,16 +111,23 @@ self.addEventListener('push', (event) => {
     } catch {}
   }
 
+  const jobId = payload.jobId || payload.vacancyId || '';
+  const defaultUrl = jobId
+    ? `/?jobId=${encodeURIComponent(jobId)}${payload.notificationId ? `&notificationId=${encodeURIComponent(payload.notificationId)}` : ''}`
+    : '/';
+
   const options = {
     body: payload.body,
     icon: payload.icon || '/pwa-192x192.png',
     badge: payload.badge || '/pwa-192x192.png',
-    tag: payload.tag || (payload.jobId ? `vacancy-${payload.jobId}` : 'hopelandjobs-alert'),
+    tag: payload.tag || (jobId ? `vacancy-${jobId}` : 'hopelandjobs-alert'),
     renotify: true,
     requireInteraction: false,
     data: {
-      url: payload.url || (payload.jobId ? `/?jobId=${encodeURIComponent(payload.jobId)}` : '/'),
-      jobId: payload.jobId || '',
+      url: payload.url || defaultUrl,
+      jobId,
+      vacancyId: jobId,
+      notificationId: payload.notificationId || '',
     },
     actions: [
       { action: 'open_job', title: 'View Vacancy' },
@@ -135,23 +143,34 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
 
-  const targetUrl =
-    (event.notification.data && event.notification.data.url) || '/';
+  const data = event.notification.data || {};
+  const targetUrl = data.url || '/';
+  const resolvedJobId = data.vacancyId || data.jobId || '';
+  const resolvedNotifId = data.notificationId || '';
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
-      for (const client of clientsList) {
-        try {
-          const clientUrl = new URL(client.url);
-          if (clientUrl.origin === self.location.origin && 'focus' in client) {
-            client.postMessage({
-              type: 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION',
-              url: targetUrl,
-              jobId: event.notification.data?.jobId || '',
-            });
-            return client.focus();
-          }
-        } catch {}
+      let targetOrigin = self.location.origin;
+      try {
+        targetOrigin = new URL(targetUrl, self.location.origin).origin;
+      } catch {}
+
+      if (targetOrigin === self.location.origin) {
+        for (const client of clientsList) {
+          try {
+            const clientUrl = new URL(client.url);
+            if (clientUrl.origin === self.location.origin && 'focus' in client) {
+              client.postMessage({
+                type: 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION',
+                url: targetUrl,
+                jobId: resolvedJobId,
+                vacancyId: resolvedJobId,
+                notificationId: resolvedNotifId,
+              });
+              return client.focus();
+            }
+          } catch {}
+        }
       }
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);

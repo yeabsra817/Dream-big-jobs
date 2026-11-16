@@ -14,11 +14,20 @@ import {
   Mail,
   Activity,
   X,
+  Clock,
+  Play,
+  Server,
 } from 'lucide-react';
-import { RegisteredUserAnalyticsSummary } from '../../types/jobSeeker';
 import {
+  AdminSchedulerStatusResponse,
+  RegisteredUserAnalyticsSummary,
+} from '../../types/jobSeeker';
+import {
+  fetchAdminSchedulerStatus,
   fetchRegisteredUserAnalyticsAdmin,
+  triggerAdminSchedulerRun,
   updateAdminUserAccountStatus,
+  verifyAdminSmtpConnection,
 } from '../../lib/notificationService';
 import { getOwnerAuthHeaders } from '../../lib/firebase';
 
@@ -50,15 +59,27 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
+  // Automated Notification & Scheduler Console State
+  const [schedulerStatus, setSchedulerStatus] = useState<AdminSchedulerStatusResponse | null>(null);
+  const [isRunningScheduler, setIsRunningScheduler] = useState(false);
+  const [isVerifyingSmtp, setIsVerifyingSmtp] = useState(false);
+  const [smtpCheckResult, setSmtpCheckResult] = useState<{ ok: boolean; message: string } | null>(null);
+
   const loadAnalytics = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchRegisteredUserAnalyticsAdmin(adminEmail || undefined);
+      const [data, sched] = await Promise.all([
+        fetchRegisteredUserAnalyticsAdmin(adminEmail || undefined),
+        fetchAdminSchedulerStatus(adminEmail || undefined),
+      ]);
       if (!data) {
         setError('Unable to load live user analytics. Verify you are signed in as the platform owner.');
       } else {
         setSummary(data);
+      }
+      if (sched) {
+        setSchedulerStatus(sched);
       }
     } catch (err: any) {
       setError(err?.message || 'Failed loading registered user analytics.');
@@ -70,6 +91,43 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
   useEffect(() => {
     loadAnalytics();
   }, [adminEmail]);
+
+  const handleRunScheduler = async (dryRun: boolean) => {
+    setIsRunningScheduler(true);
+    setError(null);
+    try {
+      const res = await triggerAdminSchedulerRun({ dryRun }, adminEmail || undefined);
+      if (res.schedulerStatus) {
+        setSchedulerStatus(res.schedulerStatus);
+      }
+      if (res.skipped) {
+        setActionToast(res.reason || 'Scheduler sweep already in progress.');
+      } else if (res.run) {
+        setActionToast(
+          `${dryRun ? 'Dry-run simulation' : 'Scheduler sweep'} ${res.run.status}: ${res.run.usersEvaluated} users evaluated, ${res.run.notificationsCreated} alerts ${dryRun ? 'matched' : 'dispatched'}.`
+        );
+      }
+      await loadAnalytics();
+      setTimeout(() => setActionToast(null), 5000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed running notification scheduler.');
+    } finally {
+      setIsRunningScheduler(false);
+    }
+  };
+
+  const handleVerifySmtp = async () => {
+    setIsVerifyingSmtp(true);
+    setSmtpCheckResult(null);
+    try {
+      const res = await verifyAdminSmtpConnection(adminEmail || undefined);
+      setSmtpCheckResult({ ok: Boolean(res.verified), message: res.message });
+    } catch (err: any) {
+      setSmtpCheckResult({ ok: false, message: err?.message || 'SMTP verification request failed.' });
+    } finally {
+      setIsVerifyingSmtp(false);
+    }
+  };
 
   const filteredUsers = useMemo(() => {
     const list = summary?.users || [];
@@ -403,6 +461,265 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Automated Notification & Background Scheduler Operations Console */}
+      {schedulerStatus && (
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-[#0B132B]" />
+                <span>Automated Notification &amp; Scheduler Operations Console</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Cron path: <span className="font-mono text-slate-700">{schedulerStatus.scheduler.cronPath}</span> · Schedule:{' '}
+                <span className="font-mono text-slate-700">{schedulerStatus.scheduler.cronSchedule}</span> · Runtime:{' '}
+                <span className="font-mono text-slate-700">{schedulerStatus.environment.runtime}</span>
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleVerifySmtp}
+                disabled={isVerifyingSmtp}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                <Mail className="w-3.5 h-3.5 text-slate-600" />
+                <span>{isVerifyingSmtp ? 'Verifying SMTP...' : 'Verify SMTP Connection'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRunScheduler(true)}
+                disabled={isRunningScheduler}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                <Server className="w-3.5 h-3.5 text-slate-600" />
+                <span>Dry-Run Check</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRunScheduler(false)}
+                disabled={isRunningScheduler}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                <Play className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isRunningScheduler ? 'Running Sweep...' : 'Run Scheduler Now'}</span>
+              </button>
+            </div>
+          </div>
+
+          {smtpCheckResult && (
+            <div
+              className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                smtpCheckResult.ok
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-amber-50 border-amber-200 text-amber-950'
+              }`}
+            >
+              {smtpCheckResult.ok ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              )}
+              <span>{smtpCheckResult.message}</span>
+            </div>
+          )}
+
+          {/* Scheduler Telemetry Summary Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 text-xs border-b border-slate-200 pb-4">
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Scheduler State</div>
+              <div
+                className={`font-extrabold mt-0.5 ${
+                  schedulerStatus.scheduler.status === 'running'
+                    ? 'text-amber-700'
+                    : schedulerStatus.scheduler.status === 'error'
+                    ? 'text-rose-700'
+                    : 'text-emerald-700'
+                }`}
+              >
+                {schedulerStatus.scheduler.status === 'running'
+                  ? 'Running'
+                  : schedulerStatus.scheduler.status === 'error'
+                  ? 'Attention Required'
+                  : 'Idle / Ready'}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Last Success</div>
+              <div className="font-mono tabular-nums font-bold text-slate-900 mt-0.5 text-[11px]">
+                {schedulerStatus.scheduler.lastSuccessfulRunAt
+                  ? new Date(schedulerStatus.scheduler.lastSuccessfulRunAt).toLocaleString()
+                  : 'Not run yet'}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Next Scheduled</div>
+              <div className="font-mono tabular-nums font-bold text-slate-900 mt-0.5 text-[11px]">
+                {new Date(schedulerStatus.scheduler.nextScheduledRunAt).toLocaleTimeString()}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Total Sent</div>
+              <div className="font-mono tabular-nums font-black text-slate-900 text-sm mt-0.5">
+                {schedulerStatus.totals.totalNotificationsSent}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Successful</div>
+              <div className="font-mono tabular-nums font-black text-emerald-700 text-sm mt-0.5">
+                {schedulerStatus.totals.successfulDeliveries}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Failed / Retry</div>
+              <div className="font-mono tabular-nums font-black text-rose-700 text-sm mt-0.5">
+                {schedulerStatus.totals.failedDeliveries} / {schedulerStatus.totals.pendingNotifications}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Push Devices</div>
+              <div className="font-mono tabular-nums font-black text-slate-900 text-sm mt-0.5">
+                {schedulerStatus.totals.activePushSubscriptionsCount}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-500">Matched Users</div>
+              <div className="font-mono tabular-nums font-black text-slate-900 text-sm mt-0.5">
+                {schedulerStatus.totals.usersReceivingRecommendationsCount}
+              </div>
+            </div>
+          </div>
+
+          {/* Environment Config Status (Booleans only, never exposing secret values) */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-700">
+            <span>
+              SMTP Email:{' '}
+              <strong className={schedulerStatus.environment.smtpConfigured ? 'text-emerald-700' : 'text-amber-700'}>
+                {schedulerStatus.environment.smtpConfigured
+                  ? `Configured (${schedulerStatus.environment.smtpHost}:${schedulerStatus.environment.smtpPort})`
+                  : 'Missing Env Vars'}
+              </strong>
+            </span>
+            <span aria-hidden="true" className="text-slate-300">·</span>
+            <span>
+              VAPID Web Push:{' '}
+              <strong className={schedulerStatus.environment.vapidConfigured ? 'text-emerald-700' : 'text-rose-700'}>
+                {schedulerStatus.environment.vapidConfigured
+                  ? `Ready (${schedulerStatus.environment.vapidSource === 'environment' ? 'Vercel Env' : 'Persisted Keypair'})`
+                  : 'Unset'}
+              </strong>
+            </span>
+            <span aria-hidden="true" className="text-slate-300">·</span>
+            <span>
+              Gemini AI Key:{' '}
+              <strong className={schedulerStatus.environment.geminiConfigured ? 'text-emerald-700' : 'text-amber-700'}>
+                {schedulerStatus.environment.geminiConfigured ? 'Configured' : 'Missing Env Var'}
+              </strong>
+            </span>
+            <span aria-hidden="true" className="text-slate-300">·</span>
+            <span>
+              Cron Auth Secret:{' '}
+              <strong className={schedulerStatus.environment.cronSecretConfigured ? 'text-emerald-700' : 'text-slate-600'}>
+                {schedulerStatus.environment.cronSecretConfigured ? 'CRON_SECRET Active' : 'Vercel Header Mode'}
+              </strong>
+            </span>
+          </div>
+
+          {schedulerStatus.environment.missingEnvVars.length > 0 && (
+            <p className="text-[11px] text-amber-800 font-medium">
+              Environment variables unset in current process: {schedulerStatus.environment.missingEnvVars.join(', ')}. Ensure these are configured in Vercel Project Settings &rarr; Environment Variables.
+            </p>
+          )}
+
+          {/* Scheduler Execution History Table */}
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                  <th className="py-2.5 px-3">Executed At</th>
+                  <th className="py-2.5 px-3">Trigger</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Users</th>
+                  <th className="py-2.5 px-3 text-right">Alerts</th>
+                  <th className="py-2.5 px-3 text-right">Push (Ok/Fail)</th>
+                  <th className="py-2.5 px-3 text-right">Email (Ok/Fail)</th>
+                  <th className="py-2.5 px-3 text-right">Duration</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {schedulerStatus.recentRuns.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-slate-500">
+                      No scheduler sweeps recorded yet. Click Run Scheduler Now to execute and record an initial sweep.
+                    </td>
+                  </tr>
+                ) : (
+                  schedulerStatus.recentRuns.slice(0, 8).map((run) => (
+                    <tr key={run.id} className="hover:bg-slate-50/70">
+                      <td className="py-2.5 px-3 font-mono tabular-nums text-[11px] text-slate-700">
+                        {new Date(run.startedAt).toLocaleString()}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-700 font-medium">
+                        {run.trigger}{run.dryRun ? ' (dry-run)' : ''}
+                      </td>
+                      <td className="py-2.5 px-3 font-bold">
+                        <span
+                          className={
+                            run.status === 'success'
+                              ? 'text-emerald-700'
+                              : run.status === 'partial'
+                              ? 'text-amber-700'
+                              : 'text-rose-700'
+                          }
+                        >
+                          {run.status === 'success' ? 'Success' : run.status === 'partial' ? 'Partial' : 'Failed'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">{run.usersEvaluated}</td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold">{run.notificationsCreated}</td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                        {run.pushSucceeded}/{run.pushFailed}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                        {run.emailSucceeded}/{run.emailFailed}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500">
+                        {run.durationMs}ms
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {schedulerStatus.recentErrors.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[11px] font-bold text-rose-800">Recent Scheduler &amp; Delivery Errors</div>
+              {schedulerStatus.recentErrors.slice(0, 4).map((errItem, idx) => (
+                <div key={idx} className="text-[11px] text-rose-900 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                  <span className="font-mono tabular-nums text-rose-700 mr-2">
+                    {new Date(errItem.timestamp).toLocaleString()}
+                  </span>
+                  <span className="font-bold mr-1.5">[{errItem.source}]</span>
+                  <span>{errItem.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

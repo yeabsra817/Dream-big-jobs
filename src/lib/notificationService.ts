@@ -15,9 +15,11 @@ import {
   withTimeout,
 } from './firebase';
 import {
+  AdminSchedulerStatusResponse,
   NotificationPermissionState,
   NotificationPreferencesRecord,
   RegisteredUserAnalyticsSummary,
+  SchedulerRunRecord,
   UserNotificationItem,
 } from '../types/jobSeeker';
 import { Vacancy } from '../types/job';
@@ -192,6 +194,7 @@ export async function saveUserNotificationPreferences(
         userId: uid,
         permissionStatus: savedPrefs.permissionStatus,
         subscriptionStatus: savedPrefs.subscriptionStatus,
+        frequency: savedPrefs.frequency || 'instant',
         enabledAt: savedPrefs.enabledAt || null,
         permissionVerifiedAt: savedPrefs.permissionVerifiedAt || null,
         lastSuccessfulDeliveryAt: savedPrefs.lastSuccessfulDeliveryAt || null,
@@ -464,6 +467,31 @@ export async function requestAndEnableNotifications(
     });
 
     const subData = subRes.ok ? await subRes.json() : null;
+    const subJson = sub.toJSON();
+    if (auth.currentUser?.uid === uid && subJson?.endpoint) {
+      const safeSubId = `${uid}_${deviceMeta.deviceId}`.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
+      try {
+        await withTimeout(
+          setDoc(
+            doc(db, 'push_subscriptions', safeSubId),
+            sanitizeForFirestore({
+              id: safeSubId,
+              userId: uid,
+              deviceId: deviceMeta.deviceId,
+              deviceLabel: deviceMeta.deviceLabel,
+              platform: deviceMeta.platform,
+              endpoint: subJson.endpoint,
+              active: true,
+              updatedAt: new Date().toISOString(),
+            }),
+            { merge: true }
+          ),
+          3000,
+          undefined
+        );
+      } catch {}
+    }
+
     const saved = await saveUserNotificationPreferences(
       uid,
       {
@@ -752,4 +780,62 @@ export async function updateAdminUserAccountStatus(
     throw new Error(data?.error || 'Failed to update user account status.');
   }
   return data.summary || null;
+}
+
+export async function fetchAdminSchedulerStatus(
+  adminEmailOverride?: string
+): Promise<AdminSchedulerStatusResponse | null> {
+  try {
+    const res = await fetch('/api/admin/scheduler-status', {
+      headers: getOwnerAuthHeaders(adminEmailOverride),
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.success ? (data as AdminSchedulerStatusResponse) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function triggerAdminSchedulerRun(
+  options: { dryRun?: boolean } = {},
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  skipped?: boolean;
+  reason?: string;
+  run?: SchedulerRunRecord;
+  schedulerStatus?: AdminSchedulerStatusResponse;
+}> {
+  const res = await fetch('/api/admin/scheduler/run-now', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify({ dryRun: Boolean(options.dryRun) }),
+  });
+  return res.json();
+}
+
+export async function verifyAdminSmtpConnection(adminEmailOverride?: string): Promise<{
+  success: boolean;
+  configured: boolean;
+  verified: boolean;
+  host?: string;
+  port?: string;
+  from?: string;
+  message: string;
+}> {
+  const res = await fetch('/api/admin/scheduler/verify-smtp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+  });
+  return res.json();
 }

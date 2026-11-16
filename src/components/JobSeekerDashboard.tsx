@@ -1250,6 +1250,54 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     })}
                   </div>
                 </div>
+
+                {/* Delivery Frequency Selector */}
+                <div className="pt-4 border-t border-slate-100 space-y-2.5">
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-800">Notification Frequency</h4>
+                    <p className="text-[11px] text-slate-500">
+                      Choose how often automated matching alerts are dispatched to your email and push devices.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    {[
+                      {
+                        id: 'instant' as const,
+                        title: 'Instant Alerts',
+                        desc: 'Send immediately as new matching vacancies are published.',
+                      },
+                      {
+                        id: 'daily' as const,
+                        title: 'Daily Summary',
+                        desc: 'Receive a consolidated digest once every 24 hours.',
+                      },
+                      {
+                        id: 'weekly' as const,
+                        title: 'Weekly Digest',
+                        desc: 'Receive a weekly roundup of top verified opportunities.',
+                      },
+                    ].map((opt) => {
+                      const isSelected = (notificationPrefs?.frequency || 'instant') === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => onUpdateNotificationPrefs({ frequency: opt.id })}
+                          className={`text-left p-3.5 rounded-xl border transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#0B132B] text-white border-[#0B132B]'
+                              : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="text-xs font-extrabold">{opt.title}</div>
+                          <div className={`text-[11px] mt-0.5 leading-snug ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                            {opt.desc}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* Persisted Notification History */}

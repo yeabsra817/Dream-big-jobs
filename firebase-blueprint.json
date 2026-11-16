@@ -213,9 +213,59 @@
         "enabledAt": { "type": "string", "maxLength": 100 },
         "permissionVerifiedAt": { "type": "string", "maxLength": 100 },
         "lastSuccessfulDeliveryAt": { "type": "string", "maxLength": 100 },
+        "lastDigestSentAt": { "type": "string", "maxLength": 100 },
+        "frequency": { "type": "string", "enum": ["instant", "daily", "weekly"] },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["userId", "permissionStatus", "subscriptionStatus", "updatedAt"]
+    },
+    "PushSubscriptionRecord": {
+      "title": "User Web Push Device Subscription",
+      "description": "User-scoped Web Push subscription endpoint and device metadata for desktop and mobile browsers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "deviceLabel": { "type": "string", "maxLength": 150 },
+        "platform": { "type": "string", "maxLength": 60 },
+        "endpoint": { "type": "string", "maxLength": 1000 },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "deviceId", "endpoint", "active", "updatedAt"]
+    },
+    "NotificationQueueItem": {
+      "title": "Notification Delivery Retry Queue Item",
+      "description": "Admin/server-only retry task for failed push or email deliveries.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "notificationId": { "type": "string", "maxLength": 128 },
+        "channel": { "type": "string", "enum": ["push", "email"] },
+        "status": { "type": "string", "enum": ["pending", "delivered", "failed"] },
+        "attempts": { "type": "number" },
+        "lastError": { "type": "string", "maxLength": 500 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "notificationId", "channel", "status", "updatedAt"]
+    },
+    "SchedulerRunRecord": {
+      "title": "Automated Scheduler Execution Log",
+      "description": "Admin-only execution telemetry for scheduled recommendation & notification sweeps.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "trigger": { "type": "string", "enum": ["vercel_cron", "background_interval", "manual_admin"] },
+        "status": { "type": "string", "enum": ["success", "partial", "failed"] },
+        "startedAt": { "type": "string", "maxLength": 100 },
+        "finishedAt": { "type": "string", "maxLength": 100 },
+        "durationMs": { "type": "number" },
+        "usersEvaluated": { "type": "number" },
+        "notificationsCreated": { "type": "number" }
+      },
+      "required": ["id", "trigger", "status", "startedAt"]
     },
     "UserJobApplication": {
       "title": "Job Application",
@@ -568,7 +618,19 @@
     },
     "/user_notification_preferences/{userId}": {
       "schema": "NotificationPreferences",
-      "description": "Notification permission state and device push subscriptions per user"
+      "description": "Notification permission state, frequency, and device push subscriptions per user"
+    },
+    "/push_subscriptions/{subId}": {
+      "schema": "PushSubscriptionRecord",
+      "description": "Device-level Web Push subscription records strictly isolated per user"
+    },
+    "/notification_queue/{queueId}": {
+      "schema": "NotificationQueueItem",
+      "description": "Server and admin-only notification retry queue"
+    },
+    "/scheduler_runs/{runId}": {
+      "schema": "SchedulerRunRecord",
+      "description": "Admin-only execution history of automated job notification sweeps"
     }
   }
 }

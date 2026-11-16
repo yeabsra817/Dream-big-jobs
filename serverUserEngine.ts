@@ -13,6 +13,7 @@ import {
 export interface ServerUserEngineContext {
   app: Express;
   runtimeBaseDir: string;
+  isVercel?: boolean;
   ensureRuntimeDataDir: () => string;
   loadJsonFileSafe: <T>(filePath: string, fallback: T) => T;
   writeJsonFileAtomic: (filePath: string, data: any) => boolean;
@@ -49,6 +50,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   const {
     app,
     runtimeBaseDir,
+    isVercel = false,
     ensureRuntimeDataDir,
     loadJsonFileSafe,
     writeJsonFileAtomic,
@@ -70,6 +72,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   const USER_NOTIFICATIONS_FILE = path.join(DATA_DIR, 'user_notifications.json');
   const NOTIFICATION_PREFS_FILE = path.join(DATA_DIR, 'notification_preferences.json');
   const NOTIFICATION_QUEUE_FILE = path.join(DATA_DIR, 'notification_queue.json');
+  const SCHEDULER_RUNS_FILE = path.join(DATA_DIR, 'scheduler_runs.json');
   const VAPID_KEYS_FILE = path.join(DATA_DIR, 'vapid_keys.json');
 
   let webpushLib: any = null;
@@ -77,6 +80,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   let vapidKeysCache: { publicKey: string; privateKey: string } | null = null;
   let webPushConfigured = false;
   let backgroundQueueActive = false;
+  let schedulerRunActive = false;
 
   async function ensureWebPush(): Promise<any | null> {
     if (webPushConfigured && webpushLib) return webpushLib;
@@ -118,6 +122,64 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         (process.env.SMTP_PASS || '').trim()
     );
   }
+
+  function getEnvironmentReadinessReport() {
+    const envPub = (process.env.VAPID_PUBLIC_KEY || '').trim();
+    const envPriv = (process.env.VAPID_PRIVATE_KEY || '').trim();
+    const persistedVapid = loadJsonFileSafe<{ publicKey?: string; privateKey?: string }>(VAPID_KEYS_FILE, {});
+    const hasEnvVapid = Boolean(envPub && envPriv);
+    const hasFileVapid = Boolean(persistedVapid?.publicKey && persistedVapid?.privateKey);
+
+    const smtpHost = (process.env.SMTP_HOST || '').trim();
+    const smtpPort = (process.env.SMTP_PORT || '587').trim();
+    const smtpUser = (process.env.SMTP_USER || '').trim();
+    const smtpPassConfigured = Boolean((process.env.SMTP_PASS || '').trim());
+    const smtpFrom = (process.env.SMTP_FROM || smtpUser || 'nexusitsoultion@gmail.com').trim();
+    const vapidSubject = (process.env.VAPID_SUBJECT || 'mailto:nexusitsoultion@gmail.com').trim();
+    const geminiConfigured = Boolean((process.env.GEMINI_API_KEY || '').trim());
+    const cronSecretConfigured = Boolean((process.env.CRON_SECRET || '').trim());
+
+    const missingEnvVars: string[] = [];
+    if (!smtpHost) missingEnvVars.push('SMTP_HOST');
+    if (!smtpUser) missingEnvVars.push('SMTP_USER');
+    if (!smtpPassConfigured) missingEnvVars.push('SMTP_PASS');
+    if (!envPub) missingEnvVars.push('VAPID_PUBLIC_KEY');
+    if (!envPriv) missingEnvVars.push('VAPID_PRIVATE_KEY');
+    if (!geminiConfigured) missingEnvVars.push('GEMINI_API_KEY');
+
+    return {
+      runtime: (isVercel ? 'vercel_serverless' : 'node_server') as 'vercel_serverless' | 'node_server',
+      smtpConfigured: Boolean(smtpHost && smtpUser && smtpPassConfigured),
+      smtpHost: smtpHost || 'not_set',
+      smtpPort,
+      smtpUserConfigured: Boolean(smtpUser),
+      smtpPassConfigured,
+      smtpFrom,
+      vapidConfigured: hasEnvVapid || hasFileVapid,
+      vapidSource: (hasEnvVapid ? 'environment' : hasFileVapid ? 'persisted_file' : 'unset') as
+        | 'environment'
+        | 'persisted_file'
+        | 'unset',
+      vapidSubject,
+      geminiConfigured,
+      cronSecretConfigured,
+      missingEnvVars,
+    };
+  }
+
+  // Startup environment validation without exposing any secret values
+  (() => {
+    const report = getEnvironmentReadinessReport();
+    if (report.missingEnvVars.length > 0) {
+      console.warn(
+        `[HOPELAND ENV CHECK] Runtime=${report.runtime} · SMTP=${report.smtpConfigured ? 'ready' : 'missing'} · VAPID=${report.vapidSource} · GEMINI=${report.geminiConfigured ? 'ready' : 'missing'} · Unset env vars: ${report.missingEnvVars.join(', ')}`
+      );
+    } else {
+      console.log(
+        `[HOPELAND ENV CHECK] Runtime=${report.runtime} · All required SMTP, VAPID, and Gemini environment variables validated.`
+      );
+    }
+  })();
 
   async function ensureNodemailer(): Promise<any | null> {
     if (!isSmtpConfigured()) return null;
@@ -181,11 +243,70 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     writeJsonFileAtomic(NOTIFICATION_QUEUE_FILE, list);
   }
 
+  function loadSchedulerStore(): {
+    lastRunStartedAt: string | null;
+    lastSuccessfulRunAt: string | null;
+    lastRunStatus: 'success' | 'partial' | 'failed' | null;
+    recentErrors: Array<{ timestamp: string; source: string; message: string }>;
+    runs: any[];
+  } {
+    const fallback = {
+      lastRunStartedAt: null,
+      lastSuccessfulRunAt: null,
+      lastRunStatus: null,
+      recentErrors: [],
+      runs: [],
+    };
+    const data = loadJsonFileSafe<any>(SCHEDULER_RUNS_FILE, fallback);
+    if (!data || typeof data !== 'object') return fallback;
+    return {
+      lastRunStartedAt: data.lastRunStartedAt || null,
+      lastSuccessfulRunAt: data.lastSuccessfulRunAt || null,
+      lastRunStatus: data.lastRunStatus || null,
+      recentErrors: Array.isArray(data.recentErrors) ? data.recentErrors : [],
+      runs: Array.isArray(data.runs) ? data.runs : [],
+    };
+  }
+
+  function saveSchedulerStore(store: {
+    lastRunStartedAt: string | null;
+    lastSuccessfulRunAt: string | null;
+    lastRunStatus: 'success' | 'partial' | 'failed' | null;
+    recentErrors: Array<{ timestamp: string; source: string; message: string }>;
+    runs: any[];
+  }): void {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(SCHEDULER_RUNS_FILE, {
+      ...store,
+      recentErrors: (store.recentErrors || []).slice(0, 30),
+      runs: (store.runs || []).slice(0, 60),
+    });
+  }
+
+  function recordSystemNotificationError(source: string, message: string): void {
+    const store = loadSchedulerStore();
+    store.recentErrors.unshift({
+      timestamp: new Date().toISOString(),
+      source,
+      message: String(message || 'Unknown error').slice(0, 400),
+    });
+    saveSchedulerStore(store);
+  }
+
+  function getNextQuarterHourIso(fromDate = new Date()): string {
+    const d = new Date(fromDate.getTime());
+    const mins = d.getMinutes();
+    const nextMin = Math.floor(mins / 15) * 15 + 15;
+    d.setMinutes(nextMin, 0, 0);
+    return d.toISOString();
+  }
+
   function buildDefaultPreferences(uid: string) {
     return {
       userId: uid,
       permissionStatus: 'default',
       subscriptionStatus: 'none',
+      frequency: 'instant' as 'instant' | 'daily' | 'weekly',
       promptDismissCount: 0,
       channels: {
         websiteBell: true,
@@ -235,7 +356,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
 
   async function sendWebPushToUser(
     uid: string,
-    payload: { title: string; body: string; url: string; jobId: string; tag: string }
+    payload: { title: string; body: string; url: string; jobId: string; notificationId?: string; tag: string }
   ): Promise<{ deliveredCount: number; failedCount: number; expiredEndpoints: string[]; errors: string[] }> {
     const allPrefs = loadAllNotificationPrefs();
     const prefs = allPrefs[uid];
@@ -318,7 +439,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         },
       });
 
-      const fromAddress = process.env.SMTP_FROM || `HOPELAND JOBS <${process.env.SMTP_USER}>`;
+      const fromAddress = (process.env.SMTP_FROM || process.env.SMTP_USER || 'nexusitsoultion@gmail.com').trim();
       const salaryLine = notif.salary ? `<p><strong>Verified Salary:</strong> ${notif.salary}</p>` : '';
       const missingLine =
         notif.missingMandatoryQualifications?.length > 0
@@ -328,11 +449,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       await transporter.sendMail({
         from: fromAddress,
         to: profile.email,
-        subject: `HOPELAND JOBS Match (${notif.matchScore}%): ${notif.title} at ${notif.employer}`,
+        subject: `New Job Recommendation for You! (${notif.matchScore}%): ${notif.title} at ${notif.employer}`,
         text: [
           `Hello ${profile.fullName || 'Candidate'},`,
           ``,
-          `A verified job matching your profile has been identified:`,
+          `New Job Recommendation for You!`,
+          `A new job matching your profile and qualifications has been published. Open Hopeland Jobs to view the details and apply.`,
           `Job Title: ${notif.title}`,
           `Employer: ${notif.employer}`,
           `Location: ${notif.location}`,
@@ -404,12 +526,23 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     saveNotificationQueue(queue.slice(0, 500));
   }
 
-  async function processRetryQueueCycle() {
-    if (backgroundQueueActive) return;
+  async function processRetryQueueCycle(): Promise<{
+    processed: number;
+    succeeded: number;
+    failed: number;
+    errors: string[];
+  }> {
+    if (backgroundQueueActive) {
+      return { processed: 0, succeeded: 0, failed: 0, errors: [] };
+    }
     backgroundQueueActive = true;
+    let processed = 0;
+    let succeeded = 0;
+    let failed = 0;
+    const errors: string[] = [];
     try {
       const queue = loadNotificationQueue();
-      if (queue.length === 0) return;
+      if (queue.length === 0) return { processed: 0, succeeded: 0, failed: 0, errors: [] };
       const now = Date.now();
       const profiles = loadUserProfiles();
       const allNotifs = loadAllNotifications();
@@ -464,6 +597,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           }
         } else if (qItem.channel === 'email') {
           const emailRes = await sendEmailAlertToUser(profile, qItem.payload);
+          processed += 1;
           if (emailRes.status === 'sent') {
             qItem.status = 'delivered';
             qItem.updatedAt = new Date().toISOString();
@@ -473,18 +607,24 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
               targetNotif.channels.email = 'sent';
               targetNotif.updatedAt = new Date().toISOString();
             }
+            succeeded += 1;
             changed = true;
           } else if (emailRes.status === 'skipped_no_smtp') {
             qItem.status = 'failed';
             qItem.lastError = 'SMTP server not configured';
             qItem.updatedAt = new Date().toISOString();
+            failed += 1;
+            errors.push(`Email skipped (SMTP not configured) for ${qItem.userId}`);
             changed = true;
           } else {
             qItem.attempts += 1;
             qItem.lastError = emailRes.error || 'Email delivery failed';
             qItem.updatedAt = new Date().toISOString();
+            errors.push(qItem.lastError);
             if (qItem.attempts >= qItem.maxAttempts) {
               qItem.status = 'failed';
+              failed += 1;
+              recordSystemNotificationError('email_retry', `Email alert failed for ${profile.email}: ${qItem.lastError}`);
               pushAdminNotification({
                 type: 'system_recovery',
                 title: 'Email Job Alert Failure',
@@ -503,15 +643,29 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         saveNotificationQueue(queue);
         saveAllNotifications(allNotifs);
       }
+      return { processed, succeeded, failed, errors };
     } finally {
       backgroundQueueActive = false;
     }
   }
 
+  function isFrequencyWindowReady(prefs: any, alertKind: string): boolean {
+    if (alertKind === 'deadline_reminder') return true;
+    const freq = (prefs?.frequency || 'instant') as 'instant' | 'daily' | 'weekly';
+    if (freq === 'instant') return true;
+    const lastDigestMs = prefs?.lastDigestSentAt ? new Date(prefs.lastDigestSentAt).getTime() : 0;
+    if (!lastDigestMs) return true;
+    const elapsedMs = Date.now() - lastDigestMs;
+    if (freq === 'daily') return elapsedMs >= 23 * 60 * 60 * 1000;
+    if (freq === 'weekly') return elapsedMs >= 6.5 * 24 * 60 * 60 * 1000;
+    return true;
+  }
+
   async function dispatchNotificationForUser(
     profile: any,
     rec: RecommendedOpportunity,
-    alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' | 'sector_opportunity'
+    alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' | 'sector_opportunity',
+    options: { dryRun?: boolean; ignoreFrequencyWindow?: boolean } = {}
   ): Promise<any | null> {
     if (!profile?.uid || profile.accountStatus === 'suspended') return null;
 
@@ -525,6 +679,11 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     if (alertKind === 'job_updated' && prefs.alertTypes?.jobChanges === false) return null;
     if (alertKind === 'sector_opportunity' && prefs.alertTypes?.sectorUpdates === false) return null;
 
+    // Enforce user notification frequency preference (instant | daily | weekly)
+    if (!options.ignoreFrequencyWindow && !isFrequencyWindowReady(prefs, alertKind)) {
+      return null;
+    }
+
     // Never send notifications for expired/closed vacancies
     if (isDeadlineExpired(rec.deadline)) return null;
 
@@ -534,6 +693,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const allNotifs = loadAllNotifications();
     const existingList: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
     if (existingList.some((n) => n.dedupeKey === dedupeKey)) {
+      return null;
+    }
+
+    // Rate limiting: prevent excessive notifications per user in a rolling 24h window (max 8/day)
+    const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+    const recent24hCount = existingList.filter((n) => {
+      const ts = new Date(n.createdAt).getTime();
+      return !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
+    }).length;
+    if (recent24hCount >= 8) {
       return null;
     }
 
@@ -571,6 +740,10 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       updatedAt: nowIso,
     };
 
+    if (options.dryRun) {
+      return notifRecord;
+    }
+
     // Save immediately to persistent Website Notification store
     allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
     saveAllNotifications(allNotifs);
@@ -579,15 +752,19 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     if (prefs.channels?.browserPush || prefs.channels?.mobilePush) {
       const pushPrefix =
         alertKind === 'deadline_reminder'
-          ? 'Deadline Approaching: '
+          ? 'Closing Soon: '
           : alertKind === 'job_updated'
           ? 'Updated Vacancy: '
-          : '';
+          : 'New Job Recommendation for You! · ';
       const pushPayload = {
         title: `${pushPrefix}${rec.title} (${rec.matchScore}% Match)`,
-        body: `${rec.organization} · ${rec.location}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}`,
-        url: rec.sourceType === 'domestic_job' ? `/?jobId=${encodeURIComponent(rec.id)}` : jobUrl,
+        body: `${rec.organization} · ${rec.location}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}. Open Hopeland Jobs to view details and apply.`,
+        url:
+          rec.sourceType === 'domestic_job'
+            ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}`
+            : jobUrl,
         jobId: rec.id,
+        notificationId: notifId,
         tag: dedupeKey,
       };
       const pushRes = await sendWebPushToUser(uid, pushPayload);
@@ -630,7 +807,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
 
   async function recalculateForUser(
     profile: any,
-    options: { sendNotifications?: boolean; changedVacancyId?: string; changeType?: 'published' | 'updated' } = {}
+    options: {
+      sendNotifications?: boolean;
+      changedVacancyId?: string;
+      changeType?: 'published' | 'updated';
+      dryRun?: boolean;
+    } = {}
   ): Promise<{ recommendations: RecommendedOpportunity[]; newNotifications: any[] }> {
     if (!profile?.uid || profile.accountStatus === 'suspended') {
       return { recommendations: [], newNotifications: [] };
@@ -663,52 +845,301 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       applyUrl: r.applyUrl,
     }));
 
-    const allRecs = loadAllRecommendations();
-    allRecs[profile.uid] = {
-      recalculatedAt: new Date().toISOString(),
-      items: compactRecs,
-    };
-    saveAllRecommendations(allRecs);
+    if (!options.dryRun) {
+      const allRecs = loadAllRecommendations();
+      allRecs[profile.uid] = {
+        recalculatedAt: new Date().toISOString(),
+        items: compactRecs,
+      };
+      saveAllRecommendations(allRecs);
 
-    // Prune/filter expired notifications automatically
-    const allNotifs = loadAllNotifications();
-    if (Array.isArray(allNotifs[profile.uid])) {
-      const vacancyMap = new Map(loadVacanciesCatalog().map((v) => [v.id, v]));
-      const activeFiltered = allNotifs[profile.uid].filter((n: any) => {
-        if (n.sourceType === 'system') return true;
-        if (isDeadlineExpired(n.deadline || n.expiresAt)) return false;
-        const linkedVac = vacancyMap.get(n.vacancyId);
-        if (linkedVac && linkedVac.status !== 'published') return false;
-        return true;
-      });
-      if (activeFiltered.length !== allNotifs[profile.uid].length) {
-        allNotifs[profile.uid] = activeFiltered;
-        saveAllNotifications(allNotifs);
+      // Prune/filter expired notifications automatically
+      const allNotifs = loadAllNotifications();
+      if (Array.isArray(allNotifs[profile.uid])) {
+        const vacancyMap = new Map(loadVacanciesCatalog().map((v) => [v.id, v]));
+        const activeFiltered = allNotifs[profile.uid].filter((n: any) => {
+          if (n.sourceType === 'system') return true;
+          if (isDeadlineExpired(n.deadline || n.expiresAt)) return false;
+          const linkedVac = vacancyMap.get(n.vacancyId);
+          if (linkedVac && linkedVac.status !== 'published') return false;
+          return true;
+        });
+        if (activeFiltered.length !== allNotifs[profile.uid].length) {
+          allNotifs[profile.uid] = activeFiltered;
+          saveAllNotifications(allNotifs);
+        }
       }
     }
 
     const newNotifications: any[] = [];
     if (options.sendNotifications) {
-      // Send notifications for high-relevance matches (prefer qualified or >= 32 score)
-      for (const r of compactRecs.slice(0, 8)) {
+      // Prioritize highest relevance matches and cap to max 5 alerts per sweep
+      const prioritized = compactRecs.filter((r) => r.matchScore >= 25 || r.isFullyQualified).slice(0, 5);
+      for (const r of prioritized) {
         let alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' = 'new_match';
         if (options.changedVacancyId && r.id === options.changedVacancyId && options.changeType === 'updated') {
           alertKind = 'job_updated';
         } else if (isDeadlineApproaching(r.deadline, 72)) {
           alertKind = 'deadline_reminder';
         }
-        const sent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, alertKind);
+        const sent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, alertKind, {
+          dryRun: options.dryRun,
+        });
         if (sent) newNotifications.push(sent);
 
         // Also send approaching deadline reminder separately if deadline <= 72h
         if (alertKind === 'new_match' && isDeadlineApproaching(r.deadline, 72)) {
-          const dlSent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, 'deadline_reminder');
+          const dlSent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, 'deadline_reminder', {
+            dryRun: options.dryRun,
+          });
           if (dlSent) newNotifications.push(dlSent);
+        }
+      }
+
+      if (!options.dryRun && newNotifications.length > 0) {
+        const allPrefs = loadAllNotificationPrefs();
+        if (allPrefs[profile.uid]) {
+          allPrefs[profile.uid].lastDigestSentAt = new Date().toISOString();
+          allPrefs[profile.uid].updatedAt = new Date().toISOString();
+          saveAllNotificationPrefs(allPrefs);
         }
       }
     }
 
     return { recommendations: recs, newNotifications };
+  }
+
+  async function executeAutomatedSchedulerSweep(options: {
+    trigger: 'vercel_cron' | 'background_interval' | 'manual_admin';
+    dryRun?: boolean;
+    changedVacancyId?: string;
+    changeType?: 'published' | 'updated';
+  }): Promise<{ skipped: boolean; reason?: string; run?: any }> {
+    if (schedulerRunActive) {
+      return { skipped: true, reason: 'Another scheduler sweep is currently running.' };
+    }
+    schedulerRunActive = true;
+    const startedAt = new Date().toISOString();
+    const startMs = Date.now();
+    const errors: string[] = [];
+
+    let usersEvaluated = 0;
+    let usersEligibleForAlerts = 0;
+    let recommendationsUpdated = 0;
+    let notificationsCreated = 0;
+    let pushAttempted = 0;
+    let pushSucceeded = 0;
+    let pushFailed = 0;
+    let emailAttempted = 0;
+    let emailSucceeded = 0;
+    let emailFailed = 0;
+    let retriesProcessed = 0;
+
+    try {
+      const store = loadSchedulerStore();
+      store.lastRunStartedAt = startedAt;
+      saveSchedulerStore(store);
+
+      // Step 1: Process delivery retry queue (with backoff)
+      if (!options.dryRun) {
+        const retryStats = await processRetryQueueCycle();
+        retriesProcessed = retryStats.processed;
+        if (retryStats.errors.length > 0) {
+          errors.push(...retryStats.errors.slice(0, 5));
+        }
+      }
+
+      // Step 2: Evaluate all active, non-suspended registered profiles
+      const profiles = Object.values(loadUserProfiles() || {}).filter(
+        (p: any) => p?.uid && p.accountStatus !== 'suspended'
+      );
+
+      for (const prof of profiles) {
+        try {
+          usersEvaluated += 1;
+          const result = await recalculateForUser(prof, {
+            sendNotifications: true,
+            changedVacancyId: options.changedVacancyId,
+            changeType: options.changeType,
+            dryRun: options.dryRun,
+          });
+          if (result.recommendations.length > 0) {
+            recommendationsUpdated += result.recommendations.length;
+            usersEligibleForAlerts += 1;
+          }
+          for (const notif of result.newNotifications) {
+            notificationsCreated += 1;
+            if (notif.channels?.push === 'sent') {
+              pushAttempted += 1;
+              pushSucceeded += 1;
+            } else if (notif.channels?.push === 'failed' || notif.channels?.push === 'queued') {
+              pushAttempted += 1;
+              pushFailed += 1;
+            }
+            if (notif.channels?.email === 'sent') {
+              emailAttempted += 1;
+              emailSucceeded += 1;
+            } else if (notif.channels?.email === 'failed' || notif.channels?.email === 'queued') {
+              emailAttempted += 1;
+              emailFailed += 1;
+            }
+          }
+        } catch (userErr: any) {
+          errors.push(`User ${prof.uid}: ${userErr?.message || String(userErr)}`);
+        }
+      }
+
+      const finishedAt = new Date().toISOString();
+      const status: 'success' | 'partial' | 'failed' =
+        errors.length === 0 ? 'success' : usersEvaluated > 0 ? 'partial' : 'failed';
+
+      const runRecord = {
+        id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger: options.trigger,
+        status,
+        dryRun: Boolean(options.dryRun),
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(1, Date.now() - startMs),
+        usersEvaluated,
+        usersEligibleForAlerts,
+        recommendationsUpdated,
+        notificationsCreated,
+        pushAttempted,
+        pushSucceeded,
+        pushFailed,
+        emailAttempted,
+        emailSucceeded,
+        emailFailed,
+        retriesProcessed,
+        errorSummary: errors[0] || undefined,
+        errors: errors.slice(0, 10),
+      };
+
+      const nextStore = loadSchedulerStore();
+      nextStore.lastRunStartedAt = startedAt;
+      nextStore.lastRunStatus = status;
+      if (status !== 'failed') {
+        nextStore.lastSuccessfulRunAt = finishedAt;
+      }
+      if (errors.length > 0) {
+        for (const msg of errors.slice(0, 5)) {
+          nextStore.recentErrors.unshift({
+            timestamp: finishedAt,
+            source: options.trigger,
+            message: msg.slice(0, 400),
+          });
+        }
+      }
+      nextStore.runs.unshift(runRecord);
+      saveSchedulerStore(nextStore);
+
+      return { skipped: false, run: runRecord };
+    } catch (fatalErr: any) {
+      const finishedAt = new Date().toISOString();
+      const msg = fatalErr?.message || String(fatalErr);
+      const runRecord = {
+        id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger: options.trigger,
+        status: 'failed' as const,
+        dryRun: Boolean(options.dryRun),
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(1, Date.now() - startMs),
+        usersEvaluated,
+        usersEligibleForAlerts,
+        recommendationsUpdated,
+        notificationsCreated,
+        pushAttempted,
+        pushSucceeded,
+        pushFailed,
+        emailAttempted,
+        emailSucceeded,
+        emailFailed,
+        retriesProcessed,
+        errorSummary: msg,
+        errors: [msg],
+      };
+      const nextStore = loadSchedulerStore();
+      nextStore.lastRunStatus = 'failed';
+      nextStore.recentErrors.unshift({ timestamp: finishedAt, source: options.trigger, message: msg });
+      nextStore.runs.unshift(runRecord);
+      saveSchedulerStore(nextStore);
+      return { skipped: false, run: runRecord };
+    } finally {
+      schedulerRunActive = false;
+    }
+  }
+
+  function buildAdminSchedulerStatus() {
+    const envReport = getEnvironmentReadinessReport();
+    const store = loadSchedulerStore();
+    const queue = loadNotificationQueue();
+    const allNotifs = loadAllNotifications();
+    const allPrefs = loadAllNotificationPrefs();
+    const allRecs = loadAllRecommendations();
+    const profiles = loadUserProfiles();
+
+    let totalNotificationsSent = 0;
+    let pushDeliveriesCount = 0;
+    let emailDeliveriesCount = 0;
+    let failedDeliveriesCount = 0;
+
+    for (const list of Object.values(allNotifs)) {
+      if (!Array.isArray(list)) continue;
+      for (const n of list) {
+        totalNotificationsSent += 1;
+        if (n.channels?.push === 'sent') pushDeliveriesCount += 1;
+        if (n.channels?.email === 'sent') emailDeliveriesCount += 1;
+        if (n.channels?.push === 'failed' || n.channels?.email === 'failed') {
+          failedDeliveriesCount += 1;
+        }
+      }
+    }
+
+    const queuePending = queue.filter((q) => q.status === 'pending').length;
+    const queueFailed = queue.filter((q) => q.status === 'failed').length;
+    const activePushSubscriptionsCount = Object.values(allPrefs).reduce((acc, pref: any) => {
+      const devices = Array.isArray(pref?.deviceSubscriptions) ? pref.deviceSubscriptions : [];
+      return acc + devices.filter((d: any) => d.active).length;
+    }, 0);
+
+    const usersReceivingRecommendationsCount = Object.values(profiles).filter(
+      (p: any) => p?.uid && p.accountStatus !== 'suspended' && (allRecs[p.uid]?.items?.length || 0) > 0
+    ).length;
+
+    const schedulerStatus: 'idle' | 'running' | 'error' = schedulerRunActive
+      ? 'running'
+      : store.lastRunStatus === 'failed'
+      ? 'error'
+      : 'idle';
+
+    return {
+      success: true,
+      checkedAt: new Date().toISOString(),
+      environment: envReport,
+      scheduler: {
+        status: schedulerStatus,
+        cronPath: '/api/cron/notifications',
+        cronSchedule: '*/15 * * * *',
+        lastRunStartedAt: store.lastRunStartedAt,
+        lastSuccessfulRunAt: store.lastSuccessfulRunAt,
+        lastRunStatus: store.lastRunStatus,
+        nextScheduledRunAt: getNextQuarterHourIso(),
+      },
+      totals: {
+        totalNotificationsSent,
+        successfulDeliveries: pushDeliveriesCount + emailDeliveriesCount + totalNotificationsSent,
+        failedDeliveries: queueFailed + failedDeliveriesCount,
+        pendingNotifications: queuePending,
+        pushDeliveriesCount,
+        emailDeliveriesCount,
+        usersReceivingRecommendationsCount,
+        activePushSubscriptionsCount,
+      },
+      recentErrors: store.recentErrors.slice(0, 15),
+      recentRuns: store.runs.slice(0, 20),
+    };
   }
 
   let bulkRecalcInProgress = false;
@@ -748,13 +1179,19 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     });
   }
 
-  // Periodic background sweep (every 2 minutes): deadline expiration, approaching reminders & retry queue
-  const periodicTimer = setInterval(() => {
-    void processRetryQueueCycle();
-    // Periodically evaluate deadline reminders and clean expired notifications without spamming
-    triggerBackgroundRecalcAllUsers({ sendNotifications: true });
-  }, 2 * 60 * 1000);
-  if (typeof periodicTimer?.unref === 'function') periodicTimer.unref();
+  // Persistent Node runtime only: periodic sweep + retry processor.
+  // On Vercel serverless deployments, Vercel Cron (/api/cron/notifications) triggers sweeps cleanly.
+  if (!isVercel) {
+    const retryTimer = setInterval(() => {
+      void processRetryQueueCycle();
+    }, 2 * 60 * 1000);
+    if (typeof retryTimer?.unref === 'function') retryTimer.unref();
+
+    const schedulerTimer = setInterval(() => {
+      void executeAutomatedSchedulerSweep({ trigger: 'background_interval' });
+    }, 15 * 60 * 1000);
+    if (typeof schedulerTimer?.unref === 'function') schedulerTimer.unref();
+  }
 
   // =========================================================================
   // ROUTES: VAPID KEY & WEB PUSH SUBSCRIPTION
@@ -884,11 +1321,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       );
     }
 
+    const validFreq = ['instant', 'daily', 'weekly'].includes(body.frequency)
+      ? body.frequency
+      : existing.frequency || 'instant';
+
     const updated = {
       ...existing,
       userId: uid,
       permissionStatus: body.permissionStatus || existing.permissionStatus,
       subscriptionStatus: body.subscriptionStatus || existing.subscriptionStatus,
+      frequency: validFreq,
       enabledAt:
         body.permissionStatus === 'granted' && !existing.enabledAt ? nowIso : body.enabledAt || existing.enabledAt,
       permissionVerifiedAt: body.permissionVerifiedAt || nowIso,
@@ -1266,6 +1708,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         notificationsEnabled,
         permissionStatus: prefs?.permissionStatus || 'default',
         subscriptionStatus: prefs?.subscriptionStatus || 'none',
+        frequency: prefs?.frequency || 'instant',
         emailAlertsEnabled: Boolean(prefs?.channels?.emailAlerts),
         recommendationsCount,
         unreadNotificationsCount,
@@ -1457,6 +1900,132 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     res.send(csv);
   });
 
+  // =========================================================================
+  // ROUTES: VERCEL CRON & ADMIN SCHEDULER OPERATIONS CONSOLE
+  // =========================================================================
+
+  function isAuthorizedCronRequest(req: Request): boolean {
+    if (isPersistentOwnerRequest(req)) return true;
+    const expectedSecret = (process.env.CRON_SECRET || '').trim();
+    if (expectedSecret) {
+      const authHeader = String(req.headers.authorization || '').trim();
+      return authHeader === `Bearer ${expectedSecret}`;
+    }
+    // When CRON_SECRET is unset, trust Vercel Cron header or local non-Vercel test invocation
+    return Boolean(req.headers['x-vercel-cron']) || !isVercel;
+  }
+
+  app.all('/api/cron/notifications', async (req: Request, res: Response): Promise<void> => {
+    if (!isAuthorizedCronRequest(req)) {
+      res.status(401).json({ error: 'Unauthorized Cron invocation' });
+      return;
+    }
+    const dryRun = req.query?.dryRun === 'true' || req.body?.dryRun === true;
+    const result = await executeAutomatedSchedulerSweep({
+      trigger: 'vercel_cron',
+      dryRun,
+    });
+    res.status(result.skipped ? 409 : 200).json({
+      success: !result.skipped,
+      ...result,
+      status: buildAdminSchedulerStatus().scheduler,
+    });
+  });
+
+  app.get('/api/admin/scheduler-status', (req: Request, res: Response): void => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    res.json(buildAdminSchedulerStatus());
+  });
+
+  app.post('/api/admin/scheduler/run-now', async (req: Request, res: Response): Promise<void> => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    const dryRun = req.body?.dryRun === true;
+    const result = await executeAutomatedSchedulerSweep({
+      trigger: 'manual_admin',
+      dryRun,
+    });
+    if (!result.skipped && result.run && !dryRun) {
+      appendAuditLog({
+        action: 'notification_scheduler_manual_run',
+        actorEmail: getRequesterEmail(req) || 'owner',
+        targetType: 'scheduler',
+        targetId: result.run.id,
+        summary: `Manual scheduler sweep finished (${result.run.status}): ${result.run.usersEvaluated} users checked, ${result.run.notificationsCreated} alerts dispatched`,
+        severity: result.run.status === 'failed' ? 'warning' : 'info',
+      });
+    }
+    res.json({
+      success: !result.skipped,
+      ...result,
+      schedulerStatus: buildAdminSchedulerStatus(),
+    });
+  });
+
+  app.post('/api/admin/scheduler/verify-smtp', async (req: Request, res: Response): Promise<void> => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    const envReport = getEnvironmentReadinessReport();
+    if (!envReport.smtpConfigured) {
+      res.json({
+        success: false,
+        configured: false,
+        verified: false,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: `SMTP credentials incomplete. Missing: ${envReport.missingEnvVars.filter((k) => k.startsWith('SMTP_')).join(', ')}`,
+      });
+      return;
+    }
+
+    try {
+      const nm = await ensureNodemailer();
+      if (!nm) {
+        res.json({ success: false, configured: true, verified: false, message: 'Nodemailer module unavailable.' });
+        return;
+      }
+      const transporter = nm.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587', 10),
+        secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+      await transporter.verify();
+      res.json({
+        success: true,
+        configured: true,
+        verified: true,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: 'SMTP server connection verified successfully.',
+      });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      recordSystemNotificationError('smtp_verify', msg);
+      res.json({
+        success: false,
+        configured: true,
+        verified: false,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: `SMTP verification failed: ${msg}`,
+      });
+    }
+  });
+
   return {
     onUserProfileSaved: async (savedProfile: any, isNewRegistration: boolean) => {
       if (!savedProfile?.uid) return;
@@ -1477,6 +2046,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       userNotifications: loadAllNotifications(),
       notificationPreferences: loadAllNotificationPrefs(),
       notificationQueue: loadNotificationQueue(),
+      schedulerRuns: loadSchedulerStore(),
     }),
     restorePersistentFilesFromBackup: (d: any) => {
       if (Array.isArray(d?.vacanciesCatalog)) saveVacanciesCatalog(d.vacanciesCatalog);
@@ -1484,6 +2054,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       if (d?.userNotifications && typeof d.userNotifications === 'object') saveAllNotifications(d.userNotifications);
       if (d?.notificationPreferences && typeof d.notificationPreferences === 'object') saveAllNotificationPrefs(d.notificationPreferences);
       if (Array.isArray(d?.notificationQueue)) saveNotificationQueue(d.notificationQueue);
+      if (d?.schedulerRuns && typeof d.schedulerRuns === 'object') saveSchedulerStore(d.schedulerRuns);
     },
     getHealthCounts: () => ({
       vacanciesCatalog: loadVacanciesCatalog().length,

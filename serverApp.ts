@@ -10458,6 +10458,7 @@ Return strict JSON:
   userEngineHandle = registerUserNotificationAndAnalyticsRoutes({
     app,
     runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
     ensureRuntimeDataDir,
     loadJsonFileSafe,
     writeJsonFileAtomic,

@@ -624,7 +624,8 @@ export default function App() {
       if (event.data?.type === 'HOPELAND_RECONNECT_SYNC_TRIGGER') {
         triggerReconnectSync();
       } else if (event.data?.type === 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION') {
-        const { vacancyId, notificationId } = event.data;
+        const resolvedJobId = event.data.vacancyId || event.data.jobId;
+        const notificationId = event.data.notificationId;
         if (notificationId && userProfile?.uid) {
           markUserNotificationReadServer(userProfile.uid, { notificationId, read: true }, userProfile.email)
             .then((res) => {
@@ -633,10 +634,12 @@ export default function App() {
             })
             .catch(() => {});
         }
-        if (vacancyId) {
-          const found = vacancies.find((v) => v.id === vacancyId);
+        if (resolvedJobId) {
+          const found = vacancies.find((v) => v.id === resolvedJobId);
           if (found) {
             setSelectedVacancy(found);
+          } else if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', `/?jobId=${encodeURIComponent(resolvedJobId)}`);
           }
         }
       }

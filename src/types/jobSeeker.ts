@@ -126,13 +126,17 @@ export interface NotificationDeviceSubscription {
   lastFailureReason?: string;
 }
 
+export type NotificationFrequency = 'instant' | 'daily' | 'weekly';
+
 export interface NotificationPreferencesRecord {
   userId: string;
   permissionStatus: NotificationPermissionState;
   subscriptionStatus: NotificationSubscriptionStatus;
+  frequency?: NotificationFrequency;
   enabledAt?: string;
   permissionVerifiedAt?: string;
   lastSuccessfulDeliveryAt?: string;
+  lastDigestSentAt?: string;
   promptDismissCount?: number;
   channels: {
     websiteBell: boolean;
@@ -149,6 +153,74 @@ export interface NotificationPreferencesRecord {
   preferredSectors?: string[];
   deviceSubscriptions: NotificationDeviceSubscription[];
   updatedAt: string;
+}
+
+export interface SchedulerRunRecord {
+  id: string;
+  trigger: 'vercel_cron' | 'background_interval' | 'manual_admin';
+  status: 'success' | 'partial' | 'failed';
+  dryRun?: boolean;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  usersEvaluated: number;
+  usersEligibleForAlerts: number;
+  recommendationsUpdated: number;
+  notificationsCreated: number;
+  pushAttempted: number;
+  pushSucceeded: number;
+  pushFailed: number;
+  emailAttempted: number;
+  emailSucceeded: number;
+  emailFailed: number;
+  retriesProcessed: number;
+  errorSummary?: string;
+  errors: string[];
+}
+
+export interface AdminSchedulerStatusResponse {
+  success: boolean;
+  checkedAt: string;
+  environment: {
+    runtime: 'vercel_serverless' | 'node_server';
+    smtpConfigured: boolean;
+    smtpHost: string;
+    smtpPort: string;
+    smtpUserConfigured: boolean;
+    smtpPassConfigured: boolean;
+    smtpFrom: string;
+    vapidConfigured: boolean;
+    vapidSource: 'environment' | 'persisted_file' | 'unset';
+    vapidSubject: string;
+    geminiConfigured: boolean;
+    cronSecretConfigured: boolean;
+    missingEnvVars: string[];
+  };
+  scheduler: {
+    status: 'idle' | 'running' | 'error';
+    cronPath: string;
+    cronSchedule: string;
+    lastRunStartedAt: string | null;
+    lastSuccessfulRunAt: string | null;
+    lastRunStatus: 'success' | 'partial' | 'failed' | null;
+    nextScheduledRunAt: string;
+  };
+  totals: {
+    totalNotificationsSent: number;
+    successfulDeliveries: number;
+    failedDeliveries: number;
+    pendingNotifications: number;
+    pushDeliveriesCount: number;
+    emailDeliveriesCount: number;
+    usersReceivingRecommendationsCount: number;
+    activePushSubscriptionsCount: number;
+  };
+  recentErrors: Array<{
+    timestamp: string;
+    source: string;
+    message: string;
+  }>;
+  recentRuns: SchedulerRunRecord[];
 }
 
 export type UserAlertKind =
@@ -248,6 +320,7 @@ export interface RegisteredUserAnalyticsSummary {
     notificationsEnabled: boolean;
     permissionStatus: NotificationPermissionState;
     subscriptionStatus: NotificationSubscriptionStatus;
+    frequency?: NotificationFrequency;
     emailAlertsEnabled: boolean;
     recommendationsCount: number;
     unreadNotificationsCount: number;

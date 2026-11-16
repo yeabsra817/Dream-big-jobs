@@ -178,8 +178,31 @@ service cloud.firestore {
         && (request.auth.uid == userId || isOwnerAdmin())
         && request.resource.data.userId == userId
         && request.resource.data.permissionStatus in ['default', 'granted', 'denied', 'unsupported']
-        && request.resource.data.subscriptionStatus in ['active', 'none', 'expired', 'revoked'];
+        && request.resource.data.subscriptionStatus in ['active', 'none', 'expired', 'revoked']
+        && (!('frequency' in request.resource.data) || request.resource.data.frequency in ['instant', 'daily', 'weekly']);
       allow delete: if isOwnerAdmin();
+    }
+
+    // Device-level Web Push Subscriptions (Strictly isolated to owning user or admin)
+    match /push_subscriptions/{subId} {
+      allow get: if isSignedIn() && isValidId(subId) && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow create, update: if isSignedIn() && isValidId(subId)
+        && request.resource.data.id is string && request.resource.data.id == subId
+        && request.resource.data.userId is string && (request.resource.data.userId == request.auth.uid || isOwnerAdmin())
+        && request.resource.data.deviceId is string && request.resource.data.deviceId.size() <= 128
+        && request.resource.data.endpoint is string && request.resource.data.endpoint.size() <= 1000
+        && request.resource.data.active is bool;
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+    }
+
+    // Server / Admin-only Notification Retry Queue & Scheduler Execution History
+    match /notification_queue/{queueId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /scheduler_runs/{runId} {
+      allow read, write: if isOwnerAdmin();
     }
 
     // Job Applications Collection (Owner-scoped read/create, Admin review)
