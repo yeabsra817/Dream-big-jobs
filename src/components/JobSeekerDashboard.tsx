@@ -27,6 +27,12 @@ import {
   Compass,
   Globe,
   Target,
+  Bell,
+  Mail,
+  CheckCheck,
+  Check,
+  AlertTriangle,
+  Smartphone,
 } from 'lucide-react';
 import {
   JobSeekerProfile,
@@ -36,6 +42,9 @@ import {
   SeekerDocument,
   CertificationItem,
   StaffAccountRole,
+  NotificationPreferencesRecord,
+  NotificationPermissionState,
+  UserNotificationItem,
   calculateProfileCompletion,
 } from '../types/jobSeeker';
 import { Vacancy } from '../types/job';
@@ -47,6 +56,25 @@ import {
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
 import { askAiCareerCoach, CareerCoachAiResponse } from '../lib/aiService';
+import { sendTestPushNotification } from '../lib/notificationService';
+
+const RECOMMENDED_SECTOR_OPTIONS = [
+  'Commercial Banking & Finance',
+  'Microfinance & SACCOs',
+  'Insurance & Risk',
+  'WASH (Water, Sanitation & Hygiene)',
+  'International NGOs & UN',
+  'Local NGOs & Civil Society',
+  'Government & Public Sector',
+  'Embassies & Diplomatic Missions',
+  'Airlines & Aviation',
+  'Hotels & Tourism',
+  'Manufacturing & Industrial',
+  'Private Companies & Corporate',
+  'IT, Software & Telecom',
+  'Health & Medical',
+  'Education & Academic',
+];
 
 interface Props {
   profile: JobSeekerProfile;
@@ -58,6 +86,26 @@ interface Props {
   onUpdateProfile: (updated: JobSeekerProfile) => Promise<void>;
   onSelectVacancy: (vacancy: Vacancy) => void;
   onClose: () => void;
+  initialTab?:
+    | 'overview'
+    | 'recommendations'
+    | 'notifications'
+    | 'personal'
+    | 'professional'
+    | 'education'
+    | 'experience'
+    | 'documents'
+    | 'applications'
+    | 'saved';
+  notifications?: UserNotificationItem[];
+  unreadNotificationsCount?: number;
+  notificationPrefs?: NotificationPreferencesRecord | null;
+  browserNotificationPermission?: NotificationPermissionState;
+  hasActiveDevicePush?: boolean;
+  onUpdateNotificationPrefs?: (patch: Partial<NotificationPreferencesRecord>) => Promise<void>;
+  onEnableDevicePush?: () => Promise<void>;
+  onMarkNotificationRead?: (id: string, read: boolean) => Promise<void>;
+  onMarkAllNotificationsRead?: () => Promise<void>;
 }
 
 export const JobSeekerDashboard: React.FC<Props> = ({
@@ -70,10 +118,21 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   onUpdateProfile,
   onSelectVacancy,
   onClose,
+  initialTab = 'overview',
+  notifications = [],
+  unreadNotificationsCount = 0,
+  notificationPrefs = null,
+  browserNotificationPermission = 'default',
+  hasActiveDevicePush = false,
+  onUpdateNotificationPrefs = async () => {},
+  onEnableDevicePush = async () => {},
+  onMarkNotificationRead = async () => {},
+  onMarkAllNotificationsRead = async () => {},
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'overview'
     | 'recommendations'
+    | 'notifications'
     | 'personal'
     | 'professional'
     | 'education'
@@ -81,7 +140,15 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     | 'documents'
     | 'applications'
     | 'saved'
-  >('overview');
+  >(initialTab);
+
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  const [recFilter, setRecFilter] = useState<'all' | 'qualified'>('all');
+  const [testPushFeedback, setTestPushFeedback] = useState<string | null>(null);
+  const [isTestingPush, setIsTestingPush] = useState(false);
 
   const [formProfile, setFormProfile] = useState<JobSeekerProfile>({
     ...profile,
@@ -89,6 +156,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
     areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
     professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
+    preferredSectors: Array.isArray(profile.preferredSectors) ? profile.preferredSectors : [],
     certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -105,6 +173,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
       previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
       areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
       professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
+      preferredSectors: Array.isArray(profile.preferredSectors) ? profile.preferredSectors : [],
       certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
     });
   }, [profile]);
@@ -421,8 +490,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
           {[
             { id: 'overview', label: 'Dashboard Overview', icon: User },
             { id: 'recommendations', label: 'Recommended For You', icon: Target, count: recommendations.length },
+            { id: 'notifications', label: 'Alerts & Preferences', icon: Bell, count: unreadNotificationsCount },
             { id: 'personal', label: 'Personal & Role', icon: Edit2 },
-            { id: 'professional', label: 'Expertise & Certs', icon: Briefcase },
+            { id: 'professional', label: 'Expertise & Sectors', icon: Briefcase },
             { id: 'education', label: 'Education', icon: GraduationCap, count: formProfile.education?.length },
             { id: 'experience', label: 'Experience', icon: Building, count: formProfile.experience?.length },
             { id: 'documents', label: 'CV & Document Vault', icon: FileText, count: formProfile.documents?.length },
@@ -796,16 +866,38 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     <span>Personalized Opportunity Recommendations ({recommendations.length})</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Strictly matched against your documented positions, expertise, skills, certifications, education, and experience. Roles requiring unverified credentials or higher experience tiers are excluded.
+                    Matched across Banking, Microfinance, Insurance, WASH, NGOs, Government, Embassies, Airlines, Hospitality, Manufacturing, and Private companies. Expired and unverified listings are strictly excluded.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('professional')}
-                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold shrink-0"
-                >
-                  Refine Expertise &amp; Interests
-                </button>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setRecFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        recFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      All Matches
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecFilter('qualified')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        recFilter === 'qualified' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+                      }`}
+                    >
+                      100% Qualified
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('professional')}
+                    className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold shrink-0 cursor-pointer"
+                  >
+                    Refine Sectors &amp; Skills
+                  </button>
+                </div>
               </div>
 
               {!hasSufficientProfile ? (
@@ -813,49 +905,58 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   <Compass className="w-10 h-10 text-amber-500 mx-auto" />
                   <h4 className="font-black text-sm text-amber-950">Add Your Role, Skills, or Education to Unlock Matches</h4>
                   <p className="text-xs text-amber-900 max-w-md mx-auto">
-                    Hopeland never invents qualifications. Add your current or desired position, areas of expertise, skills, education, or certifications so we can compute verified matches.
+                    Hopeland never invents qualifications. Add your current or desired position, preferred sectors, skills, or education so we can compute verified matches.
                   </p>
                   <button
                     type="button"
                     onClick={() => setActiveTab('professional')}
-                    className="px-5 py-2.5 rounded-xl bg-[#0B132B] text-white text-xs font-extrabold hover:bg-amber-400 hover:text-slate-950 transition-colors"
+                    className="px-5 py-2.5 rounded-xl bg-[#0B132B] text-white text-xs font-extrabold hover:bg-amber-400 hover:text-slate-950 transition-colors cursor-pointer"
                   >
                     Update Staff &amp; Career Profile
                   </button>
                 </div>
-              ) : recommendations.length === 0 ? (
+              ) : recommendations.filter((r) => recFilter === 'all' || r.isFullyQualified).length === 0 ? (
                 <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
                   <Briefcase className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-bold text-slate-800">No Eligible Matches Found Right Now</p>
+                  <p className="text-xs font-bold text-slate-800">No Matching Opportunities Found Right Now</p>
                   <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                    We checked active domestic jobs, international opportunities, and scholarships against your documented years of experience ({formProfile.yearsOfExperience || 'Not set'}), education, and expertise. Keep your profile updated to match newly published opportunities.
+                    We checked active verified jobs across all sectors against your experience ({formProfile.yearsOfExperience || 'Not set'}), education, and preferred sectors. Keep notifications enabled to be alerted immediately when new matches publish.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {recommendations.map((rec) => (
+                  {recommendations
+                    .filter((r) => recFilter === 'all' || r.isFullyQualified)
+                    .map((rec) => (
                     <div
                       key={`${rec.sourceType}_${rec.id}`}
                       className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-amber-400 transition-all space-y-3"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              {rec.matchScore}% Match • {rec.eligibilityStatus}
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                            <span
+                              className={`font-black font-mono tabular-nums ${
+                                rec.isFullyQualified ? 'text-emerald-700' : 'text-amber-700'
+                              }`}
+                            >
+                              {rec.matchScore}% Match ({rec.eligibilityStatus})
                             </span>
-                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200">
+                            <span aria-hidden="true">·</span>
+                            <span className="font-semibold text-slate-700">
                               {rec.sourceType === 'domestic_job'
-                                ? 'Domestic Vacancy'
+                                ? 'Verified Vacancy'
                                 : rec.sourceType === 'international_job'
                                 ? 'Verified International Job'
                                 : 'Experience-Based Scholarship'}
                             </span>
-                            <span className="text-[10px] font-semibold text-slate-500">{rec.category}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{rec.category}</span>
                           </div>
                           <h4 className="font-black text-base text-slate-900">{rec.title}</h4>
                           <p className="text-xs text-slate-600 font-semibold">
-                            {rec.organization} • {rec.location}
+                            {rec.organization} · {rec.location}
+                            {rec.salary ? ` · ${rec.salary}` : ''}
                           </p>
                         </div>
 
@@ -867,7 +968,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                                 onClose();
                                 onSelectVacancy(rec.vacancy!);
                               }}
-                              className="px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors"
+                              className="px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors cursor-pointer"
                             >
                               View &amp; Apply
                             </button>
@@ -885,17 +986,36 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-1.5">
-                        {rec.matchReasons.map((reason, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200"
-                          >
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                            <span>{reason}</span>
-                          </span>
-                        ))}
+                      {/* Why it matches */}
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-bold text-slate-600">Why this role matches your profile:</div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {rec.matchReasons.map((reason, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>{reason}</span>
+                            </span>
+                          ))}
+                        </div>
                       </div>
+
+                      {/* Clear Missing Mandatory Qualifications Notice */}
+                      {rec.missingMandatoryQualifications && rec.missingMandatoryQualifications.length > 0 && (
+                        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-1">
+                          <div className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                            <span>Missing Mandatory Requirements to Check Before Applying:</span>
+                          </div>
+                          <ul className="list-disc pl-5 text-xs text-amber-900 space-y-0.5">
+                            {rec.missingMandatoryQualifications.map((gap, i) => (
+                              <li key={i}>{gap}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 text-[11px] text-slate-600">
                         <div>
@@ -912,6 +1032,341 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB 1C: NOTIFICATIONS & ALERT PREFERENCES */}
+          {/* ========================================================= */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              {/* Device Push & Channel Controls */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                      <Bell className="w-5 h-5 text-amber-500" />
+                      <span>Notification Channels &amp; Device Status</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Control how Hopeland Jobs notifies you about matching vacancies across Website, Desktop/Mobile Push, and Email.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {(!hasActiveDevicePush || browserNotificationPermission !== 'granted') && (
+                      <button
+                        type="button"
+                        onClick={() => onEnableDevicePush()}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                        <span>
+                          {browserNotificationPermission === 'denied'
+                            ? 'Check Browser Permission'
+                            : 'ENABLE NOTIFICATIONS'}
+                        </span>
+                      </button>
+                    )}
+
+                    {hasActiveDevicePush && (
+                      <button
+                        type="button"
+                        disabled={isTestingPush}
+                        onClick={async () => {
+                          setIsTestingPush(true);
+                          const res = await sendTestPushNotification(formProfile.uid, formProfile.email);
+                          setTestPushFeedback(res.message);
+                          setIsTestingPush(false);
+                        }}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{isTestingPush ? 'Sending...' : 'Send Test Push Alert'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Current Device Status Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                    <div className="text-[11px] font-bold text-slate-500">This Device Permission</div>
+                    <div
+                      className={`font-extrabold mt-0.5 ${
+                        browserNotificationPermission === 'granted'
+                          ? 'text-emerald-700'
+                          : browserNotificationPermission === 'denied'
+                          ? 'text-rose-700'
+                          : 'text-amber-700'
+                      }`}
+                    >
+                      {browserNotificationPermission === 'granted' && hasActiveDevicePush
+                        ? 'Granted & Active'
+                        : browserNotificationPermission === 'granted'
+                        ? 'Granted (Syncing Device)'
+                        : browserNotificationPermission === 'denied'
+                        ? 'Blocked in Browser Settings'
+                        : browserNotificationPermission === 'unsupported'
+                        ? 'Bell & Email Mode'
+                        : 'Not Enabled Yet'}
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                    <div className="text-[11px] font-bold text-slate-500">Registered Push Devices</div>
+                    <div className="font-mono tabular-nums font-extrabold text-slate-900 mt-0.5">
+                      {(notificationPrefs?.deviceSubscriptions || []).filter((d) => d.active).length} active device(s)
+                    </div>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+                    <div className="text-[11px] font-bold text-slate-500">Last Alert Synced</div>
+                    <div className="font-mono tabular-nums font-bold text-slate-800 mt-0.5">
+                      {notificationPrefs?.lastSuccessfulDeliveryAt
+                        ? new Date(notificationPrefs.lastSuccessfulDeliveryAt).toLocaleString()
+                        : 'Ready for matches'}
+                    </div>
+                  </div>
+                </div>
+
+                {testPushFeedback && (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-800">
+                    {testPushFeedback}
+                  </div>
+                )}
+
+                {/* Channel & Type Checkboxes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-extrabold text-slate-800">Notification Channels</h4>
+                    {[
+                      {
+                        key: 'websiteBell' as const,
+                        label: 'Website Notification Bell',
+                        desc: 'Always show matched job alerts in your dashboard and navbar.',
+                      },
+                      {
+                        key: 'browserPush' as const,
+                        label: 'Desktop Browser Push Notifications',
+                        desc: 'Real-time Chrome, Edge, or Firefox push alerts even when tab is minimized.',
+                      },
+                      {
+                        key: 'mobilePush' as const,
+                        label: 'Mobile Push Notifications (Android / iOS PWA)',
+                        desc: 'Instant alerts on Android Chrome and iPhone/iPad Home Screen web apps.',
+                      },
+                      {
+                        key: 'emailAlerts' as const,
+                        label: 'Email Vacancy Alerts',
+                        desc: `Send personalized match summaries to ${formProfile.email}.`,
+                      },
+                    ].map((ch) => {
+                      const checked = notificationPrefs?.channels?.[ch.key] ?? (ch.key === 'websiteBell' || ch.key === 'emailAlerts');
+                      return (
+                        <label
+                          key={ch.key}
+                          className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:border-slate-300"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              onUpdateNotificationPrefs({
+                                channels: {
+                                  ...(notificationPrefs?.channels || {
+                                    websiteBell: true,
+                                    browserPush: false,
+                                    mobilePush: false,
+                                    emailAlerts: true,
+                                  }),
+                                  [ch.key]: e.target.checked,
+                                },
+                              })
+                            }
+                            className="mt-0.5 w-4 h-4 accent-[#0B132B] cursor-pointer"
+                          />
+                          <div className="text-xs">
+                            <div className="font-bold text-slate-900">{ch.label}</div>
+                            <div className="text-[11px] text-slate-500">{ch.desc}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-extrabold text-slate-800">Alert Categories</h4>
+                    {[
+                      {
+                        key: 'newMatches' as const,
+                        label: 'New Matching Vacancies',
+                        desc: 'Alert immediately when new verified jobs match your profile.',
+                      },
+                      {
+                        key: 'deadlineReminders' as const,
+                        label: 'Application Deadline Reminders',
+                        desc: 'Remind when a suitable matched job closes within 72 hours.',
+                      },
+                      {
+                        key: 'jobChanges' as const,
+                        label: 'Vacancy Updates & Deadline Extensions',
+                        desc: 'Notify when an employer updates requirements or extends deadlines.',
+                      },
+                      {
+                        key: 'sectorUpdates' as const,
+                        label: 'Preferred Sector Openings',
+                        desc: 'Notify on major openings across your chosen industries & WASH/NGO calls.',
+                      },
+                    ].map((at) => {
+                      const checked = notificationPrefs?.alertTypes?.[at.key] ?? true;
+                      return (
+                        <label
+                          key={at.key}
+                          className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:border-slate-300"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              onUpdateNotificationPrefs({
+                                alertTypes: {
+                                  ...(notificationPrefs?.alertTypes || {
+                                    newMatches: true,
+                                    deadlineReminders: true,
+                                    jobChanges: true,
+                                    sectorUpdates: true,
+                                  }),
+                                  [at.key]: e.target.checked,
+                                },
+                              })
+                            }
+                            className="mt-0.5 w-4 h-4 accent-[#0B132B] cursor-pointer"
+                          />
+                          <div className="text-xs">
+                            <div className="font-bold text-slate-900">{at.label}</div>
+                            <div className="text-[11px] text-slate-500">{at.desc}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Persisted Notification History */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900">
+                      Saved Notification History ({notifications.length})
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      All matched vacancy notifications remain stored across sign-outs and reconnects until expired.
+                    </p>
+                  </div>
+                  {unreadNotificationsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onMarkAllNotificationsRead()}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Mark All Read</span>
+                    </button>
+                  )}
+                </div>
+
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                    <Bell className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-700">No Job Notifications Delivered Yet</p>
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                      Save your skills, education, and preferred sectors in your profile to trigger personalized vacancy alerts.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {notifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        className={`py-4 px-3 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                          notif.read ? 'bg-white' : 'bg-amber-50/45'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="font-bold text-emerald-700 font-mono tabular-nums">
+                              {notif.matchScore}% Match
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>{notif.category}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">
+                              {new Date(notif.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h4 className="font-extrabold text-sm text-slate-900">{notif.title}</h4>
+                          <p className="text-xs text-slate-600">
+                            {notif.employer} · {notif.location}
+                            {notif.salary ? ` · ${notif.salary}` : ''} · Deadline: {notif.deadline || 'Open'}
+                          </p>
+                          {notif.matchReasonSummary && (
+                            <p className="text-xs text-emerald-800 font-medium">{notif.matchReasonSummary}</p>
+                          )}
+                          {notif.missingMandatoryQualifications?.length > 0 && (
+                            <p className="text-xs text-amber-800 font-medium">
+                              Missing requirement: {notif.missingMandatoryQualifications.join(', ')}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => onMarkNotificationRead(notif.id, !notif.read)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{notif.read ? 'Mark Unread' : 'Mark Read'}</span>
+                          </button>
+
+                          {(() => {
+                            const matchedVac = vacancies.find((v) => v.id === notif.vacancyId);
+                            if (matchedVac) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!notif.read) onMarkNotificationRead(notif.id, true);
+                                    onClose();
+                                    onSelectVacancy(matchedVac);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold cursor-pointer"
+                                >
+                                  Open Job
+                                </button>
+                              );
+                            }
+                            if (notif.applicationUrl || notif.jobUrl) {
+                              return (
+                                <a
+                                  href={notif.applicationUrl || notif.jobUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3.5 py-1.5 rounded-lg bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold inline-flex items-center gap-1"
+                                >
+                                  <span>View</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1119,14 +1574,51 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Preferred Industry / Sector</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Primary Preferred Industry</label>
                   <input
                     type="text"
                     value={formProfile.preferredIndustry}
                     onChange={(e) => setFormProfile({ ...formProfile, preferredIndustry: e.target.value })}
-                    placeholder="e.g. NGO / Banking and Financial Institutions"
+                    placeholder="e.g. WASH / NGO / Banking and Financial Institutions"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Preferred Sectors Multi-Select (Used by Automated Matcher & Alerts) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Preferred Job Sectors for Automatic Matching &amp; Alerts
+                </label>
+                <p className="text-[11px] text-slate-500 mb-2.5">
+                  Select all sectors you want automatic job recommendations and notifications for:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {RECOMMENDED_SECTOR_OPTIONS.map((sec) => {
+                    const selected = (formProfile.preferredSectors || []).includes(sec);
+                    return (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => {
+                          const current = formProfile.preferredSectors || [];
+                          const next = selected ? current.filter((x) => x !== sec) : [...current, sec];
+                          setFormProfile({
+                            ...formProfile,
+                            preferredSectors: next,
+                            preferredIndustry: next[0] || formProfile.preferredIndustry,
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                          selected
+                            ? 'bg-[#0B132B] text-white border-[#0B132B]'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {selected ? `✓ ${sec}` : sec}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

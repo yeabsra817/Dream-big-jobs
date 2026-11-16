@@ -1,5 +1,14 @@
 [
   {
+    "id": "notif_1794829182380_ohwo3",
+    "type": "staff_registered",
+    "title": "New Staff Profile Registered",
+    "message": "Abebe WASH Tester (WASH Officer) joined permanently.",
+    "severity": "info",
+    "acknowledged": false,
+    "createdAt": "2026-11-16T11:39:42.380Z"
+  },
+  {
     "id": "notif_1794821043912_svu4n",
     "type": "staff_registered",
     "title": "New Staff Profile Registered",

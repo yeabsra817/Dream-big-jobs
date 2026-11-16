@@ -17,9 +17,18 @@ import {
   Globe,
   Plane,
   GraduationCap,
+  Download,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
-import { JobSeekerProfile } from '../types/jobSeeker';
+import {
+  JobSeekerProfile,
+  NotificationPermissionState,
+  NotificationPreferencesRecord,
+  UserNotificationItem,
+} from '../types/jobSeeker';
+import { NotificationCenterPopover } from './NotificationCenterPopover';
 
 interface Props {
   siteSettings: SiteSettings;
@@ -43,6 +52,20 @@ interface Props {
   savedCount?: number;
   language: 'en' | 'am';
   onToggleLanguage: () => void;
+  notifications?: UserNotificationItem[];
+  unreadNotificationsCount?: number;
+  notificationPrefs?: NotificationPreferencesRecord | null;
+  browserNotificationPermission?: NotificationPermissionState;
+  hasActiveDevicePush?: boolean;
+  onMarkNotificationRead?: (id: string, read: boolean) => Promise<void>;
+  onMarkAllNotificationsRead?: () => Promise<void>;
+  onOpenNotification?: (notif: UserNotificationItem) => void;
+  onOpenNotificationPreferences?: () => void;
+  onPromptEnableNotifications?: () => void;
+  canInstallApp?: boolean;
+  onInstallApp?: () => void;
+  isOnline?: boolean;
+  isSyncingReconnect?: boolean;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -67,6 +90,20 @@ export const Navbar: React.FC<Props> = ({
   savedCount = 0,
   language,
   onToggleLanguage,
+  notifications = [],
+  unreadNotificationsCount = 0,
+  notificationPrefs = null,
+  browserNotificationPermission = 'default',
+  hasActiveDevicePush = false,
+  onMarkNotificationRead = async () => {},
+  onMarkAllNotificationsRead = async () => {},
+  onOpenNotification = () => {},
+  onOpenNotificationPreferences = () => {},
+  onPromptEnableNotifications = () => {},
+  canInstallApp = false,
+  onInstallApp,
+  isOnline = true,
+  isSyncingReconnect = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -94,7 +131,29 @@ export const Navbar: React.FC<Props> = ({
               🇪🇹 Addis Ababa, Hawassa, Adama, Dire Dawa & All Regions
             </span>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            {!isOnline && (
+              <span className="inline-flex items-center gap-1 text-rose-300 font-bold text-[11px] bg-rose-950/60 px-2 py-0.5 rounded border border-rose-500/40">
+                <WifiOff className="w-3 h-3" />
+                <span>Offline</span>
+              </span>
+            )}
+            {isOnline && isSyncingReconnect && (
+              <span className="inline-flex items-center gap-1 text-amber-300 font-bold text-[11px]">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Syncing alerts...</span>
+              </span>
+            )}
+            {canInstallApp && onInstallApp && (
+              <button
+                type="button"
+                onClick={onInstallApp}
+                className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-400 text-slate-950 hover:bg-amber-300 transition-colors cursor-pointer"
+              >
+                <Download className="w-3 h-3" />
+                <span>Install App</span>
+              </button>
+            )}
             <button
               onClick={onToggleLanguage}
               className="flex items-center gap-1.5 hover:text-amber-400 transition-colors text-xs font-semibold px-2 py-0.5 rounded bg-slate-800"
@@ -230,7 +289,22 @@ export const Navbar: React.FC<Props> = ({
               <span>Telegram</span>
             </a>
 
-            {/* User Auth / Dashboard Button */}
+            {/* User Notification Bell + Auth / Dashboard Button */}
+            {isLoggedIn && (
+              <NotificationCenterPopover
+                notifications={notifications}
+                unreadCount={unreadNotificationsCount}
+                prefs={notificationPrefs}
+                browserPermission={browserNotificationPermission}
+                hasActiveDevicePush={hasActiveDevicePush}
+                onMarkRead={onMarkNotificationRead}
+                onMarkAllRead={onMarkAllNotificationsRead}
+                onOpenNotification={onOpenNotification}
+                onOpenPreferences={onOpenNotificationPreferences}
+                onPromptEnableNotifications={onPromptEnableNotifications}
+              />
+            )}
+
             {isLoggedIn ? (
               <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
                 <button
@@ -294,6 +368,20 @@ export const Navbar: React.FC<Props> = ({
 
           {/* Mobile menu toggle */}
           <div className="flex sm:hidden items-center gap-2">
+            {isLoggedIn && (
+              <NotificationCenterPopover
+                notifications={notifications}
+                unreadCount={unreadNotificationsCount}
+                prefs={notificationPrefs}
+                browserPermission={browserNotificationPermission}
+                hasActiveDevicePush={hasActiveDevicePush}
+                onMarkRead={onMarkNotificationRead}
+                onMarkAllRead={onMarkAllNotificationsRead}
+                onOpenNotification={onOpenNotification}
+                onOpenPreferences={onOpenNotificationPreferences}
+                onPromptEnableNotifications={onPromptEnableNotifications}
+              />
+            )}
             {isLoggedIn ? (
               <button
                 onClick={onOpenDashboard}

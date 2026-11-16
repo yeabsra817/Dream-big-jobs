@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
 
 const Type = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -1973,17 +1974,39 @@ function loadUserProfiles(): Record<string, any> {
   return {};
 }
 
-function saveUserProfile(profile: any): { savedProfile: any; isNewRegistration: boolean } {
+let userEngineHandle: ReturnType<typeof registerUserNotificationAndAnalyticsRoutes> | null = null;
+
+function saveUserProfileMap(profiles: Record<string, any>): void {
+  ensureRuntimeDataDir();
+  writeJsonFileAtomic(USER_PROFILES_FILE, profiles);
+}
+
+function saveUserProfile(profile: any, isOwnerActor: boolean = false): { savedProfile: any; isNewRegistration: boolean } {
   ensureRuntimeDataDir();
   const all = loadUserProfiles();
   const existing = all[profile.uid] || null;
   const isNewRegistration = !existing;
-  const { isAdmin: _stripAdmin, role: _stripRole, ...safeIncoming } = profile || {};
+  const {
+    isAdmin: _stripAdmin,
+    role: _stripRole,
+    accountStatus: incomingStatus,
+    suspendedAt: _stripSuspAt,
+    suspendedReason: _stripSuspReason,
+    ...safeIncoming
+  } = profile || {};
+  const nowIso = new Date().toISOString();
+  const resolvedAccountStatus = isOwnerActor && incomingStatus
+    ? incomingStatus
+    : existing?.accountStatus || 'active';
+
   const merged = {
     ...(existing || {}),
     ...safeIncoming,
     uid: profile.uid,
     accountRole: safeIncoming.accountRole || existing?.accountRole || 'staff',
+    accountStatus: resolvedAccountStatus,
+    lastActiveAt: nowIso,
+    lastLoginAt: safeIncoming.lastLoginAt || existing?.lastLoginAt || nowIso,
     areasOfExpertise: Array.isArray(safeIncoming.areasOfExpertise)
       ? safeIncoming.areasOfExpertise
       : existing?.areasOfExpertise || [],
@@ -2000,8 +2023,11 @@ function saveUserProfile(profile: any): { savedProfile: any; isNewRegistration: 
     education: Array.isArray(safeIncoming.education) ? safeIncoming.education : existing?.education || [],
     experience: Array.isArray(safeIncoming.experience) ? safeIncoming.experience : existing?.experience || [],
     documents: Array.isArray(safeIncoming.documents) ? safeIncoming.documents : existing?.documents || [],
-    createdAt: existing?.createdAt || safeIncoming.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    preferredSectors: Array.isArray(safeIncoming.preferredSectors)
+      ? safeIncoming.preferredSectors
+      : existing?.preferredSectors || (safeIncoming.preferredIndustry ? [safeIncoming.preferredIndustry] : []),
+    createdAt: existing?.createdAt || safeIncoming.createdAt || nowIso,
+    updatedAt: nowIso,
   };
   all[profile.uid] = merged;
   writeJsonFileAtomic(USER_PROFILES_FILE, all);
@@ -2071,7 +2097,7 @@ function handleSaveProfileRequest(req: Request, res: Response): void {
       res.status(403).json({ error: 'Access denied: You can only create or update your own profile.' });
       return;
     }
-    const { savedProfile, isNewRegistration } = saveUserProfile(profile);
+    const { savedProfile, isNewRegistration } = saveUserProfile(profile, isPersistentOwnerRequest(req));
     if (isNewRegistration) {
       appendAuditLog({
         action: 'staff_registered',
@@ -2098,6 +2124,9 @@ function handleSaveProfileRequest(req: Request, res: Response): void {
         summary: `Updated permanent profile for ${savedProfile.fullName || savedProfile.email}`,
         severity: 'info',
       });
+    }
+    if (userEngineHandle) {
+      userEngineHandle.onUserProfileSaved(savedProfile, isNewRegistration).catch(() => {});
     }
     res.json({ success: true, profile: savedProfile, isNewRegistration });
   } catch (err: any) {
@@ -10426,6 +10455,24 @@ Return strict JSON:
   // PERMANENT STORAGE, BACKUPS, 24/7 AUTO-RECOVERY, AUDIT LOGS & STAFF ADMIN
   // =========================================================================
 
+  userEngineHandle = registerUserNotificationAndAnalyticsRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    saveUserProfileMap,
+    loadJobApplications,
+    loadPersistedSettings,
+    loadPersistedInternationalData,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification,
+  });
+
   function listPersistentBackups(): any[] {
     ensureRuntimeDataDir();
     try {
@@ -10478,15 +10525,18 @@ Return strict JSON:
     const analyticsEvents = loadJsonFileSafe<any[]>(ANALYTICS_FILE, []);
     const telegramLogs = loadJsonFileSafe<any[]>(TELEGRAM_LOGS_FILE, []);
     const botHealth = loadBotHealthState();
+    const userEngineBackupData = userEngineHandle ? userEngineHandle.getPersistentFilesForBackup() : {};
 
     const payload = {
       id,
-      version: '3.0.0',
+      version: '3.1.0',
       trigger,
       actorEmail,
       createdAt: nowIso,
       counts: {
-        vacancies: 0,
+        vacancies: Array.isArray((userEngineBackupData as any).vacanciesCatalog)
+          ? (userEngineBackupData as any).vacanciesCatalog.length
+          : 0,
         staffProfiles: Object.keys(userProfiles || {}).length,
         applications: Array.isArray(jobApplications) ? jobApplications.length : 0,
         internationalJobs: Array.isArray(intlData?.internationalJobs) ? intlData.internationalJobs.length : 0,
@@ -10502,6 +10552,7 @@ Return strict JSON:
         analyticsEventsCount: Array.isArray(analyticsEvents) ? analyticsEvents.length : 0,
         telegramLogs: Array.isArray(telegramLogs) ? telegramLogs.slice(0, 300) : [],
         botHealth,
+        ...userEngineBackupData,
       },
     };
 
@@ -10829,6 +10880,9 @@ Return strict JSON:
     }
     if (d.internationalData && typeof d.internationalData === 'object') {
       savePersistedInternationalData(d.internationalData);
+    }
+    if (userEngineHandle) {
+      userEngineHandle.restorePersistentFilesFromBackup(d);
     }
 
     appendAuditLog({

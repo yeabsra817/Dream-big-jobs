@@ -102,7 +102,33 @@ import { CategoryCard } from './components/CategoryCard';
 import { Footer } from './components/Footer';
 import { HiddenDeveloperLogin } from './components/HiddenDeveloperLogin';
 import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
-import { JobSeekerProfile, UserJobApplication, DEFAULT_JOB_SEEKER_PROFILE } from './types/jobSeeker';
+import {
+  JobSeekerProfile,
+  UserJobApplication,
+  DEFAULT_JOB_SEEKER_PROFILE,
+  NotificationPreferencesRecord,
+  NotificationPermissionState,
+  UserNotificationItem,
+} from './types/jobSeeker';
+import {
+  computeStaffOpportunityRecommendations,
+} from './utils/recommendationEngine';
+import {
+  registerServiceWorkerSafe,
+  getBrowserNotificationPermission,
+  fetchUserNotificationPreferences,
+  saveUserNotificationPreferences,
+  checkCurrentDevicePushHealth,
+  evaluateNotificationPromptRule,
+  requestAndEnableNotifications,
+  fetchUserNotificationsServer,
+  markUserNotificationReadServer,
+  syncNotificationsOnReconnect,
+  syncVacanciesToServerCatalog,
+  deleteVacanciesFromServerCatalog,
+  recalculateUserRecommendationsServer,
+} from './lib/notificationService';
+import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import {
   fetchCustomerVisitCount,
   generateVisitCountAiInsights,
@@ -205,9 +231,31 @@ export default function App() {
 
   // Job Seeker Dashboard & Application Modal States
   const [isJobSeekerDashboardOpen, setIsJobSeekerDashboardOpen] = useState(false);
+  const [jobSeekerInitialTab, setJobSeekerInitialTab] = useState<
+    'overview' | 'recommendations' | 'notifications' | 'professional'
+  >('overview');
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [applyTargetVacancy, setApplyTargetVacancy] = useState<Vacancy | null>(null);
   const [userApplications, setUserApplications] = useState<UserJobApplication[]>([]);
+
+  // Notifications, Push & Reconnect Sync State
+  const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferencesRecord | null>(null);
+  const [browserPerm, setBrowserPerm] = useState<NotificationPermissionState>(() =>
+    getBrowserNotificationPermission()
+  );
+  const [hasActiveDevicePush, setHasActiveDevicePush] = useState(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [notificationModalReason, setNotificationModalReason] = useState<
+    'first_time' | 'not_enabled_yet' | 'renew_device' | 'blocked_in_browser' | 'unsupported'
+  >('first_time');
+  const alreadyPromptedThisLoginRef = React.useRef(false);
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isSyncingReconnect, setIsSyncingReconnect] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
 
   // Saved Jobs Bookmarking State
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(() => {
@@ -248,6 +296,56 @@ export default function App() {
   const [isCareerCoachLoading, setIsCareerCoachLoading] = useState(false);
   const [careerCoachError, setCareerCoachError] = useState<string | null>(null);
 
+  // Helper to load user notifications, device push health & enforce Req 10F prompt rule
+  const hydrateUserNotificationsAndPrompt = React.useCallback(
+    async (uid: string, email?: string | null, evaluatePrompt = true) => {
+      if (!uid) return;
+      try {
+        const [prefs, notifRes] = await Promise.all([
+          fetchUserNotificationPreferences(uid, email),
+          fetchUserNotificationsServer(uid, email),
+        ]);
+        setNotificationPrefs(prefs);
+        setUserNotifications(notifRes.notifications);
+        setUnreadNotificationsCount(notifRes.unreadCount);
+
+        const health = await checkCurrentDevicePushHealth(uid, prefs, email);
+        setBrowserPerm(health.browserPermission);
+        setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+
+        // Background recommendation + missed match refresh
+        recalculateUserRecommendationsServer(uid, email, true)
+          .then((res) => {
+            if (res.newNotifications && res.newNotifications.length > 0) {
+              fetchUserNotificationsServer(uid, email).then((fresh) => {
+                setUserNotifications(fresh.notifications);
+                setUnreadNotificationsCount(fresh.unreadCount);
+              });
+            }
+          })
+          .catch(() => {});
+
+        if (evaluatePrompt && !alreadyPromptedThisLoginRef.current) {
+          const rule = evaluateNotificationPromptRule({
+            prefs,
+            browserPermission: health.browserPermission,
+            hasActiveDeviceSub: health.hasActiveSubscriptionOnThisDevice,
+            needsDeviceRenewal: health.needsRenewalOnThisDevice,
+            alreadyPromptedThisLogin: alreadyPromptedThisLoginRef.current,
+          });
+          alreadyPromptedThisLoginRef.current = true;
+          if (rule.shouldShowModal && rule.reason !== 'already_active') {
+            setNotificationModalReason(rule.reason);
+            setIsNotificationModalOpen(true);
+          }
+        }
+      } catch (err) {
+        console.warn('Notification hydration notice:', err);
+      }
+    },
+    []
+  );
+
   // Load Initial Data (Public data: site settings & published vacancies)
   useEffect(() => {
     // Track real visitor landing immediately so quick visits or slow mobile loads are never missed
@@ -287,6 +385,9 @@ export default function App() {
         setInternationalJobs(loadedIntlJobs);
         setImmigrationPathways(loadedPathways);
         setExperienceScholarships(loadedScholarships);
+
+        // Seed server-side vacancy catalog if empty so matching engine always has verified jobs
+        syncVacanciesToServerCatalog(loadedVacancies, { mode: 'seed_if_empty' });
 
         // Ensure Always-On GA4 measurement ID from siteSettings is initialized
         if (loadedSettings.gaTrackingEnabled !== false) {
@@ -440,6 +541,9 @@ export default function App() {
             await saveJobSeekerProfile(newProfile);
             setUserProfile(newProfile);
           }
+
+          // Hydrate notifications, verify current device push status & apply strict Req 10F rule
+          await hydrateUserNotificationsAndPrompt(user.uid, user.email, true);
         } catch (e) {
           console.warn('Profile sync notice:', e);
         }
@@ -447,6 +551,11 @@ export default function App() {
         setCurrentUser(null);
         setUserProfile(null);
         setUserApplications([]);
+        setUserNotifications([]);
+        setUnreadNotificationsCount(0);
+        setNotificationPrefs(null);
+        setHasActiveDevicePush(false);
+        alreadyPromptedThisLoginRef.current = false;
         setAnalyticsUserId(null);
         // Preserve password-authenticated developer session if active
         const activeSessionEmail = getActiveAdminSessionEmail();
@@ -475,7 +584,82 @@ export default function App() {
       clearInterval(visitInterval);
       clearTimeout(prefetchTimer);
     };
-  }, []);
+  }, [hydrateUserNotificationsAndPrompt]);
+
+  // Register Service Worker, PWA Install Prompt, Online/Offline Reconnect Sync & Deep-Link Message Handler
+  useEffect(() => {
+    registerServiceWorkerSafe();
+
+    const triggerReconnectSync = async () => {
+      if (!userProfile?.uid) return;
+      setIsSyncingReconnect(true);
+      try {
+        const res = await syncNotificationsOnReconnect(userProfile.uid, userProfile.email);
+        if (res) {
+          setUserNotifications(res.notifications);
+          setUnreadNotificationsCount(res.unreadCount);
+        }
+      } finally {
+        setIsSyncingReconnect(false);
+      }
+    };
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      triggerReconnectSync();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && userProfile?.uid) {
+        triggerReconnectSync();
+      }
+    };
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(e);
+    };
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'HOPELAND_RECONNECT_SYNC_TRIGGER') {
+        triggerReconnectSync();
+      } else if (event.data?.type === 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION') {
+        const { vacancyId, notificationId } = event.data;
+        if (notificationId && userProfile?.uid) {
+          markUserNotificationReadServer(userProfile.uid, { notificationId, read: true }, userProfile.email)
+            .then((res) => {
+              setUserNotifications(res.notifications);
+              setUnreadNotificationsCount(res.unreadCount);
+            })
+            .catch(() => {});
+        }
+        if (vacancyId) {
+          const found = vacancies.find((v) => v.id === vacancyId);
+          if (found) {
+            setSelectedVacancy(found);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      }
+    };
+  }, [userProfile?.uid, userProfile?.email, vacancies]);
 
   // Browser navigation popstate listener for direct job URLs and Back/Forward buttons
   useEffect(() => {
@@ -537,8 +721,10 @@ export default function App() {
             if (healed.changedCount > 0) {
               setVacancies(healed.healedVacancies);
               saveBatchVacancies(healed.healedVacancies);
+              syncVacanciesToServerCatalog(healed.healedVacancies, { mode: 'replace' });
             } else {
               setVacancies(all);
+              syncVacanciesToServerCatalog(all, { mode: 'replace' });
             }
           }
           if (dups.length > 0) setDuplicateReports(dups);
@@ -710,85 +896,16 @@ export default function App() {
     }
   };
 
-  // Personalized recommendations based on candidate's experience and position
+  // Personalized recommendations across all verified sectors using shared engine
   const recommendedVacancies = useMemo(() => {
     if (!userProfile) return [];
-
-    const desiredTitle = (userProfile.desiredJobTitle || '').toLowerCase().trim();
-    const pastTitles = (userProfile.experience || []).map((e) => (e.jobTitle || '').toLowerCase().trim()).filter(Boolean);
-    const allUserTitles = [desiredTitle, ...pastTitles].filter(Boolean);
-    const userExpYears = parseInt(userProfile.yearsOfExperience || '0', 10) || 0;
-    const userExpStr = (userProfile.yearsOfExperience || '').toLowerCase();
-    const userSkills = (userProfile.skills || []).map((s) => s.toLowerCase().trim()).filter(Boolean);
-    const preferredInd = (userProfile.preferredIndustry || '').toLowerCase();
-
-    return publishedVacancies
-      .map((vac) => {
-        let score = 0;
-        const reasons: string[] = [];
-
-        const vacTitle = (vac.title || '').toLowerCase();
-        const vacCat = (vac.category || '').toLowerCase();
-        const vacDesc = (vac.description || '').toLowerCase();
-        const vacReqs = (vac.requiredSkills || []).join(' ').toLowerCase();
-        const vacExp = (vac.experienceYears || '').toLowerCase();
-
-        // 1. Position / Title Match (High Priority)
-        const titleMatch = allUserTitles.some((t) => t && (vacTitle.includes(t) || t.includes(vacTitle)));
-        if (titleMatch) {
-          score += 45;
-          reasons.push('Position Match');
-        } else if (allUserTitles.some((t) => t.split(/\s+/).some((word) => word.length > 3 && vacTitle.includes(word)))) {
-          score += 25;
-          reasons.push('Role Match');
-        }
-
-        // 2. Industry / Category Match
-        if (preferredInd && (vacCat.includes(preferredInd) || preferredInd.includes(vacCat))) {
-          score += 25;
-          reasons.push('Preferred Sector');
-        }
-
-        // 3. Experience Match
-        if (userExpStr.includes('fresh') || userExpStr.includes('entry') || userExpYears <= 1) {
-          if (vacExp.includes('fresh') || vacExp.includes('0') || vacExp.includes('entry') || vacCat.includes('internship')) {
-            score += 20;
-            reasons.push('Entry-Level Match');
-          }
-        } else {
-          const vacExpYears = parseInt(vacExp, 10) || 0;
-          if (vacExpYears > 0 && Math.abs(userExpYears - vacExpYears) <= 2) {
-            score += 20;
-            reasons.push(`Experience (~${userExpYears} yrs)`);
-          } else if (userExpYears >= 3 && (vacExp.includes('senior') || vacExp.includes('lead') || vacExpYears >= 3)) {
-            score += 15;
-            reasons.push('Seniority Level');
-          }
-        }
-
-        // 4. Skills Match
-        const matchedSkills = userSkills.filter((s) => s.length > 2 && (vacDesc.includes(s) || vacReqs.includes(s) || vacTitle.includes(s)));
-        if (matchedSkills.length > 0) {
-          score += Math.min(20, matchedSkills.length * 6);
-          reasons.push(`${matchedSkills.length} Matched Skills`);
-        }
-
-        // Fallback default score if partially aligned with sector
-        if (score === 0 && (vacCat.includes('bank') || vacCat.includes('it') || vacCat.includes('company'))) {
-          score = 15;
-        }
-
-        const matchPercentage = Math.min(99, Math.max(65, score));
-        return {
-          vacancy: vac,
-          score,
-          matchPercentage,
-          reasons: reasons.slice(0, 2),
-        };
-      })
-      .filter((item) => item.score >= 15)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 4);
+    return computeStaffOpportunityRecommendations(
+      userProfile,
+      publishedVacancies,
+      [],
+      [],
+      6
+    );
   }, [publishedVacancies, userProfile]);
 
   // Continuous 24/7 Search Bar Activity Tracking
@@ -973,6 +1090,11 @@ export default function App() {
       return [updated, ...prev];
     });
     await saveVacancy(updated);
+    syncVacanciesToServerCatalog([updated], {
+      mode: 'merge',
+      changedVacancyId: updated.id,
+      changeType: existing ? 'updated' : 'published',
+    });
     void maybeAutoPublishVacancyToTelegram(updated, existing);
   };
 
@@ -983,16 +1105,19 @@ export default function App() {
       return Array.from(map.values());
     });
     await saveBatchVacancies(newVacancies);
+    syncVacanciesToServerCatalog(newVacancies, { mode: 'merge' });
   };
 
   const handleDeleteVacancy = async (id: string) => {
     setVacancies((prev) => prev.filter((v) => v.id !== id));
     await deleteVacancy(id);
+    deleteVacanciesFromServerCatalog([id]);
   };
 
   const handleBatchDeleteVacancies = async (ids: string[]) => {
     setVacancies((prev) => prev.filter((v) => !ids.includes(v.id)));
     await deleteBatchVacancies(ids);
+    deleteVacanciesFromServerCatalog(ids);
   };
 
   const handleUpdateVacancyStatus = async (
@@ -1014,6 +1139,11 @@ export default function App() {
     setVacancies((prev) => prev.map((v) => (v.id === id ? updated : v)));
     try {
       await saveVacancy(updated);
+      syncVacanciesToServerCatalog([updated], {
+        mode: 'merge',
+        changedVacancyId: updated.id,
+        changeType: status === 'published' ? 'published' : 'updated',
+      });
       void maybeAutoPublishVacancyToTelegram(updated, target);
     } catch (err) {
       console.warn('Update vacancy status note:', err);
@@ -1264,7 +1394,10 @@ export default function App() {
           setUserAuthModalMode(mode);
           setIsUserAuthModalOpen(true);
         }}
-        onOpenDashboard={() => setIsJobSeekerDashboardOpen(true)}
+        onOpenDashboard={() => {
+          setJobSeekerInitialTab('overview');
+          setIsJobSeekerDashboardOpen(true);
+        }}
         onSignOutUser={async () => {
           try {
             await signOut(auth);
@@ -1272,14 +1405,72 @@ export default function App() {
           try {
             localStorage.removeItem('hopelandjobs_current_user');
           } catch {}
+          alreadyPromptedThisLoginRef.current = false;
           setCurrentUser(null);
           setUserProfile(null);
           setUserApplications([]);
+          setUserNotifications([]);
+          setUnreadNotificationsCount(0);
+          setNotificationPrefs(null);
+          setHasActiveDevicePush(false);
           setIsJobSeekerDashboardOpen(false);
           setAnalyticsUserId(null);
         }}
         language={language}
         onToggleLanguage={() => setLanguage(language === 'en' ? 'am' : 'en')}
+        notifications={userNotifications}
+        unreadNotificationsCount={unreadNotificationsCount}
+        notificationPrefs={notificationPrefs}
+        browserNotificationPermission={browserPerm}
+        hasActiveDevicePush={hasActiveDevicePush}
+        onMarkNotificationRead={async (notifId, read) => {
+          if (!userProfile?.uid) return;
+          const res = await markUserNotificationReadServer(userProfile.uid, { notificationId: notifId, read }, userProfile.email);
+          setUserNotifications(res.notifications);
+          setUnreadNotificationsCount(res.unreadCount);
+        }}
+        onMarkAllNotificationsRead={async () => {
+          if (!userProfile?.uid) return;
+          const res = await markUserNotificationReadServer(userProfile.uid, { markAll: true }, userProfile.email);
+          setUserNotifications(res.notifications);
+          setUnreadNotificationsCount(res.unreadCount);
+        }}
+        onOpenNotification={(notif) => {
+          if (!notif.read && userProfile?.uid) {
+            markUserNotificationReadServer(userProfile.uid, { notificationId: notif.id, read: true }, userProfile.email)
+              .then((res) => {
+                setUserNotifications(res.notifications);
+                setUnreadNotificationsCount(res.unreadCount);
+              })
+              .catch(() => {});
+          }
+          const matchedVac = vacancies.find((v) => v.id === notif.vacancyId);
+          if (matchedVac) {
+            handleSelectVacancy(matchedVac);
+          } else if (notif.applicationUrl || notif.jobUrl) {
+            window.open(notif.applicationUrl || notif.jobUrl, '_blank', 'noopener,noreferrer');
+          }
+        }}
+        onOpenNotificationPreferences={() => {
+          setJobSeekerInitialTab('notifications');
+          setIsJobSeekerDashboardOpen(true);
+        }}
+        onPromptEnableNotifications={() => {
+          setNotificationModalReason(browserPerm === 'denied' ? 'blocked_in_browser' : 'not_enabled_yet');
+          setIsNotificationModalOpen(true);
+        }}
+        canInstallApp={Boolean(deferredInstallPrompt)}
+        onInstallApp={async () => {
+          if (!deferredInstallPrompt) return;
+          try {
+            await deferredInstallPrompt.prompt();
+            await deferredInstallPrompt.userChoice;
+          } finally {
+            setDeferredInstallPrompt(null);
+          }
+        }}
+        isOnline={isOnline}
+        isSyncingReconnect={isSyncingReconnect}
       />
 
       {/* Main Content Area */}
@@ -1862,18 +2053,23 @@ export default function App() {
                         Explore vacancies in your chosen sector below
                       </p>
                       <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                        We are continuously analyzing new Ethiopian announcements matching your background.
+                        We are continuously analyzing verified announcements across Banking, WASH, NGOs, Government, Embassies, Airlines, and Corporate sectors matching your background.
                       </p>
                       <button
-                        onClick={() => setIsJobSeekerDashboardOpen(true)}
+                        onClick={() => {
+                          setJobSeekerInitialTab('professional');
+                          setIsJobSeekerDashboardOpen(true);
+                        }}
                         className="mt-2 px-4 py-2 bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                       >
-                        Refine Job Title & Skills
+                        Refine Job Title &amp; Sectors
                       </button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {recommendedVacancies.map(({ vacancy: vac, matchPercentage, reasons }) => {
+                      {recommendedVacancies.map((rec) => {
+                        const vac = rec.vacancy;
+                        if (!vac) return null;
                         const days = getDaysLeft(vac.applicationDeadline);
                         const isSaved = savedJobIds.has(vac.id);
                         return (
@@ -1884,22 +2080,16 @@ export default function App() {
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-[10px] font-black tracking-wide text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
-                                      {matchPercentage}% Match
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    <span className="font-black font-mono tabular-nums text-emerald-700">
+                                      {rec.matchScore}% Match ({rec.eligibilityStatus})
                                     </span>
-                                    {reasons.map((r, i) => (
-                                      <span
-                                        key={i}
-                                        className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"
-                                      >
-                                        {r}
-                                      </span>
-                                    ))}
+                                    <span aria-hidden="true" className="text-slate-300">·</span>
+                                    <span className="text-slate-600 font-medium">{vac.category}</span>
                                   </div>
                                   <h3
                                     onClick={() => handleSelectVacancy(vac)}
-                                    className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1 pt-1"
+                                    className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1 pt-0.5"
                                   >
                                     {vac.title}
                                   </h3>
@@ -1916,6 +2106,16 @@ export default function App() {
                                   <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
                                 </button>
                               </div>
+
+                              <div className="text-[11px] text-emerald-800 font-medium line-clamp-1">
+                                Why it matches: {rec.matchReasons.slice(0, 2).join(' · ')}
+                              </div>
+
+                              {rec.missingMandatoryQualifications && rec.missingMandatoryQualifications.length > 0 && (
+                                <div className="text-[11px] text-amber-800 font-semibold line-clamp-1">
+                                  Check requirement: {rec.missingMandatoryQualifications[0]}
+                                </div>
+                              )}
 
                               <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                 <span className="flex items-center gap-1 truncate">
@@ -2433,7 +2633,10 @@ export default function App() {
                   ]);
                   if (p) setUserProfile(p);
                   setUserApplications(apps);
+                  await hydrateUserNotificationsAndPrompt(user.uid, user.email, true);
                 } catch {}
+              } else if (profile?.uid) {
+                await hydrateUserNotificationsAndPrompt(profile.uid, profile.email, true);
               }
               if (applyTargetVacancy) {
                 setIsApplicationModalOpen(true);
@@ -2441,6 +2644,37 @@ export default function App() {
             }}
           />
         </Suspense>
+      )}
+
+      {/* Notification Permission Prompt Modal (Strict Req 10 Rules) */}
+      {isNotificationModalOpen && userProfile?.uid && (
+        <NotificationPermissionModal
+          isOpen={isNotificationModalOpen}
+          uid={userProfile.uid}
+          userEmail={userProfile.email}
+          reason={notificationModalReason}
+          initialEmailAlerts={notificationPrefs?.channels?.emailAlerts ?? true}
+          onClose={(dismissed) => {
+            setIsNotificationModalOpen(false);
+            if (dismissed && userProfile?.uid) {
+              saveUserNotificationPreferences(userProfile.uid, { incrementDismiss: true }, userProfile.email)
+                .then((p) => {
+                  if (p) setNotificationPrefs(p);
+                })
+                .catch(() => {});
+            }
+          }}
+          onEnabled={async (prefs) => {
+            if (prefs) setNotificationPrefs(prefs);
+            setIsNotificationModalOpen(false);
+            const health = await checkCurrentDevicePushHealth(userProfile.uid, prefs, userProfile.email);
+            setBrowserPerm(health.browserPermission);
+            setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+            const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
+            setUserNotifications(fresh.notifications);
+            setUnreadNotificationsCount(fresh.unreadCount);
+          }}
+        />
       )}
 
       {/* Job Seeker Profile & Dashboard Modal */}
@@ -2453,10 +2687,64 @@ export default function App() {
             vacancies={vacancies}
             internationalJobs={internationalJobs}
             experienceScholarships={experienceScholarships}
-            onClose={() => setIsJobSeekerDashboardOpen(false)}
+            initialTab={jobSeekerInitialTab}
+            notifications={userNotifications}
+            unreadNotificationsCount={unreadNotificationsCount}
+            notificationPrefs={notificationPrefs}
+            browserNotificationPermission={browserPerm}
+            hasActiveDevicePush={hasActiveDevicePush}
+            onClose={() => {
+              setIsJobSeekerDashboardOpen(false);
+              setJobSeekerInitialTab('overview');
+            }}
             onUpdateProfile={async (updated) => {
               await saveJobSeekerProfile(updated);
               setUserProfile(updated);
+              // Refresh notifications & recommendations immediately after profile update
+              const fresh = await fetchUserNotificationsServer(updated.uid, updated.email);
+              setUserNotifications(fresh.notifications);
+              setUnreadNotificationsCount(fresh.unreadCount);
+            }}
+            onUpdateNotificationPrefs={async (patch) => {
+              if (!userProfile?.uid) return;
+              const saved = await saveUserNotificationPreferences(userProfile.uid, patch, userProfile.email);
+              if (saved) setNotificationPrefs(saved);
+            }}
+            onEnableDevicePush={async () => {
+              if (!userProfile?.uid) return;
+              const res = await requestAndEnableNotifications(userProfile.uid, {
+                emailAlerts: notificationPrefs?.channels?.emailAlerts ?? true,
+                websiteBell: true,
+                email: userProfile.email,
+              });
+              if (res.preferences) setNotificationPrefs(res.preferences);
+              const health = await checkCurrentDevicePushHealth(
+                userProfile.uid,
+                res.preferences,
+                userProfile.email
+              );
+              setBrowserPerm(health.browserPermission);
+              setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+            }}
+            onMarkNotificationRead={async (notifId, read) => {
+              if (!userProfile?.uid) return;
+              const res = await markUserNotificationReadServer(
+                userProfile.uid,
+                { notificationId: notifId, read },
+                userProfile.email
+              );
+              setUserNotifications(res.notifications);
+              setUnreadNotificationsCount(res.unreadCount);
+            }}
+            onMarkAllNotificationsRead={async () => {
+              if (!userProfile?.uid) return;
+              const res = await markUserNotificationReadServer(
+                userProfile.uid,
+                { markAll: true },
+                userProfile.email
+              );
+              setUserNotifications(res.notifications);
+              setUnreadNotificationsCount(res.unreadCount);
             }}
             onSelectVacancy={handleSelectVacancy}
           />

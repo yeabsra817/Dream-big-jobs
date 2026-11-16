@@ -57,6 +57,11 @@ export interface JobSeekerProfile {
 
   // Staff & Account Classification
   accountRole?: StaffAccountRole;
+  accountStatus?: 'active' | 'inactive' | 'suspended';
+  suspendedAt?: string;
+  suspendedReason?: string;
+  lastActiveAt?: string;
+  lastLoginAt?: string;
   staffDepartmentOrSector?: string;
   currentPosition?: string;
   previousPositions?: string[];
@@ -65,6 +70,7 @@ export interface JobSeekerProfile {
   employmentStatus: 'employed' | 'unemployed' | 'student' | 'freelance' | 'other';
   desiredJobTitle: string;
   preferredIndustry: string;
+  preferredSectors?: string[];
   yearsOfExperience: string;
   expectedSalaryEtb: string;
   preferredEmploymentType: 'Full-time' | 'Part-time' | 'Contract' | 'Internship' | 'Remote' | 'Any';
@@ -95,6 +101,160 @@ export interface JobSeekerProfile {
   profileCompletionPercentage: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export type NotificationPermissionState = 'default' | 'granted' | 'denied' | 'unsupported';
+export type NotificationSubscriptionStatus = 'active' | 'none' | 'expired' | 'revoked';
+
+export interface NotificationDeviceSubscription {
+  deviceId: string;
+  deviceLabel: string;
+  platform: string;
+  endpoint?: string;
+  subscription?: {
+    endpoint: string;
+    expirationTime?: number | null;
+    keys?: {
+      p256dh?: string;
+      auth?: string;
+    };
+  };
+  active: boolean;
+  createdAt: string;
+  lastVerifiedAt: string;
+  lastDeliveredAt?: string;
+  lastFailureReason?: string;
+}
+
+export interface NotificationPreferencesRecord {
+  userId: string;
+  permissionStatus: NotificationPermissionState;
+  subscriptionStatus: NotificationSubscriptionStatus;
+  enabledAt?: string;
+  permissionVerifiedAt?: string;
+  lastSuccessfulDeliveryAt?: string;
+  promptDismissCount?: number;
+  channels: {
+    websiteBell: boolean;
+    browserPush: boolean;
+    mobilePush: boolean;
+    emailAlerts: boolean;
+  };
+  alertTypes: {
+    newMatches: boolean;
+    deadlineReminders: boolean;
+    jobChanges: boolean;
+    sectorUpdates: boolean;
+  };
+  preferredSectors?: string[];
+  deviceSubscriptions: NotificationDeviceSubscription[];
+  updatedAt: string;
+}
+
+export type UserAlertKind =
+  | 'new_match'
+  | 'deadline_reminder'
+  | 'job_updated'
+  | 'sector_opportunity'
+  | 'system_test';
+
+export interface UserNotificationItem {
+  id: string;
+  userId: string;
+  vacancyId: string;
+  sourceType: 'domestic_job' | 'international_job' | 'scholarship' | 'system';
+  alertKind: UserAlertKind;
+  dedupeKey: string;
+  title: string;
+  employer: string;
+  location: string;
+  category: string;
+  salary?: string;
+  deadline?: string;
+  matchScore: number;
+  matchReasonSummary: string;
+  matchReasons: string[];
+  missingMandatoryQualifications: string[];
+  applicationUrl?: string;
+  jobUrl: string;
+  read: boolean;
+  readAt?: string;
+  channels: {
+    website: 'delivered';
+    push: 'sent' | 'failed' | 'skipped' | 'queued';
+    email: 'sent' | 'failed' | 'skipped_no_smtp' | 'skipped' | 'queued';
+  };
+  createdAt: string;
+  expiresAt?: string;
+  updatedAt: string;
+}
+
+export interface RegisteredUserAnalyticsSummary {
+  generatedAt: string;
+  metrics: {
+    totalRegisteredUsers: number;
+    totalActiveUsers: number;
+    totalInactiveUsers: number;
+    totalSuspendedUsers: number;
+    newRegistrationsToday: number;
+    newRegistrationsThisWeek: number;
+    newRegistrationsThisMonth: number;
+    completedProfilesCount: number;
+    incompleteProfilesCount: number;
+    notificationsEnabledCount: number;
+    usersReceivingRecommendationsCount: number;
+  };
+  deliveryHealth: {
+    queuePending: number;
+    queueFailed: number;
+    totalNotificationsSent: number;
+    pushDeliveriesCount: number;
+    emailDeliveriesCount: number;
+    smtpConfigured: boolean;
+    recentFailures: Array<{
+      id: string;
+      userId: string;
+      channel: string;
+      reason: string;
+      attempts: number;
+      updatedAt: string;
+    }>;
+  };
+  registrationTimeline: Array<{
+    date: string;
+    count: number;
+  }>;
+  sectorBreakdown: Array<{
+    sector: string;
+    count: number;
+  }>;
+  suspiciousDuplicates: Array<{
+    reason: string;
+    uids: string[];
+    emails: string[];
+  }>;
+  users: Array<{
+    uid: string;
+    fullName: string;
+    email: string;
+    accountRole: StaffAccountRole;
+    accountStatus: 'active' | 'inactive' | 'suspended';
+    suspendedReason?: string;
+    locationCity: string;
+    desiredJobTitle: string;
+    preferredIndustry: string;
+    profileCompletionPercentage: number;
+    isProfileComplete: boolean;
+    notificationsEnabled: boolean;
+    permissionStatus: NotificationPermissionState;
+    subscriptionStatus: NotificationSubscriptionStatus;
+    emailAlertsEnabled: boolean;
+    recommendationsCount: number;
+    unreadNotificationsCount: number;
+    applicationsCount: number;
+    registeredAt: string;
+    lastActiveAt?: string;
+  }>;
 }
 
 export type ApplicationStatus =
@@ -187,12 +347,14 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
   locationCity: 'Addis Ababa',
   locationRegion: 'Addis Ababa',
   accountRole: 'staff',
+  accountStatus: 'active',
   staffDepartmentOrSector: '',
   currentPosition: '',
   previousPositions: [],
   employmentStatus: 'unemployed',
   desiredJobTitle: '',
   preferredIndustry: 'Banking and Financial Institutions',
+  preferredSectors: ['Banking and Financial Institutions'],
   yearsOfExperience: '0-1 Years (Entry Level)',
   expectedSalaryEtb: '',
   preferredEmploymentType: 'Full-time',

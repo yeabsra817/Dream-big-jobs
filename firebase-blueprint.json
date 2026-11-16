@@ -151,7 +151,13 @@
         "currentPosition": { "type": "string", "maxLength": 200 },
         "staffDepartmentOrSector": { "type": "string", "maxLength": 200 },
         "accountRole": { "type": "string", "enum": ["staff", "job_seeker"] },
+        "accountStatus": { "type": "string", "enum": ["active", "inactive", "suspended"] },
+        "suspendedAt": { "type": "string", "maxLength": 100 },
+        "suspendedReason": { "type": "string", "maxLength": 500 },
+        "lastActiveAt": { "type": "string", "maxLength": 100 },
+        "lastLoginAt": { "type": "string", "maxLength": 100 },
         "preferredIndustry": { "type": "string", "maxLength": 200 },
+        "preferredSectors": { "type": "array", "description": "List of preferred professional sectors" },
         "yearsOfExperience": { "type": "string", "maxLength": 100 },
         "previousPositions": { "type": "array", "description": "Previous positions held by staff member" },
         "areasOfExpertise": { "type": "array", "description": "Core areas of expertise" },
@@ -161,6 +167,55 @@
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["uid", "email", "fullName"]
+    },
+    "UserRecommendation": {
+      "title": "Personalized User Recommendation",
+      "description": "Server/client matched job recommendation with explicit match reasons and missing mandatory qualifications.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "vacancyId": { "type": "string", "maxLength": 128 },
+        "sourceType": { "type": "string", "enum": ["domestic_job", "international_job", "scholarship"] },
+        "matchScore": { "type": "number" },
+        "eligibilityStatus": { "type": "string", "enum": ["Eligible", "Partially Qualified"] },
+        "matchReasons": { "type": "array" },
+        "missingMandatoryQualifications": { "type": "array" },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "vacancyId", "matchScore"]
+    },
+    "UserNotification": {
+      "title": "Personalized Job Alert Notification",
+      "description": "Deduplicated multi-channel vacancy alert delivered to a registered user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "vacancyId": { "type": "string", "maxLength": 128 },
+        "alertKind": { "type": "string", "enum": ["new_match", "deadline_reminder", "job_updated", "sector_opportunity", "system_test"] },
+        "dedupeKey": { "type": "string", "maxLength": 256 },
+        "title": { "type": "string", "maxLength": 250 },
+        "employer": { "type": "string", "maxLength": 200 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "vacancyId", "alertKind", "dedupeKey", "title", "read", "createdAt"]
+    },
+    "NotificationPreferences": {
+      "title": "User Notification & Push Subscription Record",
+      "description": "Persistent permission state, multi-channel toggles, and device push subscriptions per user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "permissionStatus": { "type": "string", "enum": ["default", "granted", "denied", "unsupported"] },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "none", "expired", "revoked"] },
+        "enabledAt": { "type": "string", "maxLength": 100 },
+        "permissionVerifiedAt": { "type": "string", "maxLength": 100 },
+        "lastSuccessfulDeliveryAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["userId", "permissionStatus", "subscriptionStatus", "updatedAt"]
     },
     "UserJobApplication": {
       "title": "Job Application",
@@ -502,6 +557,18 @@
     "/system_backups/{backupId}": {
       "schema": "SystemBackupMeta",
       "description": "Owner-only backup metadata"
+    },
+    "/user_recommendations/{recId}": {
+      "schema": "UserRecommendation",
+      "description": "Personalized job recommendations scoped strictly to the owning user"
+    },
+    "/user_notifications/{notifId}": {
+      "schema": "UserNotification",
+      "description": "Personalized vacancy alerts scoped strictly to the owning user"
+    },
+    "/user_notification_preferences/{userId}": {
+      "schema": "NotificationPreferences",
+      "description": "Notification permission state and device push subscriptions per user"
     }
   }
 }

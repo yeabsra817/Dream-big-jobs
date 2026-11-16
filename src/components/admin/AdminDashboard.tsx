@@ -51,6 +51,7 @@ import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
 import { InternationalControlCenter } from './InternationalControlCenter';
 import { SystemPersistenceCenter } from './SystemPersistenceCenter';
+import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
@@ -142,6 +143,7 @@ export const AdminDashboard: React.FC<Props> = ({
     | 'duplicates'
     | 'vacancies'
     | 'applications'
+    | 'usersAnalytics'
     | 'analytics'
     | 'health'
     | 'alerts'
@@ -467,6 +469,20 @@ export const AdminDashboard: React.FC<Props> = ({
               <span>Website Analytics</span>
             </button>
 
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('usersAnalytics')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                  activeTab === 'usersAnalytics'
+                    ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Users className="w-4 h-4 text-sky-400" />
+                <span>Registered Users</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('health')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
@@ -646,6 +662,10 @@ export const AdminDashboard: React.FC<Props> = ({
             siteSettings={siteSettings}
             onSaveSiteSettings={onSaveSiteSettings}
           />
+        )}
+
+        {activeTab === 'usersAnalytics' && isYeabsraOwner && (
+          <UserAnalyticsCenter adminEmail={adminEmail} />
         )}
 
         {activeTab === 'health' && (

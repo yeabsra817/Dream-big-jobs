@@ -1,0 +1,32 @@
+{
+  "name": "HOPELAND JOBS — Ethiopia & International Career Portal",
+  "short_name": "HOPELAND JOBS",
+  "description": "Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FBFBFA",
+  "theme_color": "#0B132B",
+  "categories": ["business", "productivity", "employment"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -237,7 +237,7 @@ if (typeof window !== 'undefined') {
   }, 3000);
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise<T>((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
