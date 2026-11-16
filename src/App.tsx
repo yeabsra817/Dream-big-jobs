@@ -273,9 +273,9 @@ export default function App() {
         setImmigrationPathways(loadedPathways);
         setExperienceScholarships(loadedScholarships);
 
-        // Ensure configured GA4 measurement ID from siteSettings is initialized
-        if (loadedSettings.gaMeasurementId) {
-          initGoogleAnalytics4(loadedSettings.gaMeasurementId, false);
+        // Ensure Always-On GA4 measurement ID from siteSettings is initialized
+        if (loadedSettings.gaTrackingEnabled !== false) {
+          initGoogleAnalytics4(loadedSettings.gaMeasurementId || 'G-KH6X73105S', false);
         }
 
         // Check URL parameter or path for direct job link (from Telegram / WhatsApp / Social shares)
@@ -2428,6 +2428,9 @@ export default function App() {
             profile={userProfile}
             applications={userApplications}
             savedVacancies={savedVacanciesList}
+            vacancies={vacancies}
+            internationalJobs={internationalJobs}
+            experienceScholarships={experienceScholarships}
             onClose={() => setIsJobSeekerDashboardOpen(false)}
             onUpdateProfile={async (updated) => {
               await saveJobSeekerProfile(updated);

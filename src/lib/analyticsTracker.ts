@@ -178,6 +178,128 @@ export const DEFAULT_GA_MEASUREMENT_ID = 'G-KH6X73105S';
 let isGaInitialized = false;
 let currentGaMeasurementId: string = DEFAULT_GA_MEASUREMENT_ID;
 let currentAnalyticsUserId: string | null = null;
+let gaScriptLoaded = false;
+let gaScriptBlocked = false;
+let gaLastError: string | null = null;
+let gaLastEventDispatchedAt: string | null = null;
+
+export interface Ga4HealthStatus {
+  configured: boolean;
+  trackingEnabled: boolean;
+  measurementId: string;
+  scriptLoaded: boolean;
+  scriptBlocked: boolean;
+  gtagAvailable: boolean;
+  dataLayerEvents: number;
+  lastEventDispatchedAt: string | null;
+  status: 'ACTIVE' | 'BLOCKED' | 'DISCONNECTED' | 'INVALID_CONFIG';
+  diagnostic: string;
+}
+
+export function checkGa4Health(measurementIdOverride?: string, trackingEnabledOverride?: boolean): Ga4HealthStatus {
+  const effectiveId = String(
+    measurementIdOverride ||
+      currentGaMeasurementId ||
+      (typeof window !== 'undefined' ? (window as any).__GA_MEASUREMENT_ID__ : '') ||
+      DEFAULT_GA_MEASUREMENT_ID
+  )
+    .trim()
+    .toUpperCase();
+
+  const trackingEnabled = trackingEnabledOverride !== undefined ? trackingEnabledOverride : true;
+  const validId = /^G-[A-Z0-9]+$/.test(effectiveId);
+  const gtagAvailable = typeof window !== 'undefined' && typeof window.gtag === 'function';
+  const dataLayerEvents =
+    typeof window !== 'undefined' && Array.isArray(window.dataLayer) ? window.dataLayer.length : 0;
+
+  // Detect already-loaded index.html script if present
+  let scriptElementPresent = false;
+  if (typeof document !== 'undefined') {
+    const existing = document.querySelector(`script[src*="googletagmanager.com/gtag/js"]`);
+    scriptElementPresent = Boolean(existing);
+    if (existing && (existing as any).dataset?.gaLoaded === 'true') {
+      gaScriptLoaded = true;
+    }
+    if (existing && (existing as any).dataset?.gaBlocked === 'true') {
+      gaScriptBlocked = true;
+    }
+  }
+
+  if (!validId) {
+    return {
+      configured: false,
+      trackingEnabled,
+      measurementId: effectiveId || '',
+      scriptLoaded: false,
+      scriptBlocked: false,
+      gtagAvailable,
+      dataLayerEvents,
+      lastEventDispatchedAt: gaLastEventDispatchedAt,
+      status: 'INVALID_CONFIG',
+      diagnostic: 'GA4 Measurement ID is missing or invalid (must begin with G-).',
+    };
+  }
+
+  if (!trackingEnabled) {
+    return {
+      configured: true,
+      trackingEnabled: false,
+      measurementId: effectiveId,
+      scriptLoaded: gaScriptLoaded,
+      scriptBlocked: gaScriptBlocked,
+      gtagAvailable,
+      dataLayerEvents,
+      lastEventDispatchedAt: gaLastEventDispatchedAt,
+      status: 'DISCONNECTED',
+      diagnostic: 'GA4 tracking is paused in site settings. Enable Always-On GA4 to resume collection.',
+    };
+  }
+
+  if (gaScriptBlocked) {
+    return {
+      configured: true,
+      trackingEnabled: true,
+      measurementId: effectiveId,
+      scriptLoaded: false,
+      scriptBlocked: true,
+      gtagAvailable,
+      dataLayerEvents,
+      lastEventDispatchedAt: gaLastEventDispatchedAt,
+      status: 'BLOCKED',
+      diagnostic:
+        gaLastError ||
+        'Google Tag Manager script failed to load in this browser (possible ad-blocker, strict privacy extension, or offline network). First-party Firestore telemetry remains active.',
+    };
+  }
+
+  if (!gtagAvailable || (!isGaInitialized && !scriptElementPresent)) {
+    return {
+      configured: true,
+      trackingEnabled: true,
+      measurementId: effectiveId,
+      scriptLoaded: gaScriptLoaded,
+      scriptBlocked: false,
+      gtagAvailable,
+      dataLayerEvents,
+      lastEventDispatchedAt: gaLastEventDispatchedAt,
+      status: 'DISCONNECTED',
+      diagnostic: 'GA4 runtime helper is not yet initialized.',
+    };
+  }
+
+  return {
+    configured: true,
+    trackingEnabled: true,
+    measurementId: effectiveId,
+    scriptLoaded: gaScriptLoaded || scriptElementPresent,
+    scriptBlocked: false,
+    gtagAvailable: true,
+    dataLayerEvents,
+    lastEventDispatchedAt: gaLastEventDispatchedAt,
+    status: 'ACTIVE',
+    diagnostic: `GA4 (${effectiveId}) is active and dispatching live visitor & engagement events.`,
+  };
+}
 
 // Sanitize non-PII Firebase UID so no email address or phone ever leaks into analytics
 function normalizeNonPiiUserId(raw: string | null): string | null {
@@ -273,18 +395,42 @@ export function initGoogleAnalytics4(measurementId?: string, isInternal: boolean
     });
 
     // Check if script tag already exists in head to prevent duplicates
-    const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`);
-    if (!existingScript) {
+    const existingScript = document.querySelector(`script[src*="googletagmanager.com/gtag/js?id=${cleanId}"]`) as HTMLScriptElement | null;
+    if (existingScript) {
+      gaScriptLoaded = true;
+      existingScript.addEventListener('load', () => {
+        gaScriptLoaded = true;
+        gaScriptBlocked = false;
+        existingScript.dataset.gaLoaded = 'true';
+      });
+      existingScript.addEventListener('error', () => {
+        gaScriptBlocked = true;
+        gaLastError = 'GA4 script blocked or unreachable.';
+        existingScript.dataset.gaBlocked = 'true';
+      });
+    } else {
       const script = document.createElement('script');
       script.async = true;
       script.src = `https://www.googletagmanager.com/gtag/js?id=${cleanId}`;
+      script.onload = () => {
+        gaScriptLoaded = true;
+        gaScriptBlocked = false;
+        gaLastError = null;
+        script.dataset.gaLoaded = 'true';
+      };
+      script.onerror = () => {
+        gaScriptBlocked = true;
+        gaLastError = 'Failed to load Google Analytics 4 script (network error or browser blocker).';
+        script.dataset.gaBlocked = 'true';
+      };
       document.head.appendChild(script);
     }
 
     isGaInitialized = true;
     currentGaMeasurementId = cleanId;
     (window as any).__GA_MEASUREMENT_ID__ = cleanId;
-  } catch (err) {
+  } catch (err: any) {
+    gaLastError = err?.message || 'GA4 initialization error';
     console.warn('[Analytics] Failed to initialize GA4:', err);
   }
 }
@@ -453,6 +599,7 @@ export async function trackAnalyticsEvent(
         default:
           break;
       }
+      gaLastEventDispatchedAt = new Date().toISOString();
     } catch (gaErr) {
       console.warn('[Analytics] GA4 event dispatch error:', gaErr);
     }

@@ -60,6 +60,11 @@
         "telegramIncludeScholarships": { "type": "boolean", "description": "Explicit opt-in flag to allow scholarship posts to Telegram" },
         "researchFrequency": { "type": "string", "enum": ["manual", "daily", "weekly"], "description": "Automatic international research cadence" },
         "lastResearchRunAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of last international research run" },
+        "gaMeasurementId": { "type": "string", "maxLength": 40, "description": "Always-on Google Analytics 4 measurement ID" },
+        "gaTrackingEnabled": { "type": "boolean", "description": "Always-on GA4 tracking toggle" },
+        "botInstructions": { "type": "string", "maxLength": 5000, "description": "Permanent Telegram bot formatting & operational instructions" },
+        "botLastVerifiedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp of last Telegram verification" },
+        "botLastVerificationStatus": { "type": "string", "maxLength": 64, "description": "Last Telegram verification status code" },
         "contactEmail": { "type": "string", "maxLength": 150, "description": "Support and inquiries email" },
         "contactPhone": { "type": "string", "maxLength": 50, "description": "Support telephone number" },
         "aboutText": { "type": "string", "maxLength": 5000, "description": "About DREAM BIG JOBS summary" },
@@ -143,8 +148,15 @@
         "authProvider": { "type": "string", "maxLength": 50 },
         "emailVerified": { "type": "boolean" },
         "desiredJobTitle": { "type": "string", "maxLength": 200 },
+        "currentPosition": { "type": "string", "maxLength": 200 },
+        "staffDepartmentOrSector": { "type": "string", "maxLength": 200 },
+        "accountRole": { "type": "string", "enum": ["staff", "job_seeker"] },
         "preferredIndustry": { "type": "string", "maxLength": 200 },
         "yearsOfExperience": { "type": "string", "maxLength": 100 },
+        "previousPositions": { "type": "array", "description": "Previous positions held by staff member" },
+        "areasOfExpertise": { "type": "array", "description": "Core areas of expertise" },
+        "professionalInterests": { "type": "array", "description": "Career and professional interests" },
+        "certifications": { "type": "array", "description": "Structured certifications and qualifications" },
         "savedJobIds": { "type": "array", "description": "Saved vacancy IDs synced across devices" },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
@@ -357,6 +369,47 @@
         "attempts": { "type": "number" }
       },
       "required": ["id", "vacancyId", "status"]
+    },
+    "AuditLogEntry": {
+      "title": "System Audit Log Entry",
+      "description": "Immutable owner-only audit trail of configuration updates, staff registrations, backups, and permanent deletions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "targetType": { "type": "string", "maxLength": 64 },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "timestamp": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "action", "actorEmail", "targetType", "timestamp"]
+    },
+    "AdminNotification": {
+      "title": "Administrator Health & System Notification",
+      "description": "Owner-only notification for bot disconnect/reconnect, GA4 status issues, new staff registrations, and backups.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "acknowledged": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "type", "title", "createdAt"]
+    },
+    "SystemBackupMeta": {
+      "title": "Persistent System Backup Metadata",
+      "description": "Owner-only metadata for automated and manual system snapshots.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "trigger": { "type": "string", "enum": ["startup", "scheduled", "manual", "pre_restore"] },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "trigger", "createdAt"]
     }
   },
   "firestore": {
@@ -437,6 +490,18 @@
     "/telegram_retry_queue/{retryId}": {
       "schema": "TelegramRetryItem",
       "description": "Admin-only failed Telegram broadcast retry queue"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLogEntry",
+      "description": "Owner-only system audit history"
+    },
+    "/admin_notifications/{notifId}": {
+      "schema": "AdminNotification",
+      "description": "Owner-only health and persistence alerts"
+    },
+    "/system_backups/{backupId}": {
+      "schema": "SystemBackupMeta",
+      "description": "Owner-only backup metadata"
     }
   }
 }

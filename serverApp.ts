@@ -1049,6 +1049,35 @@ const SETTINGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'site_settings.json');
 const TELEGRAM_CONFIG_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_config.json');
 const TELEGRAM_QUEUE_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_queue.json');
 const TELEGRAM_LOGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'telegram_logs.json');
+const BOT_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'bot_health.json');
+const SYSTEM_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'system_health.json');
+const AUDIT_LOGS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'audit_logs.json');
+const ADMIN_NOTIFICATIONS_FILE = path.join(RUNTIME_BASE_DIR, 'data', 'admin_notifications.json');
+const BACKUPS_DIR = path.join(RUNTIME_BASE_DIR, 'data', 'backups');
+const DEFAULT_GA_MEASUREMENT_ID = 'G-KH6X73105S';
+const PERSISTENT_OWNER_EMAILS = new Set(['nexusitsoultion@gmail.com', 'yeabsra45@gmail.com']);
+const SERVER_BOOT_TIME_MS = Date.now();
+
+function getRequesterEmail(req: Request): string {
+  return String(
+    req.headers['x-admin-email'] ||
+      req.headers['x-user-email'] ||
+      (req.body && typeof req.body === 'object' ? req.body.adminEmail : '') ||
+      (req.query && typeof req.query === 'object' ? req.query.adminEmail : '') ||
+      ''
+  )
+    .toLowerCase()
+    .trim();
+}
+
+function getRequesterUid(req: Request): string {
+  return String(req.headers['x-user-uid'] || '').trim();
+}
+
+function isPersistentOwnerRequest(req: Request): boolean {
+  const email = getRequesterEmail(req);
+  return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
+}
 
 function ensureRuntimeDataDir(): string {
   const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
@@ -1056,8 +1085,122 @@ function ensureRuntimeDataDir(): string {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
   } catch {}
   return dataDir;
+}
+
+function loadJsonFileSafe<T>(filePath: string, fallback: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      if (raw && raw.trim()) {
+        return JSON.parse(raw) as T;
+      }
+    }
+  } catch {}
+  return fallback;
+}
+
+function writeJsonFileAtomic(filePath: string, data: any): boolean {
+  try {
+    ensureRuntimeDataDir();
+    const tmpPath = `${filePath}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+    return true;
+  } catch (e) {
+    console.warn(`Notice: Failed writing ${path.basename(filePath)}:`, e);
+    return false;
+  }
+}
+
+function loadAuditLogs(): any[] {
+  const logs = loadJsonFileSafe<any[]>(AUDIT_LOGS_FILE, []);
+  return Array.isArray(logs) ? logs : [];
+}
+
+function appendAuditLog(entry: {
+  action: string;
+  actorEmail?: string;
+  actorUid?: string;
+  targetType: string;
+  targetId?: string;
+  summary: string;
+  severity?: 'info' | 'warning' | 'critical';
+}) {
+  const logs = loadAuditLogs();
+  const nextEntry = {
+    id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    action: entry.action,
+    actorEmail: entry.actorEmail || 'system',
+    actorUid: entry.actorUid,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    summary: entry.summary,
+    severity: entry.severity || 'info',
+    timestamp: new Date().toISOString(),
+  };
+  const updated = [nextEntry, ...logs].slice(0, 500);
+  writeJsonFileAtomic(AUDIT_LOGS_FILE, updated);
+  return nextEntry;
+}
+
+function loadAdminNotifications(): any[] {
+  const items = loadJsonFileSafe<any[]>(ADMIN_NOTIFICATIONS_FILE, []);
+  return Array.isArray(items) ? items : [];
+}
+
+function pushAdminNotification(item: {
+  type: string;
+  title: string;
+  message: string;
+  severity?: 'info' | 'warning' | 'critical';
+}) {
+  const list = loadAdminNotifications();
+  const latestSame = list.find((n) => n.type === item.type && !n.acknowledged);
+  if (latestSame && Date.now() - new Date(latestSame.createdAt).getTime() < 10 * 60 * 1000) {
+    return latestSame;
+  }
+  const next = {
+    id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    type: item.type,
+    title: item.title,
+    message: item.message,
+    severity: item.severity || 'info',
+    acknowledged: false,
+    createdAt: new Date().toISOString(),
+  };
+  writeJsonFileAtomic(ADMIN_NOTIFICATIONS_FILE, [next, ...list].slice(0, 200));
+  return next;
+}
+
+function loadBotHealthState(): any {
+  return loadJsonFileSafe<any>(BOT_HEALTH_FILE, {
+    status: 'UNCONFIGURED',
+    statusCode: 'api_connection_failed',
+    lastCheckedAt: null,
+    lastSuccessfulTestAt: null,
+    lastError: null,
+    consecutiveFailures: 0,
+    reconnectAttempts: 0,
+    botUsername: '@DreamBigJobsEthiopiaBot',
+    channelName: '@DreamBigJobsEthiopia',
+    channelId: '',
+  });
+}
+
+function saveBotHealthState(patch: Record<string, any>): any {
+  const cur = loadBotHealthState();
+  const next = {
+    ...cur,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  writeJsonFileAtomic(BOT_HEALTH_FILE, next);
+  return next;
 }
 
 function maskTelegramTokenServer(token: string): string {
@@ -1090,22 +1233,45 @@ function loadPersistedSettings(): any {
         if (tgData?.customDomain) {
           settings.customDomain = tgData.customDomain;
         }
+        if (tgData?.botInstructions) {
+          settings.botInstructions = tgData.botInstructions;
+        }
+        if (tgData?.botLastVerifiedAt) {
+          settings.botLastVerifiedAt = tgData.botLastVerifiedAt;
+        }
+        if (tgData?.botLastVerificationStatus) {
+          settings.botLastVerificationStatus = tgData.botLastVerificationStatus;
+        }
       } catch {}
+    }
+    if (!settings.gaMeasurementId) {
+      settings.gaMeasurementId = DEFAULT_GA_MEASUREMENT_ID;
+    }
+    if (settings.gaTrackingEnabled === undefined || settings.gaTrackingEnabled === null) {
+      settings.gaTrackingEnabled = true;
     }
     return settings;
   } catch (e) {
     console.warn('Notice: Failed reading persisted settings from disk:', e);
   }
-  return null;
+  return {
+    gaMeasurementId: DEFAULT_GA_MEASUREMENT_ID,
+    gaTrackingEnabled: true,
+  };
 }
 
 function sanitizeSettingsForClient(settings: any, activeToken?: string): any {
   const { telegramBotToken: _omitted, ...safe } = settings || {};
   const token = activeToken || getTelegramToken();
+  const botHealth = loadBotHealthState();
   return {
     ...safe,
+    gaMeasurementId: safe.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+    gaTrackingEnabled: safe.gaTrackingEnabled ?? true,
     telegramBotTokenConfigured: Boolean(token),
-    telegramConnected: Boolean(token),
+    telegramConnected: Boolean(token) && botHealth.status === 'CONNECTED',
+    botLastVerifiedAt: safe.botLastVerifiedAt || botHealth.lastSuccessfulTestAt || botHealth.lastCheckedAt || '',
+    botLastVerificationStatus: safe.botLastVerificationStatus || botHealth.statusCode || '',
     maskedBotToken: token ? maskTelegramTokenServer(token) : '',
   };
 }
@@ -1114,14 +1280,33 @@ function savePersistedSettings(settings: any): any {
   try {
     ensureRuntimeDataDir();
     const current = loadPersistedSettings() || {};
-    const merged = { ...current, ...settings, updatedAt: new Date().toISOString() };
+    const merged = {
+      ...current,
+      ...settings,
+      gaMeasurementId:
+        settings.gaMeasurementId && String(settings.gaMeasurementId).trim()
+          ? String(settings.gaMeasurementId).trim().toUpperCase()
+          : current.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+      gaTrackingEnabled:
+        settings.gaTrackingEnabled !== undefined
+          ? Boolean(settings.gaTrackingEnabled)
+          : current.gaTrackingEnabled ?? true,
+      updatedAt: new Date().toISOString(),
+    };
 
     // Keep secret token strictly in dedicated server-only TELEGRAM_CONFIG_FILE; omit raw token from public settings JSON
     const { telegramBotToken: rawTokenToStore, ...settingsWithoutRawToken } = merged;
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settingsWithoutRawToken, null, 2), 'utf-8');
+    writeJsonFileAtomic(SETTINGS_FILE, settingsWithoutRawToken);
 
-    // Save server-only Telegram credentials
-    if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId) {
+    // Save server-only Telegram credentials & permanent instructions
+    if (
+      rawTokenToStore ||
+      merged.customDomain ||
+      merged.telegramBotUsername ||
+      merged.telegramChannelId ||
+      merged.botInstructions !== undefined ||
+      merged.botLastVerifiedAt !== undefined
+    ) {
       let existingTg: any = {};
       try {
         if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
@@ -1133,10 +1318,18 @@ function savePersistedSettings(settings: any): any {
         ...(rawTokenToStore ? { telegramBotToken: rawTokenToStore } : {}),
         ...(merged.telegramBotUsername ? { telegramBotUsername: merged.telegramBotUsername } : {}),
         ...(merged.telegramChannelId ? { telegramChannelId: merged.telegramChannelId } : {}),
-        customDomain: (merged.customDomain && merged.customDomain !== 'healmorin.com') ? merged.customDomain : 'hopelandjobs.tech',
+        ...(merged.botInstructions !== undefined ? { botInstructions: merged.botInstructions } : {}),
+        ...(merged.botLastVerifiedAt !== undefined ? { botLastVerifiedAt: merged.botLastVerifiedAt } : {}),
+        ...(merged.botLastVerificationStatus !== undefined
+          ? { botLastVerificationStatus: merged.botLastVerificationStatus }
+          : {}),
+        customDomain:
+          merged.customDomain && merged.customDomain !== 'healmorin.com'
+            ? merged.customDomain
+            : 'hopelandjobs.tech',
         updatedAt: new Date().toISOString(),
       };
-      fs.writeFileSync(TELEGRAM_CONFIG_FILE, JSON.stringify(tgPayload, null, 2), 'utf-8');
+      writeJsonFileAtomic(TELEGRAM_CONFIG_FILE, tgPayload);
     }
 
     return merged;
@@ -1186,6 +1379,7 @@ function getTelegramToken(): string {
 app.get('/api/settings', (req: Request, res: Response): void => {
   const persisted = loadPersistedSettings() || {};
   const currentToken = getTelegramToken();
+  const botHealth = loadBotHealthState();
   const effectiveDomain =
     persisted.customDomain && persisted.customDomain !== 'healmorin.com'
       ? persisted.customDomain
@@ -1225,9 +1419,12 @@ app.get('/api/settings', (req: Request, res: Response): void => {
     nextResearchRunAt: persisted.nextResearchRunAt || '',
     telegramBotTokenConfigured: Boolean(currentToken),
     maskedBotToken: currentToken ? maskTelegramTokenServer(currentToken) : '',
-    telegramConnected: Boolean(currentToken),
-    gaMeasurementId: persisted.gaMeasurementId || '',
-    gaTrackingEnabled: persisted.gaTrackingEnabled ?? Boolean(persisted.gaMeasurementId),
+    telegramConnected: Boolean(currentToken) && botHealth.status === 'CONNECTED',
+    botInstructions: persisted.botInstructions || '',
+    botLastVerifiedAt: persisted.botLastVerifiedAt || botHealth.lastSuccessfulTestAt || botHealth.lastCheckedAt || '',
+    botLastVerificationStatus: persisted.botLastVerificationStatus || botHealth.statusCode || '',
+    gaMeasurementId: persisted.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+    gaTrackingEnabled: persisted.gaTrackingEnabled ?? true,
     contactEmail: persisted.contactEmail || 'nexusitsoultion@gmail.com',
     contactPhone: persisted.contactPhone || '+251 91 123 4567',
     contactAddress: persisted.contactAddress || 'Bole Subcity, Addis Ababa, Ethiopia',
@@ -1259,7 +1456,7 @@ app.post('/api/settings', (req: Request, res: Response): void => {
       }
     }
 
-    // Never persist empty/undefined token overwrite; keep server token untouched unless explicitly submitted via /api/telegram/configure-token
+    // Never persist empty/undefined token overwrite; keep server token untouched unless explicitly submitted
     if (incoming.telegramBotToken && typeof incoming.telegramBotToken === 'string' && incoming.telegramBotToken.includes(':')) {
       const clean = String(incoming.telegramBotToken).replace(/[\s\u200B-\u200D\uFEFF]/g, '');
       if (clean && !clean.includes('••••')) {
@@ -1270,6 +1467,14 @@ app.post('/api/settings', (req: Request, res: Response): void => {
     }
 
     const saved = savePersistedSettings(merged);
+    appendAuditLog({
+      action: 'settings_updated',
+      actorEmail: getRequesterEmail(req) || 'admin',
+      targetType: 'settings',
+      targetId: 'site_settings',
+      summary: `Updated platform settings (channel: ${saved.telegramChannelName || '@DreamBigJobsEthiopia'}, GA4: ${saved.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID})`,
+      severity: 'info',
+    });
     res.json({ success: true, settings: sanitizeSettingsForClient(saved, getTelegramToken()) });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || String(err) });
@@ -1319,16 +1524,39 @@ function loadUserProfiles(): Record<string, any> {
   return {};
 }
 
-function saveUserProfile(profile: any): void {
-  try {
-    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    const all = loadUserProfiles();
-    all[profile.uid] = { ...all[profile.uid], ...profile, updatedAt: new Date().toISOString() };
-    fs.writeFileSync(USER_PROFILES_FILE, JSON.stringify(all, null, 2), 'utf-8');
-  } catch (e) {
-    console.warn('Failed to save user profile to disk:', e);
-  }
+function saveUserProfile(profile: any): { savedProfile: any; isNewRegistration: boolean } {
+  ensureRuntimeDataDir();
+  const all = loadUserProfiles();
+  const existing = all[profile.uid] || null;
+  const isNewRegistration = !existing;
+  const { isAdmin: _stripAdmin, role: _stripRole, ...safeIncoming } = profile || {};
+  const merged = {
+    ...(existing || {}),
+    ...safeIncoming,
+    uid: profile.uid,
+    accountRole: safeIncoming.accountRole || existing?.accountRole || 'staff',
+    areasOfExpertise: Array.isArray(safeIncoming.areasOfExpertise)
+      ? safeIncoming.areasOfExpertise
+      : existing?.areasOfExpertise || [],
+    professionalInterests: Array.isArray(safeIncoming.professionalInterests)
+      ? safeIncoming.professionalInterests
+      : existing?.professionalInterests || [],
+    previousPositions: Array.isArray(safeIncoming.previousPositions)
+      ? safeIncoming.previousPositions
+      : existing?.previousPositions || [],
+    certifications: Array.isArray(safeIncoming.certifications)
+      ? safeIncoming.certifications
+      : existing?.certifications || [],
+    skills: Array.isArray(safeIncoming.skills) ? safeIncoming.skills : existing?.skills || [],
+    education: Array.isArray(safeIncoming.education) ? safeIncoming.education : existing?.education || [],
+    experience: Array.isArray(safeIncoming.experience) ? safeIncoming.experience : existing?.experience || [],
+    documents: Array.isArray(safeIncoming.documents) ? safeIncoming.documents : existing?.documents || [],
+    createdAt: existing?.createdAt || safeIncoming.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  all[profile.uid] = merged;
+  writeJsonFileAtomic(USER_PROFILES_FILE, all);
+  return { savedProfile: merged, isNewRegistration };
 }
 
 function loadJobApplications(): any[] {
@@ -1342,18 +1570,23 @@ function loadJobApplications(): any[] {
 }
 
 function saveJobApplications(apps: any[]): void {
-  try {
-    const dataDir = path.join(RUNTIME_BASE_DIR, 'data');
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-    fs.writeFileSync(JOB_APPLICATIONS_FILE, JSON.stringify(apps, null, 2), 'utf-8');
-  } catch (e) {
-    console.warn('Failed to save job applications to disk:', e);
-  }
+  writeJsonFileAtomic(JOB_APPLICATIONS_FILE, apps);
 }
 
-// User Profile Endpoints
+// User & Staff Profile Endpoints (Protected by Owner/Self RBAC)
+function isSelfOrOwnerProfileRequest(req: Request, targetUid: string): boolean {
+  const reqUid = getRequesterUid(req);
+  if (reqUid && reqUid === targetUid) return true;
+  if (isPersistentOwnerRequest(req)) return true;
+  return false;
+}
+
 app.get('/api/user-profile/:uid', (req: Request, res: Response): void => {
   const { uid } = req.params;
+  if (!isSelfOrOwnerProfileRequest(req, uid)) {
+    res.status(403).json({ error: 'Access denied: You can only view your own profile.' });
+    return;
+  }
   const all = loadUserProfiles();
   const profile = all[uid];
   if (profile) {
@@ -1363,19 +1596,68 @@ app.get('/api/user-profile/:uid', (req: Request, res: Response): void => {
   }
 });
 
-app.post('/api/user-profile', (req: Request, res: Response): void => {
+app.get('/api/staff/profile/:uid', (req: Request, res: Response): void => {
+  const { uid } = req.params;
+  if (!isSelfOrOwnerProfileRequest(req, uid)) {
+    res.status(403).json({ error: 'Access denied: You can only view your own staff profile.' });
+    return;
+  }
+  const all = loadUserProfiles();
+  const profile = all[uid];
+  if (profile) {
+    res.json(profile);
+  } else {
+    res.status(404).json({ error: 'Staff profile not found' });
+  }
+});
+
+function handleSaveProfileRequest(req: Request, res: Response): void {
   try {
     const profile = req.body;
     if (!profile || !profile.uid) {
       res.status(400).json({ error: 'Valid uid is required' });
       return;
     }
-    saveUserProfile(profile);
-    res.json({ success: true, profile });
+    if (!isSelfOrOwnerProfileRequest(req, profile.uid)) {
+      res.status(403).json({ error: 'Access denied: You can only create or update your own profile.' });
+      return;
+    }
+    const { savedProfile, isNewRegistration } = saveUserProfile(profile);
+    if (isNewRegistration) {
+      appendAuditLog({
+        action: 'staff_registered',
+        actorEmail: savedProfile.email || getRequesterEmail(req) || savedProfile.uid,
+        actorUid: savedProfile.uid,
+        targetType: 'staff_profile',
+        targetId: savedProfile.uid,
+        summary: `New ${savedProfile.accountRole || 'staff'} profile registered: ${savedProfile.fullName || savedProfile.email}`,
+        severity: 'info',
+      });
+      pushAdminNotification({
+        type: 'staff_registered',
+        title: 'New Staff Profile Registered',
+        message: `${savedProfile.fullName || savedProfile.email} (${savedProfile.currentPosition || savedProfile.desiredJobTitle || 'Profile saved'}) joined permanently.`,
+        severity: 'info',
+      });
+    } else {
+      appendAuditLog({
+        action: 'staff_profile_updated',
+        actorEmail: savedProfile.email || getRequesterEmail(req) || savedProfile.uid,
+        actorUid: savedProfile.uid,
+        targetType: 'staff_profile',
+        targetId: savedProfile.uid,
+        summary: `Updated permanent profile for ${savedProfile.fullName || savedProfile.email}`,
+        severity: 'info',
+      });
+    }
+    res.json({ success: true, profile: savedProfile, isNewRegistration });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save profile' });
   }
-});
+}
+
+app.post('/api/user-profile', handleSaveProfileRequest);
+app.post('/api/staff/profile', handleSaveProfileRequest);
 
 // Job Application Endpoints
 app.get('/api/applications', (req: Request, res: Response): void => {
@@ -1540,6 +1822,17 @@ app.get('/api/telegram/status', async (req: Request, res: Response): Promise<voi
         telegramBotToken: token,
         telegramBotUsername: data.result?.username,
         telegramConnected: true,
+        botLastVerifiedAt: new Date().toISOString(),
+        botLastVerificationStatus: 'connected',
+      });
+      saveBotHealthState({
+        status: 'CONNECTED',
+        statusCode: 'connected',
+        lastCheckedAt: new Date().toISOString(),
+        lastSuccessfulTestAt: new Date().toISOString(),
+        lastError: null,
+        consecutiveFailures: 0,
+        botUsername: data.result?.username ? `@${data.result.username}` : undefined,
       });
 
       res.json({
@@ -1556,6 +1849,12 @@ app.get('/api/telegram/status', async (req: Request, res: Response): Promise<voi
         maskedToken,
       });
     } else {
+      saveBotHealthState({
+        status: 'DISCONNECTED',
+        statusCode: 'invalid_token',
+        lastCheckedAt: new Date().toISOString(),
+        lastError: data.description || 'Telegram API rejected bot token.',
+      });
       res.json({
         configured: true,
         connected: false,
@@ -1571,6 +1870,12 @@ app.get('/api/telegram/status', async (req: Request, res: Response): Promise<voi
       });
     }
   } catch (err: any) {
+    saveBotHealthState({
+      status: 'DISCONNECTED',
+      statusCode: 'api_connection_failed',
+      lastCheckedAt: new Date().toISOString(),
+      lastError: `Could not reach Telegram Bot API: ${err?.message || 'Timeout'}`,
+    });
     res.json({
       configured: true,
       connected: false,
@@ -1628,6 +1933,25 @@ app.post('/api/telegram/configure-token', async (req: Request, res: Response): P
       telegramBotToken: cleanToken,
       telegramBotUsername: bot.username,
       telegramConnected: true,
+      botLastVerifiedAt: new Date().toISOString(),
+      botLastVerificationStatus: 'connected',
+    });
+    saveBotHealthState({
+      status: 'CONNECTED',
+      statusCode: 'connected',
+      lastCheckedAt: new Date().toISOString(),
+      lastSuccessfulTestAt: new Date().toISOString(),
+      lastError: null,
+      consecutiveFailures: 0,
+      botUsername: `@${bot.username}`,
+    });
+    appendAuditLog({
+      action: 'telegram_bot_configured',
+      actorEmail: getRequesterEmail(req) || 'admin',
+      targetType: 'bot',
+      targetId: `@${bot.username}`,
+      summary: `Saved and verified permanent Telegram bot credentials for @${bot.username}`,
+      severity: 'info',
     });
 
     res.json({
@@ -1656,6 +1980,12 @@ app.post('/api/telegram/configure-token', async (req: Request, res: Response): P
 app.post('/api/telegram/test-connection', async (req: Request, res: Response): Promise<void> => {
   const token = getTelegramToken();
   if (!token || token === 'MY_TELEGRAM_BOT_TOKEN') {
+    saveBotHealthState({
+      status: 'UNCONFIGURED',
+      statusCode: 'api_connection_failed',
+      lastCheckedAt: new Date().toISOString(),
+      lastError: 'TELEGRAM_BOT_TOKEN is not configured on the server yet.',
+    });
     res.status(400).json({
       success: false,
       error: 'TELEGRAM_BOT_TOKEN is not configured on the server yet.',
@@ -1670,6 +2000,20 @@ app.post('/api/telegram/test-connection', async (req: Request, res: Response): P
     const data = (await tgRes.json()) as any;
 
     if (data.ok) {
+      const nowIso = new Date().toISOString();
+      saveBotHealthState({
+        status: 'CONNECTED',
+        statusCode: 'connected',
+        lastCheckedAt: nowIso,
+        lastSuccessfulTestAt: nowIso,
+        lastError: null,
+        consecutiveFailures: 0,
+        botUsername: data.result?.username ? `@${data.result.username}` : undefined,
+      });
+      savePersistedSettings({
+        botLastVerifiedAt: nowIso,
+        botLastVerificationStatus: 'connected',
+      });
       res.json({
         success: true,
         latencyMs: latency,
@@ -1677,12 +2021,24 @@ app.post('/api/telegram/test-connection', async (req: Request, res: Response): P
         status: 'Connected & Verified with Telegram Bot API',
       });
     } else {
+      saveBotHealthState({
+        status: 'DISCONNECTED',
+        statusCode: 'invalid_token',
+        lastCheckedAt: new Date().toISOString(),
+        lastError: `Telegram API error: ${data.description}`,
+      });
       res.status(400).json({
         success: false,
         error: `Telegram API error: ${data.description}`,
       });
     }
   } catch (err: any) {
+    saveBotHealthState({
+      status: 'DISCONNECTED',
+      statusCode: 'api_connection_failed',
+      lastCheckedAt: new Date().toISOString(),
+      lastError: `Failed to connect to Telegram servers: ${err.message || String(err)}`,
+    });
     res.status(500).json({
       success: false,
       error: `Failed to connect to Telegram servers: ${err.message || String(err)}`,
@@ -2087,27 +2443,98 @@ async function verifyTelegramConnectionServer(token: string, rawChannel?: string
   };
 }
 
+function recordBotVerificationOutcome(result: any, source: string = 'manual_verify') {
+  const nowIso = new Date().toISOString();
+  const prev = loadBotHealthState();
+  const persisted = loadPersistedSettings() || {};
+
+  if (result?.ok) {
+    saveBotHealthState({
+      status: 'CONNECTED',
+      statusCode: result.statusCode || 'connected',
+      lastCheckedAt: nowIso,
+      lastSuccessfulTestAt: nowIso,
+      lastError: null,
+      consecutiveFailures: 0,
+      reconnectAttempts: prev.status === 'DISCONNECTED' ? (prev.reconnectAttempts || 0) : 0,
+      botUsername: result.bot?.username ? `@${result.bot.username}` : persisted.telegramBotUsername || prev.botUsername,
+      channelName: result.normalizedChannel || persisted.telegramChannelName || prev.channelName,
+      channelId: result.chat?.id ? String(result.chat.id) : persisted.telegramChannelId || prev.channelId,
+      lastSource: source,
+    });
+    savePersistedSettings({
+      botLastVerifiedAt: nowIso,
+      botLastVerificationStatus: result.statusCode || 'connected',
+      telegramBotUsername: result.bot?.username ? `@${String(result.bot.username).replace(/^@/, '')}` : persisted.telegramBotUsername,
+      ...(result.chat?.id ? { telegramChannelId: String(result.chat.id) } : {}),
+    });
+    if (prev.status === 'DISCONNECTED') {
+      pushAdminNotification({
+        type: 'bot_reconnected',
+        title: 'Telegram Bot Reconnected',
+        message: `Bot connection to ${result.normalizedChannel || persisted.telegramChannelName} restored successfully (${source}).`,
+        severity: 'info',
+      });
+      appendAuditLog({
+        action: 'bot_reconnected',
+        actorEmail: 'system',
+        targetType: 'bot',
+        summary: `Telegram bot automatically reconnected (${result.normalizedChannel || 'channel verified'})`,
+        severity: 'info',
+      });
+    }
+  } else {
+    const failures = (prev.consecutiveFailures || 0) + 1;
+    saveBotHealthState({
+      status: getTelegramToken() ? 'DISCONNECTED' : 'UNCONFIGURED',
+      statusCode: result?.statusCode || 'api_connection_failed',
+      lastCheckedAt: nowIso,
+      lastError: result?.error || result?.statusLabel || 'Bot verification failed',
+      consecutiveFailures: failures,
+      reconnectAttempts: (prev.reconnectAttempts || 0) + (source === 'auto_monitor' ? 1 : 0),
+      lastSource: source,
+    });
+    savePersistedSettings({
+      botLastVerifiedAt: nowIso,
+      botLastVerificationStatus: result?.statusCode || 'disconnected',
+    });
+    if (getTelegramToken() && (prev.status === 'CONNECTED' || failures === 1 || failures % 5 === 0)) {
+      pushAdminNotification({
+        type: 'bot_disconnected',
+        title: 'Telegram Bot Attention Required',
+        message: result?.error || `Telegram API returned ${result?.statusCode || 'error'}. Auto-reconnect will continue monitoring.`,
+        severity: 'warning',
+      });
+    }
+  }
+  return result;
+}
+
 app.get('/api/telegram/verify-connection', async (req: Request, res: Response): Promise<void> => {
   const channel = typeof req.query.channel === 'string' ? req.query.channel : undefined;
   const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
+  recordBotVerificationOutcome(result, 'manual_verify_get');
   res.json(result);
 });
 
 app.post('/api/telegram/verify-connection', async (req: Request, res: Response): Promise<void> => {
   const { channelName } = req.body || {};
   const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
+  recordBotVerificationOutcome(result, 'manual_verify_post');
   res.json(result);
 });
 
 app.get('/api/telegram/verify-channel', async (req: Request, res: Response): Promise<void> => {
   const channel = typeof req.query.channel === 'string' ? req.query.channel : undefined;
   const result = await verifyTelegramConnectionServer(getTelegramToken(), channel);
+  recordBotVerificationOutcome(result, 'verify_channel_get');
   res.json(result);
 });
 
 app.post('/api/telegram/verify-channel', async (req: Request, res: Response): Promise<void> => {
   const { channelName } = req.body || {};
   const result = await verifyTelegramConnectionServer(getTelegramToken(), channelName);
+  recordBotVerificationOutcome(result, 'verify_channel_post');
   res.json(result);
 });
 
@@ -9538,6 +9965,456 @@ Return strict JSON:
       mode: 'automatic_30s_server_scheduler',
       schedulerStatus: buildSchedulerStatusSnapshot(),
     });
+  });
+
+  // =========================================================================
+  // PERMANENT STORAGE, BACKUPS, 24/7 AUTO-RECOVERY, AUDIT LOGS & STAFF ADMIN
+  // =========================================================================
+
+  function listPersistentBackups(): any[] {
+    ensureRuntimeDataDir();
+    try {
+      const files = fs
+        .readdirSync(BACKUPS_DIR)
+        .filter((f) => f.endsWith('.json'))
+        .sort()
+        .reverse();
+      return files.map((filename) => {
+        const fullPath = path.join(BACKUPS_DIR, filename);
+        const stat = fs.statSync(fullPath);
+        const parsed = loadJsonFileSafe<any>(fullPath, {});
+        return {
+          id: parsed.id || filename.replace(/\.json$/, ''),
+          filename,
+          trigger: parsed.trigger || 'manual',
+          createdAt: parsed.createdAt || stat.mtime.toISOString(),
+          sizeBytes: stat.size,
+          counts: parsed.counts || {
+            vacancies: 0,
+            staffProfiles: 0,
+            applications: 0,
+            internationalJobs: 0,
+            immigrationPathways: 0,
+            scholarships: 0,
+          },
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  function createPersistentSystemBackup(
+    trigger: 'startup' | 'scheduled' | 'manual' | 'pre_restore',
+    actorEmail: string = 'system'
+  ) {
+    ensureRuntimeDataDir();
+    const nowIso = new Date().toISOString();
+    const safeTs = nowIso.replace(/[:.]/g, '-');
+    const id = `bkp_${safeTs}_${trigger}`;
+    const filename = `${id}.json`;
+
+    const siteSettings = loadPersistedSettings() || {};
+    const { telegramBotToken: _omitRawTok, ...safeSettings } = siteSettings;
+    const telegramConfig = loadJsonFileSafe<any>(TELEGRAM_CONFIG_FILE, {});
+    const userProfiles = loadUserProfiles();
+    const jobApplications = loadJobApplications();
+    const intlData = loadPersistedInternationalData();
+    const analyticsEvents = loadJsonFileSafe<any[]>(ANALYTICS_FILE, []);
+    const telegramLogs = loadJsonFileSafe<any[]>(TELEGRAM_LOGS_FILE, []);
+    const botHealth = loadBotHealthState();
+
+    const payload = {
+      id,
+      version: '3.0.0',
+      trigger,
+      actorEmail,
+      createdAt: nowIso,
+      counts: {
+        vacancies: 0,
+        staffProfiles: Object.keys(userProfiles || {}).length,
+        applications: Array.isArray(jobApplications) ? jobApplications.length : 0,
+        internationalJobs: Array.isArray(intlData?.internationalJobs) ? intlData.internationalJobs.length : 0,
+        immigrationPathways: Array.isArray(intlData?.immigrationPathways) ? intlData.immigrationPathways.length : 0,
+        scholarships: Array.isArray(intlData?.experienceScholarships) ? intlData.experienceScholarships.length : 0,
+      },
+      data: {
+        siteSettings: safeSettings,
+        telegramConfig,
+        userProfiles,
+        jobApplications,
+        internationalData: intlData,
+        analyticsEventsCount: Array.isArray(analyticsEvents) ? analyticsEvents.length : 0,
+        telegramLogs: Array.isArray(telegramLogs) ? telegramLogs.slice(0, 300) : [],
+        botHealth,
+      },
+    };
+
+    const fullPath = path.join(BACKUPS_DIR, filename);
+    writeJsonFileAtomic(fullPath, payload);
+
+    // Prune old automatic backups (keep latest 20 automatic backups, never delete manual backups automatically)
+    try {
+      const autoFiles = fs
+        .readdirSync(BACKUPS_DIR)
+        .filter((f) => f.endsWith('.json') && (f.includes('_startup.') || f.includes('_scheduled.')))
+        .sort()
+        .reverse();
+      for (const old of autoFiles.slice(20)) {
+        fs.unlinkSync(path.join(BACKUPS_DIR, old));
+      }
+    } catch {}
+
+    appendAuditLog({
+      action: 'backup_created',
+      actorEmail,
+      targetType: 'backup',
+      targetId: id,
+      summary: `Created ${trigger} persistent database backup (${payload.counts.staffProfiles} profiles, ${payload.counts.applications} apps)`,
+      severity: 'info',
+    });
+
+    const stat = fs.existsSync(fullPath) ? fs.statSync(fullPath) : { size: 0 };
+    return {
+      id,
+      filename,
+      trigger,
+      createdAt: nowIso,
+      sizeBytes: stat.size,
+      counts: payload.counts,
+    };
+  }
+
+  function buildSystemHealthSnapshot() {
+    ensureRuntimeDataDir();
+    let writable = false;
+    try {
+      const probeFile = path.join(RUNTIME_BASE_DIR, 'data', '.write_probe');
+      fs.writeFileSync(probeFile, new Date().toISOString(), 'utf-8');
+      fs.unlinkSync(probeFile);
+      writable = true;
+    } catch {}
+
+    const settings = loadPersistedSettings() || {};
+    const token = getTelegramToken();
+    const botHealth = loadBotHealthState();
+    const profiles = loadUserProfiles();
+    const apps = loadJobApplications();
+    const analyticsEvents = loadJsonFileSafe<any[]>(ANALYTICS_FILE, []);
+    const logs = loadAuditLogs();
+    const notifs = loadAdminNotifications();
+    const backups = listPersistentBackups();
+    const unackAlerts = notifs.filter((n) => !n.acknowledged).length;
+
+    const filesPresent: Record<string, boolean> = {
+      site_settings: fs.existsSync(SETTINGS_FILE),
+      telegram_config: fs.existsSync(TELEGRAM_CONFIG_FILE),
+      user_profiles: fs.existsSync(USER_PROFILES_FILE),
+      job_applications: fs.existsSync(JOB_APPLICATIONS_FILE),
+      international_data: fs.existsSync(INTERNATIONAL_DATA_FILE),
+      analytics_events: fs.existsSync(ANALYTICS_FILE),
+    };
+
+    const botStatus: 'CONNECTED' | 'DISCONNECTED' | 'UNCONFIGURED' = !token
+      ? 'UNCONFIGURED'
+      : botHealth.status === 'CONNECTED'
+      ? 'CONNECTED'
+      : 'DISCONNECTED';
+
+    const gaId = settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
+    const gaEnabled = settings.gaTrackingEnabled ?? true;
+
+    const overallStatus: 'HEALTHY' | 'DEGRADED' | 'ATTENTION_REQUIRED' =
+      !writable ? 'ATTENTION_REQUIRED' : botStatus === 'DISCONNECTED' || !gaEnabled ? 'DEGRADED' : 'HEALTHY';
+
+    const snapshot = {
+      checkedAt: new Date().toISOString(),
+      overallStatus,
+      serverUptimeSeconds: Math.floor((Date.now() - SERVER_BOOT_TIME_MS) / 1000),
+      storage: {
+        persistentDbWritable: writable,
+        filesPresent,
+        backupCount: backups.length,
+        latestBackupAt: backups[0]?.createdAt || null,
+      },
+      telegramBot: {
+        configured: Boolean(token),
+        tokenSaved: Boolean(token),
+        botUsername: settings.telegramBotUsername || botHealth.botUsername || '@DreamBigJobsEthiopiaBot',
+        channelName: settings.telegramChannelName || botHealth.channelName || '@DreamBigJobsEthiopia',
+        channelId: settings.telegramChannelId || botHealth.channelId || '',
+        status: botStatus,
+        statusCode: botHealth.statusCode || '',
+        lastCheckedAt: botHealth.lastCheckedAt || null,
+        lastSuccessfulTestAt: botHealth.lastSuccessfulTestAt || null,
+        lastError: botHealth.lastError || null,
+        consecutiveFailures: botHealth.consecutiveFailures || 0,
+        reconnectAttempts: botHealth.reconnectAttempts || 0,
+        autoPublishEnabled: settings.telegramAutoPublish ?? true,
+        botInstructions: settings.botInstructions || '',
+      },
+      analytics: {
+        gaMeasurementId: gaId,
+        gaTrackingEnabled: gaEnabled,
+        alwaysOnEnforced: true,
+        totalEventsRecorded: Array.isArray(analyticsEvents) ? analyticsEvents.length : 0,
+      },
+      counts: {
+        vacancies: 0,
+        staffProfiles: Object.keys(profiles || {}).length,
+        jobApplications: Array.isArray(apps) ? apps.length : 0,
+        auditLogs: logs.length,
+        unacknowledgedAlerts: unackAlerts,
+      },
+    };
+
+    writeJsonFileAtomic(SYSTEM_HEALTH_FILE, snapshot);
+    return snapshot;
+  }
+
+  let healthCycleActive = false;
+  async function runSystemHealthAndBotRecoveryCycle(source: string = 'auto_monitor') {
+    if (healthCycleActive) {
+      return buildSystemHealthSnapshot();
+    }
+    healthCycleActive = true;
+    try {
+      // Ensure GA4 Always-On config stays persisted
+      const currentSettings = loadPersistedSettings() || {};
+      if (!currentSettings.gaMeasurementId || currentSettings.gaTrackingEnabled === undefined) {
+        savePersistedSettings({
+          gaMeasurementId: currentSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
+          gaTrackingEnabled: currentSettings.gaTrackingEnabled ?? true,
+        });
+      }
+
+      // Check & auto-reconnect Telegram bot using saved credentials
+      const token = getTelegramToken();
+      if (token) {
+        const tgResult = await verifyTelegramConnectionServer(
+          token,
+          currentSettings.telegramChannelId || currentSettings.telegramChannelName
+        );
+        recordBotVerificationOutcome(tgResult, source);
+      } else {
+        saveBotHealthState({
+          status: 'UNCONFIGURED',
+          lastCheckedAt: new Date().toISOString(),
+        });
+      }
+
+      // Create scheduled backup if none in the last 12 hours
+      const existingBackups = listPersistentBackups();
+      const latestMs = existingBackups[0]?.createdAt ? new Date(existingBackups[0].createdAt).getTime() : 0;
+      if (!latestMs || Date.now() - latestMs > 12 * 60 * 60 * 1000) {
+        createPersistentSystemBackup(source === 'startup' ? 'startup' : 'scheduled', 'system');
+      }
+
+      return buildSystemHealthSnapshot();
+    } finally {
+      healthCycleActive = false;
+    }
+  }
+
+  // Start 24/7 Persistent System Health, Auto-Backup & Bot Auto-Recovery Monitor
+  if (!IS_VERCEL) {
+    const bootTimer = setTimeout(() => {
+      runSystemHealthAndBotRecoveryCycle('startup').catch((e) =>
+        console.warn('Startup health & recovery notice:', e?.message || e)
+      );
+    }, 2000);
+    if (typeof bootTimer?.unref === 'function') bootTimer.unref();
+
+    const intervalTimer = setInterval(() => {
+      runSystemHealthAndBotRecoveryCycle('auto_monitor').catch((e) =>
+        console.warn('Scheduled health monitor notice:', e?.message || e)
+      );
+    }, 60 * 1000);
+    if (typeof intervalTimer?.unref === 'function') intervalTimer.unref();
+  }
+
+  app.get('/api/system/health', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      success: true,
+      health: buildSystemHealthSnapshot(),
+      notifications: loadAdminNotifications().slice(0, 50),
+      auditLogs: loadAuditLogs().slice(0, 80),
+    });
+  });
+
+  app.post('/api/system/recover', async (req: Request, res: Response): Promise<void> => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const actor = getRequesterEmail(req) || 'owner';
+    const health = await runSystemHealthAndBotRecoveryCycle('manual_recovery');
+    appendAuditLog({
+      action: 'system_recovery_run',
+      actorEmail: actor,
+      targetType: 'system',
+      summary: `Manual system recovery & live connection check completed (Bot: ${health.telegramBot.status}, DB writable: ${health.storage.persistentDbWritable})`,
+      severity: 'info',
+    });
+    res.json({
+      success: true,
+      health,
+      notifications: loadAdminNotifications().slice(0, 50),
+      auditLogs: loadAuditLogs().slice(0, 80),
+    });
+  });
+
+  app.get('/api/admin/staff-profiles', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const all = loadUserProfiles();
+    const list = Object.values(all || {}).sort(
+      (a: any, b: any) =>
+        new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+    );
+    res.json({ success: true, profiles: list, total: list.length });
+  });
+
+  app.delete('/api/admin/staff-profiles/:uid', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { uid } = req.params;
+    const { confirmDelete, confirmationText } = req.body || {};
+    if (confirmDelete !== true || String(confirmationText || '').trim().toUpperCase() !== 'DELETE') {
+      res.status(400).json({
+        success: false,
+        error: 'Explicit owner confirmation required (confirmDelete: true and confirmationText: "DELETE").',
+      });
+      return;
+    }
+
+    const all = loadUserProfiles();
+    const existing = all[uid];
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Staff profile not found.' });
+      return;
+    }
+
+    // Create a safety backup right before permanent owner deletion
+    createPersistentSystemBackup('pre_restore', getRequesterEmail(req) || 'owner');
+
+    delete all[uid];
+    writeJsonFileAtomic(USER_PROFILES_FILE, all);
+
+    appendAuditLog({
+      action: 'staff_profile_deleted_owner',
+      actorEmail: getRequesterEmail(req) || 'owner',
+      targetType: 'staff_profile',
+      targetId: uid,
+      summary: `Owner permanently deleted staff profile for ${existing.fullName || existing.email || uid}`,
+      severity: 'warning',
+    });
+
+    res.json({ success: true, deletedUid: uid });
+  });
+
+  app.get('/api/admin/backups', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({ success: true, backups: listPersistentBackups() });
+  });
+
+  app.post('/api/admin/backups/create', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const backup = createPersistentSystemBackup('manual', getRequesterEmail(req) || 'owner');
+    pushAdminNotification({
+      type: 'backup_created',
+      title: 'Manual Database Backup Saved',
+      message: `Backup snapshot ${backup.filename} saved permanently on server storage.`,
+      severity: 'info',
+    });
+    res.json({ success: true, backup, backups: listPersistentBackups() });
+  });
+
+  app.post('/api/admin/backups/restore', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { backupId, confirmRestore } = req.body || {};
+    if (!backupId || confirmRestore !== true) {
+      res.status(400).json({
+        success: false,
+        error: 'Explicit backupId and confirmRestore: true are required before restoring.',
+      });
+      return;
+    }
+
+    const backups = listPersistentBackups();
+    const target = backups.find((b) => b.id === backupId || b.filename === backupId);
+    if (!target) {
+      res.status(404).json({ success: false, error: 'Backup snapshot not found.' });
+      return;
+    }
+
+    const fullPath = path.join(BACKUPS_DIR, target.filename);
+    const parsed = loadJsonFileSafe<any>(fullPath, null);
+    if (!parsed || !parsed.data) {
+      res.status(400).json({ success: false, error: 'Backup file is corrupt or empty.' });
+      return;
+    }
+
+    // Always capture a pre-restore backup before applying restore
+    const actor = getRequesterEmail(req) || 'owner';
+    createPersistentSystemBackup('pre_restore', actor);
+
+    const d = parsed.data;
+    if (d.siteSettings) savePersistedSettings(d.siteSettings);
+    if (d.telegramConfig && Object.keys(d.telegramConfig).length > 0) {
+      writeJsonFileAtomic(TELEGRAM_CONFIG_FILE, d.telegramConfig);
+      if (d.telegramConfig.telegramBotToken) {
+        serverTelegramBotToken = d.telegramConfig.telegramBotToken;
+        process.env.TELEGRAM_BOT_TOKEN = d.telegramConfig.telegramBotToken;
+      }
+    }
+    if (d.userProfiles && typeof d.userProfiles === 'object') {
+      const currentProfiles = loadUserProfiles();
+      // Preserve & restore non-destructively (merge restored profiles on top of existing without dropping newer entries unless explicitly replaced)
+      writeJsonFileAtomic(USER_PROFILES_FILE, { ...currentProfiles, ...d.userProfiles });
+    }
+    if (Array.isArray(d.jobApplications)) {
+      writeJsonFileAtomic(JOB_APPLICATIONS_FILE, d.jobApplications);
+    }
+    if (d.internationalData && typeof d.internationalData === 'object') {
+      savePersistedInternationalData(d.internationalData);
+    }
+
+    appendAuditLog({
+      action: 'backup_restored',
+      actorEmail: actor,
+      targetType: 'backup',
+      targetId: target.id,
+      summary: `Restored persistent database snapshot ${target.filename} (pre-restore safety snapshot saved automatically)`,
+      severity: 'warning',
+    });
+
+    res.json({
+      success: true,
+      restoredBackupId: target.id,
+      backups: listPersistentBackups(),
+      health: buildSystemHealthSnapshot(),
+    });
+  });
+
+  app.get('/api/admin/audit-logs', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    res.json({
+      success: true,
+      auditLogs: loadAuditLogs().slice(0, 150),
+      notifications: loadAdminNotifications().slice(0, 100),
+    });
+  });
+
+  app.post('/api/admin/notifications/ack', (req: Request, res: Response): void => {
+    if (!requireOwnerDeveloper(req, res)) return;
+    const { id, acknowledgeAll } = req.body || {};
+    const actor = getRequesterEmail(req) || 'owner';
+    const nowIso = new Date().toISOString();
+    const list = loadAdminNotifications().map((n) => {
+      if (acknowledgeAll || n.id === id) {
+        return { ...n, acknowledged: true, acknowledgedAt: nowIso, acknowledgedBy: actor };
+      }
+      return n;
+    });
+    writeJsonFileAtomic(ADMIN_NOTIFICATIONS_FILE, list);
+    res.json({ success: true, notifications: list });
   });
 
   return app;

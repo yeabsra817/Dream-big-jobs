@@ -55,6 +55,9 @@ import {
 import {
   getInternalTrafficExclusion,
   setInternalTrafficExclusion,
+  checkGa4Health,
+  initGoogleAnalytics4,
+  DEFAULT_GA_MEASUREMENT_ID,
 } from '../../lib/analyticsTracker';
 import { safeResponseJson, fetchAnalyticsSummaryFromFirestore, purgeAnalyticsFromFirestore } from '../../lib/firebase';
 import { generateVisitCountAiInsights } from '../../lib/aiService';
@@ -121,9 +124,10 @@ export const WebsiteAnalytics: React.FC<Props> = ({
   const [isSubmittingRevenue, setIsSubmittingRevenue] = useState(false);
 
   // GA4 Configuration state
-  const [gaInput, setGaInput] = useState<string>(siteSettings.gaMeasurementId || '');
+  const [gaInput, setGaInput] = useState<string>(siteSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID);
   const [isSavingGa, setIsSavingGa] = useState<boolean>(false);
   const [gaSuccessMsg, setGaSuccessMsg] = useState<string | null>(null);
+  const gaHealth = checkGa4Health(siteSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID, siteSettings.gaTrackingEnabled !== false);
 
   // In-app non-blocking notifications and custom confirmations (replaces window.alert / window.confirm)
   const [toastFeedback, setToastFeedback] = useState<{
@@ -1639,6 +1643,41 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
             </div>
           )}
 
+          {/* Live Always-On GA4 Runtime Diagnostic */}
+          <div
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              gaHealth.status === 'ACTIVE'
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : 'bg-amber-50 border-amber-300'
+            }`}
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-xs text-slate-900">
+                  Google Analytics 4 Always-On Pipeline ({gaHealth.measurementId || DEFAULT_GA_MEASUREMENT_ID})
+                </h4>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                    gaHealth.status === 'ACTIVE'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-rose-100 text-rose-800 border-rose-300'
+                  }`}
+                >
+                  {gaHealth.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 mt-0.5">{gaHealth.diagnostic}</p>
+            </div>
+            <div className="text-right font-mono text-[11px] shrink-0 text-slate-700">
+              <div>dataLayer: {gaHealth.dataLayerEvents} event(s)</div>
+              <div className="text-[10px] text-slate-500">
+                {gaHealth.lastEventDispatchedAt
+                  ? `Last hit: ${new Date(gaHealth.lastEventDispatchedAt).toLocaleTimeString()}`
+                  : 'Ready on public pages'}
+              </div>
+            </div>
+          </div>
+
           {/* Diagnostic Checks List */}
           <div className="space-y-3">
             {summary?.healthDiagnostics?.map((diag) => {
@@ -1862,32 +1901,32 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
           <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Globe className="w-5 h-5 text-amber-500" />
                   <h3 className="font-bold text-sm text-slate-900">
-                    Google Analytics 4 Measurement ID
+                    Google Analytics 4 Always-On Configuration
                   </h3>
                   <span
                     className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
-                      siteSettings.gaMeasurementId
+                      gaHealth.status === 'ACTIVE'
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-amber-100 text-amber-800 border border-amber-300'
                     }`}
                   >
-                    {siteSettings.gaMeasurementId ? 'CONNECTED' : 'NOT CONFIGURED'}
+                    {gaHealth.status}
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mt-1 max-w-xl">
-                  Loads official <code className="font-mono">gtag.js</code> for public pages. Dual-reported alongside our verified first-party telemetry engine.
+                  {gaHealth.diagnostic}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   value={gaInput}
                   onChange={(e) => setGaInput(e.target.value)}
-                  placeholder="G-XXXXXXXXXX"
+                  placeholder="G-KH6X73105S"
                   className="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 uppercase w-48"
                 />
                 <button
@@ -1896,6 +1935,23 @@ ${aiReport.strategicRecommendations?.map((r, i) => `${i + 1}. ${r}`).join('\n')}
                   className="px-4 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-bold text-xs transition-colors whitespace-nowrap shadow-sm"
                 >
                   {isSavingGa ? 'Saving...' : 'Save GA4 ID'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const effectiveId = (gaInput || siteSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID).trim().toUpperCase();
+                    initGoogleAnalytics4(effectiveId, false);
+                    await onSaveSiteSettings({
+                      ...siteSettings,
+                      gaMeasurementId: effectiveId,
+                      gaTrackingEnabled: true,
+                      updatedAt: new Date().toISOString(),
+                    });
+                    showToast('success', `Always-On GA4 verified & enabled (${effectiveId}).`);
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors whitespace-nowrap shadow-xs"
+                >
+                  Verify &amp; Enforce Always-On
                 </button>
               </div>
             </div>

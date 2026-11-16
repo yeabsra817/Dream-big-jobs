@@ -33,3 +33,8 @@ All the above 12 attack vectors are blocked by:
 7. **Admin-Only Research & Audit Logs**: `/research_history` and `/verification_logs` are readable and writable strictly by `isOwnerAdmin()`.
 8. **Strict Private Assistant Isolation**: `/autoApplyProfile`, `/autoApplyDocuments`, and `/autoApplyApplications` remain strictly locked to `isOwnerAdmin()` and are never exposed to public visitors or standard job seekers.
 
+## 5. Permanent Storage, Staff Profiles & Owner Control Invariants
+9. **Staff Profile Ownership & Non-Escalation**: Authenticated staff and job seekers may ONLY read, create, and update their own `/job_seeker_profiles/{uid}` document where `request.auth.uid == userId` and `data.uid == userId`. Clients are blocked from injecting `isAdmin` or `role` fields, and `list` queries on `/job_seeker_profiles` remain restricted to `isOwnerAdmin()`.
+10. **Owner-Only Permanent Deletion**: Only `isOwnerAdmin()` can delete profiles, backups, or settings. Backend `/api/admin/staff-profiles/:uid` requires verified owner headers and explicit confirmation tokens, taking a pre-delete safety backup first.
+11. **Audit Logs & Backups Isolation**: `/audit_logs`, `/admin_notifications`, and `/system_backups` are readable and writable exclusively by `isOwnerAdmin()`.
+

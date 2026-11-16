@@ -35,6 +35,14 @@ service cloud.firestore {
         && data.fullName is string && data.fullName.size() <= 200
         && (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 1000))
         && (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 50))
+        && (!('accountRole' in data) || (data.accountRole is string && data.accountRole in ['staff', 'job_seeker']))
+        && (!('currentPosition' in data) || data.currentPosition == null || (data.currentPosition is string && data.currentPosition.size() <= 200))
+        && (!('staffDepartmentOrSector' in data) || data.staffDepartmentOrSector == null || (data.staffDepartmentOrSector is string && data.staffDepartmentOrSector.size() <= 200))
+        && (!('skills' in data) || (data.skills is list && data.skills.size() <= 100))
+        && (!('areasOfExpertise' in data) || (data.areasOfExpertise is list && data.areasOfExpertise.size() <= 100))
+        && (!('professionalInterests' in data) || (data.professionalInterests is list && data.professionalInterests.size() <= 100))
+        && (!('previousPositions' in data) || (data.previousPositions is list && data.previousPositions.size() <= 50))
+        && (!('certifications' in data) || (data.certifications is list && data.certifications.size() <= 50))
         && (!('savedJobIds' in data) || (data.savedJobIds is list && data.savedJobIds.size() <= 200))
         && !('isAdmin' in data)
         && !('role' in data);
@@ -120,7 +128,7 @@ service cloud.firestore {
       allow write: if isOwnerAdmin();
     }
 
-    // Job Seeker Profiles Collection (Owner-scoped PII protection)
+    // Job Seeker & Staff Profiles Collection (Owner-scoped PII protection)
     match /job_seeker_profiles/{userId} {
       allow get: if (isSignedIn() && isValidId(userId) && request.auth.uid == userId) || isOwnerAdmin();
       allow list: if isOwnerAdmin();
@@ -246,6 +254,21 @@ service cloud.firestore {
     }
 
     match /telegram_retry_queue/{retryId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    // Owner-Only Persistence, Audit History & Backup Collections
+    match /audit_logs/{logId} {
+      allow get, list: if isOwnerAdmin();
+      allow create: if isOwnerAdmin() && isValidId(logId);
+      allow update, delete: if false;
+    }
+
+    match /admin_notifications/{notifId} {
+      allow read, write: if isOwnerAdmin();
+    }
+
+    match /system_backups/{backupId} {
       allow read, write: if isOwnerAdmin();
     }
 

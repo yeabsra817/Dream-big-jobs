@@ -596,6 +596,8 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     researchEnabledCountries: RESEARCH_REGIONS.flatMap((r) => r.countries),
     researchJobCategories: INTERNATIONAL_JOB_CATEGORIES,
     researchFrequency: 'manual',
+    gaMeasurementId: 'G-KH6X73105S',
+    gaTrackingEnabled: true,
     contactEmail: 'nexusitsoultion@gmail.com',
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
@@ -687,6 +689,10 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     if (safeFsSettings.gaMeasurementId) merged.gaMeasurementId = safeFsSettings.gaMeasurementId;
     else if (safeSrvSettings.gaMeasurementId) merged.gaMeasurementId = safeSrvSettings.gaMeasurementId;
     else if (safeCached.gaMeasurementId) merged.gaMeasurementId = safeCached.gaMeasurementId;
+    else merged.gaMeasurementId = 'G-KH6X73105S';
+  }
+  if (merged.gaTrackingEnabled === undefined || merged.gaTrackingEnabled === null) {
+    merged.gaTrackingEnabled = true;
   }
 
   try {
@@ -700,7 +706,12 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   const path = 'siteSettings/general';
   // Security: strip raw bot token before saving to client cache or Firestore
-  const { telegramBotToken: rawTokenOnlyForServerSync, ...safeSettings } = settings;
+  const { telegramBotToken: rawTokenOnlyForServerSync, ...safeSettingsRaw } = settings;
+  const safeSettings: SiteSettings = {
+    ...safeSettingsRaw,
+    gaMeasurementId: safeSettingsRaw.gaMeasurementId || 'G-KH6X73105S',
+    gaTrackingEnabled: safeSettingsRaw.gaTrackingEnabled ?? true,
+  };
 
   // 1. Update localStorage immediately (never storing raw bot token)
   try {
@@ -710,9 +721,13 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
 
   // 2. Persist to server backend disk (server strips token out of public settings and isolates it in server-only config)
   try {
+    const adminEmail = getActiveAdminSessionEmail() || auth.currentUser?.email || '';
     await fetch('/api/settings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+      },
       body: JSON.stringify(
         rawTokenOnlyForServerSync ? { ...safeSettings, telegramBotToken: rawTokenOnlyForServerSync } : safeSettings
       ),
@@ -1367,6 +1382,9 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
       const snap = await withTimeout(getDoc(doc(db, 'job_seeker_profiles', uid)), 3000, null as any);
       if (snap && snap.exists()) return snap.data() as JobSeekerProfile;
     } catch (err) {
+      if (isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.GET, `job_seeker_profiles/${uid}`);
+      }
       console.warn('Firestore profile fetch notice:', err);
     }
     return null;
@@ -1374,7 +1392,17 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
 
   const fromServer = async (): Promise<JobSeekerProfile | null> => {
     try {
-      const res = await withTimeout(fetch(`/api/user-profile/${encodeURIComponent(uid)}`), 2500, null as any);
+      const res = await withTimeout(
+        fetch(`/api/user-profile/${encodeURIComponent(uid)}`, {
+          headers: {
+            'x-user-uid': uid,
+            ...(auth.currentUser?.email ? { 'x-user-email': auth.currentUser.email } : {}),
+            ...(getActiveAdminSessionEmail() ? { 'x-admin-email': getActiveAdminSessionEmail() } : {}),
+          },
+        }),
+        2500,
+        null as any
+      );
       if (res && res.ok) {
         const serverProfile = await safeResponseJson<JobSeekerProfile>(res);
         if (serverProfile && serverProfile.uid) return serverProfile;
@@ -1384,12 +1412,24 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
   };
 
   const [fsProfile, srvProfile] = await Promise.all([fromFirestore(), fromServer()]);
-  const resolved = fsProfile || srvProfile;
+  const resolved = srvProfile || fsProfile;
   if (resolved) {
+    const normalized: JobSeekerProfile = {
+      ...resolved,
+      accountRole: resolved.accountRole || 'staff',
+      skills: Array.isArray(resolved.skills) ? resolved.skills : [],
+      areasOfExpertise: Array.isArray(resolved.areasOfExpertise) ? resolved.areasOfExpertise : [],
+      professionalInterests: Array.isArray(resolved.professionalInterests) ? resolved.professionalInterests : [],
+      previousPositions: Array.isArray(resolved.previousPositions) ? resolved.previousPositions : [],
+      certifications: Array.isArray(resolved.certifications) ? resolved.certifications : [],
+      education: Array.isArray(resolved.education) ? resolved.education : [],
+      experience: Array.isArray(resolved.experience) ? resolved.experience : [],
+      documents: Array.isArray(resolved.documents) ? resolved.documents : [],
+    };
     try {
-      localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(resolved));
+      localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(normalized));
     } catch {}
-    return resolved;
+    return normalized;
   }
 
   // 3. Fallback to localStorage
@@ -1399,8 +1439,14 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
 export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<void> {
   if (!profile.uid) return;
 
+  const { isAdmin: _stripA, role: _stripR, ...safeRest } = profile as any;
   const cleanProfile = sanitizeForFirestore({
-    ...profile,
+    ...safeRest,
+    accountRole: safeRest.accountRole || 'staff',
+    areasOfExpertise: Array.isArray(safeRest.areasOfExpertise) ? safeRest.areasOfExpertise : [],
+    professionalInterests: Array.isArray(safeRest.professionalInterests) ? safeRest.professionalInterests : [],
+    previousPositions: Array.isArray(safeRest.previousPositions) ? safeRest.previousPositions : [],
+    certifications: Array.isArray(safeRest.certifications) ? safeRest.certifications : [],
     updatedAt: new Date().toISOString(),
   });
 
@@ -1409,13 +1455,28 @@ export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<v
     localStorage.setItem(`hopelandjobs_profile_${profile.uid}`, JSON.stringify(cleanProfile));
   } catch {}
 
-  // 2 & 3. Persist to Firestore & server database in parallel
+  // 2 & 3. Persist permanently to server database & Cloud Firestore in parallel
+  const firestoreWrite = async () => {
+    try {
+      await withTimeout(setDoc(doc(db, 'job_seeker_profiles', profile.uid), cleanProfile, { merge: true }), 4000, undefined);
+    } catch (err) {
+      if (isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.WRITE, `job_seeker_profiles/${profile.uid}`);
+      }
+      console.warn('Firestore saveJobSeekerProfile notice:', err);
+    }
+  };
+
   await Promise.allSettled([
-    withTimeout(setDoc(doc(db, 'job_seeker_profiles', profile.uid), cleanProfile, { merge: true }), 3500, undefined),
+    firestoreWrite(),
     withTimeout(
       fetch('/api/user-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-uid': profile.uid,
+          ...(profile.email ? { 'x-user-email': profile.email } : {}),
+        },
         body: JSON.stringify(cleanProfile),
       }),
       3500,
@@ -2503,6 +2564,187 @@ export async function saveBatchVerificationLogs(logs: VerificationReportItem[]):
     console.warn('saveBatchVerificationLogs notice:', err);
   }
 }
+
+/* =========================================================================
+ * 13. OWNER-ONLY SYSTEM PERSISTENCE, BACKUPS, AUDIT & STAFF MANAGEMENT
+ * ========================================================================= */
+
+export async function fetchSystemHealthAdmin(adminEmailOverride?: string): Promise<{
+  health: any;
+  notifications: any[];
+  auditLogs: any[];
+} | null> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) return null;
+  try {
+    const res = await fetch('/api/system/health', {
+      headers: { 'x-admin-email': email },
+    });
+    if (!res.ok) return null;
+    const data = await safeResponseJson<any>(res);
+    return data?.success ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function runSystemRecoveryAdmin(adminEmailOverride?: string): Promise<{
+  health: any;
+  notifications: any[];
+  auditLogs: any[];
+} | null> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) return null;
+  const res = await fetch('/api/system/recover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+    body: JSON.stringify({ adminEmail: email }),
+  });
+  const data = await safeResponseJson<any>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'System recovery check failed');
+  }
+  return data;
+}
+
+export async function fetchAllStaffProfilesAdmin(adminEmailOverride?: string): Promise<JobSeekerProfile[]> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) return [];
+  const mergedMap = new Map<string, JobSeekerProfile>();
+
+  try {
+    const res = await fetch('/api/admin/staff-profiles', {
+      headers: { 'x-admin-email': email },
+    });
+    if (res.ok) {
+      const data = await safeResponseJson<any>(res);
+      if (Array.isArray(data?.profiles)) {
+        data.profiles.forEach((p: JobSeekerProfile) => {
+          if (p?.uid) mergedMap.set(p.uid, p);
+        });
+      }
+    }
+  } catch {}
+
+  if (auth.currentUser) {
+    try {
+      const snap = await withTimeout(getDocs(collection(db, 'job_seeker_profiles')), 4000, null as any);
+      if (snap) {
+        snap.forEach((d: any) => {
+          const p = d.data() as JobSeekerProfile;
+          if (p?.uid && !mergedMap.has(p.uid)) {
+            mergedMap.set(p.uid, p);
+          }
+        });
+      }
+    } catch (err) {
+      if (isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.LIST, 'job_seeker_profiles');
+      }
+    }
+  }
+
+  return Array.from(mergedMap.values()).sort(
+    (a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+  );
+}
+
+export async function deleteStaffProfileOwnerOnly(
+  uid: string,
+  confirmationText: string,
+  adminEmailOverride?: string
+): Promise<void> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) throw new Error('Authorized owner session is required.');
+
+  const res = await fetch(`/api/admin/staff-profiles/${encodeURIComponent(uid)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-email': email,
+    },
+    body: JSON.stringify({
+      confirmDelete: true,
+      confirmationText,
+    }),
+  });
+  const data = await safeResponseJson<any>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Owner delete failed.');
+  }
+
+  if (auth.currentUser) {
+    try {
+      await deleteDoc(doc(db, 'job_seeker_profiles', uid));
+    } catch (err) {
+      if (isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.DELETE, `job_seeker_profiles/${uid}`);
+      }
+    }
+  }
+}
+
+export async function fetchSystemBackupsAdmin(adminEmailOverride?: string): Promise<any[]> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) return [];
+  try {
+    const res = await fetch('/api/admin/backups', {
+      headers: { 'x-admin-email': email },
+    });
+    if (!res.ok) return [];
+    const data = await safeResponseJson<any>(res);
+    return Array.isArray(data?.backups) ? data.backups : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createSystemBackupAdmin(adminEmailOverride?: string): Promise<any> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) throw new Error('Authorized owner session required.');
+  const res = await fetch('/api/admin/backups/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+    body: JSON.stringify({ adminEmail: email }),
+  });
+  const data = await safeResponseJson<any>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Failed to create persistent backup.');
+  }
+  return data;
+}
+
+export async function restoreSystemBackupAdmin(backupId: string, adminEmailOverride?: string): Promise<any> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) throw new Error('Authorized owner session required.');
+  const res = await fetch('/api/admin/backups/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+    body: JSON.stringify({ backupId, confirmRestore: true, adminEmail: email }),
+  });
+  const data = await safeResponseJson<any>(res);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || 'Failed to restore backup snapshot.');
+  }
+  return data;
+}
+
+export async function acknowledgeAdminNotification(
+  id?: string,
+  acknowledgeAll: boolean = false,
+  adminEmailOverride?: string
+): Promise<any[]> {
+  const email = adminEmailOverride || getActiveAdminSessionEmail();
+  if (!email) return [];
+  const res = await fetch('/api/admin/notifications/ack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-email': email },
+    body: JSON.stringify({ id, acknowledgeAll, adminEmail: email }),
+  });
+  const data = await safeResponseJson<any>(res);
+  return Array.isArray(data?.notifications) ? data.notifications : [];
+}
+
 
 
 

@@ -221,6 +221,91 @@ export interface SiteSettings {
   autoHealDuplicatesEnabled?: boolean;
   lastSelfHealingRun?: string;
   totalSelfHealedCount?: number;
+  // Persistent Bot Instructions & Health Metadata
+  botInstructions?: string;
+  botLastVerifiedAt?: string;
+  botLastVerificationStatus?: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  actorEmail: string;
+  actorUid?: string;
+  targetType: 'settings' | 'bot' | 'staff_profile' | 'backup' | 'system' | 'vacancy' | 'analytics';
+  targetId?: string;
+  summary: string;
+  severity: 'info' | 'warning' | 'critical';
+  timestamp: string;
+}
+
+export interface AdminNotificationItem {
+  id: string;
+  type: 'bot_disconnected' | 'bot_reconnected' | 'ga4_disconnected' | 'staff_registered' | 'backup_created' | 'system_recovery' | 'security_alert';
+  title: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  acknowledged: boolean;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  createdAt: string;
+}
+
+export interface SystemBackupSummary {
+  id: string;
+  filename: string;
+  trigger: 'startup' | 'scheduled' | 'manual' | 'pre_restore';
+  createdAt: string;
+  sizeBytes: number;
+  counts: {
+    vacancies: number;
+    staffProfiles: number;
+    applications: number;
+    internationalJobs: number;
+    immigrationPathways: number;
+    scholarships: number;
+  };
+}
+
+export interface SystemHealthSnapshot {
+  checkedAt: string;
+  overallStatus: 'HEALTHY' | 'DEGRADED' | 'ATTENTION_REQUIRED';
+  serverUptimeSeconds: number;
+  storage: {
+    persistentDbWritable: boolean;
+    filesPresent: Record<string, boolean>;
+    backupCount: number;
+    latestBackupAt?: string | null;
+  };
+  telegramBot: {
+    configured: boolean;
+    tokenSaved: boolean;
+    botUsername?: string;
+    channelName?: string;
+    channelId?: string;
+    status: 'CONNECTED' | 'DISCONNECTED' | 'UNCONFIGURED';
+    statusCode?: string;
+    lastCheckedAt?: string | null;
+    lastSuccessfulTestAt?: string | null;
+    lastError?: string | null;
+    consecutiveFailures: number;
+    reconnectAttempts: number;
+    autoPublishEnabled: boolean;
+    botInstructions?: string;
+  };
+  analytics: {
+    gaMeasurementId: string;
+    gaTrackingEnabled: boolean;
+    alwaysOnEnforced: boolean;
+    totalEventsRecorded: number;
+  };
+  counts: {
+    vacancies: number;
+    staffProfiles: number;
+    jobApplications: number;
+    auditLogs: number;
+    unacknowledgedAlerts: number;
+  };
 }
 
 export interface BulkImportStats {

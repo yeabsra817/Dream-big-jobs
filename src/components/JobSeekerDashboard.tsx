@@ -23,6 +23,10 @@ import {
   Sparkles,
   X,
   FileCheck,
+  Award,
+  Compass,
+  Globe,
+  Target,
 } from 'lucide-react';
 import {
   JobSeekerProfile,
@@ -30,10 +34,16 @@ import {
   EducationItem,
   ExperienceItem,
   SeekerDocument,
+  CertificationItem,
+  StaffAccountRole,
   calculateProfileCompletion,
 } from '../types/jobSeeker';
 import { Vacancy } from '../types/job';
-import { saveJobSeekerProfile } from '../lib/firebase';
+import { InternationalJob, ExperienceScholarship } from '../types/international';
+import {
+  computeStaffOpportunityRecommendations,
+  hasSufficientProfileForRecommendations,
+} from '../utils/recommendationEngine';
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
 import { askAiCareerCoach, CareerCoachAiResponse } from '../lib/aiService';
@@ -42,6 +52,9 @@ interface Props {
   profile: JobSeekerProfile;
   applications: UserJobApplication[];
   savedVacancies: Vacancy[];
+  vacancies?: Vacancy[];
+  internationalJobs?: InternationalJob[];
+  experienceScholarships?: ExperienceScholarship[];
   onUpdateProfile: (updated: JobSeekerProfile) => Promise<void>;
   onSelectVacancy: (vacancy: Vacancy) => void;
   onClose: () => void;
@@ -51,20 +64,76 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   profile,
   applications,
   savedVacancies,
+  vacancies = [],
+  internationalJobs = [],
+  experienceScholarships = [],
   onUpdateProfile,
   onSelectVacancy,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'personal' | 'professional' | 'education' | 'experience' | 'documents' | 'applications' | 'saved'
+    | 'overview'
+    | 'recommendations'
+    | 'personal'
+    | 'professional'
+    | 'education'
+    | 'experience'
+    | 'documents'
+    | 'applications'
+    | 'saved'
   >('overview');
 
-  const [formProfile, setFormProfile] = useState<JobSeekerProfile>({ ...profile });
+  const [formProfile, setFormProfile] = useState<JobSeekerProfile>({
+    ...profile,
+    accountRole: profile.accountRole || 'staff',
+    previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
+    areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
+    professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
+    certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [aiCoachResult, setAiCoachResult] = useState<CareerCoachAiResponse | null>(null);
   const [isAiCoachLoading, setIsAiCoachLoading] = useState(false);
+
+  // Sync if outer profile updates
+  React.useEffect(() => {
+    setFormProfile({
+      ...profile,
+      accountRole: profile.accountRole || 'staff',
+      previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
+      areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
+      professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
+      certifications: Array.isArray(profile.certifications) ? profile.certifications : [],
+    });
+  }, [profile]);
+
+  const [newPrevPosition, setNewPrevPosition] = useState('');
+  const [isAddingCert, setIsAddingCert] = useState(false);
+  const [newCert, setNewCert] = useState<Partial<CertificationItem>>({
+    name: '',
+    issuingOrganization: '',
+    issueDate: '',
+    credentialId: '',
+  });
+
+  const hasSufficientProfile = React.useMemo(
+    () => hasSufficientProfileForRecommendations(formProfile),
+    [formProfile]
+  );
+
+  const recommendations = React.useMemo(
+    () =>
+      computeStaffOpportunityRecommendations(
+        formProfile,
+        vacancies,
+        internationalJobs,
+        experienceScholarships,
+        25
+      ),
+    [formProfile, vacancies, internationalJobs, experienceScholarships]
+  );
 
   const handleRunAiCareerCoach = async () => {
     setIsAiCoachLoading(true);
@@ -179,6 +248,51 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     });
   };
 
+  // Add Previous Position
+  const handleAddPreviousPosition = () => {
+    const val = newPrevPosition.trim();
+    if (!val) return;
+    const existing = formProfile.previousPositions || [];
+    if (!existing.includes(val)) {
+      setFormProfile({ ...formProfile, previousPositions: [...existing, val] });
+    }
+    setNewPrevPosition('');
+  };
+
+  // Remove Previous Position
+  const handleRemovePreviousPosition = (idx: number) => {
+    setFormProfile({
+      ...formProfile,
+      previousPositions: (formProfile.previousPositions || []).filter((_, i) => i !== idx),
+    });
+  };
+
+  // Add Certification
+  const handleAddCertification = () => {
+    if (!newCert.name?.trim() || !newCert.issuingOrganization?.trim()) return;
+    const item: CertificationItem = {
+      id: `cert_${Date.now()}`,
+      name: newCert.name.trim(),
+      issuingOrganization: newCert.issuingOrganization.trim(),
+      issueDate: newCert.issueDate?.trim() || '',
+      credentialId: newCert.credentialId?.trim() || '',
+    };
+    setFormProfile({
+      ...formProfile,
+      certifications: [...(formProfile.certifications || []), item],
+    });
+    setIsAddingCert(false);
+    setNewCert({ name: '', issuingOrganization: '', issueDate: '', credentialId: '' });
+  };
+
+  // Remove Certification
+  const handleRemoveCertification = (id: string) => {
+    setFormProfile({
+      ...formProfile,
+      certifications: (formProfile.certifications || []).filter((c) => c.id !== id),
+    });
+  };
+
   // Handle Document Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: SeekerDocument['type']) => {
     const file = e.target.files?.[0];
@@ -258,19 +372,19 @@ export const JobSeekerDashboard: React.FC<Props> = ({
               )}
 
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-xl sm:text-2xl font-black text-white">
-                    {formProfile.fullName || 'Job Seeker Profile'}
+                    {formProfile.fullName || 'Staff & Career Profile'}
                   </h1>
                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                    Verified Seeker
+                    {formProfile.accountRole === 'staff' ? 'Registered Staff' : 'Verified Seeker'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {formProfile.email} {formProfile.phone ? `• ${formProfile.phone}` : ''}
                 </p>
                 <p className="text-xs text-amber-300 font-semibold mt-0.5">
-                  {formProfile.desiredJobTitle || 'Career Professional'} • {formProfile.locationCity || 'Addis Ababa'}
+                  {formProfile.currentPosition || formProfile.desiredJobTitle || 'Career Professional'} • {formProfile.locationCity || 'Addis Ababa'}
                 </p>
               </div>
             </div>
@@ -306,8 +420,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0">
           {[
             { id: 'overview', label: 'Dashboard Overview', icon: User },
-            { id: 'personal', label: 'Personal Details', icon: Edit2 },
-            { id: 'professional', label: 'Career & Skills', icon: Briefcase },
+            { id: 'recommendations', label: 'Recommended For You', icon: Target, count: recommendations.length },
+            { id: 'personal', label: 'Personal & Role', icon: Edit2 },
+            { id: 'professional', label: 'Expertise & Certs', icon: Briefcase },
             { id: 'education', label: 'Education', icon: GraduationCap, count: formProfile.education?.length },
             { id: 'experience', label: 'Experience', icon: Building, count: formProfile.experience?.length },
             { id: 'documents', label: 'CV & Document Vault', icon: FileText, count: formProfile.documents?.length },
@@ -386,6 +501,23 @@ export const JobSeekerDashboard: React.FC<Props> = ({
 
                 <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+                    <span>Eligible Matches</span>
+                    <Target className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-2xl font-black text-emerald-700 font-mono">
+                    {recommendations.length}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('recommendations')}
+                    className="text-[10px] font-bold text-amber-600 hover:text-amber-700 mt-0.5"
+                  >
+                    View tailored list →
+                  </button>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
                     <span>Saved Vacancies</span>
                     <Heart className="w-4 h-4 text-rose-500" />
                   </div>
@@ -394,6 +526,104 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">Bookmarked opportunities</div>
                 </div>
+              </div>
+
+              {/* Tailored Eligible Opportunities Preview */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                      <Target className="w-4 h-4 text-emerald-600" />
+                      <span>Eligible Opportunity Matches</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Automatically filtered against your documented role, years of experience, education, and certifications.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('recommendations')}
+                    className="text-xs font-bold text-amber-600 hover:text-amber-700 shrink-0"
+                  >
+                    See All ({recommendations.length}) →
+                  </button>
+                </div>
+
+                {!hasSufficientProfile ? (
+                  <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="text-xs text-amber-950">
+                      <strong>Complete your staff profile</strong> (current position, expertise, skills, education, or experience) so we can match you accurately without guessing.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('professional')}
+                      className="px-4 py-2 rounded-xl bg-[#0B132B] text-white text-xs font-bold shrink-0 hover:bg-amber-400 hover:text-slate-950 transition-colors"
+                    >
+                      Complete Profile
+                    </button>
+                  </div>
+                ) : recommendations.length === 0 ? (
+                  <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                    No active open listings currently match your exact documented qualifications. Update your skills, areas of expertise, or preferred sector in <strong>Expertise &amp; Certs</strong> to expand matches.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {recommendations.slice(0, 4).map((rec) => (
+                      <div
+                        key={rec.id}
+                        className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-amber-400 transition-all flex flex-col justify-between gap-3"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {rec.matchScore}% Match • {rec.eligibilityStatus}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {rec.sourceType === 'domestic_job'
+                                ? 'Domestic Vacancy'
+                                : rec.sourceType === 'international_job'
+                                ? 'International Job'
+                                : 'Scholarship'}
+                            </span>
+                          </div>
+                          <h4 className="font-extrabold text-sm text-slate-900 line-clamp-1">{rec.title}</h4>
+                          <p className="text-[11px] text-slate-600">
+                            {rec.organization} • {rec.location}
+                          </p>
+                          <div className="text-[11px] text-emerald-800 font-medium">
+                            {rec.matchReasons[0]}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 text-[11px]">
+                          <span className="text-slate-500">Deadline: {rec.deadline || 'Open'}</span>
+                          {rec.vacancy ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onSelectVacancy(rec.vacancy!);
+                              }}
+                              className="font-extrabold text-[#0B132B] hover:text-amber-600"
+                            >
+                              View &amp; Apply →
+                            </button>
+                          ) : rec.applyUrl ? (
+                            <a
+                              href={rec.applyUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-extrabold text-[#0B132B] hover:text-amber-600 inline-flex items-center gap-1"
+                            >
+                              <span>Official Source</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* AI Career Coach & Profile Enhancer */}
@@ -555,14 +785,145 @@ export const JobSeekerDashboard: React.FC<Props> = ({
           )}
 
           {/* ========================================================= */}
+          {/* TAB 1B: RECOMMENDED FOR YOU */}
+          {/* ========================================================= */}
+          {activeTab === 'recommendations' && (
+            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <Target className="w-5 h-5 text-emerald-600" />
+                    <span>Personalized Opportunity Recommendations ({recommendations.length})</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Strictly matched against your documented positions, expertise, skills, certifications, education, and experience. Roles requiring unverified credentials or higher experience tiers are excluded.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('professional')}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold shrink-0"
+                >
+                  Refine Expertise &amp; Interests
+                </button>
+              </div>
+
+              {!hasSufficientProfile ? (
+                <div className="p-8 text-center bg-amber-50/70 rounded-2xl border border-amber-200 space-y-3">
+                  <Compass className="w-10 h-10 text-amber-500 mx-auto" />
+                  <h4 className="font-black text-sm text-amber-950">Add Your Role, Skills, or Education to Unlock Matches</h4>
+                  <p className="text-xs text-amber-900 max-w-md mx-auto">
+                    Hopeland never invents qualifications. Add your current or desired position, areas of expertise, skills, education, or certifications so we can compute verified matches.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('professional')}
+                    className="px-5 py-2.5 rounded-xl bg-[#0B132B] text-white text-xs font-extrabold hover:bg-amber-400 hover:text-slate-950 transition-colors"
+                  >
+                    Update Staff &amp; Career Profile
+                  </button>
+                </div>
+              ) : recommendations.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                  <Briefcase className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-800">No Eligible Matches Found Right Now</p>
+                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                    We checked active domestic jobs, international opportunities, and scholarships against your documented years of experience ({formProfile.yearsOfExperience || 'Not set'}), education, and expertise. Keep your profile updated to match newly published opportunities.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recommendations.map((rec) => (
+                    <div
+                      key={`${rec.sourceType}_${rec.id}`}
+                      className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-amber-400 transition-all space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              {rec.matchScore}% Match • {rec.eligibilityStatus}
+                            </span>
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200">
+                              {rec.sourceType === 'domestic_job'
+                                ? 'Domestic Vacancy'
+                                : rec.sourceType === 'international_job'
+                                ? 'Verified International Job'
+                                : 'Experience-Based Scholarship'}
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-500">{rec.category}</span>
+                          </div>
+                          <h4 className="font-black text-base text-slate-900">{rec.title}</h4>
+                          <p className="text-xs text-slate-600 font-semibold">
+                            {rec.organization} • {rec.location}
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          {rec.vacancy ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onSelectVacancy(rec.vacancy!);
+                              }}
+                              className="px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors"
+                            >
+                              View &amp; Apply
+                            </button>
+                          ) : rec.applyUrl ? (
+                            <a
+                              href={rec.applyUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors"
+                            >
+                              <span>Open Official Portal</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {rec.matchReasons.map((reason, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-900 border border-emerald-200"
+                          >
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span>{reason}</span>
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 text-[11px] text-slate-600">
+                        <div>
+                          <strong className="text-slate-800">Education:</strong> {rec.requiredEducationText}
+                        </div>
+                        <div>
+                          <strong className="text-slate-800">Experience:</strong> {rec.requiredExperienceText}
+                        </div>
+                        <div>
+                          <strong className="text-slate-800">Deadline:</strong> {rec.deadline || 'Rolling / Open'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================= */}
           {/* TAB 2: PERSONAL INFORMATION */}
           {/* ========================================================= */}
           {activeTab === 'personal' && (
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
               <div>
-                <h3 className="font-extrabold text-base text-slate-900">Personal Information</h3>
+                <h3 className="font-extrabold text-base text-slate-900">Personal &amp; Staff Identity Information</h3>
                 <p className="text-xs text-slate-500">
-                  Manage your personal contact information displayed to employers.
+                  Manage your permanent staff role, department, and personal contact information.
                 </p>
               </div>
 
@@ -631,6 +992,33 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     <option value="Female">Female</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Account Role</label>
+                  <select
+                    value={formProfile.accountRole || 'staff'}
+                    onChange={(e) =>
+                      setFormProfile({ ...formProfile, accountRole: e.target.value as StaffAccountRole })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  >
+                    <option value="staff">Staff Member (Organization / Team Profile)</option>
+                    <option value="job_seeker">Job Seeker / Candidate</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Department / Practice Sector</label>
+                  <input
+                    type="text"
+                    value={formProfile.staffDepartmentOrSector || ''}
+                    onChange={(e) =>
+                      setFormProfile({ ...formProfile, staffDepartmentOrSector: e.target.value })
+                    }
+                    placeholder="e.g. WASH Program / Banking Operations / IT"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                </div>
               </div>
 
               <div>
@@ -672,6 +1060,17 @@ export const JobSeekerDashboard: React.FC<Props> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Current Position</label>
+                  <input
+                    type="text"
+                    value={formProfile.currentPosition || ''}
+                    onChange={(e) => setFormProfile({ ...formProfile, currentPosition: e.target.value })}
+                    placeholder="e.g. WASH Project Coordinator / Credit Analyst"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Desired Job Title *</label>
                   <input
@@ -718,12 +1117,69 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Preferred Industry / Sector</label>
+                  <input
+                    type="text"
+                    value={formProfile.preferredIndustry}
+                    onChange={(e) => setFormProfile({ ...formProfile, preferredIndustry: e.target.value })}
+                    placeholder="e.g. NGO / Banking and Financial Institutions"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Previous Positions */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Previous Positions Held
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(formProfile.previousPositions || []).map((pos, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-sky-900 text-xs font-bold border border-sky-200"
+                    >
+                      <span>{pos}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePreviousPosition(idx)}
+                        className="text-sky-500 hover:text-rose-500"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPrevPosition}
+                    onChange={(e) => setNewPrevPosition(e.target.value)}
+                    placeholder="Add a previous role (e.g. Junior Project Officer at UNICEF)..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddPreviousPosition();
+                      }
+                    }}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddPreviousPosition}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold"
+                  >
+                    Add Role
+                  </button>
+                </div>
               </div>
 
               {/* Skills Tags */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Key Skills (Comma separated or add tags)
+                  Key Skills (Press Enter to add)
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(formProfile.skills || []).map((skill, idx) => (
@@ -747,7 +1203,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                 </div>
                 <input
                   type="text"
-                  placeholder="Type a skill and press Enter (e.g. IFRS, Core Banking, Python)..."
+                  placeholder="Type a skill and press Enter (e.g. IFRS, Core Banking, Python, WASH Engineering)..."
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -760,6 +1216,196 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                 />
+              </div>
+
+              {/* Areas of Expertise */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Areas of Expertise (Press Enter to add)
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(formProfile.areasOfExpertise || []).map((expTag, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 text-xs font-bold border border-emerald-200"
+                    >
+                      <span>{expTag}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = (formProfile.areasOfExpertise || []).filter((_, i) => i !== idx);
+                          setFormProfile({ ...formProfile, areasOfExpertise: next });
+                        }}
+                        className="text-emerald-500 hover:text-rose-500"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. Water & Sanitation, Financial Risk Management, Monitoring & Evaluation..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      const current = formProfile.areasOfExpertise || [];
+                      if (val && !current.includes(val)) {
+                        setFormProfile({ ...formProfile, areasOfExpertise: [...current, val] });
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                />
+              </div>
+
+              {/* Professional Interests */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Professional &amp; Opportunity Interests (Press Enter to add)
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(formProfile.professionalInterests || []).map((interest, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-900 text-xs font-bold border border-amber-200"
+                    >
+                      <span>{interest}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = (formProfile.professionalInterests || []).filter((_, i) => i !== idx);
+                          setFormProfile({ ...formProfile, professionalInterests: next });
+                        }}
+                        className="text-amber-600 hover:text-rose-500"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. Humanitarian WASH, International Relocation, Graduate Scholarships..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      const current = formProfile.professionalInterests || [];
+                      if (val && !current.includes(val)) {
+                        setFormProfile({ ...formProfile, professionalInterests: [...current, val] });
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                />
+              </div>
+
+              {/* Structured Certifications */}
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800">
+                      Professional Certifications &amp; Licenses
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Used to verify eligibility for specialized domestic and international roles (e.g. CPA, ACCA, PMP).
+                    </p>
+                  </div>
+                  {!isAddingCert && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCert(true)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Certification</span>
+                    </button>
+                  )}
+                </div>
+
+                {isAddingCert && (
+                  <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input
+                        type="text"
+                        placeholder="Certification Name (e.g. ACCA, PMP, AWS Certified)"
+                        value={newCert.name}
+                        onChange={(e) => setNewCert({ ...newCert, name: e.target.value })}
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Issuing Organization (e.g. PMI, ACCA Global)"
+                        value={newCert.issuingOrganization}
+                        onChange={(e) => setNewCert({ ...newCert, issuingOrganization: e.target.value })}
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Issue Year / Date (Optional)"
+                        value={newCert.issueDate}
+                        onChange={(e) => setNewCert({ ...newCert, issueDate: e.target.value })}
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Credential ID (Optional)"
+                        value={newCert.credentialId}
+                        onChange={(e) => setNewCert({ ...newCert, credentialId: e.target.value })}
+                        className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs outline-none"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingCert(false)}
+                        className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddCertification}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#0B132B] text-white text-xs font-bold"
+                      >
+                        Save Certification
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {(formProfile.certifications || []).length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {(formProfile.certifications || []).map((cert) => (
+                      <div
+                        key={cert.id}
+                        className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start justify-between gap-2"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <Award className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold text-xs text-slate-900">{cert.name}</div>
+                            <div className="text-[11px] text-slate-500">
+                              {cert.issuingOrganization}
+                              {cert.issueDate ? ` • ${cert.issueDate}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCertification(cert.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end pt-2">
@@ -1065,7 +1711,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
               </div>
 
               {/* Upload Dropzones */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="p-4 rounded-2xl border-2 border-dashed border-slate-200 hover:border-amber-400 text-center bg-slate-50/50 transition-colors">
                   <input
                     type="file"
@@ -1108,6 +1754,21 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     <Briefcase className="w-6 h-6 text-emerald-500 mx-auto" />
                     <span className="text-xs font-bold text-slate-800 block">Experience Letter</span>
                     <span className="text-[10px] text-slate-400 block">Proof of past employment</span>
+                  </label>
+                </div>
+
+                <div className="p-4 rounded-2xl border-2 border-dashed border-slate-200 hover:border-amber-400 text-center bg-slate-50/50 transition-colors">
+                  <input
+                    type="file"
+                    id="uploadCertDoc"
+                    accept=".pdf,.jpg,.png"
+                    onChange={(e) => handleFileUpload(e, 'certification')}
+                    className="hidden"
+                  />
+                  <label htmlFor="uploadCertDoc" className="cursor-pointer block space-y-1">
+                    <Award className="w-6 h-6 text-amber-600 mx-auto" />
+                    <span className="text-xs font-bold text-slate-800 block">Certification / License</span>
+                    <span className="text-[10px] text-slate-400 block">CPA, ACCA, PMP, etc.</span>
                   </label>
                 </div>
               </div>

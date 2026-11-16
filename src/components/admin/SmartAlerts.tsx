@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Vacancy, SiteSettings } from '../../types/job';
 import { SmartAlertItem, AnalyticsSummary } from '../../types/analytics';
+import { checkGa4Health, DEFAULT_GA_MEASUREMENT_ID } from '../../lib/analyticsTracker';
 
 export interface EvaluatedAlert extends SmartAlertItem {
   category: 'traffic' | 'links' | 'analytics' | 'conversion' | 'system';
@@ -189,8 +190,9 @@ export function evaluateSmartAlerts(
   // -------------------------------------------------------------
   // 3. ANALYTICS INTEGRATION & GA4 TELEMETRY FAILURES
   // -------------------------------------------------------------
-  const gaId = (siteSettings.gaMeasurementId || 'G-KH6X73105S').trim();
+  const gaId = (siteSettings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID).trim();
   const isGaTrackingEnabled = siteSettings.gaTrackingEnabled !== false;
+  const gaHealth = typeof window !== 'undefined' ? checkGa4Health(gaId, isGaTrackingEnabled) : null;
 
   if (!isGaTrackingEnabled) {
     alerts.push({
@@ -198,15 +200,15 @@ export function evaluateSmartAlerts(
       category: 'analytics',
       title: 'Google Analytics 4 Tracking Paused',
       type: 'analytics_failure',
-      severity: 'low',
-      status: 'NORMAL',
-      triggerCondition: 'GA4 tracking explicitly toggled off in Site Settings',
-      currentValue: 'Tracking Disabled (First-party engine logging locally)',
+      severity: 'high',
+      status: 'ALERT',
+      triggerCondition: 'Always-On GA4 tracking was turned off in settings',
+      currentValue: 'Tracking Disabled (Re-enable in Analytics Settings)',
       detectedAt: new Date().toISOString(),
-      recommendedAction: 'Enable GA4 tracking when ready to collect Google Analytics 4 traffic.',
+      recommendedAction: 'Click Re-enable Always-On GA4 in Website Analytics or Persistence Center.',
       actionTab: 'analytics',
-      actionLabel: 'Enable GA4',
-      isDismissed: false,
+      actionLabel: 'Re-enable GA4',
+      isDismissed: dismissedSet.has('alt_ga_disabled'),
     });
   } else if (!gaId) {
     alerts.push({
@@ -240,6 +242,22 @@ export function evaluateSmartAlerts(
       actionLabel: 'Fix GA4 ID',
       isDismissed: dismissedSet.has('alt_ga_malformed'),
     });
+  } else if (gaHealth && (gaHealth.status === 'BLOCKED' || gaHealth.status === 'DISCONNECTED')) {
+    alerts.push({
+      id: 'alt_ga_disconnected',
+      category: 'analytics',
+      title: gaHealth.status === 'BLOCKED' ? 'GA4 Script Blocked in Browser Session' : 'GA4 Runtime Disconnected',
+      type: 'analytics_failure',
+      severity: 'medium',
+      status: 'ALERT',
+      triggerCondition: gaHealth.diagnostic,
+      currentValue: `${gaHealth.status} (${gaId})`,
+      detectedAt: new Date().toISOString(),
+      recommendedAction: 'Verify network access to googletagmanager.com or disable ad-blockers for your admin domain. First-party tracking stays active.',
+      actionTab: 'analytics',
+      actionLabel: 'Inspect GA4 Health',
+      isDismissed: dismissedSet.has('alt_ga_disconnected'),
+    });
   } else {
     alerts.push({
       id: 'alt_ga_active',
@@ -248,8 +266,8 @@ export function evaluateSmartAlerts(
       type: 'analytics_failure',
       severity: 'low',
       status: 'PASS',
-      triggerCondition: 'GA4 Measurement ID loaded and verified in public HTML runtime',
-      currentValue: `Verified (${gaId})`,
+      triggerCondition: 'Always-On GA4 Measurement ID loaded and active in runtime',
+      currentValue: `ACTIVE (${gaId})${gaHealth?.lastEventDispatchedAt ? ` • Last event ${new Date(gaHealth.lastEventDispatchedAt).toLocaleTimeString()}` : ''}`,
       detectedAt: new Date().toISOString(),
       recommendedAction: 'GA4 telemetry script streaming hits reliably without errors.',
       actionTab: 'analytics',
@@ -485,6 +503,7 @@ export const SmartAlertsCenter: React.FC<SmartAlertsProps> = ({
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [thresholdFeedback, setThresholdFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Threshold form state
   const [dropThreshold, setDropThreshold] = useState<number>(siteSettings.alertTrafficDropThreshold ?? 50);
@@ -523,6 +542,7 @@ export const SmartAlertsCenter: React.FC<SmartAlertsProps> = ({
   // Save Threshold Settings
   const handleSaveThresholds = async () => {
     setIsSaving(true);
+    setThresholdFeedback(null);
     try {
       await onSaveSiteSettings({
         ...siteSettings,
@@ -532,9 +552,9 @@ export const SmartAlertsCenter: React.FC<SmartAlertsProps> = ({
         updatedAt: new Date().toISOString(),
       });
       setIsConfigOpen(false);
-      alert('Alert thresholds saved successfully!');
+      setThresholdFeedback({ type: 'success', text: 'Alert thresholds saved permanently!' });
     } catch (err: any) {
-      alert('Failed to save settings: ' + err.message);
+      setThresholdFeedback({ type: 'error', text: 'Failed to save settings: ' + (err?.message || 'Unknown error') });
     } finally {
       setIsSaving(false);
     }
@@ -575,6 +595,25 @@ export const SmartAlertsCenter: React.FC<SmartAlertsProps> = ({
 
   return (
     <div className="space-y-6">
+      {thresholdFeedback && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2 ${
+            thresholdFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          <span>{thresholdFeedback.text}</span>
+          <button
+            type="button"
+            onClick={() => setThresholdFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Executive Header Card */}
       <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xs border border-slate-200">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">

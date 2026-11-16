@@ -1,0 +1,20 @@
+[
+  {
+    "id": "notif_1794821043912_svu4n",
+    "type": "staff_registered",
+    "title": "New Staff Profile Registered",
+    "message": "Verify Staff (WASH Officer) joined permanently.",
+    "severity": "info",
+    "acknowledged": false,
+    "createdAt": "2026-11-16T09:24:03.912Z"
+  },
+  {
+    "id": "notif_1794821043861_0cgen",
+    "type": "backup_created",
+    "title": "Manual Database Backup Saved",
+    "message": "Backup snapshot bkp_2026-11-16T09-24-03-849Z_manual.json saved permanently on server storage.",
+    "severity": "info",
+    "acknowledged": false,
+    "createdAt": "2026-11-16T09:24:03.861Z"
+  }
+]

@@ -50,6 +50,7 @@ import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './Smart
 import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
 import { InternationalControlCenter } from './InternationalControlCenter';
+import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
@@ -134,7 +135,20 @@ export const AdminDashboard: React.FC<Props> = ({
   );
 
   const [activeTab, setActiveTab] = useState<
-    'bulk' | 'international' | 'telegramQueue' | 'manual' | 'duplicates' | 'vacancies' | 'applications' | 'analytics' | 'health' | 'alerts' | 'autoApply' | 'telegram' | 'settings'
+    | 'bulk'
+    | 'international'
+    | 'telegramQueue'
+    | 'manual'
+    | 'duplicates'
+    | 'vacancies'
+    | 'applications'
+    | 'analytics'
+    | 'health'
+    | 'alerts'
+    | 'autoApply'
+    | 'persistence'
+    | 'telegram'
+    | 'settings'
   >('bulk');
 
   const [queueSelectedJobIds, setQueueSelectedJobIds] = useState<string[]>([]);
@@ -512,6 +526,20 @@ export const AdminDashboard: React.FC<Props> = ({
               <span>Bot Config & Test</span>
             </button>
 
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('persistence')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                  activeTab === 'persistence'
+                    ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
+                    : 'text-emerald-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <HardDrive className="w-4 h-4 text-emerald-400" />
+                <span>Persistence, Backups &amp; Staff</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('settings')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
@@ -674,6 +702,14 @@ export const AdminDashboard: React.FC<Props> = ({
                 await onSaveVacancy(updated);
               }
             }}
+          />
+        )}
+
+        {activeTab === 'persistence' && isYeabsraOwner && (
+          <SystemPersistenceCenter
+            adminEmail={adminEmail}
+            siteSettings={siteSettings}
+            onSaveSiteSettings={onSaveSiteSettings}
           />
         )}
 

@@ -18,10 +18,21 @@ export interface ExperienceItem {
   achievements?: string;
 }
 
+export type StaffAccountRole = 'staff' | 'job_seeker';
+
+export interface CertificationItem {
+  id: string;
+  name: string;
+  issuingOrganization: string;
+  issueDate?: string;
+  expiryDate?: string;
+  credentialId?: string;
+}
+
 export interface SeekerDocument {
   id: string;
   name: string;
-  type: 'cv' | 'degree_certificate' | 'experience_letter' | 'other';
+  type: 'cv' | 'degree_certificate' | 'experience_letter' | 'certification' | 'other';
   url: string;
   storagePath?: string;
   sizeBytes?: number;
@@ -44,6 +55,12 @@ export interface JobSeekerProfile {
   authProvider?: string;
   emailVerified?: boolean;
 
+  // Staff & Account Classification
+  accountRole?: StaffAccountRole;
+  staffDepartmentOrSector?: string;
+  currentPosition?: string;
+  previousPositions?: string[];
+
   // Professional Information
   employmentStatus: 'employed' | 'unemployed' | 'student' | 'freelance' | 'other';
   desiredJobTitle: string;
@@ -53,6 +70,9 @@ export interface JobSeekerProfile {
   preferredEmploymentType: 'Full-time' | 'Part-time' | 'Contract' | 'Internship' | 'Remote' | 'Any';
   preferredWorkLocation: string;
   skills: string[];
+  areasOfExpertise?: string[];
+  professionalInterests?: string[];
+  certifications?: CertificationItem[];
 
   // Education & Experience
   education: EducationItem[];
@@ -115,12 +135,13 @@ export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): 
   const weights = {
     fullName: 10,
     email: 10,
-    phone: 10,
-    locationCity: 10,
-    desiredJobTitle: 10,
-    skills: 10,
+    phone: 8,
+    locationCity: 7,
+    desiredJobTitleOrPosition: 10,
+    skillsAndExpertise: 10,
     education: 15,
     experience: 15,
+    certificationsOrInterests: 5,
     documents: 10,
   };
 
@@ -128,10 +149,31 @@ export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): 
   if (profile.email && profile.email.includes('@')) score += weights.email;
   if (profile.phone && profile.phone.trim().length > 5) score += weights.phone;
   if (profile.locationCity && profile.locationCity.trim().length > 1) score += weights.locationCity;
-  if (profile.desiredJobTitle && profile.desiredJobTitle.trim().length > 2) score += weights.desiredJobTitle;
-  if (profile.skills && profile.skills.length > 0) score += weights.skills;
+  if (
+    (profile.desiredJobTitle && profile.desiredJobTitle.trim().length > 2) ||
+    (profile.currentPosition && profile.currentPosition.trim().length > 2)
+  ) {
+    score += weights.desiredJobTitleOrPosition;
+  }
+  if (
+    (profile.skills && profile.skills.length > 0) ||
+    (profile.areasOfExpertise && profile.areasOfExpertise.length > 0)
+  ) {
+    score += weights.skillsAndExpertise;
+  }
   if (profile.education && profile.education.length > 0) score += weights.education;
-  if (profile.experience && profile.experience.length > 0) score += weights.experience;
+  if (
+    (profile.experience && profile.experience.length > 0) ||
+    (profile.previousPositions && profile.previousPositions.length > 0)
+  ) {
+    score += weights.experience;
+  }
+  if (
+    (profile.certifications && profile.certifications.length > 0) ||
+    (profile.professionalInterests && profile.professionalInterests.length > 0)
+  ) {
+    score += weights.certificationsOrInterests;
+  }
   if (profile.documents && profile.documents.length > 0) score += weights.documents;
 
   return Math.min(100, Math.max(10, score));
@@ -144,6 +186,10 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
   phone: '',
   locationCity: 'Addis Ababa',
   locationRegion: 'Addis Ababa',
+  accountRole: 'staff',
+  staffDepartmentOrSector: '',
+  currentPosition: '',
+  previousPositions: [],
   employmentStatus: 'unemployed',
   desiredJobTitle: '',
   preferredIndustry: 'Banking and Financial Institutions',
@@ -151,7 +197,10 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
   expectedSalaryEtb: '',
   preferredEmploymentType: 'Full-time',
   preferredWorkLocation: 'Addis Ababa',
-  skills: ['Communication', 'Microsoft Office', 'Teamwork'],
+  skills: [],
+  areasOfExpertise: [],
+  professionalInterests: [],
+  certifications: [],
   education: [],
   experience: [],
   documents: [],

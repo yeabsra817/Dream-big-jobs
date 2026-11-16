@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-11-16T09:24:21.484Z",
+  "overallStatus": "HEALTHY",
+  "serverUptimeSeconds": 27,
+  "storage": {
+    "persistentDbWritable": true,
+    "filesPresent": {
+      "site_settings": true,
+      "telegram_config": true,
+      "user_profiles": true,
+      "job_applications": true,
+      "international_data": true,
+      "analytics_events": true
+    },
+    "backupCount": 3,
+    "latestBackupAt": "2026-11-16T09:24:04.101Z"
+  },
+  "telegramBot": {
+    "configured": true,
+    "tokenSaved": true,
+    "botUsername": "@DreamBigJobsEthiopiaBot",
+    "channelName": "@hopelandJobsEthiopia",
+    "channelId": "-1004499169829",
+    "status": "CONNECTED",
+    "statusCode": "connected",
+    "lastCheckedAt": "2026-11-16T09:24:03.776Z",
+    "lastSuccessfulTestAt": "2026-11-16T09:24:03.776Z",
+    "lastError": null,
+    "consecutiveFailures": 0,
+    "reconnectAttempts": 0,
+    "autoPublishEnabled": true,
+    "botInstructions": ""
+  },
+  "analytics": {
+    "gaMeasurementId": "G-KH6X73105S",
+    "gaTrackingEnabled": true,
+    "alwaysOnEnforced": true,
+    "totalEventsRecorded": 1
+  },
+  "counts": {
+    "vacancies": 0,
+    "staffProfiles": 2,
+    "jobApplications": 1,
+    "auditLogs": 6,
+    "unacknowledgedAlerts": 2
+  }
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "aud_1794821044110_9cohp",
+    "action": "staff_profile_deleted_owner",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "staff_profile",
+    "targetId": "test_staff_verify_tmp",
+    "summary": "Owner permanently deleted staff profile for Verify Staff",
+    "severity": "warning",
+    "timestamp": "2026-11-16T09:24:04.110Z"
+  },
+  {
+    "id": "aud_1794821044109_do8tb",
+    "action": "backup_created",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "backup",
+    "targetId": "bkp_2026-11-16T09-24-04-101Z_pre_restore",
+    "summary": "Created pre_restore persistent database backup (3 profiles, 1 apps)",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:24:04.109Z"
+  },
+  {
+    "id": "aud_1794821043911_ajfzn",
+    "action": "staff_registered",
+    "actorEmail": "staff.tmp@hopelandjobs.tech",
+    "actorUid": "test_staff_verify_tmp",
+    "targetType": "staff_profile",
+    "targetId": "test_staff_verify_tmp",
+    "summary": "New staff profile registered: Verify Staff",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:24:03.911Z"
+  },
+  {
+    "id": "aud_1794821043860_crdzb",
+    "action": "backup_created",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "backup",
+    "targetId": "bkp_2026-11-16T09-24-03-849Z_manual",
+    "summary": "Created manual persistent database backup (2 profiles, 1 apps)",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:24:03.860Z"
+  },
+  {
+    "id": "aud_1794821043786_ede98",
+    "action": "system_recovery_run",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "system",
+    "summary": "Manual system recovery & live connection check completed (Bot: CONNECTED, DB writable: true)",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:24:03.786Z"
+  },
+  {
+    "id": "aud_1794821036486_3mrsm",
+    "action": "backup_created",
+    "actorEmail": "system",
+    "targetType": "backup",
+    "targetId": "bkp_2026-11-16T09-23-56-479Z_startup",
+    "summary": "Created startup persistent database backup (2 profiles, 1 apps)",
+    "severity": "info",
+    "timestamp": "2026-11-16T09:23:56.487Z"
+  }
+]

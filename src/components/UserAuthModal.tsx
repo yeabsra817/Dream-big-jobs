@@ -215,12 +215,12 @@ export const UserAuthModal: React.FC<Props> = ({
           </div>
 
           <h2 className="text-xl sm:text-2xl font-black text-white">
-            {mode === 'signup' ? 'Create Your Free Account' : 'Welcome Back'}
+            {mode === 'signup' ? 'Register Permanent Staff & Career Profile' : 'Welcome Back'}
           </h2>
           <p className="text-xs text-slate-300 mt-1">
             {mode === 'signup'
-              ? 'Register instantly with your Google account — no passwords required.'
-              : 'Sign in with your Google account to apply for vacancies and track applications.'}
+              ? 'Create your permanent Hopeland profile with Google — saved securely across sessions and server restarts.'
+              : 'Sign in with Google to access your permanent staff profile, tailored opportunities, and applications.'}
           </p>
         </div>
 
@@ -238,19 +238,19 @@ export const UserAuthModal: React.FC<Props> = ({
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Verified Google Account Only:</strong> Instant sign-up or sign-in using your Google profile.
+                <strong>Permanent Cloud Profile:</strong> Role, expertise, certifications, and CVs remain saved across all logins.
               </span>
             </div>
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
               <Briefcase className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Tailored Job Matches:</strong> Personalized Ethiopian vacancies matched to your experience.
+                <strong>Eligible Opportunity Matching:</strong> Automatic job &amp; scholarship recommendations strictly matched to your profile.
               </span>
             </div>
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
               <FileCheck2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
               <span>
-                <strong>10GB Document Vault:</strong> Store your CV & certificates for fast 1-click applications.
+                <strong>10GB Document Vault:</strong> Store your CV &amp; certificates for fast 1-click applications.
               </span>
             </div>
           </div>

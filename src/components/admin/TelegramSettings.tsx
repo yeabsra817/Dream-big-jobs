@@ -113,6 +113,7 @@ export const TelegramSettings: React.FC<Props> = ({
   const [includeScholarships, setIncludeScholarships] = useState(
     Boolean(settings.telegramIncludeScholarships)
   );
+  const [botInstructions, setBotInstructions] = useState(settings.botInstructions || '');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isVerifyingChannel, setIsVerifyingChannel] = useState(false);
   const [channelVerification, setChannelVerification] = useState<ChannelVerificationResult | null>(null);
@@ -412,6 +413,7 @@ export const TelegramSettings: React.FC<Props> = ({
         telegramDistributionMode: distributionMode,
         telegramIncludeInternationalImmigration: includeImmigration,
         telegramIncludeScholarships: includeScholarships,
+        botInstructions: botInstructions.trim(),
         customDomain: cleanDomain,
         updatedAt: new Date().toISOString(),
       };
@@ -419,7 +421,7 @@ export const TelegramSettings: React.FC<Props> = ({
       const modeLabel = getTelegramDistributionModeLabel(distributionMode);
       setFeedbackMessage({
         type: 'success',
-        text: `Settings saved! Target channel: ${cleanChan}. Mode: ${modeLabel}. Domain: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
+        text: `Settings & bot instructions saved permanently! Target channel: ${cleanChan}. Mode: ${modeLabel}. Domain: ${cleanDomain}. Auto-publish: ${autoPublish ? 'ENABLED' : 'DISABLED'}.`,
       });
     } catch (err: any) {
       setFeedbackMessage({
@@ -1073,6 +1075,23 @@ export const TelegramSettings: React.FC<Props> = ({
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Permanent Bot Operational Instructions */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
+            <label className="text-xs font-extrabold text-slate-900 block">
+              Permanent Bot Operational Instructions &amp; Rules
+            </label>
+            <textarea
+              rows={3}
+              value={botInstructions}
+              onChange={(e) => setBotInstructions(e.target.value)}
+              placeholder="Enter standing operational instructions for your Telegram bot (e.g. WASH NGO 🟢⭐ labeling rules, posting tone, or channel moderation notes)..."
+              className="w-full p-3 rounded-xl border border-slate-200 text-xs text-slate-800 focus:border-amber-500 outline-none resize-y"
+            />
+            <p className="text-[11px] text-slate-500">
+              Saved permanently in database and restored automatically after server restarts, refreshes, and deployments.
+            </p>
           </div>
 
           {/* Critical Channel Admin Instructions */}
