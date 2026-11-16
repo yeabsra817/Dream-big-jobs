@@ -1,5 +1,14 @@
 [
   {
+    "id": "notif_1794853854205_v9bsn",
+    "type": "security_update",
+    "title": "Developer Password Hash Updated",
+    "message": "Your developer password was securely hashed (scrypt) and saved permanently.",
+    "severity": "info",
+    "acknowledged": false,
+    "createdAt": "2026-11-16T18:30:54.205Z"
+  },
+  {
     "id": "notif_1794829182380_ohwo3",
     "type": "staff_registered",
     "title": "New Staff Profile Registered",

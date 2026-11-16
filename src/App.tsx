@@ -125,6 +125,7 @@ import {
   markUserNotificationReadServer,
   syncNotificationsOnReconnect,
   syncVacanciesToServerCatalog,
+  syncAllUsersFromFirestoreToServer,
   deleteVacanciesFromServerCatalog,
   recalculateUserRecommendationsServer,
 } from './lib/notificationService';
@@ -701,6 +702,7 @@ export default function App() {
   // When admin logs in, load ALL vacancies, duplicate reports, fresh site settings, and international admin datasets
   useEffect(() => {
     if (isOwnerAuthorized) {
+      syncAllUsersFromFirestoreToServer(adminEmail || undefined).catch(() => {});
       Promise.all([
         fetchAllVacanciesAdmin(),
         fetchDuplicateReports(),
@@ -1093,9 +1095,11 @@ export default function App() {
       return [updated, ...prev];
     });
     await saveVacancy(updated);
-    syncVacanciesToServerCatalog([updated], {
+    await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
+    await syncVacanciesToServerCatalog([updated], {
       mode: 'merge',
       changedVacancyId: updated.id,
+      changedVacancyIds: updated.status === 'published' ? [updated.id] : [],
       changeType: existing ? 'updated' : 'published',
     });
     void maybeAutoPublishVacancyToTelegram(updated, existing);
@@ -1108,7 +1112,14 @@ export default function App() {
       return Array.from(map.values());
     });
     await saveBatchVacancies(newVacancies);
-    syncVacanciesToServerCatalog(newVacancies, { mode: 'merge' });
+    const publishedIds = newVacancies.filter((v) => v.status === 'published').map((v) => v.id);
+    await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
+    await syncVacanciesToServerCatalog(newVacancies, {
+      mode: 'merge',
+      changedVacancyId: publishedIds[0],
+      changedVacancyIds: publishedIds,
+      changeType: 'published',
+    });
   };
 
   const handleDeleteVacancy = async (id: string) => {
@@ -1142,9 +1153,11 @@ export default function App() {
     setVacancies((prev) => prev.map((v) => (v.id === id ? updated : v)));
     try {
       await saveVacancy(updated);
-      syncVacanciesToServerCatalog([updated], {
+      await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
+      await syncVacanciesToServerCatalog([updated], {
         mode: 'merge',
         changedVacancyId: updated.id,
+        changedVacancyIds: status === 'published' ? [updated.id] : [],
         changeType: status === 'published' ? 'published' : 'updated',
       });
       void maybeAutoPublishVacancyToTelegram(updated, target);
@@ -2703,7 +2716,8 @@ export default function App() {
             onUpdateProfile={async (updated) => {
               await saveJobSeekerProfile(updated);
               setUserProfile(updated);
-              // Refresh notifications & recommendations immediately after profile update
+              // Recalculate personalized recommendations and dispatch eligible job alerts right away
+              await recalculateUserRecommendationsServer(updated.uid, updated.email, true).catch(() => null);
               const fresh = await fetchUserNotificationsServer(updated.uid, updated.email);
               setUserNotifications(fresh.notifications);
               setUnreadNotificationsCount(fresh.unreadCount);

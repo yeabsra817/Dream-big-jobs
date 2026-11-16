@@ -132,8 +132,8 @@ export function isDeadlineApproaching(deadline?: string, withinHours = 72): bool
 
 // Broad sector keyword mapping across all Ethiopian & international sectors
 const SECTOR_ALIAS_GROUPS: Array<{ label: string; keywords: string[] }> = [
-  { label: 'banking', keywords: ['bank', 'banking', 'commercial bank', 'branch manager', 'credit', 'teller', 'treasury'] },
-  { label: 'microfinance', keywords: ['microfinance', 'mfi', 'sacco', 'micro-credit'] },
+  { label: 'banking', keywords: ['bank', 'banking', 'commercial bank', 'branch manager', 'credit', 'teller', 'treasury', 'loan officer', 'customer service officer'] },
+  { label: 'microfinance', keywords: ['microfinance', 'mfi', 'sacco', 'micro-credit', 'micro finance'] },
   { label: 'insurance', keywords: ['insurance', 'underwriting', 'claims', 'actuarial', 'brokerage'] },
   { label: 'wash', keywords: ['wash', 'water supply', 'sanitation', 'hygiene', 'hydrogeology', 'water engineering', 'emergency wash'] },
   { label: 'ingo', keywords: ['international ngo', 'ngo', 'un ', 'unicef', 'undp', 'wfp', 'unhcr', 'humanitarian', 'save the children', 'nrc', 'drc', 'mercy corps', 'plan international', 'oxfam', 'care'] },
@@ -143,12 +143,13 @@ const SECTOR_ALIAS_GROUPS: Array<{ label: string; keywords: string[] }> = [
   { label: 'airlines', keywords: ['airline', 'aviation', 'ethiopian airlines', 'flight', 'cabin crew', 'cargo', 'freight', 'airport'] },
   { label: 'hospitality', keywords: ['hotel', 'hospitality', 'tourism', 'travel', 'resort', 'lodge', 'catering', 'chef'] },
   { label: 'manufacturing', keywords: ['manufacturing', 'factory', 'industrial', 'plant', 'production', 'textile', 'brewery', 'cement', 'pharmaceutical manufacturing'] },
-  { label: 'private', keywords: ['private', 'corporate', 'company', 'plc', 'share company', 'enterprise', 'telecom', 'safaricom'] },
+  { label: 'private', keywords: ['private', 'corporate', 'company', 'plc', 'share company', 'enterprise', 'telecom', 'safaricom', 'logistics', 'supply chain', 'procurement', 'sales', 'marketing', 'human resource', 'administration'] },
   { label: 'it', keywords: ['software', 'developer', 'engineer', 'it ', 'technology', 'data', 'network', 'cyber', 'devops', 'ict'] },
   { label: 'health', keywords: ['medical', 'health', 'hospital', 'clinic', 'nurse', 'doctor', 'pharmacist', 'public health', 'nutrition'] },
   { label: 'finance', keywords: ['accounting', 'finance', 'auditor', 'audit', 'tax', 'cpa', 'acca', 'ifrs'] },
   { label: 'education', keywords: ['education', 'university', 'college', 'teacher', 'lecturer', 'instructor', 'academic'] },
   { label: 'engineering', keywords: ['civil', 'construction', 'electrical', 'mechanical', 'architect', 'surveyor', 'site engineer'] },
+  { label: 'other', keywords: ['other', 'general', 'all sector', 'any sector', 'multi-sector'] },
 ];
 
 function extractSectorTags(text: string): string[] {
@@ -237,10 +238,28 @@ export function hasSufficientProfileForRecommendations(profile: JobSeekerProfile
       (profile.areasOfExpertise && profile.areasOfExpertise.length > 0) ||
       (profile.education && profile.education.length > 0) ||
       (profile.experience && profile.experience.length > 0) ||
+      (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
       (profile.professionalInterests && profile.professionalInterests.length > 0) ||
       (profile.preferredSectors && profile.preferredSectors.length > 0) ||
-      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 3)
+      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2)
   );
+}
+
+export function hasCompletedMandatoryPreferences(profile: JobSeekerProfile | null | undefined): boolean {
+  if (!profile) return false;
+  const hasExperience = Boolean(
+    (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
+      (profile.experience && profile.experience.length > 0) ||
+      (profile.previousPositions && profile.previousPositions.length > 0)
+  );
+  const hasSectorOrRole = Boolean(
+    (profile.preferredSectors && profile.preferredSectors.length > 0) ||
+      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2) ||
+      (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
+      (profile.skills && profile.skills.length > 0)
+  );
+  return hasExperience && hasSectorOrRole;
 }
 
 export function isVerifiedActiveVacancy(v: Vacancy): boolean {
@@ -311,17 +330,20 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(`Role alignment: ${matchedTitleWords.slice(0, 3).join(', ')}`);
     }
 
-    // Sector / Category Match (supports multi-sector & WASH/NGO/Banking/Embassies/Airlines/etc.)
+    // Sector / Category Match (supports multi-sector & WASH/NGO/Banking/Embassies/Airlines/Other/etc.)
     const matchedSectorTag = tokens.preferredSectorTags.find((tag) => vacSectorTags.includes(tag));
+    const wantsOtherOrAll = tokens.preferredSectorTags.includes('other') || tokens.preferredSectorsRaw.some((s) => /\b(other|all|any)\b/i.test(s));
     const directSectorMatch = tokens.preferredSectorsRaw.some((sec) =>
-      sec.split(/[\s,/&]+/).some((w) => w.length > 3 && v.category.toLowerCase().includes(w))
+      sec.split(/[\s,/&]+/).some((w) => w.length > 2 && `${v.category} ${v.title}`.toLowerCase().includes(w))
     );
-    if (matchedSectorTag || directSectorMatch) {
-      score += 22;
+    if (matchedSectorTag || directSectorMatch || wantsOtherOrAll) {
+      score += matchedSectorTag || directSectorMatch ? 24 : 22;
       reasons.push(
         v.isWashNgo
           ? 'Preferred Sector: WASH / Humanitarian NGO'
-          : `Preferred Sector: ${v.category}`
+          : matchedSectorTag || directSectorMatch
+          ? `Preferred Sector: ${v.category}`
+          : `General / Other Sector Match: ${v.category}`
       );
     }
 
@@ -389,7 +411,7 @@ export function computeStaffOpportunityRecommendations(
       matchedTitleWords.length > 0 ||
       matchedSkills.length > 0 ||
       matchedStudy.length > 0 ||
-      Boolean(matchedSectorTag || directSectorMatch);
+      Boolean(matchedSectorTag || directSectorMatch || wantsOtherOrAll);
 
     if (!hasRelevantMatch || score < 22 || reasons.length === 0) continue;
 

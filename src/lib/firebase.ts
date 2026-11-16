@@ -1464,6 +1464,17 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
       experience: Array.isArray(resolved.experience) ? resolved.experience : [],
       documents: Array.isArray(resolved.documents) ? resolved.documents : [],
     };
+    if (!srvProfile && fsProfile) {
+      fetch('/api/user-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-uid': uid,
+          ...(normalized.email ? { 'x-user-email': normalized.email } : {}),
+        },
+        body: JSON.stringify(normalized),
+      }).catch(() => {});
+    }
     try {
       localStorage.setItem(`hopelandjobs_profile_${uid}`, JSON.stringify(normalized));
     } catch {}

@@ -74,6 +74,7 @@ const RECOMMENDED_SECTOR_OPTIONS = [
   'IT, Software & Telecom',
   'Health & Medical',
   'Education & Academic',
+  'Other / General Sectors',
 ];
 
 interface Props {
@@ -251,8 +252,15 @@ export const JobSeekerDashboard: React.FC<Props> = ({
         updatedAt: new Date().toISOString(),
       };
       await onUpdateProfile(updated);
-      setSaveToast('Profile changes saved successfully!');
-      setTimeout(() => setSaveToast(null), 3500);
+      const hasMandatoryReady =
+        Boolean(updated.yearsOfExperience?.trim() || (updated.experience?.length || 0) > 0) &&
+        Boolean((updated.preferredSectors?.length || 0) > 0 || updated.preferredIndustry?.trim() || updated.desiredJobTitle?.trim());
+      setSaveToast(
+        hasMandatoryReady
+          ? 'Profile saved! Matching job recommendations & notifications are now active.'
+          : 'Profile saved! Add your experience & preferred job sector to activate automatic job alerts.'
+      );
+      setTimeout(() => setSaveToast(null), 4000);
 
       trackAnalyticsEvent('profile_update', {
         title: 'Job Seeker Profile Updated',

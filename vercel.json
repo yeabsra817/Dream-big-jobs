@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.mjs": {
+      "includeFiles": "data/*.json"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/notifications",

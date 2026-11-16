@@ -1,5 +1,43 @@
 [
   {
+    "id": "aud_1794853895558_cjxtr",
+    "action": "admin_test_job_notification",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "user_notifications",
+    "targetId": "user_yeabsra_test",
+    "summary": "Admin sent test job alert to 1/1 saved user(s) (Emails sent: 1, Push sent: 0).",
+    "severity": "info",
+    "timestamp": "2026-11-16T18:31:35.558Z"
+  },
+  {
+    "id": "aud_1794853881246_n0z5o",
+    "action": "developer_login_failed",
+    "actorEmail": "unauthenticated",
+    "targetType": "developer_auth",
+    "summary": "Failed developer password attempt from 127.0.0.1 (attempt 1/8).",
+    "severity": "info",
+    "timestamp": "2026-11-16T18:31:21.246Z"
+  },
+  {
+    "id": "aud_1794853881078_tbsa9",
+    "action": "developer_login_success",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "developer_auth",
+    "targetId": "primary",
+    "summary": "Authorized developer authenticated via salted scrypt password verification.",
+    "severity": "info",
+    "timestamp": "2026-11-16T18:31:21.078Z"
+  },
+  {
+    "id": "aud_1794853854205_yrqmc",
+    "action": "developer_password_rotated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "developer_auth",
+    "summary": "Authorized developer updated the salted scrypt developer password hash.",
+    "severity": "warning",
+    "timestamp": "2026-11-16T18:30:54.205Z"
+  },
+  {
     "id": "aud_1794822421087_8ddd4",
     "action": "developer_login_success",
     "actorEmail": "nexusitsoultion@gmail.com",

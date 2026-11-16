@@ -1358,6 +1358,23 @@ function ensureRuntimeDataDir(): string {
     if (!fs.existsSync(BACKUPS_DIR)) {
       fs.mkdirSync(BACKUPS_DIR, { recursive: true });
     }
+    // On serverless runtimes (e.g. Vercel /tmp), seed initial bundled data/*.json files on cold start if not yet present
+    const bundledDataDir = path.join(process.cwd(), 'data');
+    if (path.resolve(dataDir) !== path.resolve(bundledDataDir) && fs.existsSync(bundledDataDir)) {
+      const entries = fs.readdirSync(bundledDataDir);
+      for (const file of entries) {
+        if (!file.endsWith('.json')) continue;
+        const srcPath = path.join(bundledDataDir, file);
+        const destPath = path.join(dataDir, file);
+        if (!fs.existsSync(destPath)) {
+          try {
+            if (fs.statSync(srcPath).isFile()) {
+              fs.copyFileSync(srcPath, destPath);
+            }
+          } catch {}
+        }
+      }
+    }
   } catch {}
   return dataDir;
 }
@@ -2086,7 +2103,7 @@ app.get('/api/staff/profile/:uid', (req: Request, res: Response): void => {
   }
 });
 
-function handleSaveProfileRequest(req: Request, res: Response): void {
+async function handleSaveProfileRequest(req: Request, res: Response): Promise<void> {
   try {
     const profile = req.body;
     if (!profile || !profile.uid) {
@@ -2125,10 +2142,14 @@ function handleSaveProfileRequest(req: Request, res: Response): void {
         severity: 'info',
       });
     }
+    let engineResult: { recommendationsCount?: number; newNotificationsCount?: number } | undefined;
     if (userEngineHandle) {
-      userEngineHandle.onUserProfileSaved(savedProfile, isNewRegistration).catch(() => {});
+      const r = await userEngineHandle.onUserProfileSaved(savedProfile, isNewRegistration).catch(() => null);
+      if (r && typeof r === 'object') {
+        engineResult = r;
+      }
     }
-    res.json({ success: true, profile: savedProfile, isNewRegistration });
+    res.json({ success: true, profile: savedProfile, isNewRegistration, ...(engineResult || {}) });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save profile' });
   }

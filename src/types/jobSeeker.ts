@@ -384,7 +384,9 @@ export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): 
   if (profile.locationCity && profile.locationCity.trim().length > 1) score += weights.locationCity;
   if (
     (profile.desiredJobTitle && profile.desiredJobTitle.trim().length > 2) ||
-    (profile.currentPosition && profile.currentPosition.trim().length > 2)
+    (profile.currentPosition && profile.currentPosition.trim().length > 2) ||
+    (profile.preferredSectors && profile.preferredSectors.length > 0) ||
+    (profile.preferredIndustry && profile.preferredIndustry.trim().length > 2)
   ) {
     score += weights.desiredJobTitleOrPosition;
   }
@@ -397,7 +399,8 @@ export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): 
   if (profile.education && profile.education.length > 0) score += weights.education;
   if (
     (profile.experience && profile.experience.length > 0) ||
-    (profile.previousPositions && profile.previousPositions.length > 0)
+    (profile.previousPositions && profile.previousPositions.length > 0) ||
+    (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0)
   ) {
     score += weights.experience;
   }

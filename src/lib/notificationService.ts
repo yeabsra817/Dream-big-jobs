@@ -621,8 +621,22 @@ export async function fetchUserNotificationsServer(
     });
     if (res.ok) {
       const data = await res.json();
+      const serverList: UserNotificationItem[] = Array.isArray(data?.notifications) ? data.notifications : [];
+      if (auth.currentUser?.uid === uid && serverList.length > 0) {
+        for (const n of serverList.slice(0, 10)) {
+          if (!n?.id) continue;
+          setDoc(
+            doc(db, 'user_notifications', n.id),
+            sanitizeForFirestore({
+              ...n,
+              userId: uid,
+            }),
+            { merge: true }
+          ).catch(() => {});
+        }
+      }
       return {
-        notifications: Array.isArray(data?.notifications) ? data.notifications : [],
+        notifications: serverList,
         unreadCount: Number(data?.unreadCount || 0),
       };
     }
@@ -700,11 +714,22 @@ export async function syncNotificationsOnReconnect(
 
 export async function syncVacanciesToServerCatalog(
   vacancies: Vacancy[],
-  options: { mode?: 'merge' | 'replace' | 'seed_if_empty'; changedVacancyId?: string; changeType?: 'published' | 'updated' } = {}
-): Promise<void> {
-  if (!Array.isArray(vacancies) || vacancies.length === 0) return;
+  options: {
+    mode?: 'merge' | 'replace' | 'seed_if_empty';
+    changedVacancyId?: string;
+    changedVacancyIds?: string[];
+    changeType?: 'published' | 'updated';
+  } = {}
+): Promise<{
+  success?: boolean;
+  notifiedUsersCount?: number;
+  notificationsDispatched?: number;
+  emailsSent?: number;
+  pushSent?: number;
+} | null> {
+  if (!Array.isArray(vacancies) || vacancies.length === 0) return null;
   try {
-    await withTimeout(
+    const res = await withTimeout(
       fetch('/api/vacancies/sync', {
         method: 'POST',
         headers: {
@@ -716,10 +741,42 @@ export async function syncVacanciesToServerCatalog(
           vacancies,
           mode: options.mode || 'merge',
           changedVacancyId: options.changedVacancyId,
+          changedVacancyIds: options.changedVacancyIds,
           changeType: options.changeType,
         }),
       }),
-      3500,
+      8500,
+      null as any
+    );
+    if (res && res.ok) {
+      return await res.json().catch(() => null);
+    }
+  } catch {}
+  return null;
+}
+
+export async function syncAllUsersFromFirestoreToServer(adminEmailOverride?: string): Promise<void> {
+  if (!auth.currentUser) return;
+  try {
+    const [profilesSnap, prefsSnap] = await Promise.all([
+      withTimeout(getDocs(collection(db, 'job_seeker_profiles')), 4000, null as any),
+      withTimeout(getDocs(collection(db, 'user_notification_preferences')), 4000, null as any),
+    ]);
+    const profiles = profilesSnap ? profilesSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.uid) : [];
+    const preferences = prefsSnap ? prefsSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.userId) : [];
+    if (profiles.length === 0 && preferences.length === 0) return;
+
+    await withTimeout(
+      fetch('/api/admin/sync-registered-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getOwnerAuthHeaders(adminEmailOverride),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ profiles, preferences }),
+      }),
+      4500,
       null as any
     );
   } catch {}
@@ -836,6 +893,41 @@ export async function verifyAdminSmtpConnection(adminEmailOverride?: string): Pr
       ...getOwnerAuthHeaders(adminEmailOverride),
     },
     credentials: 'include',
+  });
+  return res.json();
+}
+
+export async function sendAdminTestNotificationToUsers(
+  options: { targetUid?: string; sendToAll?: boolean; customNote?: string } = {},
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  usersTargeted: number;
+  usersNotified: number;
+  emailsSent: number;
+  emailsFailed: number;
+  pushSent: number;
+  pushQueued: number;
+  deliveries?: Array<{
+    uid: string;
+    email: string;
+    fullName: string;
+    jobTitle: string;
+    website: string;
+    emailStatus: string;
+    pushStatus: string;
+  }>;
+  errors?: string[];
+  error?: string;
+}> {
+  const res = await fetch('/api/admin/notifications/send-test', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify(options),
   });
   return res.json();
 }

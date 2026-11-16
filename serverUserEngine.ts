@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import {
   computeStaffOpportunityRecommendations,
+  hasCompletedMandatoryPreferences,
   hasSufficientProfileForRecommendations,
   isDeadlineApproaching,
   isDeadlineExpired,
@@ -665,7 +666,13 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     profile: any,
     rec: RecommendedOpportunity,
     alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' | 'sector_opportunity',
-    options: { dryRun?: boolean; ignoreFrequencyWindow?: boolean } = {}
+    options: {
+      dryRun?: boolean;
+      ignoreFrequencyWindow?: boolean;
+      bypassRateLimit?: boolean;
+      isTestNotification?: boolean;
+      customNote?: string;
+    } = {}
   ): Promise<any | null> {
     if (!profile?.uid || profile.accountStatus === 'suspended') return null;
 
@@ -673,11 +680,13 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const allPrefs = loadAllNotificationPrefs();
     const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
 
-    // Check user alert-type preferences
-    if (alertKind === 'new_match' && prefs.alertTypes?.newMatches === false) return null;
-    if (alertKind === 'deadline_reminder' && prefs.alertTypes?.deadlineReminders === false) return null;
-    if (alertKind === 'job_updated' && prefs.alertTypes?.jobChanges === false) return null;
-    if (alertKind === 'sector_opportunity' && prefs.alertTypes?.sectorUpdates === false) return null;
+    if (!options.isTestNotification) {
+      // Check user alert-type preferences
+      if (alertKind === 'new_match' && prefs.alertTypes?.newMatches === false) return null;
+      if (alertKind === 'deadline_reminder' && prefs.alertTypes?.deadlineReminders === false) return null;
+      if (alertKind === 'job_updated' && prefs.alertTypes?.jobChanges === false) return null;
+      if (alertKind === 'sector_opportunity' && prefs.alertTypes?.sectorUpdates === false) return null;
+    }
 
     // Enforce user notification frequency preference (instant | daily | weekly)
     if (!options.ignoreFrequencyWindow && !isFrequencyWindowReady(prefs, alertKind)) {
@@ -685,25 +694,29 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
 
     // Never send notifications for expired/closed vacancies
-    if (isDeadlineExpired(rec.deadline)) return null;
+    if (!options.isTestNotification && isDeadlineExpired(rec.deadline)) return null;
 
     const dateStamp = alertKind === 'job_updated' ? `::${new Date().toISOString().slice(0, 10)}` : '';
-    const dedupeKey = `${uid}::${rec.id}::${alertKind}${dateStamp}`;
+    const dedupeKey = options.isTestNotification
+      ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
 
     const allNotifs = loadAllNotifications();
     const existingList: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
-    if (existingList.some((n) => n.dedupeKey === dedupeKey)) {
+    if (!options.isTestNotification && existingList.some((n) => n.dedupeKey === dedupeKey)) {
       return null;
     }
 
-    // Rate limiting: prevent excessive notifications per user in a rolling 24h window (max 8/day)
-    const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-    const recent24hCount = existingList.filter((n) => {
-      const ts = new Date(n.createdAt).getTime();
-      return !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
-    }).length;
-    if (recent24hCount >= 8) {
-      return null;
+    // Rate limiting: prevent excessive notifications per user in a rolling 24h window (max 25/day)
+    if (!options.bypassRateLimit) {
+      const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
+      const recent24hCount = existingList.filter((n) => {
+        const ts = new Date(n.createdAt).getTime();
+        return !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
+      }).length;
+      if (recent24hCount >= 25) {
+        return null;
+      }
     }
 
     const jobUrl = rec.sourceType === 'domestic_job' ? buildJobUrl(rec.id) : rec.applyUrl || buildJobUrl(rec.id);
@@ -717,15 +730,18 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       sourceType: rec.sourceType,
       alertKind,
       dedupeKey,
-      title: rec.title,
+      title: options.isTestNotification ? `[Test Alert] ${rec.title}` : rec.title,
       employer: rec.organization,
       location: rec.location,
       category: rec.category,
       salary: rec.salary || undefined,
       deadline: rec.deadline || 'Open',
       matchScore: rec.matchScore,
-      matchReasonSummary: rec.matchReasons[0] || `Matched your profile in ${rec.category}`,
-      matchReasons: rec.matchReasons,
+      matchReasonSummary:
+        options.customNote ||
+        rec.matchReasons[0] ||
+        `Matched your profile in ${rec.category}`,
+      matchReasons: options.customNote ? [options.customNote, ...rec.matchReasons] : rec.matchReasons,
       missingMandatoryQualifications: rec.missingMandatoryQualifications || [],
       applicationUrl: rec.applyUrl || jobUrl,
       jobUrl,
@@ -810,6 +826,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     options: {
       sendNotifications?: boolean;
       changedVacancyId?: string;
+      changedVacancyIds?: string[];
       changeType?: 'published' | 'updated';
       dryRun?: boolean;
     } = {}
@@ -823,7 +840,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
     const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
 
-    const recs = computeStaffOpportunityRecommendations(profile, vacancies, intlJobs, scholarships, 30);
+    const recs = computeStaffOpportunityRecommendations(profile, vacancies, intlJobs, scholarships, 40);
 
     // Strip bulky nested full vacancy description objects before storing in user_recommendations.json
     const compactRecs = recs.map((r) => ({
@@ -873,11 +890,21 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
 
     const newNotifications: any[] = [];
     if (options.sendNotifications) {
-      // Prioritize highest relevance matches and cap to max 5 alerts per sweep
-      const prioritized = compactRecs.filter((r) => r.matchScore >= 25 || r.isFullyQualified).slice(0, 5);
+      const changedSet = new Set(
+        [
+          ...(options.changedVacancyId ? [options.changedVacancyId] : []),
+          ...(Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []),
+        ].filter(Boolean)
+      );
+      const qualified = compactRecs.filter((r) => r.matchScore >= 22 || r.isFullyQualified);
+      // Guarantee newly posted/updated jobs are never crowded out by older higher-scoring matches
+      const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
+      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id)).slice(0, 5);
+      const prioritized = [...changedMatches, ...topGeneralMatches];
+
       for (const r of prioritized) {
         let alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' = 'new_match';
-        if (options.changedVacancyId && r.id === options.changedVacancyId && options.changeType === 'updated') {
+        if (changedSet.has(r.id) && options.changeType === 'updated') {
           alertKind = 'job_updated';
         } else if (isDeadlineApproaching(r.deadline, 72)) {
           alertKind = 'deadline_reminder';
@@ -1504,8 +1531,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   // ROUTES: VACANCIES CATALOG SYNC (TRIGGERS BACKGROUND MATCHING + ALERTS)
   // =========================================================================
 
-  app.post('/api/vacancies/sync', (req: Request, res: Response): void => {
-    const { vacancies: incomingList, mode, changedVacancyId, changeType } = req.body || {};
+  app.post('/api/vacancies/sync', async (req: Request, res: Response): Promise<void> => {
+    const { vacancies: incomingList, mode, changedVacancyId, changedVacancyIds, changeType } = req.body || {};
     if (!Array.isArray(incomingList)) {
       res.status(400).json({ error: 'vacancies array is required' });
       return;
@@ -1523,26 +1550,34 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
 
     const map = new Map<string, any>(mode === 'replace' ? [] : existing.map((v) => [v.id, v]));
+    const changedSet = new Set<string>(
+      [
+        ...(changedVacancyId ? [String(changedVacancyId)] : []),
+        ...(Array.isArray(changedVacancyIds) ? changedVacancyIds.map(String) : []),
+      ].filter(Boolean)
+    );
     let newlyPublishedOrUpdatedId = changedVacancyId || '';
     let resolvedChangeType: 'published' | 'updated' | undefined = changeType;
 
     for (const item of incomingList) {
       if (!item?.id) continue;
       const prev = map.get(item.id);
-      if (!prev && item.status === 'published' && !newlyPublishedOrUpdatedId) {
-        newlyPublishedOrUpdatedId = item.id;
-        resolvedChangeType = 'published';
-      } else if (prev && prev.status !== 'published' && item.status === 'published' && !newlyPublishedOrUpdatedId) {
-        newlyPublishedOrUpdatedId = item.id;
-        resolvedChangeType = 'published';
+      if (!prev && item.status === 'published') {
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = 'published';
+      } else if (prev && prev.status !== 'published' && item.status === 'published') {
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = 'published';
       } else if (
         prev &&
         item.status === 'published' &&
-        (prev.applicationDeadline !== item.applicationDeadline || prev.salary !== item.salary || prev.title !== item.title) &&
-        !newlyPublishedOrUpdatedId
+        (prev.applicationDeadline !== item.applicationDeadline || prev.salary !== item.salary || prev.title !== item.title)
       ) {
-        newlyPublishedOrUpdatedId = item.id;
-        resolvedChangeType = 'updated';
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = 'updated';
       }
       map.set(item.id, item);
     }
@@ -1550,14 +1585,51 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const merged = Array.from(map.values());
     saveVacanciesCatalog(merged);
 
-    // Always recalculate & dispatch non-blocking background notifications across all users
-    triggerBackgroundRecalcAllUsers({
-      sendNotifications: true,
-      changedVacancyId: newlyPublishedOrUpdatedId || undefined,
-      changeType: resolvedChangeType,
-    });
+    const changedIds = Array.from(changedSet);
+    let notificationsDispatched = 0;
+    let notifiedUsersCount = 0;
+    let emailsSent = 0;
+    let pushSent = 0;
 
-    res.json({ success: true, total: merged.length, backgroundMatchingTriggered: true });
+    if (mode === 'seed_if_empty') {
+      // Initial seed uses background non-blocking pass when persistent Node is active
+      triggerBackgroundRecalcAllUsers({
+        sendNotifications: false,
+      });
+    } else {
+      // Await matching & notification dispatch directly so serverless deployments complete SMTP/Push before exiting
+      const profiles = Object.values(loadUserProfiles() || {}).filter(
+        (p: any) => p?.uid && p.accountStatus !== 'suspended'
+      );
+      for (const prof of profiles) {
+        try {
+          const result = await recalculateForUser(prof, {
+            sendNotifications: true,
+            changedVacancyId: newlyPublishedOrUpdatedId || undefined,
+            changedVacancyIds: changedIds.length > 0 ? changedIds : undefined,
+            changeType: resolvedChangeType,
+          });
+          if (result.newNotifications.length > 0) {
+            notifiedUsersCount += 1;
+            notificationsDispatched += result.newNotifications.length;
+            for (const n of result.newNotifications) {
+              if (n.channels?.email === 'sent') emailsSent += 1;
+              if (n.channels?.push === 'sent') pushSent += 1;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    res.json({
+      success: true,
+      total: merged.length,
+      backgroundMatchingTriggered: true,
+      notifiedUsersCount,
+      notificationsDispatched,
+      emailsSent,
+      pushSent,
+    });
   });
 
   app.post('/api/vacancies/delete', (req: Request, res: Response): void => {
@@ -2026,19 +2098,227 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
   });
 
+  app.post('/api/admin/sync-registered-users', (req: Request, res: Response): void => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    const { profiles: incomingProfiles, preferences: incomingPrefs } = req.body || {};
+    const profilesMap = loadUserProfiles();
+    const prefsMap = loadAllNotificationPrefs();
+
+    let profilesMerged = 0;
+    if (Array.isArray(incomingProfiles)) {
+      for (const incoming of incomingProfiles) {
+        if (!incoming?.uid) continue;
+        const existing = profilesMap[incoming.uid];
+        const incTs = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+        const extTs = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
+        if (!existing || incTs >= extTs) {
+          profilesMap[incoming.uid] = {
+            ...(existing || {}),
+            ...incoming,
+            uid: incoming.uid,
+            accountRole: incoming.accountRole || existing?.accountRole || 'staff',
+            accountStatus: existing?.accountStatus || incoming.accountStatus || 'active',
+          };
+          profilesMerged += 1;
+        }
+        if (!prefsMap[incoming.uid]) {
+          prefsMap[incoming.uid] = buildDefaultPreferences(incoming.uid);
+        }
+      }
+      saveUserProfileMap(profilesMap);
+    }
+
+    let prefsMerged = 0;
+    if (Array.isArray(incomingPrefs)) {
+      for (const pref of incomingPrefs) {
+        const uid = pref?.userId;
+        if (!uid) continue;
+        const existing = prefsMap[uid] || buildDefaultPreferences(uid);
+        prefsMap[uid] = {
+          ...existing,
+          ...pref,
+          userId: uid,
+          channels: {
+            ...existing.channels,
+            ...(pref.channels || {}),
+          },
+          alertTypes: {
+            ...existing.alertTypes,
+            ...(pref.alertTypes || {}),
+          },
+          deviceSubscriptions:
+            Array.isArray(existing.deviceSubscriptions) && existing.deviceSubscriptions.length > 0
+              ? existing.deviceSubscriptions
+              : Array.isArray(pref.deviceSubscriptions)
+              ? pref.deviceSubscriptions
+              : [],
+        };
+        prefsMerged += 1;
+      }
+    }
+    saveAllNotificationPrefs(prefsMap);
+
+    res.json({
+      success: true,
+      profilesMerged,
+      prefsMerged,
+      totalRegisteredUsers: Object.keys(profilesMap).length,
+    });
+  });
+
+  app.post('/api/admin/notifications/send-test', async (req: Request, res: Response): Promise<void> => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    const { targetUid, sendToAll, customNote } = req.body || {};
+    const profilesMap = loadUserProfiles();
+    const allProfiles = Object.values(profilesMap || {}).filter(
+      (p: any) => p?.uid && p.accountStatus !== 'suspended'
+    );
+
+    const targets = targetUid
+      ? allProfiles.filter((p: any) => p.uid === String(targetUid))
+      : sendToAll !== false
+      ? allProfiles
+      : allProfiles.slice(0, 1);
+
+    if (targets.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: 'No saved active registered users found to notify.',
+      });
+      return;
+    }
+
+    const activeVacancies = loadVacanciesCatalog().filter(isVerifiedActiveVacancy);
+    const intl = loadPersistedInternationalData();
+    const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
+    const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
+
+    const fallbackVacancy = activeVacancies[0];
+    let usersNotified = 0;
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    let pushSent = 0;
+    let pushQueued = 0;
+    const deliveries: Array<{
+      uid: string;
+      email: string;
+      fullName: string;
+      jobTitle: string;
+      website: string;
+      emailStatus: string;
+      pushStatus: string;
+    }> = [];
+    const errors: string[] = [];
+
+    for (const profile of targets) {
+      try {
+        const allPrefs = loadAllNotificationPrefs();
+        if (!allPrefs[profile.uid]) {
+          allPrefs[profile.uid] = buildDefaultPreferences(profile.uid);
+          saveAllNotificationPrefs(allPrefs);
+        }
+
+        const recs = computeStaffOpportunityRecommendations(profile, activeVacancies, intlJobs, scholarships, 5);
+        const topMatch: RecommendedOpportunity = recs[0] || {
+          id: fallbackVacancy?.id || `test_alert_${Date.now()}`,
+          sourceType: 'domestic_job',
+          title: fallbackVacancy?.title || 'Hopeland Jobs — Live Personalized Job Alerts Active',
+          organization: fallbackVacancy?.organization || 'Hopeland Jobs Ethiopia',
+          location: fallbackVacancy?.location || profile.locationCity || 'Addis Ababa',
+          category: fallbackVacancy?.category || profile.preferredIndustry || 'Banking & NGO Opportunities',
+          salary: fallbackVacancy?.salary && fallbackVacancy.salary !== 'Not specified' ? fallbackVacancy.salary : undefined,
+          deadline: fallbackVacancy?.applicationDeadline || 'Open',
+          matchScore: 95,
+          eligibilityStatus: 'Eligible',
+          isFullyQualified: true,
+          matchReasons: [
+            String(customNote || 'Automated job recommendation & notification test from Hopeland Jobs Admin.'),
+          ],
+          missingMandatoryQualifications: [],
+          requiredExperienceText: fallbackVacancy?.experienceYears || profile.yearsOfExperience || 'Not specified',
+          requiredEducationText: fallbackVacancy?.educationQualification || 'Not specified',
+          applyUrl: fallbackVacancy?.applicationUrl,
+        };
+
+        const sent = await dispatchNotificationForUser(profile, topMatch, 'new_match', {
+          ignoreFrequencyWindow: true,
+          bypassRateLimit: true,
+          isTestNotification: true,
+          customNote:
+            String(customNote || '').trim() ||
+            'Live test job recommendation message verifying your Website Bell, Email, and Push alerts on Hopeland Jobs.',
+        });
+
+        if (sent) {
+          usersNotified += 1;
+          if (sent.channels?.email === 'sent') emailsSent += 1;
+          else if (sent.channels?.email === 'queued' || sent.channels?.email === 'failed') emailsFailed += 1;
+          if (sent.channels?.push === 'sent') pushSent += 1;
+          else if (sent.channels?.push === 'queued' || sent.channels?.push === 'failed') pushQueued += 1;
+
+          deliveries.push({
+            uid: profile.uid,
+            email: profile.email || '',
+            fullName: profile.fullName || 'Registered User',
+            jobTitle: sent.title,
+            website: sent.channels?.website || 'delivered',
+            emailStatus: sent.channels?.email || 'skipped',
+            pushStatus: sent.channels?.push || 'skipped',
+          });
+        }
+      } catch (err: any) {
+        errors.push(`${profile.email || profile.uid}: ${err?.message || String(err)}`);
+      }
+    }
+
+    appendAuditLog({
+      action: 'admin_test_job_notification',
+      actorEmail: getRequesterEmail(req) || 'owner',
+      targetType: 'user_notifications',
+      targetId: targetUid || 'all_saved_users',
+      summary: `Admin sent test job alert to ${usersNotified}/${targets.length} saved user(s) (Emails sent: ${emailsSent}, Push sent: ${pushSent}).`,
+      severity: 'info',
+    });
+
+    res.json({
+      success: usersNotified > 0,
+      usersTargeted: targets.length,
+      usersNotified,
+      emailsSent,
+      emailsFailed,
+      pushSent,
+      pushQueued,
+      deliveries,
+      errors,
+    });
+  });
+
   return {
     onUserProfileSaved: async (savedProfile: any, isNewRegistration: boolean) => {
-      if (!savedProfile?.uid) return;
-      // Ensure preference record exists on signup
+      if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
+      // Ensure preference record exists on signup with Email + Website Bell active by default
       const allPrefs = loadAllNotificationPrefs();
       if (!allPrefs[savedProfile.uid]) {
         allPrefs[savedProfile.uid] = buildDefaultPreferences(savedProfile.uid);
         saveAllNotificationPrefs(allPrefs);
       }
-      // Recalculate recommendations and dispatch alerts immediately upon profile registration/completion
-      await recalculateForUser(savedProfile, {
-        sendNotifications: isNewRegistration || hasSufficientProfileForRecommendations(savedProfile),
-      }).catch(() => {});
+      const readyForMatch =
+        hasSufficientProfileForRecommendations(savedProfile) ||
+        hasCompletedMandatoryPreferences(savedProfile);
+      // Recalculate recommendations and dispatch alerts immediately once user has profile/mandatory preferences
+      const res = await recalculateForUser(savedProfile, {
+        sendNotifications: isNewRegistration || readyForMatch,
+      }).catch(() => ({ recommendations: [], newNotifications: [] }));
+      return {
+        recommendationsCount: res.recommendations.length,
+        newNotificationsCount: res.newNotifications.length,
+      };
     },
     getPersistentFilesForBackup: () => ({
       vacanciesCatalog: loadVacanciesCatalog(),

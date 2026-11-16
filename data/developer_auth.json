@@ -4,29 +4,17 @@
   "passwordHashes": [
     {
       "id": "primary",
-      "label": "Primary Developer Access",
-      "salt": "b9d6fe4c3e2292c11539635e84d15f9f",
-      "hashHex": "62b7dec08c4776df97deda5910e29d97143f82406a4a39c5efa7772513b07c49762db90cdc5b900e164126d38163ebdd885ccb51b30fc564e3da579d62e3cf6d",
+      "label": "Developer Master Password",
+      "salt": "81db33e72174ff2a3203b0ad9dc04382",
+      "hashHex": "3abc80ca5972217a6b70f5abfb66ef1a4f876d9f7f4820dec793114ce66a9d85e7364e90707959b957aa47e6181c756edf0ea019057468bb4286598e27333ebb",
       "algorithm": "scrypt",
       "cost": 16384,
       "blockSize": 8,
       "parallelization": 1,
-      "createdAt": "2026-11-16T09:43:19.666Z",
-      "updatedAt": "2026-11-16T09:43:19.666Z"
-    },
-    {
-      "id": "secondary",
-      "label": "Secondary Developer Access",
-      "salt": "766bb11dc3a0e313a9847581c19648ce",
-      "hashHex": "7c9a6294fffb61dcc3f223fc22583b004689dfb99011c59f48ac646b0dd24066d49532b30bd96f1a623cc72be5dac2e6db5eb138465f95505d1fd516d2bbef77",
-      "algorithm": "scrypt",
-      "cost": 16384,
-      "blockSize": 8,
-      "parallelization": 1,
-      "createdAt": "2026-11-16T09:43:19.727Z",
-      "updatedAt": "2026-11-16T09:43:19.727Z"
+      "createdAt": "2026-11-16T18:30:54.204Z",
+      "updatedAt": "2026-11-16T18:30:54.204Z"
     }
   ],
   "sessionSigningKey": "52930041322316bcffa808515b47d17f477406b1d471074f2d79e8e57c09292d",
-  "updatedAt": "2026-11-16T09:43:19.727Z"
+  "updatedAt": "2026-11-16T18:30:54.204Z"
 }

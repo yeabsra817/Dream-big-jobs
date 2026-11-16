@@ -20,5 +20,27 @@
     "deviceSubscriptions": [],
     "updatedAt": "2026-11-16T16:54:34.146Z",
     "permissionVerifiedAt": "2026-11-16T16:54:34.146Z"
+  },
+  "user_yeabsra_test": {
+    "userId": "user_yeabsra_test",
+    "permissionStatus": "default",
+    "subscriptionStatus": "none",
+    "frequency": "instant",
+    "promptDismissCount": 0,
+    "channels": {
+      "websiteBell": true,
+      "browserPush": false,
+      "mobilePush": false,
+      "emailAlerts": true
+    },
+    "alertTypes": {
+      "newMatches": true,
+      "deadlineReminders": true,
+      "jobChanges": true,
+      "sectorUpdates": true
+    },
+    "preferredSectors": [],
+    "deviceSubscriptions": [],
+    "updatedAt": "2026-11-16T18:31:34.980Z"
   }
 }

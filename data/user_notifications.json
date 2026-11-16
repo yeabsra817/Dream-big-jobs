@@ -1,6 +1,40 @@
 {
   "user_yeabsra_test": [
     {
+      "id": "unotif_1794853894998_rrucbi",
+      "userId": "user_yeabsra_test",
+      "vacancyId": "job_1794642856820_2_g4ep1",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "test::user_yeabsra_test::1794853894998_gdwa",
+      "title": "[Test Alert] Human Resource Director",
+      "employer": "Admas University",
+      "location": "Addis Ababa – Head Office",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "November 20, 2026",
+      "matchScore": 51,
+      "matchReasonSummary": "Live verification test from Hopeland Jobs: job posting alerts, email notifications, and recommendation matching are active.",
+      "matchReasons": [
+        "Live verification test from Hopeland Jobs: job posting alerts, email notifications, and recommendation matching are active.",
+        "Role alignment: lead, senior",
+        "Field of study match: computer",
+        "Preferred location: Addis Ababa – Head Office"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://hopelandjobs.tech/?jobId=job_1794642856820_2_g4ep1",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794642856820_2_g4ep1",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "sent"
+      },
+      "createdAt": "2026-11-16T18:31:34.998Z",
+      "expiresAt": "November 20, 2026",
+      "updatedAt": "2026-11-16T18:31:35.558Z"
+    },
+    {
       "id": "unotif_1794848073565_oeacro",
       "userId": "user_yeabsra_test",
       "vacancyId": "job_1793785445321_36_b25du",
