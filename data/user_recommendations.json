@@ -1,6 +1,6 @@
 {
   "user_yeabsra_test": {
-    "recalculatedAt": "2026-11-17T10:17:33.437Z",
+    "recalculatedAt": "2026-11-17T13:18:58.337Z",
     "items": [
       {
         "id": "job_1794642856820_2_g4ep1",
@@ -599,6 +599,27 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 22,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: full",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
         "id": "job_1794759677415_32_w6t8i",
         "sourceType": "domestic_job",
         "title": "Senior Manager, Internal Audit – Airwallex, UAE, only if the audit and regulatory experience can be demonstrated.",
@@ -750,6 +771,30 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_5_oozz8",
+        "sourceType": "domestic_job",
+        "title": "Communications Lead – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 30,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "matchReasons": [
+          "Role alignment: lead",
+          "Education eligible (BSc in Computer Science)",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 6 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "6 years.",
+        "requiredEducationText": "Bachelor's degree.",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2835/communications-lead-iwork-programme/job"
+      },
+      {
         "id": "job_1794759677414_12_050jg",
         "sourceType": "domestic_job",
         "title": "WASH and Infrastructure Coordinator",
@@ -817,58 +862,11 @@
         "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
         "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
         "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794648445935_15_pxtdl",
-        "sourceType": "domestic_job",
-        "title": "Senior Human Rights Officer",
-        "organization": "Ethiopian Human Rights Commission (EHRC)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "21 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "matchReasons": [
-          "Role alignment: senior",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 2 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years of relevant professional experience.",
-        "requiredEducationText": "Relevant master's degree or LLM in Human Rights Law, International Law, Public Law or a related field.",
-        "applyUrl": "https://hris.ehrc.org/Vacancies/Index"
-      },
-      {
-        "id": "job_1794648445935_34_4629w",
-        "sourceType": "domestic_job",
-        "title": "Research Management Coordinator – Land and Food System Modelling",
-        "organization": "Alliance of Bioversity International and CIAT",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Internships and Graduate Trainee Programs",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 November 2026 (confirm against the portal).",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "matchReasons": [
-          "Role alignment: systems",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "Relevant research-management and modelling experience.",
-        "requiredEducationText": "Relevant postgraduate degree in Geography, Environmental Studies, Hydrology, Remote Sensing or Food Systems Modelling.",
-        "applyUrl": "https://ilri.simplicant.com/"
       }
     ]
   },
   "google_7965616273726134": {
-    "recalculatedAt": "2026-11-17T10:17:33.507Z",
+    "recalculatedAt": "2026-11-17T13:18:58.423Z",
     "items": [
       {
         "id": "job_1794642856820_2_g4ep1",
@@ -1467,6 +1465,27 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 22,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: full",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
         "id": "job_1794759677415_32_w6t8i",
         "sourceType": "domestic_job",
         "title": "Senior Manager, Internal Audit – Airwallex, UAE, only if the audit and regulatory experience can be demonstrated.",
@@ -1618,6 +1637,30 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_5_oozz8",
+        "sourceType": "domestic_job",
+        "title": "Communications Lead – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 30,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "matchReasons": [
+          "Role alignment: lead",
+          "Education eligible (BSc in Computer Science)",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 6 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "6 years.",
+        "requiredEducationText": "Bachelor's degree.",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2835/communications-lead-iwork-programme/job"
+      },
+      {
         "id": "job_1794759677414_12_050jg",
         "sourceType": "domestic_job",
         "title": "WASH and Infrastructure Coordinator",
@@ -1685,58 +1728,11 @@
         "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
         "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
         "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794648445935_15_pxtdl",
-        "sourceType": "domestic_job",
-        "title": "Senior Human Rights Officer",
-        "organization": "Ethiopian Human Rights Commission (EHRC)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "21 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "matchReasons": [
-          "Role alignment: senior",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 2 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years of relevant professional experience.",
-        "requiredEducationText": "Relevant master's degree or LLM in Human Rights Law, International Law, Public Law or a related field.",
-        "applyUrl": "https://hris.ehrc.org/Vacancies/Index"
-      },
-      {
-        "id": "job_1794648445935_34_4629w",
-        "sourceType": "domestic_job",
-        "title": "Research Management Coordinator – Land and Food System Modelling",
-        "organization": "Alliance of Bioversity International and CIAT",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Internships and Graduate Trainee Programs",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 November 2026 (confirm against the portal).",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "matchReasons": [
-          "Role alignment: systems",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "Relevant research-management and modelling experience.",
-        "requiredEducationText": "Relevant postgraduate degree in Geography, Environmental Studies, Hydrology, Remote Sensing or Food Systems Modelling.",
-        "applyUrl": "https://ilri.simplicant.com/"
       }
     ]
   },
   "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2": {
-    "recalculatedAt": "2026-11-17T10:34:01.634Z",
+    "recalculatedAt": "2026-11-17T13:19:51.525Z",
     "items": [
       {
         "id": "job_1794642856820_3_l975o",
@@ -1747,11 +1743,11 @@
         "category": "Education and Universities",
         "salary": "Attractive / Per Company Scale",
         "deadline": "November 24, 2026",
-        "matchScore": 56,
+        "matchScore": 70,
         "eligibilityStatus": "Eligible",
         "isFullyQualified": true,
         "matchReasons": [
-          "Role alignment: manager",
+          "Role alignment: manager, managerial",
           "Preferred Sector: Education and Universities",
           "Matching skills: communication",
           "Preferred location: Head Office, Addis Ababa"
@@ -1760,6 +1756,94 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
+      },
+      {
+        "id": "job_1794759677415_30_ggwgo",
+        "sourceType": "domestic_job",
+        "title": "Deputy Finance Manager – DRC, Democratic Republic of Congo, only if the French and NGO finance requirements can be met.",
+        "organization": "Ethiopian Organization",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "NGO and International Organizations",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "Not specified in the original vacancy",
+        "matchScore": 60,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: manager, finance",
+          "Preferred Sector: NGO and International Organizations",
+          "Preferred location: Addis Ababa, Ethiopia"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1794759677415_31_ofp99",
+        "sourceType": "domestic_job",
+        "title": "Finance Manager – ACOUP, Dubai, only if the mandatory outsourcing experience can be demonstrated.",
+        "organization": "Ethiopian Organization",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "Not specified in the original vacancy",
+        "matchScore": 60,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: manager, finance",
+          "Preferred Sector: Private Companies",
+          "Preferred location: Addis Ababa, Ethiopia"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1794916511980_6_thgv5",
+        "sourceType": "domestic_job",
+        "title": "Gender and Safeguarding Manager – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 56,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: manager",
+          "Preferred Sector: Private Companies",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1794648445935_21_kpap9",
+        "sourceType": "domestic_job",
+        "title": "Climate Finance Consultant – RESIslands Initiative",
+        "organization": "United Nations Economic Commission for Africa (UNECA)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Government and Public Sector",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "17 November 2026.",
+        "matchScore": 56,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Government and Public Sector",
+          "Preferred location: Addis Ababa, Ethiopia"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the accessible official announcement.",
+        "requiredEducationText": "Not stated in the accessible official announcement.",
+        "applyUrl": "https://careers.un.org/jobSearchDescription/287759"
       },
       {
         "id": "job_1794648445936_47_dxr29",
@@ -1847,48 +1931,26 @@
         "applyUrl": "https://ekum.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2019/jobs"
       },
       {
-        "id": "job_1794759677415_30_ggwgo",
+        "id": "job_1794916511980_9_s92k8",
         "sourceType": "domestic_job",
-        "title": "Deputy Finance Manager – DRC, Democratic Republic of Congo, only if the French and NGO finance requirements can be met.",
-        "organization": "Ethiopian Organization",
-        "location": "Addis Ababa, Ethiopia",
+        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
+        "organization": "UNICEF",
+        "location": "Addis Ababa / Remote with travel",
         "category": "NGO and International Organizations",
         "salary": "Attractive / Per Company Scale",
-        "deadline": "Not specified in the original vacancy",
+        "deadline": "23 November 2026",
         "matchScore": 46,
         "eligibilityStatus": "Eligible",
         "isFullyQualified": true,
         "matchReasons": [
-          "Role alignment: manager",
+          "Role alignment: finance",
           "Preferred Sector: NGO and International Organizations",
-          "Preferred location: Addis Ababa, Ethiopia"
+          "Preferred location: Addis Ababa / Remote with travel"
         ],
         "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
         "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794759677415_31_ofp99",
-        "sourceType": "domestic_job",
-        "title": "Finance Manager – ACOUP, Dubai, only if the mandatory outsourcing experience can be demonstrated.",
-        "organization": "Ethiopian Organization",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "Not specified in the original vacancy",
-        "matchScore": 46,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Role alignment: manager",
-          "Preferred Sector: Private Companies",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
+        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "job_1794759677415_32_w6t8i",
@@ -1935,6 +1997,116 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794642856820_5_nw624",
+        "sourceType": "domestic_job",
+        "title": "Finance Supervisor",
+        "organization": "Transsion Manufacturing PLC – Cawin Mobility",
+        "location": "Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "December 5, 2026",
+        "matchScore": 46,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Banking and Financial Institutions",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1793870443029_15_h8nw9",
+        "sourceType": "domestic_job",
+        "title": "SENIOR FINANCE OFFICER",
+        "organization": "KKGT Import Export",
+        "location": "Addis Ababa",
+        "category": "Education and Universities",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "15 working days from November 3, 2026",
+        "matchScore": 46,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Education and Universities",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1793870443029_17_tcphg",
+        "sourceType": "domestic_job",
+        "title": "GENERAL ACCOUNTS SECTION HEAD",
+        "organization": "Ethio Impact Consulting PLC",
+        "location": "Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "November 20, 2026",
+        "matchScore": 46,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Banking and Financial Institutions",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://forms.gle/EwaeAwLY7Df3gDbA8"
+      },
+      {
+        "id": "job_1793870443029_18_vw1a1",
+        "sourceType": "domestic_job",
+        "title": "ACCOUNTING & FINANCE OFFICER",
+        "organization": "MAG Addis Trading PLC (Milli's Coffee & Healthy Eating)",
+        "location": "Bole Adey, Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "November 19, 2026",
+        "matchScore": 46,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Banking and Financial Institutions",
+          "Preferred location: Bole Adey, Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1793870443029_19_1xov4",
+        "sourceType": "domestic_job",
+        "title": "AUDITOR",
+        "organization": "Great Coffee Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Education and Universities",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "December 6, 2026",
+        "matchScore": 46,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Education and Universities",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1794648445935_19_fx3k7",
         "sourceType": "domestic_job",
         "title": "RITD/RIEDS – Consultant – APPM",
@@ -1975,27 +2147,6 @@
         "requiredExperienceText": "Not stated in the accessible official announcement.",
         "requiredEducationText": "Not stated in the accessible official announcement.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287244"
-      },
-      {
-        "id": "job_1794648445935_21_kpap9",
-        "sourceType": "domestic_job",
-        "title": "Climate Finance Consultant – RESIslands Initiative",
-        "organization": "United Nations Economic Commission for Africa (UNECA)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "17 November 2026.",
-        "matchScore": 42,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not stated in the accessible official announcement.",
-        "requiredEducationText": "Not stated in the accessible official announcement.",
-        "applyUrl": "https://careers.un.org/jobSearchDescription/287759"
       },
       {
         "id": "job_1794648445935_22_lx29m",
@@ -2124,6 +2275,27 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
+      },
+      {
+        "id": "job_1794818427383_11_2njs3",
+        "sourceType": "domestic_job",
+        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
+        "organization": "Self Help Africa",
+        "location": "Ethiopia",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "23 November 2026.",
+        "matchScore": 38,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: Private Companies"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
       },
       {
         "id": "job_1794759677414_23_k0u6v",
@@ -2147,6 +2319,27 @@
         "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177167"
       },
       {
+        "id": "job_1793870443029_12_p1vbp",
+        "sourceType": "domestic_job",
+        "title": "FINANCE AND ADMINISTRATION OFFICER",
+        "organization": "The Well in Action",
+        "location": "Alamata Town, Amhara Region",
+        "category": "NGO and International Organizations",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "Not specified in the original vacancy",
+        "matchScore": 38,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: NGO and International Organizations"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1793870443029_21_susdy",
         "sourceType": "domestic_job",
         "title": "HOTEL MANAGER – DENBI ECO LODGE",
@@ -2168,6 +2361,26 @@
         "applyUrl": "https://ethio-jobs.net.et/vacancy-detail.php?id=53485"
       },
       {
+        "id": "job_1794916511980_3_tk06q",
+        "sourceType": "domestic_job",
+        "title": "Project Facilitation Officer – Training and Workforce Development (Re-advertisement)",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Harar",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "20 November 2026",
+        "matchScore": 34,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2831/re-advertisement-project-facilitation-officer-training-and-workforce-development/job?in_iframe=1"
+      },
+      {
         "id": "job_1794759677414_26_autcv",
         "sourceType": "domestic_job",
         "title": "Chef de Projet Protection",
@@ -2227,6 +2440,48 @@
         "requiredExperienceText": "Not stated in the accessible official announcement.",
         "requiredEducationText": "Not stated in the accessible official announcement.",
         "applyUrl": "https://ekum.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2019/jobs"
+      },
+      {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Internships and Graduate Trainee Programs",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
+        "id": "job_1794916511980_2_wjpgy",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "UK Foreign, Commonwealth & Development Office (FCDO)",
+        "location": "British Embassy, Addis Ababa",
+        "category": "Embassy and Diplomatic Jobs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "4 December 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Preferred location: British Embassy, Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
       },
       {
         "id": "job_1794818427383_0_fvkzn",
@@ -2332,263 +2587,11 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794648445935_16_wmc1t",
-        "sourceType": "domestic_job",
-        "title": "Program Assistant",
-        "organization": "Ethiopian Human Rights Commission (EHRC)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "21 November 2026.",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant administrative and programme-support experience.",
-        "requiredEducationText": "Relevant qualification in Administration, Management, Office Management or Secretarial Studies.",
-        "applyUrl": "https://hris.ehrc.org/Vacancies/Index"
-      },
-      {
-        "id": "job_1794648445935_28_gyknf",
-        "sourceType": "domestic_job",
-        "title": "Women and Girls Adviser, SEO",
-        "organization": "Foreign, Commonwealth & Development Office (FCDO), British Embassy",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Embassy and Diplomatic Jobs",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "4 December 2026.",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Embassy and Diplomatic Jobs",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant gender equality, women's rights, policy or development-advisory experience.",
-        "requiredEducationText": "Not stated in the accessible official announcement.",
-        "applyUrl": "https://fco.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/user-8802896/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
-      },
-      {
-        "id": "job_1794642856820_1_wiosb",
-        "sourceType": "domestic_job",
-        "title": "Security Officer",
-        "organization": "Ethiopian Airlines Group – Ethiopian Skylight Hotel",
-        "location": "Addis Ababa",
-        "category": "Hotel and Hospitality",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 19, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Hotel and Hospitality",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "- Minimum completion of Grade 10 or Grade 12 under the old or new curriculum.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://corporate.ethiopianairlines.com/AboutEthiopian/careers/vacancies/1"
-      },
-      {
-        "id": "job_1794642856820_5_nw624",
-        "sourceType": "domestic_job",
-        "title": "Finance Supervisor",
-        "organization": "Transsion Manufacturing PLC – Cawin Mobility",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "December 5, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794642856821_6_e7ykq",
-        "sourceType": "domestic_job",
-        "title": "Ground Support Equipment (GSE) Operator",
-        "organization": "International Cargo and Aviation Service PLC (ICAS)",
-        "location": "Addis Ababa – Bole International Airport",
-        "category": "Hotel and Hospitality",
-        "salary": "As per company salary scale.",
-        "deadline": "November 20, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Hotel and Hospitality",
-          "Preferred location: Addis Ababa – Bole International Airport"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794642198602_0_419on",
-        "sourceType": "domestic_job",
-        "title": "ETHIOPIA JOB VACANCIES – 31 POSITIONS",
-        "organization": "GLOBAL BANK ETHIOPIA",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "Not specified in the original vacancy",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794642198602_12_jerpc",
-        "sourceType": "domestic_job",
-        "title": "Procurement Officer",
-        "organization": "Apply: https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2491&company=dashenbank",
-        "location": "Addis Ababa.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026.",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa."
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Review the official vacancy requirements.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2491&company=dashenbank"
-      },
-      {
-        "id": "job_1794642198602_14_33hkb",
-        "sourceType": "domestic_job",
-        "title": "Principal System Administration Officer",
-        "organization": "Apply: https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2069&company=dashenbank",
-        "location": "Head Office, Addis Ababa.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 19, 2026.",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Head Office, Addis Ababa."
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Review the official vacancy requirements.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2069&company=dashenbank"
-      },
-      {
-        "id": "job_1794642198602_15_iben8",
-        "sourceType": "domestic_job",
-        "title": "Warehouse Officer",
-        "organization": "Apply: https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2541&company=dashenbank",
-        "location": "Addis Ababa.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026.",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa."
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Review the official vacancy requirements.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2541&company=dashenbank"
-      },
-      {
-        "id": "job_1794642198602_32_8spv1",
-        "sourceType": "domestic_job",
-        "title": "IMPORTANT: Some entries above contain only the details available from the earlier list, rather than the complete official job descriptions. Check the employer's page for exact qualifications, experience, number of posts, salary and required documents before submitting an application. A deadline may have changed or passed.",
-        "organization": "Ethiopian Organization",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "Not specified in the original vacancy",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_15_h8nw9",
-        "sourceType": "domestic_job",
-        "title": "SENIOR FINANCE OFFICER",
-        "organization": "KKGT Import Export",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "15 working days from November 3, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_17_tcphg",
-        "sourceType": "domestic_job",
-        "title": "GENERAL ACCOUNTS SECTION HEAD",
-        "organization": "Ethio Impact Consulting PLC",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://forms.gle/EwaeAwLY7Df3gDbA8"
       }
     ]
   },
   "F25h34YBU1UPkMiFC1oK0r3KZxB3": {
-    "recalculatedAt": "2026-11-17T10:17:33.666Z",
+    "recalculatedAt": "2026-11-17T13:18:58.591Z",
     "items": [
       {
         "id": "job_1794648445936_47_dxr29",
@@ -2611,6 +2614,27 @@
         "requiredExperienceText": "Previous work experience is not stated as a mandatory requirement.",
         "requiredEducationText": "Eligibility under the UN internship programme, including relevant university enrolment or recent graduation.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287879"
+      },
+      {
+        "id": "job_1794916511980_6_thgv5",
+        "sourceType": "domestic_job",
+        "title": "Gender and Safeguarding Manager – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 42,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
       },
       {
         "id": "job_1794648445935_19_fx3k7",
@@ -2826,6 +2850,26 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_3_tk06q",
+        "sourceType": "domestic_job",
+        "title": "Project Facilitation Officer – Training and Workforce Development (Re-advertisement)",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Harar",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "20 November 2026",
+        "matchScore": 34,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2831/re-advertisement-project-facilitation-officer-training-and-workforce-development/job?in_iframe=1"
+      },
+      {
         "id": "job_1794759677414_26_autcv",
         "sourceType": "domestic_job",
         "title": "Chef de Projet Protection",
@@ -2925,6 +2969,69 @@
         "requiredExperienceText": "Not stated in the accessible official announcement.",
         "requiredEducationText": "Not stated in the accessible official announcement.",
         "applyUrl": "https://ekum.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2019/jobs"
+      },
+      {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Internships and Graduate Trainee Programs",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
+        "id": "job_1794916511980_2_wjpgy",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "UK Foreign, Commonwealth & Development Office (FCDO)",
+        "location": "British Embassy, Addis Ababa",
+        "category": "Embassy and Diplomatic Jobs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "4 December 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Preferred location: British Embassy, Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1794916511980_9_s92k8",
+        "sourceType": "domestic_job",
+        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
+        "organization": "UNICEF",
+        "location": "Addis Ababa / Remote with travel",
+        "category": "NGO and International Organizations",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "23 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: NGO and International Organizations",
+          "Preferred location: Addis Ababa / Remote with travel"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "job_1794818427383_0_fvkzn",
@@ -3319,111 +3426,6 @@
         "matchReasons": [
           "Preferred Sector: Private Companies",
           "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_15_h8nw9",
-        "sourceType": "domestic_job",
-        "title": "SENIOR FINANCE OFFICER",
-        "organization": "KKGT Import Export",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "15 working days from November 3, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_17_tcphg",
-        "sourceType": "domestic_job",
-        "title": "GENERAL ACCOUNTS SECTION HEAD",
-        "organization": "Ethio Impact Consulting PLC",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://forms.gle/EwaeAwLY7Df3gDbA8"
-      },
-      {
-        "id": "job_1793870443029_18_vw1a1",
-        "sourceType": "domestic_job",
-        "title": "ACCOUNTING & FINANCE OFFICER",
-        "organization": "MAG Addis Trading PLC (Milli's Coffee & Healthy Eating)",
-        "location": "Bole Adey, Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 19, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Bole Adey, Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_19_1xov4",
-        "sourceType": "domestic_job",
-        "title": "AUDITOR",
-        "organization": "Great Coffee Ethiopia",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "December 6, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_23_6vano",
-        "sourceType": "domestic_job",
-        "title": "HR AND PROPERTY OFFICER",
-        "organization": "Great Abyssinia Group",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 28, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
         ],
         "missingMandatoryQualifications": [],
         "requiredExperienceText": "Not specified in the original vacancy",
@@ -3433,7 +3435,7 @@
     ]
   },
   "XPuREoTPhvTyYsvB14L3JpptCV53": {
-    "recalculatedAt": "2026-11-17T10:17:33.736Z",
+    "recalculatedAt": "2026-11-17T13:18:58.676Z",
     "items": [
       {
         "id": "job_1794648445936_47_dxr29",
@@ -3456,6 +3458,27 @@
         "requiredExperienceText": "Previous work experience is not stated as a mandatory requirement.",
         "requiredEducationText": "Eligibility under the UN internship programme, including relevant university enrolment or recent graduation.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287879"
+      },
+      {
+        "id": "job_1794916511980_6_thgv5",
+        "sourceType": "domestic_job",
+        "title": "Gender and Safeguarding Manager – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 42,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
       },
       {
         "id": "job_1794648445935_19_fx3k7",
@@ -3671,6 +3694,26 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_3_tk06q",
+        "sourceType": "domestic_job",
+        "title": "Project Facilitation Officer – Training and Workforce Development (Re-advertisement)",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Harar",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "20 November 2026",
+        "matchScore": 34,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2831/re-advertisement-project-facilitation-officer-training-and-workforce-development/job?in_iframe=1"
+      },
+      {
         "id": "job_1794759677414_26_autcv",
         "sourceType": "domestic_job",
         "title": "Chef de Projet Protection",
@@ -3770,6 +3813,69 @@
         "requiredExperienceText": "Not stated in the accessible official announcement.",
         "requiredEducationText": "Not stated in the accessible official announcement.",
         "applyUrl": "https://ekum.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2019/jobs"
+      },
+      {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Internships and Graduate Trainee Programs",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
+        "id": "job_1794916511980_2_wjpgy",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "UK Foreign, Commonwealth & Development Office (FCDO)",
+        "location": "British Embassy, Addis Ababa",
+        "category": "Embassy and Diplomatic Jobs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "4 December 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Preferred location: British Embassy, Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1794916511980_9_s92k8",
+        "sourceType": "domestic_job",
+        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
+        "organization": "UNICEF",
+        "location": "Addis Ababa / Remote with travel",
+        "category": "NGO and International Organizations",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "23 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: NGO and International Organizations",
+          "Preferred location: Addis Ababa / Remote with travel"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "job_1794818427383_0_fvkzn",
@@ -4164,111 +4270,6 @@
         "matchReasons": [
           "Preferred Sector: Private Companies",
           "Preferred location: Addis Ababa, Ethiopia"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_15_h8nw9",
-        "sourceType": "domestic_job",
-        "title": "SENIOR FINANCE OFFICER",
-        "organization": "KKGT Import Export",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "15 working days from November 3, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_17_tcphg",
-        "sourceType": "domestic_job",
-        "title": "GENERAL ACCOUNTS SECTION HEAD",
-        "organization": "Ethio Impact Consulting PLC",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://forms.gle/EwaeAwLY7Df3gDbA8"
-      },
-      {
-        "id": "job_1793870443029_18_vw1a1",
-        "sourceType": "domestic_job",
-        "title": "ACCOUNTING & FINANCE OFFICER",
-        "organization": "MAG Addis Trading PLC (Milli's Coffee & Healthy Eating)",
-        "location": "Bole Adey, Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 19, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Bole Adey, Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_19_1xov4",
-        "sourceType": "domestic_job",
-        "title": "AUDITOR",
-        "organization": "Great Coffee Ethiopia",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "December 6, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_23_6vano",
-        "sourceType": "domestic_job",
-        "title": "HR AND PROPERTY OFFICER",
-        "organization": "Great Abyssinia Group",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 28, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
         ],
         "missingMandatoryQualifications": [],
         "requiredExperienceText": "Not specified in the original vacancy",
@@ -4278,7 +4279,7 @@
     ]
   },
   "xieFVTlwLcb3o5698g8nWSnyboc2": {
-    "recalculatedAt": "2026-11-17T10:17:33.805Z",
+    "recalculatedAt": "2026-11-17T13:18:58.767Z",
     "items": [
       {
         "id": "job_1794648445936_47_dxr29",
@@ -4301,6 +4302,27 @@
         "requiredExperienceText": "Previous work experience is not stated as a mandatory requirement.",
         "requiredEducationText": "Eligibility under the UN internship programme, including relevant university enrolment or recent graduation.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287879"
+      },
+      {
+        "id": "job_1794916511980_6_thgv5",
+        "sourceType": "domestic_job",
+        "title": "Gender and Safeguarding Manager – iWork Programme",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Addis Ababa",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "25 November 2026",
+        "matchScore": 42,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": ""
       },
       {
         "id": "job_1794648445935_19_fx3k7",
@@ -4516,6 +4538,26 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1794916511980_3_tk06q",
+        "sourceType": "domestic_job",
+        "title": "Project Facilitation Officer – Training and Workforce Development (Re-advertisement)",
+        "organization": "SOS Children's Villages Ethiopia",
+        "location": "Harar",
+        "category": "Private Companies",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "20 November 2026",
+        "matchScore": 34,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Private Companies"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement available for verification.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://careers-sos-kd.icims.com/jobs/2831/re-advertisement-project-facilitation-officer-training-and-workforce-development/job?in_iframe=1"
+      },
+      {
         "id": "job_1794759677414_26_autcv",
         "sourceType": "domestic_job",
         "title": "Chef de Projet Protection",
@@ -4615,6 +4657,69 @@
         "requiredExperienceText": "Not stated in the accessible official announcement.",
         "requiredEducationText": "Not stated in the accessible official announcement.",
         "applyUrl": "https://ekum.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_2019/jobs"
+      },
+      {
+        "id": "job_1794916511980_12_icdpc",
+        "sourceType": "domestic_job",
+        "title": "Research Management Coordinator – Land and Food System Modelling",
+        "organization": "Alliance of Bioversity International and CIAT",
+        "location": "Addis Ababa",
+        "category": "Internships and Graduate Trainee Programs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "19 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Internships and Graduate Trainee Programs",
+          "Preferred location: Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Check the official announcement for the detailed requirements.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://ilri.simplicant.com/jobs/62905-research-management-coordinator-land-and-food-system-modelling/detail"
+      },
+      {
+        "id": "job_1794916511980_2_wjpgy",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "UK Foreign, Commonwealth & Development Office (FCDO)",
+        "location": "British Embassy, Addis Ababa",
+        "category": "Embassy and Diplomatic Jobs",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "4 December 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Preferred location: British Embassy, Addis Ababa"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not specified in the original vacancy",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1794916511980_9_s92k8",
+        "sourceType": "domestic_job",
+        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
+        "organization": "UNICEF",
+        "location": "Addis Ababa / Remote with travel",
+        "category": "NGO and International Organizations",
+        "salary": "Attractive / Per Company Scale",
+        "deadline": "23 November 2026",
+        "matchScore": 32,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: NGO and International Organizations",
+          "Preferred location: Addis Ababa / Remote with travel"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
+        "requiredEducationText": "Not specified in the original vacancy",
+        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "job_1794818427383_0_fvkzn",
@@ -5014,112 +5119,15 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_15_h8nw9",
-        "sourceType": "domestic_job",
-        "title": "SENIOR FINANCE OFFICER",
-        "organization": "KKGT Import Export",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "15 working days from November 3, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_17_tcphg",
-        "sourceType": "domestic_job",
-        "title": "GENERAL ACCOUNTS SECTION HEAD",
-        "organization": "Ethio Impact Consulting PLC",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 20, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://forms.gle/EwaeAwLY7Df3gDbA8"
-      },
-      {
-        "id": "job_1793870443029_18_vw1a1",
-        "sourceType": "domestic_job",
-        "title": "ACCOUNTING & FINANCE OFFICER",
-        "organization": "MAG Addis Trading PLC (Milli's Coffee & Healthy Eating)",
-        "location": "Bole Adey, Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 19, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Bole Adey, Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_19_1xov4",
-        "sourceType": "domestic_job",
-        "title": "AUDITOR",
-        "organization": "Great Coffee Ethiopia",
-        "location": "Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "December 6, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1793870443029_23_6vano",
-        "sourceType": "domestic_job",
-        "title": "HR AND PROPERTY OFFICER",
-        "organization": "Great Abyssinia Group",
-        "location": "Addis Ababa",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 28, 2026",
-        "matchScore": 32,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Preferred location: Addis Ababa"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
       }
     ]
+  },
+  "H7wtgxkocOSFcfcHwZVj6JrLEGy1": {
+    "recalculatedAt": "2026-11-17T13:18:58.833Z",
+    "items": []
+  },
+  "fSf3qBTVTxNpO2OCjpPt9bNrViR2": {
+    "recalculatedAt": "2026-11-17T13:18:58.860Z",
+    "items": []
   }
 }

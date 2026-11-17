@@ -60,6 +60,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
 
   const isIosInstallNeeded = reason === 'ios_install_required' || isIosSafariNeedsInstall();
   const isBlocked = !isIosInstallNeeded && (reason === 'blocked_in_browser' || currentPerm === 'denied');
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const handleEnableClick = async () => {
     const livePerm = getBrowserNotificationPermission();
@@ -86,13 +87,19 @@ export const NotificationPermissionModal: React.FC<Props> = ({
       } else {
         setFeedback({
           type: result.permissionStatus === 'denied' ? 'error' : 'info',
-          text: result.message,
+          text:
+            isInIframe && result.permissionStatus !== 'granted'
+              ? 'Your browser is inside an embedded preview frame which blocks notification prompts. Tap "Open App in Chrome Tab" below to activate phone bar alerts.'
+              : result.message,
         });
       }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        text: err?.message || 'Unable to activate notifications right now.',
+        text:
+          isInIframe
+            ? 'Embedded preview blocked the permission dialog. Tap "Open App in Chrome Tab" below to allow notifications.'
+            : err?.message || 'Unable to activate notifications right now.',
       });
     } finally {
       setIsLoading(false);
@@ -142,7 +149,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
               <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
                 {isBlocked
                   ? 'Allow browser notifications in your device or site settings to receive instant Hopeland Jobs alerts.'
-                  : 'Hopeland Jobs — Instant Phone & Desktop Alerts'}
+                  : 'Hopeland Jobs — Instant Phone Bar & Desktop Alerts'}
               </p>
             </div>
           </div>
@@ -220,16 +227,16 @@ export const NotificationPermissionModal: React.FC<Props> = ({
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-slate-700 leading-relaxed font-medium">
-                Enable instant job alerts and get notified whenever new vacancies matching your qualifications, education, experience, and preferred industry are published.
+                Phone bar job alerts are active by default once you fill your mandatory experience, years of experience, and job expertise (you can disable them anytime in Alert Preferences).
               </p>
               <div className="space-y-2.5 text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
                 <div className="flex items-start gap-2.5">
                   <Smartphone className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>Delivered directly to your Android phone, iPhone app, Windows, or Mac notification panel with 1-tap access to apply.</span>
+                  <span>Delivered directly to your Android phone notification bar, iPhone Home Screen app, Windows, or Mac.</span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Personalized job matches only — up to 3 relevant alerts per day, saved automatically to your account.</span>
+                  <span>Strictly qualified matches only — maximum 3 relevant jobs per day, never unrelated openings.</span>
                 </div>
               </div>
             </div>
@@ -245,6 +252,18 @@ export const NotificationPermissionModal: React.FC<Props> = ({
             >
               {feedback.text}
             </div>
+          )}
+
+          {isInIframe && !isBlocked && !isIosInstallNeeded && (
+            <a
+              href={typeof window !== 'undefined' ? window.location.href : '/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full min-h-[40px] px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+            >
+              <Smartphone className="w-4 h-4 text-emerald-700" />
+              <span>Open App in Chrome Tab (for Phone Bar Prompt)</span>
+            </a>
           )}
 
           {/* Actions */}
@@ -276,7 +295,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
                 className="flex-1 min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs tracking-wide inline-flex items-center justify-center gap-2 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 <Bell className="w-4 h-4" />
-                <span>{isLoading ? 'Subscribing...' : 'Enable Notifications'}</span>
+                <span>{isLoading ? 'Subscribing...' : 'Allow Phone Notifications'}</span>
               </button>
             )}
 

@@ -52,6 +52,7 @@ import { Vacancy } from '../types/job';
 import { InternationalJob, ExperienceScholarship } from '../types/international';
 import {
   computeStaffOpportunityRecommendations,
+  hasCompletedMandatoryPreferences,
   hasSufficientProfileForRecommendations,
 } from '../utils/recommendationEngine';
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
@@ -76,6 +77,30 @@ const RECOMMENDED_SECTOR_OPTIONS = [
   'Health & Medical',
   'Education & Academic',
   'Other / General Sectors',
+];
+
+const QUICK_EXPERIENCE_YEAR_OPTIONS = [
+  '0 Years (Fresh Graduate)',
+  '1 Year',
+  '2 Years',
+  '3 Years',
+  '4 Years',
+  '5 Years',
+  '7+ Years',
+  '10+ Years',
+];
+
+const QUICK_EXPERTISE_SUGGESTIONS = [
+  'Accounting & Finance',
+  'Banking Operations',
+  'Software Development',
+  'Project Management',
+  'WASH Engineering',
+  'Health & Nursing',
+  'Logistics & Supply Chain',
+  'Human Resources',
+  'Monitoring & Evaluation',
+  'Sales & Marketing',
 ];
 
 interface Props {
@@ -184,6 +209,8 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   }, [profile]);
 
   const [newPrevPosition, setNewPrevPosition] = useState('');
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [newExpertiseInput, setNewExpertiseInput] = useState('');
   const [isAddingCert, setIsAddingCert] = useState(false);
   const [newCert, setNewCert] = useState<Partial<CertificationItem>>({
     name: '',
@@ -194,6 +221,11 @@ export const JobSeekerDashboard: React.FC<Props> = ({
 
   const hasSufficientProfile = React.useMemo(
     () => hasSufficientProfileForRecommendations(formProfile),
+    [formProfile]
+  );
+
+  const hasMandatoryNotificationFields = React.useMemo(
+    () => hasCompletedMandatoryPreferences(formProfile),
     [formProfile]
   );
 
@@ -259,12 +291,16 @@ export const JobSeekerDashboard: React.FC<Props> = ({
         updatedAt: new Date().toISOString(),
       };
       await onUpdateProfile(updated);
+      const alertsDisabled = notificationPrefs?.manuallyDisabled === true;
+      const readyForAlerts = hasCompletedMandatoryPreferences(updated);
       setSaveToast(
-        completionEval.isProfileComplete
-          ? 'Profile 100% complete! Personalized recommendations and instant Web Push matching are now active.'
-          : `Profile saved (${completionPct}% complete). Missing: ${completionEval.missingSections.join(', ')}.`
+        readyForAlerts
+          ? alertsDisabled
+            ? 'Profile saved! Phone bar push alerts remain paused because you disabled them in Alerts & Preferences.'
+            : 'Profile saved! Up to 3 strictly qualifying job alerts are enabled for your phone & website bell.'
+          : `Profile saved (${completionPct}% complete). Fill experience status, years of experience, and job expertise to receive up to 3 qualified job alerts.`
       );
-      setTimeout(() => setSaveToast(null), 4500);
+      setTimeout(() => setSaveToast(null), 5000);
 
       trackAnalyticsEvent('profile_update', {
         title: 'Job Seeker Profile Updated',
@@ -346,6 +382,28 @@ export const JobSeekerDashboard: React.FC<Props> = ({
       ...formProfile,
       previousPositions: (formProfile.previousPositions || []).filter((_, i) => i !== idx),
     });
+  };
+
+  // Add Skill (works via Enter or button click on Android/iOS)
+  const handleAddSkill = () => {
+    const val = newSkillInput.trim();
+    if (!val) return;
+    const existing = formProfile.skills || [];
+    if (!existing.includes(val)) {
+      setFormProfile({ ...formProfile, skills: [...existing, val] });
+    }
+    setNewSkillInput('');
+  };
+
+  // Add Area of Expertise (works via Enter, chip, or button click)
+  const handleAddExpertise = (explicitVal?: string) => {
+    const val = (explicitVal ?? newExpertiseInput).trim();
+    if (!val) return;
+    const existing = formProfile.areasOfExpertise || [];
+    if (!existing.includes(val)) {
+      setFormProfile({ ...formProfile, areasOfExpertise: [...existing, val] });
+    }
+    if (!explicitVal) setNewExpertiseInput('');
   };
 
   // Add Certification
@@ -1171,7 +1229,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {(!hasActiveDevicePush || browserNotificationPermission !== 'granted') && (
+                    {(notificationPrefs?.manuallyDisabled === true ||
+                      !hasActiveDevicePush ||
+                      browserNotificationPermission !== 'granted') && (
                       <button
                         type="button"
                         onClick={() => onEnableDevicePush()}
@@ -1179,48 +1239,52 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                       >
                         <Bell className="w-3.5 h-3.5" />
                         <span>
-                          {browserNotificationPermission === 'denied'
+                          {notificationPrefs?.manuallyDisabled === true
+                            ? 'RE-ENABLE PHONE PUSH ALERTS'
+                            : browserNotificationPermission === 'denied'
                             ? 'Check Browser Permission'
-                            : 'ENABLE PUSH NOTIFICATIONS'}
+                            : 'ENABLE / SYNC PHONE PUSH ALERTS'}
                         </span>
                       </button>
                     )}
 
-                    {hasActiveDevicePush && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={isTestingPush}
-                          onClick={async () => {
-                            setIsTestingPush(true);
-                            const res = await sendTestPushNotification(formProfile.uid, formProfile.email);
-                            setTestPushFeedback(res.message);
-                            setIsTestingPush(false);
-                          }}
-                          className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                        >
-                          <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{isTestingPush ? 'Sending...' : 'Send Test Push Alert'}</span>
-                        </button>
+                    {hasActiveDevicePush && notificationPrefs?.manuallyDisabled !== true && (
+                      <button
+                        type="button"
+                        disabled={isTestingPush}
+                        onClick={async () => {
+                          setIsTestingPush(true);
+                          const res = await sendTestPushNotification(formProfile.uid, formProfile.email);
+                          setTestPushFeedback(res.message);
+                          setIsTestingPush(false);
+                        }}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{isTestingPush ? 'Sending...' : 'Send Test Push Alert'}</span>
+                      </button>
+                    )}
 
-                        <button
-                          type="button"
-                          disabled={isDisablingPush}
-                          onClick={async () => {
-                            setIsDisablingPush(true);
-                            try {
-                              await onDisableDevicePush();
-                              setTestPushFeedback('Push notifications disabled for this device.');
-                            } finally {
-                              setIsDisablingPush(false);
-                            }
-                          }}
-                          className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          <span>{isDisablingPush ? 'Disabling...' : 'Disable Push Alerts'}</span>
-                        </button>
-                      </>
+                    {notificationPrefs?.manuallyDisabled !== true && (
+                      <button
+                        type="button"
+                        disabled={isDisablingPush}
+                        onClick={async () => {
+                          setIsDisablingPush(true);
+                          try {
+                            await onDisableDevicePush();
+                            setTestPushFeedback(
+                              'Phone bar push notifications have been disabled. You can re-enable them anytime.'
+                            );
+                          } finally {
+                            setIsDisablingPush(false);
+                          }
+                        }}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>{isDisablingPush ? 'Disabling...' : 'Disable Push Alerts'}</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1231,22 +1295,26 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     <div className="text-[11px] font-bold text-slate-500">This Device Permission</div>
                     <div
                       className={`font-extrabold mt-0.5 ${
-                        browserNotificationPermission === 'granted'
+                        notificationPrefs?.manuallyDisabled === true
+                          ? 'text-slate-600'
+                          : browserNotificationPermission === 'granted'
                           ? 'text-emerald-700'
                           : browserNotificationPermission === 'denied'
                           ? 'text-rose-700'
                           : 'text-amber-700'
                       }`}
                     >
-                      {browserNotificationPermission === 'granted' && hasActiveDevicePush
-                        ? 'Granted & Active'
+                      {notificationPrefs?.manuallyDisabled === true
+                        ? 'Disabled by You (Opted Out)'
+                        : browserNotificationPermission === 'granted' && hasActiveDevicePush
+                        ? 'Granted & Active (Auto-On)'
                         : browserNotificationPermission === 'granted'
                         ? 'Granted (Syncing Device)'
                         : browserNotificationPermission === 'denied'
                         ? 'Blocked in Browser Settings'
                         : browserNotificationPermission === 'unsupported'
                         ? 'Website Bell Mode'
-                        : 'Not Enabled Yet'}
+                        : 'Auto-Enabled (Activates on Save)'}
                     </div>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
@@ -1301,7 +1369,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                         desc: 'Instant alerts directly in your Android system tray or iPhone Home Screen web app.',
                       },
                     ].map((ch) => {
-                      const checked = notificationPrefs?.channels?.[ch.key] ?? ch.key === 'websiteBell';
+                      const defaultChecked =
+                        ch.key === 'websiteBell' ? true : notificationPrefs?.manuallyDisabled !== true;
+                      const checked = notificationPrefs?.channels?.[ch.key] ?? defaultChecked;
                       return (
                         <label
                           key={ch.key}
@@ -1310,20 +1380,27 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                           <input
                             type="checkbox"
                             checked={checked}
-                            onChange={(e) =>
-                              onUpdateNotificationPrefs({
-                                channels: {
-                                  ...(notificationPrefs?.channels || {
-                                    websiteBell: true,
-                                    browserPush: false,
-                                    mobilePush: false,
-                                    emailAlerts: false,
-                                  }),
+                            onChange={(e) => {
+                              const nextChecked = e.target.checked;
+                              const nextChannels = {
+                                ...(notificationPrefs?.channels || {
+                                  websiteBell: true,
+                                  browserPush: true,
+                                  mobilePush: true,
                                   emailAlerts: false,
-                                  [ch.key]: e.target.checked,
-                                },
-                              })
-                            }
+                                }),
+                                emailAlerts: false,
+                                [ch.key]: nextChecked,
+                              };
+                              const pushChannelChanged = ch.key === 'browserPush' || ch.key === 'mobilePush';
+                              const nextManuallyDisabled = pushChannelChanged
+                                ? !nextChannels.browserPush && !nextChannels.mobilePush
+                                : notificationPrefs?.manuallyDisabled === true;
+                              onUpdateNotificationPrefs({
+                                manuallyDisabled: nextManuallyDisabled,
+                                channels: nextChannels,
+                              });
+                            }}
                             className="mt-0.5 w-4 h-4 accent-[#0B132B] cursor-pointer"
                           />
                           <div className="text-xs">
@@ -1700,7 +1777,34 @@ export const JobSeekerDashboard: React.FC<Props> = ({
               <div>
                 <h3 className="font-extrabold text-base text-slate-900">Career &amp; Professional Information</h3>
                 <p className="text-xs text-slate-500">
-                  Specify your desired job title, expected salary in ETB, and core competencies.
+                  Fill your mandatory work experience, total years of experience, and job expertise to automatically receive up to 3 strictly matching jobs on your phone bar.
+                </p>
+              </div>
+
+              {/* Mandatory Phone Notification Gate Banner */}
+              <div
+                className={`p-4 rounded-2xl border text-xs space-y-1.5 ${
+                  hasMandatoryNotificationFields
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                    : 'bg-amber-50 border-amber-200 text-amber-950'
+                }`}
+              >
+                <div className="font-extrabold flex items-center gap-1.5">
+                  {hasMandatoryNotificationFields ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>
+                    {hasMandatoryNotificationFields
+                      ? 'Mandatory Alert Criteria Complete — Max 3 Qualified Phone Notifications Active'
+                      : 'Required for Phone Job Alerts (Max 3 Strictly Qualified Jobs)'}
+                  </span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Complete <strong>Experience Status</strong> (previous/current role or check No Experience),{' '}
+                  <strong>Total Years of Experience</strong>, and <strong>Job Expertise</strong> below, then tap{' '}
+                  <strong>Save Professional Details</strong>. Only jobs you strictly fulfill are sent (max 3; non-fitting jobs are skipped).
                 </p>
               </div>
 
@@ -1745,8 +1849,10 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Total Experience Years</label>
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Total Years of Experience *
+                  </label>
                   <input
                     type="text"
                     value={formProfile.yearsOfExperience}
@@ -1754,6 +1860,49 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     placeholder="e.g. 5 Years or 0 Years (Fresh Graduate)"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_EXPERIENCE_YEAR_OPTIONS.map((yr) => {
+                      const active = (formProfile.yearsOfExperience || '').trim() === yr;
+                      return (
+                        <button
+                          key={yr}
+                          type="button"
+                          onClick={() =>
+                            setFormProfile({
+                              ...formProfile,
+                              yearsOfExperience: yr,
+                              noExperience: yr.startsWith('0 Years') ? true : formProfile.noExperience,
+                            })
+                          }
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[#0B132B] text-white border-[#0B132B]'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {yr.replace(' (Fresh Graduate)', '')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formProfile.noExperience)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormProfile({
+                          ...formProfile,
+                          noExperience: checked,
+                          yearsOfExperience: checked
+                            ? '0 Years (Fresh Graduate)'
+                            : formProfile.yearsOfExperience,
+                        });
+                      }}
+                      className="w-3.5 h-3.5 accent-[#0B132B] cursor-pointer"
+                    />
+                    <span>I have no prior work experience (0 Years / Entry Level)</span>
+                  </label>
                 </div>
 
                 <div>
@@ -1887,7 +2036,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
               {/* Skills Tags */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Key Skills (Press Enter to add)
+                  Key Skills * (Add via button or Enter)
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(formProfile.skills || []).map((skill, idx) => (
@@ -1909,27 +2058,34 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     </span>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  placeholder="Type a skill and press Enter (e.g. IFRS, Core Banking, Python, WASH Engineering)..."
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const val = (e.target as HTMLInputElement).value.trim();
-                      if (val && !formProfile.skills.includes(val)) {
-                        setFormProfile({ ...formProfile, skills: [...formProfile.skills, val] });
-                        (e.target as HTMLInputElement).value = '';
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSkillInput}
+                    onChange={(e) => setNewSkillInput(e.target.value)}
+                    placeholder="Type a skill (e.g. IFRS, Core Banking, Python, WASH Engineering)..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSkill();
                       }
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                />
+                    }}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddSkill}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold shrink-0 cursor-pointer"
+                  >
+                    Add Skill
+                  </button>
+                </div>
               </div>
 
               {/* Areas of Expertise */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Areas of Expertise (Press Enter to add)
+                  Job Expertise / Areas of Specialization * (Add via button, chip, or Enter)
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {(formProfile.areasOfExpertise || []).map((expTag, idx) => (
@@ -1951,22 +2107,48 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     </span>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  placeholder="e.g. Water & Sanitation, Financial Risk Management, Monitoring & Evaluation..."
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const val = (e.target as HTMLInputElement).value.trim();
-                      const current = formProfile.areasOfExpertise || [];
-                      if (val && !current.includes(val)) {
-                        setFormProfile({ ...formProfile, areasOfExpertise: [...current, val] });
-                        (e.target as HTMLInputElement).value = '';
+                <div className="flex gap-2 mb-2.5">
+                  <input
+                    type="text"
+                    value={newExpertiseInput}
+                    onChange={(e) => setNewExpertiseInput(e.target.value)}
+                    placeholder="e.g. Accounting & Finance, Banking Operations, Software Engineering..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddExpertise();
                       }
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                />
+                    }}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddExpertise()}
+                    className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold shrink-0 cursor-pointer"
+                  >
+                    Add Expertise
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_EXPERTISE_SUGGESTIONS.map((tag) => {
+                    const exists = (formProfile.areasOfExpertise || []).includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        disabled={exists}
+                        onClick={() => handleAddExpertise(tag)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                          exists
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
+                        }`}
+                      >
+                        {exists ? `✓ ${tag}` : `+ ${tag}`}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Professional Interests */}

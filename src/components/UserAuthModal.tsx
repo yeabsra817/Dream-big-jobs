@@ -7,12 +7,15 @@ import {
   ShieldCheck,
   Briefcase,
   FileCheck2,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import {
-  auth,
   googleProvider,
-  signInWithPopup,
-  signInWithRedirect,
+  signInWithGoogleResilient,
+  signInWithGoogleGisDirect,
+  ensureGoogleGsiLoaded,
+  isEmbeddedIframeContext,
   getAdditionalUserInfo,
   fetchJobSeekerProfile,
   saveJobSeekerProfile,
@@ -40,13 +43,18 @@ export const UserAuthModal: React.FC<Props> = ({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Synchronize internal mode with initialMode prop when modal is opened or mode switched
+  // Synchronize internal mode with initialMode prop & pre-warm Google Identity Services when modal opens
   React.useEffect(() => {
     setMode(initialMode === 'signup' ? 'signup' : 'signin');
     setError(null);
+    setErrorCode(null);
     setSuccessMsg(null);
+    if (isOpen) {
+      ensureGoogleGsiLoaded().catch(() => false);
+    }
   }, [initialMode, isOpen]);
 
   // Lock background scroll when modal is open
@@ -91,96 +99,113 @@ export const UserAuthModal: React.FC<Props> = ({
     }
   };
 
-  // Real Firebase Google Account Selection Popup Sign-In & Registration (with mobile redirect fallback)
+  const completeGoogleSignIn = async (result: any) => {
+    if (!result?.user) return;
+    const user = result.user;
+    let additionalInfo: any = null;
+    try {
+      additionalInfo = getAdditionalUserInfo(result);
+    } catch {}
+    const isNewUser = Boolean(additionalInfo?.isNewUser);
+    const now = new Date().toISOString();
+
+    let profile = await fetchJobSeekerProfile(user.uid);
+    if (!profile) {
+      profile = {
+        ...DEFAULT_JOB_SEEKER_PROFILE,
+        uid: user.uid,
+        email: user.email || '',
+        fullName: user.displayName || user.email?.split('@')[0] || 'Job Seeker',
+        photoUrl: user.photoURL || undefined,
+        phone: user.phoneNumber || '',
+        authProvider: 'google',
+        emailVerified: user.emailVerified,
+        noExperience: false,
+        profileStatus: 'incomplete',
+        profileCompletionPercentage: 0,
+        lastLoginAt: now,
+        lastActiveAt: now,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveJobSeekerProfile(profile);
+    } else {
+      const syncedFullName =
+        !profile.fullName || profile.fullName === 'Job Seeker'
+          ? user.displayName || profile.fullName
+          : profile.fullName;
+      const syncedPhotoUrl = user.photoURL || profile.photoUrl;
+      const syncedEmail = user.email || profile.email;
+      profile = {
+        ...profile,
+        fullName: syncedFullName,
+        photoUrl: syncedPhotoUrl,
+        email: syncedEmail,
+        authProvider: profile.authProvider || 'google',
+        emailVerified: user.emailVerified || profile.emailVerified,
+        lastLoginAt: now,
+        lastActiveAt: now,
+        updatedAt: now,
+      };
+      await saveJobSeekerProfile(profile);
+    }
+
+    // Track registration/login in GA4
+    trackAnalyticsEvent(
+      isNewUser || mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login',
+      {
+        method: 'google',
+        title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
+      }
+    );
+
+    setSuccessMsg(
+      isNewUser
+        ? `Account created! Welcome, ${user.displayName || profile.fullName || 'Job Seeker'}!`
+        : `Welcome back, ${user.displayName || profile.fullName || 'Job Seeker'}!`
+    );
+
+    if (onSuccess) {
+      await onSuccess(user, profile);
+    }
+    onClose();
+  };
+
+  // Real Firebase Google Account Selection Popup Sign-In & Registration (with GIS + redirect fallback)
   const handleGoogleAuth = async () => {
     setLoading(true);
     setError(null);
+    setErrorCode(null);
     setSuccessMsg(null);
 
     try {
-      let result;
-      try {
-        result = await signInWithPopup(auth, googleProvider);
-      } catch (popupErr: any) {
-        if (
-          popupErr?.code === 'auth/popup-blocked' ||
-          popupErr?.code === 'auth/operation-not-supported-in-this-environment'
-        ) {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        }
-        throw popupErr;
-      }
-      const user = result.user;
-      const additionalInfo = getAdditionalUserInfo(result);
-      const isNewUser = Boolean(additionalInfo?.isNewUser);
-      const now = new Date().toISOString();
-
-      let profile = await fetchJobSeekerProfile(user.uid);
-      if (!profile) {
-        profile = {
-          ...DEFAULT_JOB_SEEKER_PROFILE,
-          uid: user.uid,
-          email: user.email || '',
-          fullName: user.displayName || user.email?.split('@')[0] || 'Job Seeker',
-          photoUrl: user.photoURL || undefined,
-          phone: user.phoneNumber || '',
-          authProvider: 'google',
-          emailVerified: user.emailVerified,
-          noExperience: false,
-          profileStatus: 'incomplete',
-          profileCompletionPercentage: 0,
-          lastLoginAt: now,
-          lastActiveAt: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-        await saveJobSeekerProfile(profile);
-      } else {
-        const syncedFullName =
-          !profile.fullName || profile.fullName === 'Job Seeker'
-            ? user.displayName || profile.fullName
-            : profile.fullName;
-        const syncedPhotoUrl = user.photoURL || profile.photoUrl;
-        const syncedEmail = user.email || profile.email;
-        profile = {
-          ...profile,
-          fullName: syncedFullName,
-          photoUrl: syncedPhotoUrl,
-          email: syncedEmail,
-          authProvider: profile.authProvider || 'google',
-          emailVerified: user.emailVerified || profile.emailVerified,
-          lastLoginAt: now,
-          lastActiveAt: now,
-          updatedAt: now,
-        };
-        await saveJobSeekerProfile(profile);
-      }
-
-      // Track registration/login in GA4
-      trackAnalyticsEvent(
-        isNewUser || mode === 'signup' ? 'job_seeker_register' : 'job_seeker_login',
-        {
-          method: 'google',
-          title: isNewUser ? 'Google Sign-Up' : 'Google Sign-In',
-        }
-      );
-
-      setSuccessMsg(
-        isNewUser
-          ? `Account created! Welcome, ${user.displayName || profile.fullName || 'Job Seeker'}!`
-          : `Welcome back, ${user.displayName || profile.fullName || 'Job Seeker'}!`
-      );
-
-      if (onSuccess) {
-        await onSuccess(user, profile);
-      }
-      onClose();
+      const result = await signInWithGoogleResilient(googleProvider);
+      if (!result) return; // Top-level redirect initiated
+      await completeGoogleSignIn(result);
     } catch (err: any) {
+      setErrorCode(err?.code || 'unknown');
       setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Synchronous tap handler calling Google Identity Services directly (bypasses __/auth/iframe)
+  const handleDirectGisAuth = () => {
+    setLoading(true);
+    setError(null);
+    setErrorCode(null);
+    setSuccessMsg(null);
+
+    signInWithGoogleGisDirect()
+      .then((result) => completeGoogleSignIn(result))
+      .catch((err: any) => {
+        setErrorCode(err?.code || 'unknown');
+        setError(mapAuthError(err));
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   return (
@@ -256,9 +281,37 @@ export const UserAuthModal: React.FC<Props> = ({
 
           {/* Feedback messages */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-2.5">
+              <div className="font-bold flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {(errorCode === 'auth/network-request-failed' ||
+                errorCode === 'auth/popup-blocked' ||
+                errorCode === 'auth/internal-error') && (
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDirectGisAuth}
+                    disabled={loading}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-slate-50 border border-rose-200 text-[#0B132B] font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-[#16A34A]" />
+                    <span>Direct Google Sign-In</span>
+                  </button>
+                  {isEmbeddedIframeContext() && typeof window !== 'undefined' && (
+                    <a
+                      href={window.location.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-[11px] transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-[#4ADE80]" />
+                      <span>Open in New Tab</span>
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

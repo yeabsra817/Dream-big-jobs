@@ -4,9 +4,8 @@ import * as fs from 'fs';
 import {
   computeStaffOpportunityRecommendations,
   hasCompletedMandatoryPreferences,
-  hasSufficientProfileForRecommendations,
-  isDeadlineApproaching,
   isDeadlineExpired,
+  isStrictJobFitForUser,
   isVerifiedActiveVacancy,
   RecommendedOpportunity,
 } from './src/utils/recommendationCore';
@@ -377,7 +376,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       ? (data.defaultFrequency as 'instant' | 'daily' | 'weekly')
       : 'instant';
     const capNum = Number(data?.dailyCapPerUser);
-    const dailyCapPerUser = Number.isFinite(capNum) ? Math.min(10, Math.max(1, Math.round(capNum))) : 3;
+    const dailyCapPerUser = Number.isFinite(capNum) ? Math.min(3, Math.max(1, Math.round(capNum))) : 3;
     return {
       defaultFrequency: freq,
       dailyCapPerUser,
@@ -404,12 +403,13 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       userId: uid,
       permissionStatus: 'default',
       subscriptionStatus: 'none',
+      manuallyDisabled: false,
       frequency: policy.defaultFrequency,
       promptDismissCount: 0,
       channels: {
         websiteBell: true,
-        browserPush: false,
-        mobilePush: false,
+        browserPush: true,
+        mobilePush: true,
         emailAlerts: false,
       },
       alertTypes: {
@@ -504,7 +504,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         const devId = String(subDoc.deviceId || endpoint.slice(-24));
         const filtered = devices.filter((d) => d.deviceId !== devId && d.endpoint !== endpoint);
         const keys = subDoc.keys || subDoc.subscription?.keys;
-        if (subDoc.active !== false && keys?.p256dh && keys?.auth) {
+        if (subDoc.active !== false && !pref.manuallyDisabled && keys?.p256dh && keys?.auth) {
           filtered.unshift({
             deviceId: devId,
             deviceLabel: String(subDoc.deviceLabel || 'Web Browser'),
@@ -588,7 +588,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   ): Promise<{ deliveredCount: number; failedCount: number; expiredEndpoints: string[]; errors: string[] }> {
     const allPrefs = loadAllNotificationPrefs();
     const prefs = allPrefs[uid];
-    if (!prefs || (!prefs.channels?.browserPush && !prefs.channels?.mobilePush)) {
+    if (!prefs || prefs.manuallyDisabled === true || (!prefs.channels?.browserPush && !prefs.channels?.mobilePush)) {
       return { deliveredCount: 0, failedCount: 0, expiredEndpoints: [], errors: [] };
     }
     const activeDevices = (prefs.deviceSubscriptions || []).filter((d: any) => d.active && d.subscription?.endpoint);
@@ -946,6 +946,10 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
 
     if (!options.isTestNotification) {
+      // Check mandatory user profile completion before sending job alerts
+      if (!hasCompletedMandatoryPreferences(profile)) return null;
+      // Respect user opt-out for push & job alerts
+      if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) return null;
       // Check user alert-type preferences
       if (alertKind === 'new_match' && prefs.alertTypes?.newMatches === false) return null;
       if (alertKind === 'deadline_reminder' && prefs.alertTypes?.deadlineReminders === false) return null;
@@ -976,9 +980,10 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       return null;
     }
 
-    // Strict daily limit: maximum notifications per user per day (default 3)
+    // Strict daily limit: maximum 3 job notifications per user per day
     if (!options.bypassRateLimit) {
       const policy = loadNotificationPolicy();
+      const effectiveCap = Math.min(3, Math.max(1, policy.dailyCapPerUser || 3));
       const todayKey = getAddisDateKey(new Date());
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
       const todayCount = existingList.filter((n) => {
@@ -986,7 +991,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         const ts = new Date(n.createdAt).getTime();
         return getAddisDateKey(n.createdAt) === todayKey || (!Number.isNaN(ts) && ts >= twentyFourHoursAgoMs);
       }).length;
-      if (todayCount >= policy.dailyCapPerUser) {
+      if (todayCount >= effectiveCap) {
         return null;
       }
     }
@@ -1036,9 +1041,13 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
     saveAllNotifications(allNotifs);
 
-    // Real Web Push delivery directly to Android / iPhone PWA / Desktop panel (Email is intentionally not used)
+    // Real Web Push delivery directly to Android / iPhone PWA / Desktop notification panel
     const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d: any) => d.active && d.subscription?.endpoint));
-    if (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) {
+    if (
+      prefs.manuallyDisabled !== true &&
+      (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) &&
+      hasPushDevices
+    ) {
       const pushTitle = options.isTestNotification
         ? `HOPELANDJOBS — Test Job Notification!`
         : alertKind === 'deadline_reminder'
@@ -1049,7 +1058,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       const pushBody = `${rec.title} — ${rec.organization} (${rec.location})\n${
         options.customNote
           ? options.customNote
-          : `Matches your profile in ${rec.category}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}.`
+          : `Matches your qualifications in ${rec.category}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}.`
       } Tap to view the job and apply.`;
       const pushPayload = {
         title: pushTitle,
@@ -1122,6 +1131,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       matchScore: r.matchScore,
       eligibilityStatus: r.eligibilityStatus,
       isFullyQualified: r.isFullyQualified,
+      strictlyQualified: r.strictlyQualified,
       matchReasons: r.matchReasons,
       missingMandatoryQualifications: r.missingMandatoryQualifications,
       requiredExperienceText: r.requiredExperienceText,
@@ -1156,40 +1166,32 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
 
     const newNotifications: any[] = [];
-    if (options.sendNotifications) {
+    const currentPrefs = loadAllNotificationPrefs()[profile.uid];
+    const hasMandatoryProfile = hasCompletedMandatoryPreferences(profile);
+    const notificationsPausedByUser = currentPrefs?.manuallyDisabled === true;
+
+    if (options.sendNotifications && hasMandatoryProfile && !notificationsPausedByUser) {
       const changedSet = new Set(
         [
           ...(options.changedVacancyId ? [options.changedVacancyId] : []),
           ...(Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []),
         ].filter(Boolean)
       );
-      const qualified = compactRecs.filter(
-        (r) => r.isFullyQualified && (r.matchScore >= 24 || changedSet.has(r.id))
-      );
-      // Guarantee newly posted/updated jobs are never crowded out by older higher-scoring matches
+
+      // Strictly only jobs the user fulfills with verified qualification & domain fit (max 3 jobs)
+      const qualified = compactRecs.filter((r) => isStrictJobFitForUser(r as RecommendedOpportunity));
       const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
-      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id)).slice(0, 5);
-      const prioritized = [...changedMatches, ...topGeneralMatches];
+      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id));
+      const prioritized = [...changedMatches, ...topGeneralMatches].slice(0, 3);
 
       for (const r of prioritized) {
-        let alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' = 'new_match';
-        if (changedSet.has(r.id) && options.changeType === 'updated') {
-          alertKind = 'job_updated';
-        } else if (isDeadlineApproaching(r.deadline, 72)) {
-          alertKind = 'deadline_reminder';
-        }
+        if (newNotifications.length >= 3) break;
+        const alertKind: 'new_match' | 'job_updated' =
+          changedSet.has(r.id) && options.changeType === 'updated' ? 'job_updated' : 'new_match';
         const sent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, alertKind, {
           dryRun: options.dryRun,
         });
         if (sent) newNotifications.push(sent);
-
-        // Also send approaching deadline reminder separately if deadline <= 72h
-        if (alertKind === 'new_match' && isDeadlineApproaching(r.deadline, 72)) {
-          const dlSent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, 'deadline_reminder', {
-            dryRun: options.dryRun,
-          });
-          if (dlSent) newNotifications.push(dlSent);
-        }
       }
 
       if (!options.dryRun && newNotifications.length > 0) {
@@ -1560,7 +1562,59 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     res.json({ publicKey: vapidKeysCache.publicKey });
   });
 
-  app.post('/api/push/subscribe/:uid', (req: Request, res: Response): void => {
+  async function deliverPendingPushNotificationsForUser(uid: string): Promise<number> {
+    const allPrefs = loadAllNotificationPrefs();
+    const prefs = allPrefs[uid];
+    if (!prefs || prefs.manuallyDisabled === true) return 0;
+    const hasDevices = Boolean(prefs.deviceSubscriptions?.some((d: any) => d.active && d.subscription?.endpoint));
+    if (!hasDevices) return 0;
+
+    const allNotifs = loadAllNotifications();
+    const userNotifs: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+    const pendingPush = userNotifs
+      .filter(
+        (n) =>
+          !n.read &&
+          n.sourceType !== 'system' &&
+          n.channels?.push !== 'sent' &&
+          !isDeadlineExpired(n.deadline || n.expiresAt)
+      )
+      .slice(0, 3);
+
+    if (pendingPush.length === 0) return 0;
+
+    let pushedCount = 0;
+    let mutated = false;
+    for (const notif of pendingPush) {
+      const pushRes = await sendWebPushToUser(uid, {
+        title: `HOPELANDJOBS — ${notif.title}`,
+        body: `${notif.employer} (${notif.location}) · ${notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`}. Tap to apply.`,
+        url:
+          notif.sourceType === 'domestic_job'
+            ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&notificationId=${encodeURIComponent(notif.id)}`
+            : notif.jobUrl || '/',
+        jobId: notif.vacancyId,
+        notificationId: notif.id,
+        tag: `vacancy-${notif.vacancyId}`,
+        jobTitle: notif.title,
+        employer: notif.employer,
+        category: notif.category,
+      });
+      if (pushRes.deliveredCount > 0) {
+        notif.channels = { ...(notif.channels || { website: 'delivered', email: 'skipped' }), push: 'sent' };
+        notif.updatedAt = new Date().toISOString();
+        pushedCount += 1;
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      allNotifs[uid] = userNotifs;
+      saveAllNotifications(allNotifs);
+    }
+    return pushedCount;
+  }
+
+  app.post('/api/push/subscribe/:uid', async (req: Request, res: Response): Promise<void> => {
     const { uid } = req.params;
     if (!isSelfOrOwner(req, uid)) {
       res.status(403).json({ error: 'Access denied' });
@@ -1599,13 +1653,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       userId: uid,
       permissionStatus: 'granted',
       subscriptionStatus: 'active',
+      manuallyDisabled: false,
       enabledAt: existing.enabledAt || nowIso,
       permissionVerifiedAt: nowIso,
       channels: {
         ...existing.channels,
         websiteBell: true,
         browserPush: true,
-        mobilePush: existing.channels?.mobilePush || isMobile,
+        mobilePush: existing.channels?.mobilePush || isMobile || true,
       },
       deviceSubscriptions: filtered.slice(0, 15),
       updatedAt: nowIso,
@@ -1613,7 +1668,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
 
     allPrefs[uid] = updated;
     saveAllNotificationPrefs(allPrefs);
-    res.json({ success: true, preferences: updated });
+    const pendingPushDelivered = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, preferences: updated, pendingPushDelivered });
   });
 
   app.post('/api/push/subscribe-anonymous', (req: Request, res: Response): void => {
@@ -1638,7 +1694,6 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const nowIso = new Date().toISOString();
     const anonMap = loadAnonymousPushSubscriptions();
 
-    // Remove older anonymous records sharing the exact same browser endpoint
     for (const [key, item] of Object.entries(anonMap)) {
       if (key !== cleanDeviceId && (item?.endpoint === endpoint || item?.subscription?.endpoint === endpoint)) {
         delete anonMap[key];
@@ -1670,7 +1725,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     });
   });
 
-  app.post('/api/push/claim-anonymous/:uid', (req: Request, res: Response): void => {
+  app.post('/api/push/claim-anonymous/:uid', async (req: Request, res: Response): Promise<void> => {
     const { uid } = req.params;
     if (!isSelfOrOwner(req, uid)) {
       res.status(403).json({ error: 'Access denied' });
@@ -1708,7 +1763,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const allPrefs = loadAllNotificationPrefs();
     const existingPrefs = allPrefs[uid] || buildDefaultPreferences(uid);
 
-    if (!resolvedSub?.endpoint) {
+    if (!resolvedSub?.endpoint || existingPrefs.manuallyDisabled === true) {
       res.json({ success: true, claimed: false, preferences: existingPrefs });
       return;
     }
@@ -1747,13 +1802,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       userId: uid,
       permissionStatus: 'granted',
       subscriptionStatus: 'active',
+      manuallyDisabled: false,
       enabledAt: existingPrefs.enabledAt || nowIso,
       permissionVerifiedAt: nowIso,
       channels: {
         ...existingPrefs.channels,
         websiteBell: true,
         browserPush: true,
-        mobilePush: existingPrefs.channels?.mobilePush || isMobile,
+        mobilePush: existingPrefs.channels?.mobilePush || isMobile || true,
       },
       deviceSubscriptions: filtered.slice(0, 15),
       updatedAt: nowIso,
@@ -1767,7 +1823,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       saveAnonymousPushSubscriptions(anonMap);
     }
 
-    res.json({ success: true, claimed: true, preferences: updated });
+    const pendingPushDelivered = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, claimed: true, preferences: updated, pendingPushDelivered });
   });
 
   app.post('/api/push/unsubscribe/:uid', (req: Request, res: Response): void => {
@@ -1801,7 +1858,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const updated = {
       ...existing,
       userId: uid,
-      subscriptionStatus: stillHasActive ? 'active' : 'none',
+      manuallyDisabled: !stillHasActive,
+      subscriptionStatus: stillHasActive ? 'active' : 'revoked',
       channels: {
         ...existing.channels,
         browserPush: stillHasActive ? Boolean(existing.channels?.browserPush) : false,
@@ -1814,6 +1872,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     allPrefs[uid] = updated;
     saveAllNotificationPrefs(allPrefs);
     res.json({ success: true, preferences: updated });
+  });
+
+  app.post('/api/push/deliver-pending/:uid', async (req: Request, res: Response): Promise<void> => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const deliveredCount = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, deliveredCount });
   });
 
   app.post('/api/push/test/:uid', async (req: Request, res: Response): Promise<void> => {
@@ -1879,11 +1947,29 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       ? body.frequency
       : existing.frequency || 'instant';
 
+    const nextChannels = {
+      ...existing.channels,
+      ...(body.channels || {}),
+    };
+    const nextManuallyDisabled =
+      typeof body.manuallyDisabled === 'boolean'
+        ? body.manuallyDisabled
+        : body.channels &&
+          typeof body.channels.browserPush === 'boolean' &&
+          typeof body.channels.mobilePush === 'boolean' &&
+          !body.channels.browserPush &&
+          !body.channels.mobilePush
+        ? true
+        : body.channels?.browserPush === true || body.channels?.mobilePush === true
+        ? false
+        : Boolean(existing.manuallyDisabled);
+
     const updated = {
       ...existing,
       userId: uid,
       permissionStatus: body.permissionStatus || existing.permissionStatus,
       subscriptionStatus: body.subscriptionStatus || existing.subscriptionStatus,
+      manuallyDisabled: nextManuallyDisabled,
       frequency: validFreq,
       enabledAt:
         body.permissionStatus === 'granted' && !existing.enabledAt ? nowIso : body.enabledAt || existing.enabledAt,
@@ -1892,10 +1978,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         typeof body.incrementDismiss === 'boolean' && body.incrementDismiss
           ? (existing.promptDismissCount || 0) + 1
           : body.promptDismissCount ?? existing.promptDismissCount ?? 0,
-      channels: {
-        ...existing.channels,
-        ...(body.channels || {}),
-      },
+      channels: nextChannels,
       alertTypes: {
         ...existing.alertTypes,
         ...(body.alertTypes || {}),
@@ -3283,20 +3366,17 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   });
 
   return {
-    onUserProfileSaved: async (savedProfile: any, isNewRegistration: boolean) => {
+    onUserProfileSaved: async (savedProfile: any, _isNewRegistration: boolean) => {
       if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
-      // Ensure preference record exists on signup with Email + Website Bell active by default
       const allPrefs = loadAllNotificationPrefs();
       if (!allPrefs[savedProfile.uid]) {
         allPrefs[savedProfile.uid] = buildDefaultPreferences(savedProfile.uid);
         saveAllNotificationPrefs(allPrefs);
       }
-      const readyForMatch =
-        hasSufficientProfileForRecommendations(savedProfile) ||
-        hasCompletedMandatoryPreferences(savedProfile);
-      // Recalculate recommendations and dispatch alerts immediately once user has profile/mandatory preferences
+      const readyForStrictAlerts = hasCompletedMandatoryPreferences(savedProfile);
+      // Only dispatch job notifications once mandatory experience, years of experience, and job expertise are filled
       const res = await recalculateForUser(savedProfile, {
-        sendNotifications: isNewRegistration || readyForMatch,
+        sendNotifications: readyForStrictAlerts,
       }).catch(() => ({ recommendations: [], newNotifications: [] }));
       return {
         recommendationsCount: res.recommendations.length,

@@ -9,15 +9,13 @@ import {
   EyeOff,
 } from 'lucide-react';
 import {
-  auth,
   googleProvider,
-  signInWithRedirect,
+  signInWithGoogleResilient,
   ADMIN_EMAIL,
   isUserAdmin,
   verifyDeveloperPasswordServer,
   establishDeveloperGoogleSession,
 } from '../../lib/firebase';
-import { signInWithPopup } from 'firebase/auth';
 
 interface Props {
   isOpen: boolean;
@@ -42,19 +40,8 @@ export const AdminAuthModal: React.FC<Props> = ({
     setLoading(true);
     setError(null);
     try {
-      let result;
-      try {
-        result = await signInWithPopup(auth, googleProvider);
-      } catch (popupErr: any) {
-        if (
-          popupErr?.code === 'auth/popup-blocked' ||
-          popupErr?.code === 'auth/operation-not-supported-in-this-environment'
-        ) {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        }
-        throw popupErr;
-      }
+      const result = await signInWithGoogleResilient(googleProvider);
+      if (!result) return;
       const user = result.user;
       if (isUserAdmin(user)) {
         const email = user.email || ADMIN_EMAIL;

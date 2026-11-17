@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -14,6 +15,7 @@ import {
   onAuthStateChanged,
   getAdditionalUserInfo,
   User,
+  UserCredential,
 } from 'firebase/auth';
 import {
   initializeFirestore,
@@ -1403,6 +1405,7 @@ export async function generateFullSystemBackupSnapshot(
 export {
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -1411,6 +1414,240 @@ export {
   updateProfile,
   getAdditionalUserInfo,
 };
+
+export function isEmbeddedIframeContext(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+let gsiLoadPromise: Promise<boolean> | null = null;
+
+export function ensureGoogleGsiLoaded(timeoutMs = 4000): Promise<boolean> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve(false);
+  }
+  const win = window as any;
+  if (win.google?.accounts?.oauth2?.initTokenClient) {
+    return Promise.resolve(true);
+  }
+  if (gsiLoadPromise) return gsiLoadPromise;
+
+  gsiLoadPromise = new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (!ok) gsiLoadPromise = null;
+      resolve(ok);
+    };
+
+    const pollInterval = setInterval(() => {
+      if ((window as any).google?.accounts?.oauth2?.initTokenClient) {
+        clearInterval(pollInterval);
+        clearTimeout(timer);
+        finish(true);
+      }
+    }, 80);
+
+    const timer = setTimeout(() => {
+      clearInterval(pollInterval);
+      finish(Boolean((window as any).google?.accounts?.oauth2?.initTokenClient));
+    }, timeoutMs);
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src*="accounts.google.com/gsi/client"]'
+    );
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => {
+        clearInterval(pollInterval);
+        clearTimeout(timer);
+        finish(false);
+      };
+      document.head.appendChild(script);
+    }
+  });
+
+  return gsiLoadPromise;
+}
+
+/**
+ * Direct Google Identity Services (GIS) popup login -> Firebase signInWithCredential.
+ * Bypasses Firebase's apis.google.com + __/auth/iframe ping which often times out
+ * with auth/network-request-failed in mobile Chrome or nested preview iframes.
+ * Invokes requestAccessToken() synchronously when GIS is already loaded to preserve
+ * Chrome Android user activation.
+ */
+export function signInWithGoogleGisDirect(): Promise<UserCredential> {
+  const clientId = ((firebaseConfig as any).oAuthClientId || '').trim();
+  if (!clientId) {
+    return Promise.reject({
+      code: 'auth/operation-not-supported-in-this-environment',
+      message: 'Google OAuth client ID is missing.',
+    });
+  }
+
+  const runTokenRequest = (): Promise<UserCredential> =>
+    new Promise<UserCredential>((resolve, reject) => {
+      const win = window as any;
+      const oauth2 = win.google?.accounts?.oauth2;
+      if (!oauth2?.initTokenClient) {
+        reject({
+          code: 'auth/network-request-failed',
+          message: 'Google Sign-In library is not ready yet. Please try again.',
+        });
+        return;
+      }
+
+      let settled = false;
+      const client = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        callback: async (tokenResponse: any) => {
+          if (settled) return;
+          if (tokenResponse?.error || !tokenResponse?.access_token) {
+            settled = true;
+            const errType = String(tokenResponse?.error || '');
+            if (errType === 'access_denied') {
+              reject({
+                code: 'auth/popup-closed-by-user',
+                message: 'Google sign-in was cancelled.',
+              });
+            } else {
+              reject({
+                code: 'auth/network-request-failed',
+                message: tokenResponse?.error_description || 'Google sign-in could not complete.',
+              });
+            }
+            return;
+          }
+          try {
+            const credential = GoogleAuthProvider.credential(null, tokenResponse.access_token);
+            const userCredential = await signInWithCredential(auth, credential);
+            settled = true;
+            resolve(userCredential);
+          } catch (credErr) {
+            settled = true;
+            reject(credErr);
+          }
+        },
+        error_callback: (err: any) => {
+          if (settled) return;
+          settled = true;
+          const type = String(err?.type || '');
+          if (type === 'popup_closed') {
+            reject({
+              code: 'auth/popup-closed-by-user',
+              message: 'Google sign-in popup was closed before completing authentication.',
+            });
+          } else if (type === 'popup_failed_to_open') {
+            reject({
+              code: 'auth/popup-blocked',
+              message: 'Your browser blocked the Google sign-in popup.',
+            });
+          } else {
+            reject({
+              code: 'auth/network-request-failed',
+              message: 'Network error while connecting to Google Authentication.',
+            });
+          }
+        },
+      });
+
+      client.requestAccessToken({ prompt: 'select_account' });
+    });
+
+  const win = typeof window !== 'undefined' ? (window as any) : null;
+  if (win?.google?.accounts?.oauth2?.initTokenClient) {
+    return runTokenRequest();
+  }
+
+  return ensureGoogleGsiLoaded(4000).then((loaded) => {
+    if (!loaded) {
+      throw {
+        code: 'auth/network-request-failed',
+        message: 'Unable to reach Google Sign-In service. Please check your connection and try again.',
+      };
+    }
+    return runTokenRequest();
+  });
+}
+
+/**
+ * Resilient Google Sign-In for desktop, mobile Chrome, PWA, and AI Studio preview iframes.
+ * Returns null only when a top-level redirect (signInWithRedirect) was initiated.
+ */
+export async function signInWithGoogleResilient(
+  provider: GoogleAuthProvider = googleProvider
+): Promise<UserCredential | null> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw {
+      code: 'auth/network-request-failed',
+      message: 'You appear to be offline. Please check your internet connection and try again.',
+    };
+  }
+
+  try {
+    return await signInWithPopup(auth, provider);
+  } catch (err: any) {
+    const code = err?.code || '';
+    const embedded = isEmbeddedIframeContext();
+
+    // If Firebase's hidden __/auth/iframe ping or apis.google.com failed (common on Chrome Android / preview iframes)
+    if (code === 'auth/network-request-failed' || code === 'auth/internal-error') {
+      // Attempt 1: Bypass gapi/iframe completely using GIS Token Client -> signInWithCredential
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2?.initTokenClient) {
+        try {
+          return await signInWithGoogleGisDirect();
+        } catch (gisErr: any) {
+          // If user intentionally closed GIS popup, propagate immediately
+          if (gisErr?.code === 'auth/popup-closed-by-user') {
+            throw gisErr;
+          }
+          // If GIS popup was blocked because previous attempt timed out after 5s, fall through cleanly
+        }
+      }
+
+      // Attempt 2: Retry signInWithPopup once (after @firebase/auth clears failed cachedGApiLoader)
+      try {
+        return await signInWithPopup(auth, provider);
+      } catch (retryErr: any) {
+        const retryCode = retryErr?.code || '';
+        // Only fall back to full-page redirect when NOT inside an iframe (accounts.google.com blocks X-Frame-Options)
+        if (!embedded && (retryCode === 'auth/popup-blocked' || retryCode === 'auth/network-request-failed')) {
+          await signInWithRedirect(auth, provider);
+          return null;
+        }
+        throw retryErr;
+      }
+    }
+
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/operation-not-supported-in-this-environment'
+    ) {
+      if (!embedded) {
+        await signInWithRedirect(auth, provider);
+        return null;
+      }
+      // Inside iframe: try GIS popup directly before surfacing popup-blocked UI
+      try {
+        return await signInWithGoogleGisDirect();
+      } catch (gisErr: any) {
+        throw gisErr;
+      }
+    }
+
+    throw err;
+  }
+}
 
 /* =========================================================================
  * 10. JOB SEEKER PROFILES & DASHBOARD PERSISTENCE

@@ -96,15 +96,6 @@ function isDeadlineExpired(deadline) {
   if (Number.isNaN(parsed.getTime())) return false;
   return parsed.getTime() < Date.now() - 24 * 60 * 60 * 1e3;
 }
-function isDeadlineApproaching(deadline, withinHours = 72) {
-  if (!deadline) return false;
-  const trimmed = deadline.trim().toLowerCase();
-  if (!trimmed || /rolling|ongoing|open|not stated|asap|until filled/i.test(trimmed)) return false;
-  const parsed = new Date(deadline);
-  if (Number.isNaN(parsed.getTime())) return false;
-  const diffMs = parsed.getTime() - Date.now();
-  return diffMs > 0 && diffMs <= withinHours * 60 * 60 * 1e3;
-}
 var SECTOR_ALIAS_GROUPS = [
   { label: "banking", keywords: ["bank", "banking", "commercial bank", "branch manager", "credit", "teller", "treasury", "loan officer", "customer service officer"] },
   { label: "microfinance", keywords: ["microfinance", "mfi", "sacco", "micro-credit", "micro finance"] },
@@ -136,7 +127,32 @@ function extractSectorTags(text) {
   return found;
 }
 function tokenizeProfileKeywords(profile) {
-  const stopWords = /* @__PURE__ */ new Set(["and", "the", "for", "with", "of", "in", "to", "at", "or", "on", "officer", "staff", "job"]);
+  const stopWords = /* @__PURE__ */ new Set([
+    "and",
+    "the",
+    "for",
+    "with",
+    "of",
+    "in",
+    "to",
+    "at",
+    "or",
+    "on",
+    "officer",
+    "staff",
+    "job",
+    "senior",
+    "junior",
+    "assistant",
+    "associate",
+    "general",
+    "service",
+    "services",
+    "company",
+    "sector",
+    "private",
+    "public"
+  ]);
   const splitClean = (values) => Array.from(
     new Set(
       values.join(" ").toLowerCase().split(/[^a-z0-9+]+/).filter((w) => w.length >= 3 && !stopWords.has(w))
@@ -157,6 +173,7 @@ function tokenizeProfileKeywords(profile) {
     ]),
     skillTokens: (profile.skills || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseTokens: (profile.areasOfExpertise || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    expertiseWordTokens: splitClean([...profile.areasOfExpertise || [], ...profile.skills || []]),
     interestTokens: (profile.professionalInterests || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     certTokens: (profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`.trim().toLowerCase()).filter(Boolean),
     studyTokens: splitClean((profile.education || []).map((e) => `${e.fieldOfStudy} ${e.qualification}`)),
@@ -196,13 +213,22 @@ function hasSufficientProfileForRecommendations(profile) {
 }
 function hasCompletedMandatoryPreferences(profile) {
   if (!profile) return false;
-  const hasExperience = Boolean(
-    profile.noExperience === true || profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0 || profile.experience && profile.experience.length > 0 || profile.previousPositions && profile.previousPositions.length > 0
+  const hasExperienceStatus = Boolean(
+    profile.noExperience === true || Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2
   );
-  const hasSectorOrRole = Boolean(
-    profile.preferredSectors && profile.preferredSectors.length > 0 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.skills && profile.skills.length > 0
+  const hasYearsOfExperience = Boolean(
+    profile.noExperience === true || profile.yearsOfExperience && /\d/.test(profile.yearsOfExperience)
   );
-  return hasExperience && hasSectorOrRole;
+  const hasJobExpertise = Boolean(
+    Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0
+  );
+  return hasExperienceStatus && hasYearsOfExperience && hasJobExpertise;
+}
+function isStrictJobFitForUser(rec) {
+  if (!rec) return false;
+  if (!rec.isFullyQualified) return false;
+  if (rec.strictlyQualified === false) return false;
+  return rec.matchScore >= 36;
 }
 function isVerifiedActiveVacancy(v) {
   if (!v || !v.id || !v.title) return false;
@@ -227,7 +253,8 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
   const userLocation = `${profile.preferredWorkLocation || ""} ${profile.locationCity || ""} ${profile.locationRegion || ""}`.toLowerCase();
   for (const v of domesticVacancies || []) {
     if (!isVerifiedActiveVacancy(v)) continue;
-    const combinedText = `${v.title} ${v.organization} ${v.category} ${v.requiredFieldOfStudy} ${v.educationQualification} ${(v.requiredSkills || []).join(" ")} ${v.description} ${(v.responsibilities || []).join(" ")} ${v.specialRequirements || ""}`.toLowerCase();
+    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(" ")} ${v.description} ${(v.responsibilities || []).join(" ")} ${v.specialRequirements || ""}`.toLowerCase();
+    const combinedText = `${roleAndReqText} ${v.organization} ${v.category}`.toLowerCase();
     const vacSectorTags = extractSectorTags(`${v.category} ${v.title} ${v.organization} ${v.description} ${v.isWashNgo ? "wash" : ""}`);
     const missingMandatory = [];
     const reqYears = parseMinRequiredYears(v.experienceYears);
@@ -245,32 +272,34 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
     missingMandatory.push(...licenseGaps);
     let score = 0;
     const reasons = [];
-    const matchedTitleWords = tokens.titleTokens.filter((t) => combinedText.includes(t));
+    const matchedTitleWords = tokens.titleTokens.filter((t) => roleAndReqText.includes(t));
     if (matchedTitleWords.length > 0) {
       score += Math.min(35, matchedTitleWords.length * 14);
       reasons.push(`Role alignment: ${matchedTitleWords.slice(0, 3).join(", ")}`);
     }
-    const matchedSectorTag = tokens.preferredSectorTags.find((tag) => vacSectorTags.includes(tag));
-    const wantsOtherOrAll = tokens.preferredSectorTags.includes("other") || tokens.preferredSectorsRaw.some((s) => /\b(other|all|any)\b/i.test(s));
+    const matchedSectorTag = tokens.preferredSectorTags.find((tag) => tag !== "other" && vacSectorTags.includes(tag));
     const directSectorMatch = tokens.preferredSectorsRaw.some(
-      (sec) => sec.split(/[\s,/&]+/).some((w) => w.length > 2 && `${v.category} ${v.title}`.toLowerCase().includes(w))
+      (sec) => sec.split(/[\s,/&]+/).some((w) => w.length > 2 && !/^(other|all|any|general|sector)$/i.test(w) && `${v.category} ${v.title}`.toLowerCase().includes(w))
     );
-    if (matchedSectorTag || directSectorMatch || wantsOtherOrAll) {
-      score += matchedSectorTag || directSectorMatch ? 24 : 22;
+    if (matchedSectorTag || directSectorMatch) {
+      score += 24;
       reasons.push(
-        v.isWashNgo ? "Preferred Sector: WASH / Humanitarian NGO" : matchedSectorTag || directSectorMatch ? `Preferred Sector: ${v.category}` : `General / Other Sector Match: ${v.category}`
+        v.isWashNgo ? "Preferred Sector: WASH / Humanitarian NGO" : `Preferred Sector: ${v.category}`
       );
     }
+    const matchedSkillPhrases = [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
+      (s) => s.length >= 2 && roleAndReqText.includes(s.toLowerCase())
+    );
+    const matchedExpertiseWords = tokens.expertiseWordTokens.filter((w) => roleAndReqText.includes(w));
     const matchedSkills = Array.from(
-      new Set(
-        [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
-          (s) => s.length >= 2 && combinedText.includes(s.toLowerCase())
-        )
-      )
+      /* @__PURE__ */ new Set([
+        ...matchedSkillPhrases,
+        ...matchedExpertiseWords
+      ])
     );
     if (matchedSkills.length > 0) {
-      score += Math.min(30, matchedSkills.length * 10);
-      reasons.push(`Matching skills: ${matchedSkills.slice(0, 3).join(", ")}`);
+      score += Math.min(34, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
+      reasons.push(`Matching expertise/skills: ${matchedSkills.slice(0, 3).join(", ")}`);
     }
     const matchedCerts = (profile.certifications || []).filter((c) => c.name && combinedText.includes(c.name.toLowerCase())).map((c) => c.name);
     if (matchedCerts.length > 0) {
@@ -302,12 +331,14 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += 8;
       reasons.push(`Preferred location: ${v.location}`);
     }
-    const hasRelevantMatch = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || Boolean(matchedSectorTag || directSectorMatch || wantsOtherOrAll);
-    if (!hasRelevantMatch || score < 22 || reasons.length === 0) continue;
+    const hasDirectDomainFit = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || matchedCerts.length > 0;
+    const hasRelevantMatch = hasDirectDomainFit || Boolean(matchedSectorTag || directSectorMatch);
+    if (!hasRelevantMatch || score < 24 || reasons.length === 0) continue;
     if (reqYears !== null && reqYears - userExpYears > 5) continue;
     if (reqEduRank >= EDUCATION_RANK.phd && userEduRank < EDUCATION_RANK.master) continue;
     const isFullyQualified = missingMandatory.length === 0;
     const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, Math.min(82, score - missingMandatory.length * 10));
+    const strictlyQualified = isFullyQualified && hasDirectDomainFit && adjustedScore >= 36;
     results.push({
       id: v.id,
       sourceType: "domestic_job",
@@ -320,6 +351,7 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       matchScore: adjustedScore,
       eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
       isFullyQualified,
+      strictlyQualified,
       matchReasons: reasons.slice(0, 5),
       missingMandatoryQualifications: missingMandatory,
       requiredExperienceText: v.experienceYears || "Not specified",
@@ -351,11 +383,13 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += Math.min(35, matchedTitle.length * 14);
       reasons.push(`International role fit (${matchedTitle.slice(0, 3).join(", ")})`);
     }
-    const matchedSkills = Array.from(
-      new Set([...tokens.skillTokens, ...tokens.expertiseTokens].filter((s) => combinedText.includes(s)))
+    const matchedSkillPhrases = [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
+      (s) => combinedText.includes(s)
     );
+    const matchedExpertiseWords = tokens.expertiseWordTokens.filter((w) => combinedText.includes(w));
+    const matchedSkills = Array.from(/* @__PURE__ */ new Set([...matchedSkillPhrases, ...matchedExpertiseWords]));
     if (matchedSkills.length > 0) {
-      score += Math.min(25, matchedSkills.length * 10);
+      score += Math.min(30, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
       reasons.push(`Skill/expertise alignment: ${matchedSkills.slice(0, 3).join(", ")}`);
     }
     const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
@@ -370,6 +404,7 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
     if (score >= 28 && reasons.length >= 1 && (matchedTitle.length > 0 || matchedSkills.length > 0)) {
       if (reqYears !== null && reqYears - userExpYears > 5) continue;
       const isFullyQualified = missingMandatory.length === 0;
+      const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
       results.push({
         id: ij.id,
         sourceType: "international_job",
@@ -379,9 +414,10 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
         category: ij.category || "International Recruitment",
         salary: ij.salary && !/not stated/i.test(ij.salary) ? ij.salary : void 0,
         deadline: ij.applicationDeadline,
-        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
         isFullyQualified,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedTitle.length > 0 || matchedSkills.length > 0),
         matchReasons: reasons,
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: ij.requiredExperience || "Official requirements apply",
@@ -427,6 +463,7 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
     }
     if (score >= 28 && reasons.length >= 1) {
       const isFullyQualified = missingMandatory.length === 0;
+      const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
       results.push({
         id: sc.id,
         sourceType: "scholarship",
@@ -435,9 +472,10 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
         location: sc.country,
         category: `Scholarship (${sc.studyLevel})`,
         deadline: sc.applicationDeadline,
-        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
         isFullyQualified,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedStudy.length > 0 || matchedDomain.length > 0),
         matchReasons: reasons,
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: sc.experienceCompensationNotes || "Experience valued",
@@ -462,35 +500,40 @@ function evaluateMandatoryProfileCompletion(profile) {
     profile.fullName && profile.fullName.trim().length >= 2 && profile.email && profile.email.includes("@") && profile.phone && profile.phone.trim().length >= 6 && profile.locationCity && profile.locationCity.trim().length >= 2
   );
   if (hasPersonal) {
-    score += 20;
+    score += 15;
     completedSections.push("Personal Information");
   } else {
     missingSections.push("Personal Information (Name, Phone & City)");
   }
   const hasEducation = Boolean(Array.isArray(profile.education) && profile.education.length > 0);
   if (hasEducation) {
-    score += 20;
+    score += 15;
     completedSections.push("Education");
   } else {
     missingSections.push("Education History");
   }
-  const hasEmploymentOrNone = Boolean(
-    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.noExperience === true
+  const hasExperienceStatus = Boolean(
+    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.noExperience === true || profile.currentPosition && profile.currentPosition.trim().length >= 2
   );
-  if (hasEmploymentOrNone) {
-    score += 20;
-    completedSections.push(profile.noExperience ? "Employment Status (No Prior Experience)" : "Employment History");
+  const hasExplicitYears = Boolean(
+    profile.noExperience === true || profile.yearsOfExperience && /\d/.test(profile.yearsOfExperience)
+  );
+  if (hasExperienceStatus && hasExplicitYears) {
+    score += 25;
+    completedSections.push(
+      profile.noExperience ? "Experience & Years (0 Years / Entry Level)" : `Work Experience (${profile.yearsOfExperience})`
+    );
   } else {
-    missingSections.push("Employment History (or No-Experience selection)");
+    missingSections.push("Work Experience & Years of Experience");
   }
-  const hasCurrentOrPreviousJob = Boolean(
-    profile.currentPosition && profile.currentPosition.trim().length >= 2 || Array.isArray(profile.previousPositions) && profile.previousPositions.length > 0 || Array.isArray(profile.experience) && profile.experience.length > 0 || profile.noExperience === true
+  const hasJobExpertise = Boolean(
+    Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0
   );
-  if (hasCurrentOrPreviousJob) {
-    score += 15;
-    completedSections.push("Current or Previous Role");
+  if (hasJobExpertise) {
+    score += 20;
+    completedSections.push("Job Expertise & Skills");
   } else {
-    missingSections.push("Current or Previous Job Title");
+    missingSections.push("Job Expertise & Core Skills");
   }
   const hasIndustry = Boolean(
     profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0
@@ -813,7 +856,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     const data = loadJsonFileSafe(NOTIFICATION_POLICY_FILE, fallback);
     const freq = ["instant", "daily", "weekly"].includes(data?.defaultFrequency) ? data.defaultFrequency : "instant";
     const capNum = Number(data?.dailyCapPerUser);
-    const dailyCapPerUser = Number.isFinite(capNum) ? Math.min(10, Math.max(1, Math.round(capNum))) : 3;
+    const dailyCapPerUser = Number.isFinite(capNum) ? Math.min(3, Math.max(1, Math.round(capNum))) : 3;
     return {
       defaultFrequency: freq,
       dailyCapPerUser,
@@ -832,12 +875,13 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       userId: uid,
       permissionStatus: "default",
       subscriptionStatus: "none",
+      manuallyDisabled: false,
       frequency: policy.defaultFrequency,
       promptDismissCount: 0,
       channels: {
         websiteBell: true,
-        browserPush: false,
-        mobilePush: false,
+        browserPush: true,
+        mobilePush: true,
         emailAlerts: false
       },
       alertTypes: {
@@ -917,7 +961,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         const devId = String(subDoc.deviceId || endpoint.slice(-24));
         const filtered = devices.filter((d) => d.deviceId !== devId && d.endpoint !== endpoint);
         const keys = subDoc.keys || subDoc.subscription?.keys;
-        if (subDoc.active !== false && keys?.p256dh && keys?.auth) {
+        if (subDoc.active !== false && !pref.manuallyDisabled && keys?.p256dh && keys?.auth) {
           filtered.unshift({
             deviceId: devId,
             deviceLabel: String(subDoc.deviceLabel || "Web Browser"),
@@ -980,7 +1024,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
   async function sendWebPushToUser(uid, payload) {
     const allPrefs = loadAllNotificationPrefs();
     const prefs = allPrefs[uid];
-    if (!prefs || !prefs.channels?.browserPush && !prefs.channels?.mobilePush) {
+    if (!prefs || prefs.manuallyDisabled === true || !prefs.channels?.browserPush && !prefs.channels?.mobilePush) {
       return { deliveredCount: 0, failedCount: 0, expiredEndpoints: [], errors: [] };
     }
     const activeDevices = (prefs.deviceSubscriptions || []).filter((d) => d.active && d.subscription?.endpoint);
@@ -1286,6 +1330,8 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     const allPrefs = loadAllNotificationPrefs();
     const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
     if (!options.isTestNotification) {
+      if (!hasCompletedMandatoryPreferences(profile)) return null;
+      if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) return null;
       if (alertKind === "new_match" && prefs.alertTypes?.newMatches === false) return null;
       if (alertKind === "deadline_reminder" && prefs.alertTypes?.deadlineReminders === false) return null;
       if (alertKind === "job_updated" && prefs.alertTypes?.jobChanges === false) return null;
@@ -1304,6 +1350,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     }
     if (!options.bypassRateLimit) {
       const policy = loadNotificationPolicy();
+      const effectiveCap = Math.min(3, Math.max(1, policy.dailyCapPerUser || 3));
       const todayKey = getAddisDateKey(/* @__PURE__ */ new Date());
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1e3;
       const todayCount = existingList.filter((n) => {
@@ -1311,7 +1358,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         const ts = new Date(n.createdAt).getTime();
         return getAddisDateKey(n.createdAt) === todayKey || !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
       }).length;
-      if (todayCount >= policy.dailyCapPerUser) {
+      if (todayCount >= effectiveCap) {
         return null;
       }
     }
@@ -1353,10 +1400,10 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
     saveAllNotifications(allNotifs);
     const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
-    if (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) {
+    if (prefs.manuallyDisabled !== true && (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) && hasPushDevices) {
       const pushTitle = options.isTestNotification ? `HOPELANDJOBS \u2014 Test Job Notification!` : alertKind === "deadline_reminder" ? `HOPELANDJOBS \u2014 Closing Soon: ${rec.title}` : alertKind === "job_updated" ? `HOPELANDJOBS \u2014 Updated Job Matching Your Profile!` : `HOPELANDJOBS \u2014 New Job Matching Your Profile!`;
       const pushBody = `${rec.title} \u2014 ${rec.organization} (${rec.location})
-${options.customNote ? options.customNote : `Matches your profile in ${rec.category}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}.`} Tap to view the job and apply.`;
+${options.customNote ? options.customNote : `Matches your qualifications in ${rec.category}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}.`} Tap to view the job and apply.`;
       const pushPayload = {
         title: pushTitle,
         body: pushBody,
@@ -1409,6 +1456,7 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       matchScore: r.matchScore,
       eligibilityStatus: r.eligibilityStatus,
       isFullyQualified: r.isFullyQualified,
+      strictlyQualified: r.strictlyQualified,
       matchReasons: r.matchReasons,
       missingMandatoryQualifications: r.missingMandatoryQualifications,
       requiredExperienceText: r.requiredExperienceText,
@@ -1439,36 +1487,27 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       }
     }
     const newNotifications = [];
-    if (options.sendNotifications) {
+    const currentPrefs = loadAllNotificationPrefs()[profile.uid];
+    const hasMandatoryProfile = hasCompletedMandatoryPreferences(profile);
+    const notificationsPausedByUser = currentPrefs?.manuallyDisabled === true;
+    if (options.sendNotifications && hasMandatoryProfile && !notificationsPausedByUser) {
       const changedSet = new Set(
         [
           ...options.changedVacancyId ? [options.changedVacancyId] : [],
           ...Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []
         ].filter(Boolean)
       );
-      const qualified = compactRecs.filter(
-        (r) => r.isFullyQualified && (r.matchScore >= 24 || changedSet.has(r.id))
-      );
+      const qualified = compactRecs.filter((r) => isStrictJobFitForUser(r));
       const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
-      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id)).slice(0, 5);
-      const prioritized = [...changedMatches, ...topGeneralMatches];
+      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id));
+      const prioritized = [...changedMatches, ...topGeneralMatches].slice(0, 3);
       for (const r of prioritized) {
-        let alertKind = "new_match";
-        if (changedSet.has(r.id) && options.changeType === "updated") {
-          alertKind = "job_updated";
-        } else if (isDeadlineApproaching(r.deadline, 72)) {
-          alertKind = "deadline_reminder";
-        }
+        if (newNotifications.length >= 3) break;
+        const alertKind = changedSet.has(r.id) && options.changeType === "updated" ? "job_updated" : "new_match";
         const sent = await dispatchNotificationForUser(profile, r, alertKind, {
           dryRun: options.dryRun
         });
         if (sent) newNotifications.push(sent);
-        if (alertKind === "new_match" && isDeadlineApproaching(r.deadline, 72)) {
-          const dlSent = await dispatchNotificationForUser(profile, r, "deadline_reminder", {
-            dryRun: options.dryRun
-          });
-          if (dlSent) newNotifications.push(dlSent);
-        }
       }
       if (!options.dryRun && newNotifications.length > 0) {
         const allPrefs = loadAllNotificationPrefs();
@@ -1788,7 +1827,46 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
     }
     res.json({ publicKey: vapidKeysCache.publicKey });
   });
-  app.post("/api/push/subscribe/:uid", (req, res) => {
+  async function deliverPendingPushNotificationsForUser(uid) {
+    const allPrefs = loadAllNotificationPrefs();
+    const prefs = allPrefs[uid];
+    if (!prefs || prefs.manuallyDisabled === true) return 0;
+    const hasDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
+    if (!hasDevices) return 0;
+    const allNotifs = loadAllNotifications();
+    const userNotifs = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+    const pendingPush = userNotifs.filter(
+      (n) => !n.read && n.sourceType !== "system" && n.channels?.push !== "sent" && !isDeadlineExpired(n.deadline || n.expiresAt)
+    ).slice(0, 3);
+    if (pendingPush.length === 0) return 0;
+    let pushedCount = 0;
+    let mutated = false;
+    for (const notif of pendingPush) {
+      const pushRes = await sendWebPushToUser(uid, {
+        title: `HOPELANDJOBS \u2014 ${notif.title}`,
+        body: `${notif.employer} (${notif.location}) \xB7 ${notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`}. Tap to apply.`,
+        url: notif.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&notificationId=${encodeURIComponent(notif.id)}` : notif.jobUrl || "/",
+        jobId: notif.vacancyId,
+        notificationId: notif.id,
+        tag: `vacancy-${notif.vacancyId}`,
+        jobTitle: notif.title,
+        employer: notif.employer,
+        category: notif.category
+      });
+      if (pushRes.deliveredCount > 0) {
+        notif.channels = { ...notif.channels || { website: "delivered", email: "skipped" }, push: "sent" };
+        notif.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        pushedCount += 1;
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      allNotifs[uid] = userNotifs;
+      saveAllNotifications(allNotifs);
+    }
+    return pushedCount;
+  }
+  app.post("/api/push/subscribe/:uid", async (req, res) => {
     const { uid } = req.params;
     if (!isSelfOrOwner(req, uid)) {
       res.status(403).json({ error: "Access denied" });
@@ -1823,20 +1901,22 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       userId: uid,
       permissionStatus: "granted",
       subscriptionStatus: "active",
+      manuallyDisabled: false,
       enabledAt: existing.enabledAt || nowIso,
       permissionVerifiedAt: nowIso,
       channels: {
         ...existing.channels,
         websiteBell: true,
         browserPush: true,
-        mobilePush: existing.channels?.mobilePush || isMobile
+        mobilePush: existing.channels?.mobilePush || isMobile || true
       },
       deviceSubscriptions: filtered.slice(0, 15),
       updatedAt: nowIso
     };
     allPrefs[uid] = updated;
     saveAllNotificationPrefs(allPrefs);
-    res.json({ success: true, preferences: updated });
+    const pendingPushDelivered = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, preferences: updated, pendingPushDelivered });
   });
   app.post("/api/push/subscribe-anonymous", (req, res) => {
     const { deviceId, deviceLabel, platform, subscription } = req.body || {};
@@ -1882,7 +1962,7 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       updatedAt: nowIso
     });
   });
-  app.post("/api/push/claim-anonymous/:uid", (req, res) => {
+  app.post("/api/push/claim-anonymous/:uid", async (req, res) => {
     const { uid } = req.params;
     if (!isSelfOrOwner(req, uid)) {
       res.status(403).json({ error: "Access denied" });
@@ -1909,7 +1989,7 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
     const resolvedSub = subscription?.endpoint?.startsWith("https://") && subscription?.keys?.p256dh && subscription?.keys?.auth ? subscription : matchedAnonRecord?.subscription || null;
     const allPrefs = loadAllNotificationPrefs();
     const existingPrefs = allPrefs[uid] || buildDefaultPreferences(uid);
-    if (!resolvedSub?.endpoint) {
+    if (!resolvedSub?.endpoint || existingPrefs.manuallyDisabled === true) {
       res.json({ success: true, claimed: false, preferences: existingPrefs });
       return;
     }
@@ -1944,13 +2024,14 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       userId: uid,
       permissionStatus: "granted",
       subscriptionStatus: "active",
+      manuallyDisabled: false,
       enabledAt: existingPrefs.enabledAt || nowIso,
       permissionVerifiedAt: nowIso,
       channels: {
         ...existingPrefs.channels,
         websiteBell: true,
         browserPush: true,
-        mobilePush: existingPrefs.channels?.mobilePush || isMobile
+        mobilePush: existingPrefs.channels?.mobilePush || isMobile || true
       },
       deviceSubscriptions: filtered.slice(0, 15),
       updatedAt: nowIso
@@ -1961,7 +2042,8 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       delete anonMap[matchedAnonKey];
       saveAnonymousPushSubscriptions(anonMap);
     }
-    res.json({ success: true, claimed: true, preferences: updated });
+    const pendingPushDelivered = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, claimed: true, preferences: updated, pendingPushDelivered });
   });
   app.post("/api/push/unsubscribe/:uid", (req, res) => {
     const { uid } = req.params;
@@ -1989,7 +2071,8 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
     const updated = {
       ...existing,
       userId: uid,
-      subscriptionStatus: stillHasActive ? "active" : "none",
+      manuallyDisabled: !stillHasActive,
+      subscriptionStatus: stillHasActive ? "active" : "revoked",
       channels: {
         ...existing.channels,
         browserPush: stillHasActive ? Boolean(existing.channels?.browserPush) : false,
@@ -2001,6 +2084,15 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
     allPrefs[uid] = updated;
     saveAllNotificationPrefs(allPrefs);
     res.json({ success: true, preferences: updated });
+  });
+  app.post("/api/push/deliver-pending/:uid", async (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const deliveredCount = await deliverPendingPushNotificationsForUser(uid).catch(() => 0);
+    res.json({ success: true, deliveredCount });
   });
   app.post("/api/push/test/:uid", async (req, res) => {
     const { uid } = req.params;
@@ -2053,19 +2145,22 @@ ${options.customNote ? options.customNote : `Matches your profile in ${rec.categ
       );
     }
     const validFreq = ["instant", "daily", "weekly"].includes(body.frequency) ? body.frequency : existing.frequency || "instant";
+    const nextChannels = {
+      ...existing.channels,
+      ...body.channels || {}
+    };
+    const nextManuallyDisabled = typeof body.manuallyDisabled === "boolean" ? body.manuallyDisabled : body.channels && typeof body.channels.browserPush === "boolean" && typeof body.channels.mobilePush === "boolean" && !body.channels.browserPush && !body.channels.mobilePush ? true : body.channels?.browserPush === true || body.channels?.mobilePush === true ? false : Boolean(existing.manuallyDisabled);
     const updated = {
       ...existing,
       userId: uid,
       permissionStatus: body.permissionStatus || existing.permissionStatus,
       subscriptionStatus: body.subscriptionStatus || existing.subscriptionStatus,
+      manuallyDisabled: nextManuallyDisabled,
       frequency: validFreq,
       enabledAt: body.permissionStatus === "granted" && !existing.enabledAt ? nowIso : body.enabledAt || existing.enabledAt,
       permissionVerifiedAt: body.permissionVerifiedAt || nowIso,
       promptDismissCount: typeof body.incrementDismiss === "boolean" && body.incrementDismiss ? (existing.promptDismissCount || 0) + 1 : body.promptDismissCount ?? existing.promptDismissCount ?? 0,
-      channels: {
-        ...existing.channels,
-        ...body.channels || {}
-      },
+      channels: nextChannels,
       alertTypes: {
         ...existing.alertTypes,
         ...body.alertTypes || {}
@@ -3270,16 +3365,16 @@ ${rows.join("\n")}`;
     });
   });
   return {
-    onUserProfileSaved: async (savedProfile, isNewRegistration) => {
+    onUserProfileSaved: async (savedProfile, _isNewRegistration) => {
       if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
       const allPrefs = loadAllNotificationPrefs();
       if (!allPrefs[savedProfile.uid]) {
         allPrefs[savedProfile.uid] = buildDefaultPreferences(savedProfile.uid);
         saveAllNotificationPrefs(allPrefs);
       }
-      const readyForMatch = hasSufficientProfileForRecommendations(savedProfile) || hasCompletedMandatoryPreferences(savedProfile);
+      const readyForStrictAlerts = hasCompletedMandatoryPreferences(savedProfile);
       const res = await recalculateForUser(savedProfile, {
-        sendNotifications: isNewRegistration || readyForMatch
+        sendNotifications: readyForStrictAlerts
       }).catch(() => ({ recommendations: [], newNotifications: [] }));
       return {
         recommendationsCount: res.recommendations.length,

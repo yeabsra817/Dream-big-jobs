@@ -11,11 +11,9 @@ import {
   LogOut,
   LayoutDashboard,
 } from 'lucide-react';
-import { signInWithPopup } from 'firebase/auth';
 import {
-  auth,
   googleProvider,
-  signInWithRedirect,
+  signInWithGoogleResilient,
   ADMIN_EMAIL,
   isUserAdmin,
   verifyDeveloperPasswordServer,
@@ -101,19 +99,8 @@ export const HiddenDeveloperLogin: React.FC<Props> = ({
     setLoading(true);
     setError(null);
     try {
-      let result;
-      try {
-        result = await signInWithPopup(auth, googleProvider);
-      } catch (popupErr: any) {
-        if (
-          popupErr?.code === 'auth/popup-blocked' ||
-          popupErr?.code === 'auth/operation-not-supported-in-this-environment'
-        ) {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        }
-        throw popupErr;
-      }
+      const result = await signInWithGoogleResilient(googleProvider);
+      if (!result) return;
 
       const user = result.user;
       if (isUserAdmin(user)) {
@@ -137,20 +124,19 @@ export const HiddenDeveloperLogin: React.FC<Props> = ({
   };
 
   return (
-    <div ref={containerRef} className="fixed bottom-2.5 left-2.5 z-40">
+    <div
+      ref={containerRef}
+      className={`fixed bottom-2 left-2 ${isRevealed ? 'z-50' : 'z-30'}`}
+    >
       {!isRevealed ? (
         <button
           type="button"
           onClick={() => setIsRevealed(true)}
           tabIndex={0}
-          className={`flex items-center justify-center rounded-lg select-none cursor-pointer transition-all duration-300 ${
-            isOwnerAuthorized
-              ? 'px-2.5 py-1.5 bg-[#0B132B]/70 text-amber-400/80 border border-amber-400/25 backdrop-blur-sm opacity-45 hover:opacity-100'
-              : 'w-14 h-7 bg-slate-900/15 text-slate-400/40 backdrop-blur-md blur-[4px] opacity-[0.04] hover:opacity-[0.14] hover:blur-[2px] focus-visible:opacity-90 focus-visible:blur-none'
-          }`}
+          className="w-7 h-7 rounded-full bg-slate-400/10 text-slate-400/20 backdrop-blur-xl blur-[6px] opacity-[0.025] hover:opacity-[0.15] hover:blur-[2px] focus-visible:opacity-90 focus-visible:blur-none flex items-center justify-center select-none cursor-pointer transition-all duration-300"
           aria-label="Developer Access"
         >
-          <Lock className="w-3 h-3" />
+          <Lock className="w-2.5 h-2.5" />
         </button>
       ) : (
         <div className="w-[min(340px,calc(100vw-1.25rem))] rounded-2xl bg-[#0B132B] text-white border border-slate-700/90 shadow-2xl overflow-hidden animate-in fade-in duration-150">

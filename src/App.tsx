@@ -32,6 +32,9 @@ import {
   Globe,
   Plane,
   Landmark,
+  Building2,
+  BellRing,
+  UploadCloud,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -99,8 +102,14 @@ import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
+import { CategoryIcon } from './components/CategoryIcon';
 import { Footer } from './components/Footer';
 import { HiddenDeveloperLogin } from './components/HiddenDeveloperLogin';
+import { TrustedCompaniesCarousel } from './components/TrustedCompaniesCarousel';
+import { FeaturedCompaniesCarousel } from './components/FeaturedCompaniesCarousel';
+import { ETHIOPIAN_TRUSTED_COMPANIES, EthiopianCompanyItem } from './data/trustedCompanies';
+import heroCareerBackdropImg from './assets/images/hero_career_backdrop_1794921607084.jpg';
+import howHopelandWorksImg from './assets/images/how_hopeland_works_clean_1794921628573.jpg';
 import { initGoogleAnalytics4, trackAnalyticsEvent, setAnalyticsUserId } from './lib/analyticsTracker';
 import {
   JobSeekerProfile,
@@ -113,6 +122,7 @@ import {
 } from './types/jobSeeker';
 import {
   computeStaffOpportunityRecommendations,
+  hasCompletedMandatoryPreferences,
 } from './utils/recommendationEngine';
 import {
   registerServiceWorkerSafe,
@@ -128,6 +138,7 @@ import {
   fetchUserNotificationsServer,
   markUserNotificationReadServer,
   syncNotificationsOnReconnect,
+  dispatchLocalServiceWorkerPushFallback,
   syncVacanciesToServerCatalog,
   syncAllUsersFromFirestoreToServer,
   deleteVacanciesFromServerCatalog,
@@ -166,22 +177,11 @@ const JobSeekerDashboard = lazy(() => import('./components/JobSeekerDashboard').
 const PageLoader = () => (
   <div className="min-h-[50vh] flex items-center justify-center py-16">
     <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-xs text-xs font-bold text-slate-700">
-      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+      <Loader2 className="w-4 h-4 animate-spin text-[#16A34A]" />
       <span>Loading...</span>
     </div>
   </div>
 );
-
-const POPULAR_EMPLOYERS = [
-  { name: 'Commercial Bank of Ethiopia', short: 'CBE', category: 'Commercial Banking & Microfinance', vacancies: 'Official' },
-  { name: 'Awash Bank', short: 'Awash', category: 'Commercial Banking & Microfinance', vacancies: 'Verified' },
-  { name: 'Ethiopian Airlines', short: 'ET Air', category: 'Aviation, Logistics & Freight', vacancies: 'Direct' },
-  { name: 'Safaricom Ethiopia', short: 'Safaricom', category: 'IT, Software & Telecommunications', vacancies: 'Official' },
-  { name: 'UNICEF Ethiopia', short: 'UNICEF', category: 'NGO, UN & Civil Society', vacancies: 'UN Agency' },
-  { name: 'MSF (Doctors Without Borders)', short: 'MSF', category: 'Health, Medical & Pharmaceuticals', vacancies: 'Medical' },
-  { name: 'Ethio Telecom', short: 'EthioTel', category: 'IT, Software & Telecommunications', vacancies: 'Telecom' },
-  { name: 'Dashen Bank', short: 'Dashen', category: 'Commercial Banking & Microfinance', vacancies: 'Private' },
-];
 
 export default function App() {
   // Database State — hydrated synchronously from localStorage cache for 0ms initial render
@@ -296,6 +296,9 @@ export default function App() {
   const [heroLocation, setHeroLocation] = useState('All');
   const [heroSector, setHeroSector] = useState('All');
   const [heroEmploymentType, setHeroEmploymentType] = useState('All');
+  const [searchTab, setSearchTab] = useState<'jobs' | 'companies'>('jobs');
+  const [searchTriggered, setSearchTriggered] = useState(false);
+  const [howWorksImgError, setHowWorksImgError] = useState(false);
 
   // Language
   const [language, setLanguage] = useState<'en' | 'am'>('en');
@@ -329,33 +332,46 @@ export default function App() {
           visitorPromptTimerRef.current = null;
         }
 
-        // Automatically sync any previously granted anonymous or browser push subscription with this account
-        await syncBrowserPushWithUserAccount(uid, email).catch(() => null);
+        // Load user preferences first so an explicit opt-out (manuallyDisabled) is never overwritten
+        const initialPrefs = await fetchUserNotificationPreferences(uid, email).catch(() => null);
+        if (initialPrefs?.manuallyDisabled !== true) {
+          await syncBrowserPushWithUserAccount(uid, email, undefined, initialPrefs).catch(() => null);
+        }
 
         const [status, notifRes] = await Promise.all([
           checkVisitorNotificationStatus(uid, email),
           fetchUserNotificationsServer(uid, email),
         ]);
-        const freshPrefs = status.preferences || (await fetchUserNotificationPreferences(uid, email).catch(() => null));
+        const freshPrefs = status.preferences || initialPrefs;
         setNotificationPrefs(freshPrefs);
         setUserNotifications(notifRes.notifications);
         setUnreadNotificationsCount(notifRes.unreadCount);
         setBrowserPerm(status.browserPermission);
-        setHasActiveDevicePush(status.hasValidSubscription);
+        setHasActiveDevicePush(
+          freshPrefs?.manuallyDisabled !== true && status.hasValidSubscription
+        );
 
-        // Background recommendation + missed match refresh
+        if (freshPrefs?.manuallyDisabled !== true && notifRes.notifications.length > 0) {
+          dispatchLocalServiceWorkerPushFallback(uid, notifRes.notifications, freshPrefs).catch(() => 0);
+        }
+
+        // Background recommendation + missed match refresh (strictly gated on mandatory fields & opt-out)
         recalculateUserRecommendationsServer(uid, email, true)
-          .then((res) => {
+          .then(async (res) => {
             if (res.newNotifications && res.newNotifications.length > 0) {
-              fetchUserNotificationsServer(uid, email).then((fresh) => {
-                setUserNotifications(fresh.notifications);
-                setUnreadNotificationsCount(fresh.unreadCount);
-              });
+              const fresh = await fetchUserNotificationsServer(uid, email);
+              setUserNotifications(fresh.notifications);
+              setUnreadNotificationsCount(fresh.unreadCount);
+              if (freshPrefs?.manuallyDisabled !== true) {
+                await dispatchLocalServiceWorkerPushFallback(uid, fresh.notifications, freshPrefs).catch(
+                  () => 0
+                );
+              }
             }
           })
           .catch(() => {});
 
-        if (status.hasValidSubscription) {
+        if (freshPrefs?.manuallyDisabled === true || status.hasValidSubscription) {
           setIsNotificationModalOpen(false);
           return;
         }
@@ -586,12 +602,13 @@ export default function App() {
             await saveUserNotificationPreferences(
               user.uid,
               {
+                manuallyDisabled: false,
                 permissionStatus: 'default',
                 subscriptionStatus: 'none',
                 channels: {
                   websiteBell: true,
-                  browserPush: false,
-                  mobilePush: false,
+                  browserPush: true,
+                  mobilePush: true,
                   emailAlerts: false,
                 },
               },
@@ -707,6 +724,13 @@ export default function App() {
         if (res) {
           setUserNotifications(res.notifications);
           setUnreadNotificationsCount(res.unreadCount);
+          if (notificationPrefs?.manuallyDisabled !== true && res.notifications.length > 0) {
+            await dispatchLocalServiceWorkerPushFallback(
+              userProfile.uid,
+              res.notifications,
+              notificationPrefs
+            ).catch(() => 0);
+          }
         }
       } finally {
         setIsSyncingReconnect(false);
@@ -924,16 +948,42 @@ export default function App() {
     return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline));
   }, [vacancies]);
 
+  // Filtered Ethiopian showcase companies when browsing/searching in Companies tab
+  const matchingCompanies = useMemo(() => {
+    const q = heroSearch.toLowerCase().trim();
+    const list = ETHIOPIAN_TRUSTED_COMPANIES.filter((c) => {
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.shortName.toLowerCase().includes(q) ||
+        c.sector.toLowerCase().includes(q) ||
+        c.categoryName.toLowerCase().includes(q) ||
+        c.location.toLowerCase().includes(q)
+      );
+    });
+    return list;
+  }, [heroSearch]);
+
   // Filtered vacancies for the homepage list
   const filteredHomepageVacancies = useMemo(() => {
     return publishedVacancies.filter((v) => {
       const q = heroSearch.toLowerCase().trim();
+      const matchedCompany = q
+        ? ETHIOPIAN_TRUSTED_COMPANIES.find(
+            (c) =>
+              c.name.toLowerCase() === q ||
+              c.shortName.toLowerCase() === q ||
+              c.name.toLowerCase().includes(q)
+          )
+        : undefined;
+
       const matchesSearch =
         !q ||
         v.title.toLowerCase().includes(q) ||
         v.organization.toLowerCase().includes(q) ||
         v.category.toLowerCase().includes(q) ||
         v.location.toLowerCase().includes(q) ||
+        (matchedCompany ? v.category === matchedCompany.categoryName && v.organization.toLowerCase().includes(matchedCompany.shortName.toLowerCase()) : false) ||
         (v.requiredSkills && v.requiredSkills.some((s) => s.toLowerCase().includes(q)));
 
       const matchesLocation =
@@ -962,6 +1012,56 @@ export default function App() {
     }
     return filteredHomepageVacancies;
   }, [aiSearchResult, publishedVacancies, filteredHomepageVacancies]);
+
+  const handleHeroSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSearchTriggered(true);
+    setAiSearchError(null);
+    setTimeout(() => {
+      const el = document.getElementById('search-results');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  const handleSelectCompanyFromShowcase = (company: EthiopianCompanyItem) => {
+    setSearchTab('companies');
+    setHeroSearch(company.name);
+    setHeroLocation('All');
+    setHeroSector('All');
+    setHeroEmploymentType('All');
+    setAiSearchResult(null);
+    setAiSearchError(null);
+    setSearchTriggered(true);
+    setTimeout(() => {
+      const el = document.getElementById('search-results');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  const handleViewAllFeaturedCompanies = () => {
+    setSearchTab('companies');
+    setHeroSearch('');
+    setHeroLocation('All');
+    setHeroSector('All');
+    setHeroEmploymentType('All');
+    setAiSearchResult(null);
+    setAiSearchError(null);
+    setSearchTriggered(true);
+    setTimeout(() => {
+      const el = document.getElementById('search-results');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  const handleClearHomepageSearch = () => {
+    setHeroSearch('');
+    setHeroLocation('All');
+    setHeroSector('All');
+    setHeroEmploymentType('All');
+    setAiSearchResult(null);
+    setAiSearchError(null);
+    setSearchTriggered(false);
+  };
 
   const handleAiSmartSearch = async () => {
     const q = heroSearch.trim();
@@ -1679,603 +1779,359 @@ export default function App() {
             />
           </Suspense>
         ) : (
-          /* HOMEPAGE */
+          /* HOMEPAGE (Clean Ethiojobs-inspired HopelandJobs Layout) */
           <>
-            {/* HERO SECTION */}
-            <section className="relative bg-[#0B132B] text-white overflow-hidden py-14 sm:py-20 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-amber-500/10 blur-[120px] rounded-full pointer-events-none" />
-
-              <div className="relative max-w-6xl mx-auto text-center space-y-6">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-800/90 text-amber-400 text-xs font-bold border border-slate-700/80 shadow-sm">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  <span>100% Verified Ethiopian Career Opportunities</span>
-                </div>
-
-                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-                  HOPELAND <span className="text-amber-400">JOBS</span>
-                  <span className="block text-lg sm:text-2xl font-medium text-slate-300 mt-2.5">
-                    Hopeland Jobs. Find Your Opportunity.
-                  </span>
-                </h1>
-
-                <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed">
-                  Your trusted destination for banking, embassy, NGO, hospitality, corporate, and international career opportunities across Addis Ababa and all Ethiopian regions.
-                </p>
-
-                {/* Comprehensive Multi-Field Search Form */}
-                <div className="max-w-4xl mx-auto pt-2">
-                  <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-2xl border border-slate-200/90 text-slate-900 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                      {/* Keyword search input */}
-                      <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          value={heroSearch}
-                          onChange={(e) => {
-                            setHeroSearch(e.target.value);
-                            if (aiSearchResult) setAiSearchResult(null);
-                            if (aiSearchError) setAiSearchError(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && heroSearch.trim()) {
-                              e.preventDefault();
-                              handleAiSmartSearch();
-                            }
-                          }}
-                          placeholder="Job title, skills, or ask AI (e.g. banking Addis)..."
-                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
-                        />
-                      </div>
-
-                      {/* Location Filter */}
-                      <div className="relative">
-                        <MapPin className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={heroLocation}
-                          onChange={(e) => setHeroLocation(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium bg-white text-slate-700 focus:ring-2 focus:ring-amber-400"
-                        >
-                          <option value="All">All Locations (Ethiopia & Remote)</option>
-                          {ETHIOPIAN_LOCATIONS.map((loc) => (
-                            <option key={loc} value={loc}>
-                              {loc}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Sector Filter */}
-                      <div className="relative">
-                        <Briefcase className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <select
-                          value={heroSector}
-                          onChange={(e) => setHeroSector(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs sm:text-sm border border-slate-200 outline-none font-medium bg-white text-slate-700 focus:ring-2 focus:ring-amber-400"
-                        >
-                          <option value="All">All Professional Sectors</option>
-                          {OFFICIAL_CATEGORIES.map((cat) => (
-                            <option key={cat.id} value={cat.name}>
-                              {cat.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Secondary filters row */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                        <span className="text-slate-500 font-semibold shrink-0">Type:</span>
-                        {['All', 'Full-time', 'Contract', 'Remote', 'Internship'].map((tp) => (
-                          <button
-                            key={tp}
-                            onClick={() => setHeroEmploymentType(tp)}
-                            className={`px-2.5 py-1 rounded-lg font-semibold transition-colors shrink-0 ${
-                              heroEmploymentType === tp
-                                ? 'bg-amber-400 text-slate-950 font-bold'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                          >
-                            {tp}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                        {(heroSearch || heroLocation !== 'All' || heroSector !== 'All' || heroEmploymentType !== 'All' || aiSearchResult) && (
-                          <button
-                            onClick={() => {
-                              setHeroSearch('');
-                              setHeroLocation('All');
-                              setHeroSector('All');
-                              setHeroEmploymentType('All');
-                              setAiSearchResult(null);
-                              setAiSearchError(null);
-                            }}
-                            className="text-xs text-slate-500 hover:text-slate-800 underline cursor-pointer"
-                          >
-                            Reset
-                          </button>
-                        )}
-                        {heroSearch.trim().length > 0 && (
-                          <button
-                            type="button"
-                            onClick={handleAiSmartSearch}
-                            disabled={isAiSearching}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-60 text-amber-400 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
-                          >
-                            {isAiSearching ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="w-3.5 h-3.5 fill-current" />
-                            )}
-                            <span>{isAiSearching ? 'AI Matching...' : 'AI Smart Search'}</span>
-                          </button>
-                        )}
-                        {heroSearch || heroLocation !== 'All' || heroSector !== 'All' || aiSearchResult ? (
-                          <a
-                            href="#search-results"
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
-                          >
-                            <span>View {displayedHomepageVacancies.length} Matching Jobs</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsAllCategoriesView(true);
-                              window.scrollTo({ top: 0, behavior: 'auto' });
-                            }}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 cursor-pointer"
-                          >
-                            <LayoutGrid className="w-3.5 h-3.5 text-slate-950" />
-                            <span>Browse Job Categories</span>
-                            <ChevronRight className="w-3.5 h-3.5 text-slate-950" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Statistics Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-5xl mx-auto pt-6 text-left">
-                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-2xl font-black text-amber-400">{totalActiveVacancies}</div>
-                    <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                      Active Vacancies
-                    </div>
-                    <div className="text-[10px] text-slate-500">Live verified database</div>
-                  </div>
-
-                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-2xl font-black text-white">16</div>
-                    <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                      Job Sectors
-                    </div>
-                    <div className="text-[10px] text-slate-500">Banking to Embassy</div>
-                  </div>
-
-                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-2xl font-black text-white">25+</div>
-                    <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                      Ethiopian Cities
-                    </div>
-                    <div className="text-[10px] text-slate-500">Addis & All Regions</div>
-                  </div>
-
-                  <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
-                    <div className="text-2xl font-black text-emerald-400">100%</div>
-                    <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                      Verified Jobs
-                    </div>
-                    <div className="text-[10px] text-slate-500">Zero fake listings</div>
-                  </div>
-
-                  <div className="col-span-2 sm:col-span-1 bg-slate-900/95 p-3.5 rounded-xl border border-amber-500/30 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="text-2xl font-black text-sky-400">
-                          {visitStats ? visitStats.totalUniqueVisits : 0}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleToggleHeroVisitInsight}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[10px] font-bold transition-colors cursor-pointer"
-                          title="AI Customer Visit Count Insight"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>AI</span>
-                        </button>
-                      </div>
-                      <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-0.5">
-                        Customer Visits
-                      </div>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {visitStats?.visitorsToday ?? 0} today • {visitStats?.activeNow ?? 0} live
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expandable AI Customer Visit Count Insight Panel */}
-                {showHeroVisitPanel && (
-                  <div className="max-w-5xl mx-auto mt-3 bg-slate-900/95 border border-amber-400/40 rounded-2xl p-4 sm:p-5 text-left space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-xs font-extrabold text-amber-400 uppercase tracking-wider">
-                        <BarChart3 className="w-4 h-4" />
-                        <span>AI Customer Visit Count Intelligence</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setIsHeroVisitInsightLoading(true);
-                            setHeroVisitInsightError(null);
-                            try {
-                              const [freshStats, freshInsight] = await Promise.all([
-                                fetchCustomerVisitCount(true),
-                                generateVisitCountAiInsights(true),
-                              ]);
-                              if (freshStats) setVisitStats(freshStats);
-                              setHeroVisitInsight(freshInsight);
-                            } catch (err: any) {
-                              setHeroVisitInsightError(err?.message || 'Unable to refresh AI visit insights.');
-                            } finally {
-                              setIsHeroVisitInsightLoading(false);
-                            }
-                          }}
-                          disabled={isHeroVisitInsightLoading}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold cursor-pointer"
-                        >
-                          {isHeroVisitInsightLoading ? 'Analyzing...' : 'Refresh AI'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowHeroVisitPanel(false)}
-                          className="text-xs text-slate-400 hover:text-white px-2 py-1 cursor-pointer"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-
-                    {isHeroVisitInsightLoading ? (
-                      <div className="flex items-center gap-2 text-xs text-slate-300 py-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                        <span>Gemini AI is analyzing live Hopeland Jobs customer visit counts...</span>
-                      </div>
-                    ) : heroVisitInsightError ? (
-                      <p className="text-xs text-rose-300">{heroVisitInsightError}</p>
-                    ) : heroVisitInsight ? (
-                      <div className="space-y-2 text-xs">
-                        <p className="font-bold text-white">{heroVisitInsight.headline}</p>
-                        <p className="text-slate-300 leading-relaxed">{heroVisitInsight.visitTrendSummary}</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
-                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                            <div className="text-[10px] font-bold uppercase text-amber-400 mb-1">
-                              Audience Behavior
-                            </div>
-                            <p className="text-slate-300 leading-relaxed">{heroVisitInsight.audienceBehavior}</p>
-                          </div>
-                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                            <div className="text-[10px] font-bold uppercase text-emerald-400 mb-1">
-                              Conversion Opportunity
-                            </div>
-                            <p className="text-slate-300 leading-relaxed">{heroVisitInsight.conversionOpportunity}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
+            {/* 1. CLEAN WHITE HERO & ROUNDED SEARCH SECTION */}
+            <section className="relative bg-white overflow-hidden pt-14 pb-16 sm:pt-24 sm:pb-24 px-4 sm:px-6 lg:px-8">
+              {/* Subtle Illustrated Backdrop Graphic around edges, pure white center */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-55"
+              >
+                <img
+                  src={heroCareerBackdropImg}
+                  alt=""
+                  className="w-full h-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/35 to-white" />
               </div>
-            </section>
 
-            {/* TELEGRAM CHANNEL STRIP */}
-            <section className="bg-gradient-to-r from-[#229ED9] via-[#1E88E5] to-[#0288D1] text-white py-4 px-4 sm:px-6 shadow-inner">
-              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-                    <Send className="w-5 h-5 fill-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-extrabold tracking-tight">
-                      Instant Vacancy Alerts on Telegram
-                    </h3>
-                    <p className="text-xs text-white/90 font-medium">
-                      Join <strong className="text-white underline">@DreamBigJobsEthiopia</strong> for real-time announcements.
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-5 py-2.5 rounded-xl bg-white text-[#1976D2] hover:bg-slate-50 font-black text-xs uppercase tracking-wider shadow-md transition-all shrink-0 flex items-center gap-2 cursor-pointer"
+              <div className="relative z-10 max-w-4xl mx-auto">
+                {/* Clean minimal Jobs / Companies tabs above the search bar */}
+                <div
+                  role="tablist"
+                  aria-label="Search type"
+                  className="flex items-center justify-center gap-6 mb-5"
                 >
-                  <Send className="w-3.5 h-3.5 fill-[#1976D2]" />
-                  <span>Join Our Telegram Channel</span>
-                </a>
-              </div>
-            </section>
-
-            {/* SEARCH RESULTS SECTION (Shown Only When Visitor Has an Active Search or Filter Query) */}
-            {(heroSearch.trim().length > 0 || heroLocation !== 'All' || heroSector !== 'All' || aiSearchResult !== null) && (
-              <section id="search-results" className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto animate-in fade-in">
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-                  <div>
-                    <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700 mb-1">
-                      {aiSearchResult ? (
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-current" />
-                      ) : (
-                        <Search className="w-3.5 h-3.5 text-amber-600" />
-                      )}
-                      <span>{aiSearchResult ? 'Gemini AI Smart Search Results' : 'Search Results'}</span>
-                    </div>
-                    <h2 className="text-2xl font-extrabold text-[#0B132B]">
-                      Matching Vacancies ({displayedHomepageVacancies.length})
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Showing results for {heroSearch ? `"${heroSearch}"` : 'selected filters'} across Ethiopia.
-                    </p>
-                  </div>
                   <button
-                    onClick={() => {
-                      setHeroSearch('');
-                      setHeroLocation('All');
-                      setHeroSector('All');
-                      setHeroEmploymentType('All');
-                      setAiSearchResult(null);
-                      setAiSearchError(null);
-                    }}
-                    className="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 rounded-xl transition-all self-start sm:self-auto cursor-pointer"
+                    type="button"
+                    role="tab"
+                    aria-selected={searchTab === 'jobs'}
+                    onClick={() => setSearchTab('jobs')}
+                    className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
+                      searchTab === 'jobs'
+                        ? 'border-[#16A34A] text-[#0B132B]'
+                        : 'border-transparent text-slate-500 hover:text-[#0B132B]'
+                    }`}
                   >
-                    Clear Search
+                    Jobs
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={searchTab === 'companies'}
+                    onClick={() => setSearchTab('companies')}
+                    className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
+                      searchTab === 'companies'
+                        ? 'border-[#16A34A] text-[#0B132B]'
+                        : 'border-transparent text-slate-500 hover:text-[#0B132B]'
+                    }`}
+                  >
+                    Companies
                   </button>
                 </div>
 
-                {aiSearchError && (
-                  <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
-                    {aiSearchError}
+                {/* Prominent Rounded Search Bar */}
+                <form
+                  onSubmit={handleHeroSearchSubmit}
+                  className="bg-white rounded-full p-2 sm:p-2.5 shadow-[0_10px_36px_rgba(11,19,43,0.08)] border border-slate-200/90 focus-within:border-[#16A34A] focus-within:ring-4 focus-within:ring-[#16A34A]/10 transition-all flex items-center gap-2"
+                >
+                  <div className="relative flex-1 min-w-0 flex items-center pl-3 sm:pl-4">
+                    <Search className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                    <input
+                      type="text"
+                      value={heroSearch}
+                      onChange={(e) => {
+                        setHeroSearch(e.target.value);
+                        if (aiSearchResult) setAiSearchResult(null);
+                        if (aiSearchError) setAiSearchError(null);
+                      }}
+                      placeholder={
+                        searchTab === 'jobs'
+                          ? 'Job title, keywords, or skills...'
+                          : 'Search companies in Ethiopia (e.g. CBE, Airlines, UNICEF)...'
+                      }
+                      aria-label={searchTab === 'jobs' ? 'Search jobs' : 'Search companies'}
+                      className="w-full py-2 sm:py-2.5 bg-transparent text-sm sm:text-base text-[#0B132B] placeholder:text-slate-400 outline-none font-medium"
+                    />
+                  </div>
+
+                  {/* Clean desktop location selector inside the rounded bar when on Jobs tab */}
+                  {searchTab === 'jobs' && (
+                    <div className="hidden md:flex items-center border-l border-slate-200 pl-3 pr-1 max-w-[185px]">
+                      <MapPin className="w-4 h-4 text-slate-400 shrink-0 mr-1.5" />
+                      <select
+                        value={heroLocation}
+                        onChange={(e) => setHeroLocation(e.target.value)}
+                        aria-label="Filter by location"
+                        className="w-full py-2 bg-transparent text-xs sm:text-sm font-medium text-slate-600 outline-none cursor-pointer truncate"
+                      >
+                        <option value="All">All Ethiopia</option>
+                        {ETHIOPIAN_LOCATIONS.map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="px-5 sm:px-7 py-2.5 sm:py-3 rounded-full bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm transition-colors shrink-0 cursor-pointer shadow-sm"
+                  >
+                    Search
+                  </button>
+                </form>
+
+                {/* Mobile-only compact location selector */}
+                {searchTab === 'jobs' && (
+                  <div className="mt-3 flex md:hidden justify-center">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                      <MapPin className="w-3.5 h-3.5 text-[#16A34A]" />
+                      <select
+                        value={heroLocation}
+                        onChange={(e) => setHeroLocation(e.target.value)}
+                        aria-label="Filter by location mobile"
+                        className="bg-transparent font-medium outline-none cursor-pointer"
+                      >
+                        <option value="All">All Ethiopia</option>
+                        {ETHIOPIAN_LOCATIONS.map((loc) => (
+                          <option key={loc} value={loc}>
+                            {loc}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 )}
+              </div>
+            </section>
 
-                {aiSearchResult && (
-                  <div className="mb-6 p-4 rounded-2xl bg-[#0B132B] text-white border border-slate-800 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-xs font-extrabold text-amber-400">
-                        <Sparkles className="w-4 h-4 fill-current" />
-                        <span>AI Interpretation: {aiSearchResult.interpretedQuery}</span>
+            {/* 2. TRUSTED BY ETHIOPIAN COMPANIES CAROUSEL (Right-to-Left Infinite Scroll) */}
+            <TrustedCompaniesCarousel onSelectCompany={handleSelectCompanyFromShowcase} />
+
+            {/* 3. SEARCH RESULTS SECTION (Shown when visitor searches or clicks a company) */}
+            {(heroSearch.trim().length > 0 ||
+              heroLocation !== 'All' ||
+              heroSector !== 'All' ||
+              aiSearchResult !== null ||
+              searchTriggered) && (
+              <section
+                id="search-results"
+                className="bg-white py-10 px-4 sm:px-6 lg:px-8 border-t border-slate-100"
+              >
+                <div className="max-w-7xl mx-auto">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#16A34A] mb-1">
+                        {aiSearchResult ? (
+                          <Sparkles className="w-3.5 h-3.5 text-[#16A34A]" />
+                        ) : (
+                          <Search className="w-3.5 h-3.5 text-[#16A34A]" />
+                        )}
+                        <span>
+                          {aiSearchResult
+                            ? 'AI Smart Search Results'
+                            : searchTab === 'companies'
+                              ? 'Companies & Open Vacancies'
+                              : 'Job Search Results'}
+                        </span>
                       </div>
+                      <h2 className="text-2xl font-bold text-[#0B132B]">
+                        {searchTab === 'companies'
+                          ? `Matching Companies (${matchingCompanies.length}) · Vacancies (${displayedHomepageVacancies.length})`
+                          : `Matching Vacancies (${displayedHomepageVacancies.length})`}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                        {heroSearch.trim()
+                          ? `Showing results for "${heroSearch.trim()}" across Ethiopia.`
+                          : 'Showing active verified listings across Ethiopia.'}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                      {searchTab === 'jobs' && heroSearch.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleAiSmartSearch}
+                          disabled={isAiSearching}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-60 text-white font-semibold text-xs transition-colors cursor-pointer"
+                        >
+                          {isAiSearching ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#4ADE80]" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5 text-[#4ADE80]" />
+                          )}
+                          <span>{isAiSearching ? 'Matching...' : 'AI Smart Search'}</span>
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setAiSearchResult(null)}
-                        className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+                        onClick={handleClearHomepageSearch}
+                        className="text-xs font-semibold text-slate-600 hover:text-[#0B132B] bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors cursor-pointer"
                       >
-                        Switch to standard filter
+                        Clear Search
                       </button>
                     </div>
-                    <p className="text-xs text-slate-200 leading-relaxed">{aiSearchResult.explanation}</p>
-                    {aiSearchResult.searchTip && (
-                      <p className="text-[11px] text-amber-300 font-medium">
-                        Tip: {aiSearchResult.searchTip}
-                      </p>
-                    )}
                   </div>
-                )}
 
-                {displayedHomepageVacancies.length === 0 ? (
-                  <div className="bg-white rounded-2xl p-10 text-center border border-slate-200 space-y-3">
-                    <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
-                    <h4 className="font-bold text-slate-800 text-sm">No vacancies match this specific filter</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto">
-                      Try searching by category name, click AI Smart Search for semantic matching, or browse the 16 official Ethiopian job categories.
-                    </p>
-                    <button
-                      onClick={() => {
-                        setHeroSearch('');
-                        setHeroLocation('All');
-                        setHeroSector('All');
-                        setHeroEmploymentType('All');
-                        setAiSearchResult(null);
-                      }}
-                      className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
-                    >
-                      Reset Filters
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayedHomepageVacancies.map((vac) => {
-                      const days = getDaysLeft(vac.applicationDeadline);
-                      const isSaved = savedJobIds.has(vac.id);
-                      return (
-                        <div
-                          key={vac.id}
-                          className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
-                        >
-                          <div className="space-y-2.5">
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full truncate max-w-[200px]">
-                                {vac.category}
-                              </span>
-                              <button
-                                onClick={() => handleToggleSaveJob(vac.id)}
-                                className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
-                                title="Bookmark"
-                              >
-                                <Heart className={`w-3.5 h-3.5 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
-                              </button>
-                            </div>
-
-                            <h3
-                              onClick={() => handleSelectVacancy(vac)}
-                              className="font-bold text-sm text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1"
-                            >
-                              {vac.title}
-                            </h3>
-
-                            <p className="text-xs text-slate-600 font-semibold truncate flex items-center gap-1">
-                              <Building className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{vac.organization}</span>
-                            </p>
-
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500 pt-1">
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3 text-amber-500" />
-                                {vac.location}
-                              </span>
-                              <span>•</span>
-                              <span className="text-slate-600 font-medium">{vac.employmentType || 'Full-time'}</span>
-                            </div>
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
-                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              {days.text}
-                            </span>
-                            <button
-                              onClick={() => handleSelectVacancy(vac)}
-                              className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white transition-colors cursor-pointer"
-                            >
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* PERSONALIZED RECOMMENDATIONS (Based on Candidate's Position & Experience) */}
-            {userProfile ? (
-              <section className="py-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-                <div className="bg-gradient-to-br from-amber-500/10 via-white to-amber-500/5 rounded-3xl p-6 sm:p-8 border border-amber-200/90 shadow-sm space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-800 mb-1">
-                        <Sparkles className="w-4 h-4 text-amber-600 fill-current" />
-                        <span>Personalized Career Matches</span>
-                      </div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-[#0B132B]">
-                        Recommended For You
-                      </h2>
-                      <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                        Tailored for <strong>{userProfile.fullName || 'You'}</strong> based on your desired position{' '}
-                        <strong className="text-amber-800">"{userProfile.desiredJobTitle || userProfile.preferredIndustry}"</strong> and{' '}
-                        <strong>{userProfile.yearsOfExperience}</strong> of professional experience.
-                      </p>
+                  {aiSearchError && (
+                    <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700">
+                      {aiSearchError}
                     </div>
-                    <button
-                      onClick={() => setIsJobSeekerDashboardOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-900 font-bold text-xs shadow-xs transition-all self-start sm:self-auto shrink-0 cursor-pointer"
-                    >
-                      <span>Update Preferences</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-amber-600" />
-                    </button>
-                  </div>
+                  )}
 
-                  {recommendedVacancies.length === 0 ? (
-                    <div className="bg-white/80 backdrop-blur rounded-2xl p-8 text-center border border-amber-100 space-y-2">
-                      <Briefcase className="w-8 h-8 text-amber-400 mx-auto" />
-                      <p className="text-xs font-bold text-slate-800">
-                        Explore vacancies in your chosen sector below
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                        We are continuously analyzing verified announcements across Banking, WASH, NGOs, Government, Embassies, Airlines, and Corporate sectors matching your background.
+                  {aiSearchResult && (
+                    <div className="mb-6 p-4 rounded-2xl bg-[#0B132B] text-white border border-slate-800 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#4ADE80]">
+                          <Sparkles className="w-4 h-4" />
+                          <span>AI Interpretation: {aiSearchResult.interpretedQuery}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAiSearchResult(null)}
+                          className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+                        >
+                          Switch to standard filter
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-200 leading-relaxed">{aiSearchResult.explanation}</p>
+                      {aiSearchResult.searchTip && (
+                        <p className="text-[11px] text-[#4ADE80] font-medium">
+                          Tip: {aiSearchResult.searchTip}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Companies Grid when Companies tab is active */}
+                  {searchTab === 'companies' && (
+                    <div className="mb-8">
+                      {matchingCompanies.length === 0 ? (
+                        <div className="bg-[#F5F7FA] rounded-2xl p-8 text-center border border-slate-200">
+                          <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="text-sm font-bold text-[#0B132B]">
+                            No partner organizations matched "{heroSearch.trim()}"
+                          </p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Try searching another Ethiopian company name or browse all featured employers below.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {matchingCompanies.map((company) => (
+                            <div
+                              key={company.id}
+                              onClick={() => handleSelectCompanyFromShowcase(company)}
+                              className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-[#16A34A] hover:shadow-md transition-all cursor-pointer flex items-start gap-4"
+                            >
+                              <div className="w-14 h-14 rounded-xl bg-slate-50 border border-slate-200/80 p-2 flex items-center justify-center shrink-0">
+                                <img
+                                  src={company.logoUrl}
+                                  alt={company.name}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  className="max-h-full max-w-full w-auto h-auto object-contain"
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-sm font-bold text-[#0B132B] truncate">
+                                  {company.name}
+                                </h3>
+                                <p className="text-xs text-slate-500 truncate mt-0.5">{company.sector}</p>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 truncate">
+                                  <MapPin className="w-3 h-3 text-[#16A34A] shrink-0" />
+                                  <span className="truncate">{company.location}</span>
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Vacancies Grid */}
+                  {displayedHomepageVacancies.length === 0 ? (
+                    <div className="bg-[#F5F7FA] rounded-2xl p-10 text-center border border-slate-200 space-y-3">
+                      <Briefcase className="w-10 h-10 text-slate-300 mx-auto" />
+                      <h4 className="font-bold text-[#0B132B] text-sm">
+                        No open vacancies matched this filter right now
+                      </h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Try searching by another keyword, click AI Smart Search for semantic matching, or explore the 16 official categories below.
                       </p>
                       <button
-                        onClick={() => {
-                          setJobSeekerInitialTab('professional');
-                          setIsJobSeekerDashboardOpen(true);
-                        }}
-                        className="mt-2 px-4 py-2 bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                        type="button"
+                        onClick={handleClearHomepageSearch}
+                        className="px-4 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-xs cursor-pointer transition-colors"
                       >
-                        Refine Job Title &amp; Sectors
+                        Reset Search
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {recommendedVacancies.map((rec) => {
-                        const vac = rec.vacancy;
-                        if (!vac) return null;
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {displayedHomepageVacancies.map((vac) => {
                         const days = getDaysLeft(vac.applicationDeadline);
                         const isSaved = savedJobIds.has(vac.id);
                         return (
                           <div
                             key={vac.id}
-                            className="bg-white rounded-2xl p-5 border border-amber-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                            className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-[#16A34A] hover:shadow-md transition-all flex flex-col justify-between"
                           >
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                                    <span className="font-black font-mono tabular-nums text-emerald-700">
-                                      {rec.matchScore}% Match ({rec.eligibilityStatus})
-                                    </span>
-                                    <span aria-hidden="true" className="text-slate-300">·</span>
-                                    <span className="text-slate-600 font-medium">{vac.category}</span>
-                                  </div>
-                                  <h3
-                                    onClick={() => handleSelectVacancy(vac)}
-                                    className="text-base font-bold text-slate-900 hover:text-amber-600 transition-colors cursor-pointer line-clamp-1 pt-0.5"
-                                  >
-                                    {vac.title}
-                                  </h3>
-                                  <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                                    <Building className="w-3.5 h-3.5 text-slate-400" />
-                                    <span>{vac.organization}</span>
-                                  </p>
-                                </div>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                                <span className="font-semibold text-[#16A34A] truncate">
+                                  {vac.category}
+                                </span>
                                 <button
+                                  type="button"
                                   onClick={() => handleToggleSaveJob(vac.id)}
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
-                                  title={isSaved ? 'Remove' : 'Save'}
+                                  className="p-1 text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
+                                  title="Save job"
                                 >
                                   <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
                                 </button>
                               </div>
 
-                              <div className="text-[11px] text-emerald-800 font-medium line-clamp-1">
-                                Why it matches: {rec.matchReasons.slice(0, 2).join(' · ')}
-                              </div>
+                              <h3
+                                onClick={() => handleSelectVacancy(vac)}
+                                className="font-bold text-base text-[#0B132B] hover:text-[#16A34A] transition-colors cursor-pointer line-clamp-1"
+                              >
+                                {vac.title}
+                              </h3>
 
-                              {rec.missingMandatoryQualifications && rec.missingMandatoryQualifications.length > 0 && (
-                                <div className="text-[11px] text-amber-800 font-semibold line-clamp-1">
-                                  Check requirement: {rec.missingMandatoryQualifications[0]}
-                                </div>
-                              )}
+                              <p className="text-xs text-slate-600 font-semibold truncate flex items-center gap-1.5">
+                                <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate">{vac.organization}</span>
+                              </p>
 
-                              <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                <span className="flex items-center gap-1 truncate">
-                                  <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                  <span className="truncate">{vac.location}</span>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 pt-1">
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5 text-[#16A34A]" />
+                                  {vac.location}
                                 </span>
-                                <span className="flex items-center gap-1 truncate">
-                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <span className="truncate">{days.text}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-slate-600 font-medium">
+                                  {vac.employmentType || 'Full-time'}
                                 </span>
                               </div>
                             </div>
 
-                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
-                              <span className="text-xs font-bold text-emerald-700 truncate max-w-[150px]">
-                                {vac.salary || 'Salary negotiable'}
+                            <div className="pt-3.5 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                              <span className="text-xs text-slate-500 font-medium flex items-center gap-1 tabular-nums">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                {days.text}
                               </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleSelectVacancy(vac)}
-                                  className="px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors shadow-xs cursor-pointer"
-                                >
-                                  View Details
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectVacancy(vac)}
+                                className="px-4 py-1.5 rounded-xl font-semibold text-xs bg-[#16A34A] hover:bg-[#15803D] text-white transition-colors cursor-pointer"
+                              >
+                                View Details
+                              </button>
                             </div>
                           </div>
                         );
@@ -2284,439 +2140,452 @@ export default function App() {
                   )}
                 </div>
               </section>
-            ) : (
-              /* Logged-Out Recommendation Invitation Banner */
-              <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-                <div className="bg-gradient-to-r from-[#0B132B] to-[#1C2541] rounded-3xl p-6 sm:p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl border border-slate-800">
-                  <div className="space-y-2 max-w-2xl text-center md:text-left">
-                    <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                      <Sparkles className="w-4 h-4 fill-current" />
-                      <span>Personalized Job Recommendations</span>
-                    </div>
-                    <h3 className="text-xl sm:text-2xl font-black text-white">
-                      Want Vacancies Recommended for Your Position & Experience?
-                    </h3>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Sign in with your Google account to receive custom-tailored Ethiopian job opportunities matched directly to your experience level and desired job title.
-                    </p>
-                  </div>
+            )}
+
+            {/* 4. TOP CATEGORIES SECTION (Light Grey #F5F7FA) */}
+            <section
+              id="categories-section"
+              aria-label="Top Categories"
+              className="bg-[#F5F7FA] py-14 sm:py-16 px-4 sm:px-6 lg:px-8 border-t border-slate-200/70"
+            >
+              <div className="max-w-7xl mx-auto">
+                <div className="text-center max-w-2xl mx-auto mb-10">
+                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
+                    Top Categories
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-2">
+                    Explore verified Ethiopian career opportunities across banking, NGOs, diplomacy, IT, health, and corporate industries.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+                  {OFFICIAL_CATEGORIES.slice(0, 12).map((cat) => {
+                    const count = activeCountMap.get(cat.name) || 0;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => handleSelectCategoryByName(cat.name)}
+                        className="group bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#16A34A] hover:shadow-md transition-all text-left flex items-start gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                      >
+                        <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#16A34A] group-hover:bg-[#16A34A] group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                          <CategoryIcon iconName={cat.iconName} className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-bold text-[#0B132B] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug">
+                            {cat.name}
+                          </h3>
+                          {cat.amharicName && (
+                            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                              {cat.amharicName}
+                            </p>
+                          )}
+                          <p className="text-xs font-semibold text-slate-500 mt-1.5 tabular-nums">
+                            {count} {count === 1 ? 'Open Job' : 'Open Jobs'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-9 text-center">
                   <button
+                    type="button"
                     onClick={() => {
-                      setUserAuthModalMode('signin');
-                      setIsUserAuthModalOpen(true);
+                      setIsAllCategoriesView(true);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transition-all shrink-0 flex items-center gap-2 cursor-pointer hover:scale-105"
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm shadow-xs transition-all cursor-pointer"
                   >
-                    <span>Sign In for Recommendations</span>
-                    <ArrowRight className="w-4 h-4 text-slate-950" />
+                    <LayoutGrid className="w-4 h-4" />
+                    <span>Explore All 16 Categories</span>
+                    <ChevronRight className="w-4 h-4" />
                   </button>
+                </div>
+              </div>
+            </section>
+
+            {/* PERSONALIZED RECOMMENDATIONS (Rendered only when Candidate is signed in) */}
+            {userProfile && (
+              <section className="bg-white py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-100">
+                <div className="max-w-7xl mx-auto">
+                  <div className="rounded-3xl p-6 sm:p-8 border border-emerald-200 bg-emerald-50/40 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A] mb-1">
+                          <Sparkles className="w-4 h-4" />
+                          <span>Personalized Career Matches</span>
+                        </div>
+                        <h2 className="text-2xl font-bold text-[#0B132B]">
+                          Recommended For You
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                          Tailored for <strong>{userProfile.fullName || 'You'}</strong> based on{' '}
+                          <strong className="text-[#15803D]">"{userProfile.desiredJobTitle || userProfile.preferredIndustry}"</strong>{' '}
+                          and <strong>{userProfile.yearsOfExperience}</strong> of experience.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsJobSeekerDashboardOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-emerald-200 hover:border-[#16A34A] text-[#0B132B] font-semibold text-xs shadow-xs transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
+                      >
+                        <span>Update Preferences</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-[#16A34A]" />
+                      </button>
+                    </div>
+
+                    {recommendedVacancies.length === 0 ? (
+                      <div className="bg-white rounded-2xl p-8 text-center border border-emerald-100 space-y-2">
+                        <Briefcase className="w-8 h-8 text-[#16A34A] mx-auto" />
+                        <p className="text-xs font-bold text-[#0B132B]">
+                          Complete your preferred job title and sector to view personalized matches
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setJobSeekerInitialTab('professional');
+                            setIsJobSeekerDashboardOpen(true);
+                          }}
+                          className="mt-2 px-4 py-2 bg-[#16A34A] hover:bg-[#15803D] text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          Refine Job Title &amp; Sectors
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {recommendedVacancies.map((rec) => {
+                          const vac = rec.vacancy;
+                          if (!vac) return null;
+                          const days = getDaysLeft(vac.applicationDeadline);
+                          const isSaved = savedJobIds.has(vac.id);
+                          return (
+                            <div
+                              key={vac.id}
+                              className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-[#16A34A] shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                            >
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap text-xs">
+                                      <span className="font-bold font-mono tabular-nums text-[#16A34A]">
+                                        {rec.matchScore}% Match ({rec.eligibilityStatus})
+                                      </span>
+                                      <span aria-hidden="true" className="text-slate-300">·</span>
+                                      <span className="text-slate-600 font-medium">{vac.category}</span>
+                                    </div>
+                                    <h3
+                                      onClick={() => handleSelectVacancy(vac)}
+                                      className="text-base font-bold text-[#0B132B] hover:text-[#16A34A] transition-colors cursor-pointer line-clamp-1 pt-0.5"
+                                    >
+                                      {vac.title}
+                                    </h3>
+                                    <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                      <Building className="w-3.5 h-3.5 text-slate-400" />
+                                      <span>{vac.organization}</span>
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSaveJob(vac.id)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
+                                    title={isSaved ? 'Remove' : 'Save'}
+                                  >
+                                    <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                                  </button>
+                                </div>
+
+                                <div className="text-xs text-[#15803D] font-medium line-clamp-1">
+                                  Why it matches: {rec.matchReasons.slice(0, 2).join(' · ')}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                  <span className="flex items-center gap-1 truncate">
+                                    <MapPin className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                                    <span className="truncate">{vac.location}</span>
+                                  </span>
+                                  <span aria-hidden="true" className="text-slate-300">·</span>
+                                  <span className="flex items-center gap-1 truncate tabular-nums">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span className="truncate">{days.text}</span>
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                                <span className="text-xs font-semibold text-[#15803D] truncate max-w-[160px]">
+                                  {vac.salary || 'Salary negotiable'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectVacancy(vac)}
+                                  className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-[#16A34A] hover:bg-[#15803D] text-white transition-colors cursor-pointer"
+                                >
+                                  View Details
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
             )}
 
-            {/* ETHIOPIAN JOB CATEGORIES DISCOVERY BANNER (Opens All Categories Directory) */}
-            <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="space-y-1 text-center sm:text-left">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-amber-700">
-                    <Briefcase className="w-3.5 h-3.5" />
-                    <span>Official Ethiopian Sectors</span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-extrabold text-[#0B132B]">
-                    Browse All 16 Job Categories
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Explore vacancies across Banking, NGOs, Microfinance, IT, Healthcare, Engineering, and Diplomatic missions.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAllCategoriesView(true);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="px-6 py-3 rounded-2xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-sm shrink-0 flex items-center gap-2 cursor-pointer"
-                >
-                  <LayoutGrid className="w-4 h-4 text-amber-400" />
-                  <span>View All 16 Categories</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </section>
+            {/* 5. FEATURED COMPANIES SLIDER SECTION (Blue Background #1E40AF-#0F3D8A) */}
+            <FeaturedCompaniesCarousel
+              vacancies={publishedVacancies}
+              onSelectCompany={handleSelectCompanyFromShowcase}
+              onViewAllCompanies={handleViewAllFeaturedCompanies}
+            />
 
-            {/* INTERNATIONAL EXPANSION ACCESS STRIP */}
-            <section className="pb-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="mb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-sky-700">
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Global Career, Legal Residency &amp; Study Pathways</span>
-                  </div>
-                  <h2 className="text-xl sm:text-2xl font-black text-[#0B132B]">
-                    International Expansion Portals
+            {/* 6. HOW HOPELANDJOBS WORKS SECTION (Light Grey #F5F7FA) */}
+            <section
+              aria-label="How HopelandJobs Works"
+              className="bg-[#F5F7FA] py-14 sm:py-16 px-4 sm:px-6 lg:px-8"
+            >
+              <div className="max-w-6xl mx-auto">
+                <div className="text-center max-w-2xl mx-auto mb-10">
+                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
+                    How HopelandJobs Works
                   </h2>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Strictly verified from official government portals, employers &amp; recognized universities.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-sky-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
-                        <Globe className="w-5 h-5" />
-                      </div>
-                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
-                        {internationalJobs.filter((j) => j.verificationStatus === 'VERIFIED' && j.applicationStatus !== 'expired').length} Verified
-                      </span>
-                    </div>
-                    <h3 className="text-base font-black text-slate-900">
-                      International Workforce Jobs
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Europe, Middle East, Far East &amp; global employer-sponsored roles open to Ethiopian applicants with transparent fee &amp; visa sponsorship policies.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenExpansionView('international-jobs')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <span>Explore International Jobs</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-emerald-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                        <Landmark className="w-5 h-5" />
-                      </div>
-                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        {immigrationPathways.filter((p) => p.verificationStatus === 'VERIFIED').length} Verified
-                      </span>
-                    </div>
-                    <h3 className="text-base font-black text-slate-900">
-                      INTERNATIONAL IMMIGRATION &amp; PERMANENT RESIDENCE
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Official government portals only: work-based residence permits, skilled worker routes, permanent residency rules &amp; Ethiopian eligibility.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenExpansionView('immigration')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <span>View Legal Pathways</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 border border-slate-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
-                        <GraduationCap className="w-5 h-5" />
-                      </div>
-                      <span className="text-[11px] font-black px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                        {experienceScholarships.filter((s) => s.verificationStatus === 'VERIFIED' && s.applicationStatus !== 'expired').length} Verified
-                      </span>
-                    </div>
-                    <h3 className="text-base font-black text-slate-900">
-                      EXPERIENCE-BASED SCHOLARSHIPS
-                    </h3>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Universities and governments valuing leadership &amp; professional experience, clearly stating verified GPA, recommendation &amp; funding rules.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenExpansionView('scholarships')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <span>Browse Scholarships</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* HOW IT WORKS SECTION */}
-            <section className="bg-[#0B132B] text-white py-16 px-4 sm:px-6 lg:px-8 border-y border-slate-800">
-              <div className="max-w-7xl mx-auto space-y-10">
-                <div className="text-center max-w-2xl mx-auto space-y-2">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400">
-                    <Sparkles className="w-3.5 h-3.5 fill-current" />
-                    <span>Simple & Transparent</span>
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                    How Hopeland Jobs Works for Ethiopian Job Seekers
-                  </h2>
-                  <p className="text-xs text-slate-300">
-                    Designed from the ground up for simplicity, security, and real career results.
+                  <p className="text-sm text-slate-500 mt-2">
+                    Find verified Ethiopian careers, organize your application documents, and receive real-time job alerts tailored to your profile.
                   </p>
                 </div>
 
+                {/* Large Centered Clean Illustration */}
+                {!howWorksImgError ? (
+                  <div className="max-w-4xl mx-auto mb-10 rounded-2xl overflow-hidden bg-white border border-slate-200/80 shadow-sm">
+                    <img
+                      src={howHopelandWorksImg}
+                      alt="How HopelandJobs works across job discovery, CV profile readiness, and alerts"
+                      onError={() => setHowWorksImgError(true)}
+                      className="w-full h-auto object-cover"
+                    />
+                  </div>
+                ) : null}
+
+                {/* Concise 3-Step Horizontal Flow */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
-                      1
+                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center font-bold text-sm tabular-nums">
+                      01
                     </div>
-                    <h3 className="font-extrabold text-base text-white">Discover Verified Vacancies</h3>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Every position on Hopeland Jobs is reviewed for verified employers, official deadlines, and authentic job requirements.
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
-                      2
-                    </div>
-                    <h3 className="font-extrabold text-base text-white">Build Your Vault (10 GB Cloud)</h3>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Securely store your CVs, degree certificates, Kebele IDs, and experience letters in persistent cloud storage, ready for any application.
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
-                      3
-                    </div>
-                    <h3 className="font-extrabold text-base text-white">Apply & Track Status</h3>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Submit applications in 1-click without duplicate submissions. Monitor milestone updates in real-time from your personal dashboard.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* JOB SEEKER REGISTRATION CTA BANNER */}
-            <section className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 rounded-3xl p-8 sm:p-12 shadow-lg text-slate-950 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="space-y-2 max-w-xl text-center md:text-left">
-                  <span className="text-xs font-black uppercase tracking-wider bg-slate-950 text-amber-400 px-3 py-1 rounded-full">
-                    Free Account for Job Seekers
-                  </span>
-                  <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                    Ready to Accelerate Your Career in Ethiopia?
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-950/90 font-medium">
-                    Create your candidate account to unlock the 10GB Document Vault, track application progression, and receive tailored vacancy alerts.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
-                  <button
-                    onClick={() => {
-                      setUserAuthModalMode('signup');
-                      setIsUserAuthModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-extrabold text-xs transition-all shadow-md"
-                  >
-                    Create Free Account
-                  </button>
-                  <button
-                    onClick={() => {
-                      setUserAuthModalMode('signin');
-                      setIsUserAuthModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs transition-all border border-slate-950/20"
-                  >
-                    Sign In
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* CV & COVER LETTER ASSISTANCE SECTION + INTERACTIVE AI CAREER ADVISOR */}
-            <section id="cv-assistance-section" className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              <div className="bg-[#FFFBEB] rounded-3xl p-8 sm:p-12 border-2 border-amber-300 relative overflow-hidden space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                  <div className="space-y-4">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-400 text-slate-950">
-                      <Sparkles className="w-3.5 h-3.5 fill-current" />
-                      <span>AI Career Guidance Service</span>
-                    </div>
-                    <h2 className="text-2xl sm:text-3xl font-extrabold text-amber-950">
-                      CV & Application Assistance for Ethiopian Job Seekers
-                    </h2>
-                    <p className="text-xs sm:text-sm text-amber-900/90 leading-relaxed">
-                      Applying for banking positions at CBE or Awash? Diplomatic missions at AU or embassies? UN agencies like UNICEF? Each sector requires tailored application standards.
-                    </p>
-
-                    <div className="space-y-2 text-xs text-amber-900 font-medium">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>AI-powered cover letter & interview preparation on every vacancy.</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Checklists of required Ethiopian documents (Kebele ID, Degree, Experience).</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Direct official employer portals — no third-party application fees.</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-amber-200 shadow-sm space-y-3">
-                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Standard Ethiopian Application Checklist
+                    <h3 className="text-base font-bold text-[#0B132B]">
+                      Search Verified Jobs
                     </h3>
-                    <div className="space-y-2 text-xs text-slate-700">
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>1. Professional CV (Chronological format)</span>
-                        <span className="text-emerald-600 font-bold">Standard</span>
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                      Browse genuine job announcements across Ethiopia’s top banks, NGOs, UN agencies, airlines, and corporate employers with confirmed deadlines.
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center">
+                      <UploadCloud className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#0B132B]">
+                      Build Profile &amp; CV Vault
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                      Save your education, work history, CV, and supporting credentials securely once so you are always ready to apply directly.
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center">
+                      <BellRing className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#0B132B]">
+                      Get Matched &amp; Apply
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                      Receive instant alerts when vacancies matching your qualifications and preferred sectors open, with direct official employer application links.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* 7. CV & APPLICATION ADVISOR + ABOUT HOPELANDJOBS (Restrained White Section) */}
+            <section
+              id="cv-assistance-section"
+              className="bg-white py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200/80"
+            >
+              <div className="max-w-7xl mx-auto space-y-10">
+                <div className="bg-[#F5F7FA] rounded-3xl p-6 sm:p-10 border border-slate-200/80 space-y-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <div className="space-y-4">
+                      <h2 className="text-2xl sm:text-3xl font-bold text-[#0B132B]">
+                        CV &amp; Application Assistance
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Applying for banking positions at CBE or Awash, UN agencies like UNICEF, or corporate roles in Addis Ababa? Prepare your application documents to match official Ethiopian recruitment standards.
+                      </p>
+
+                      <div className="space-y-2 text-xs sm:text-sm text-slate-700 font-medium">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                          <span>Tailored cover letter &amp; interview tips on every vacancy.</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                          <span>Document checklists (Degree, Official Transcript, National ID).</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                          <span>Direct employer submission portals — zero application fees.</span>
+                        </div>
                       </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>2. Tailored Application Letter referencing Ref #</span>
-                        <span className="text-emerald-600 font-bold">Essential</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>3. University Degree & Official Student Copy</span>
-                        <span className="text-emerald-600 font-bold">Required</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <span>4. Renewed National ID (Fayda / Kebele ID)</span>
-                        <span className="text-emerald-600 font-bold">Government</span>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                      <h3 className="text-xs font-bold text-[#0B132B] uppercase tracking-wider">
+                        Standard Ethiopian Application Checklist
+                      </h3>
+                      <div className="space-y-2 text-xs text-slate-700">
+                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                          <span>1. Professional CV (Chronological format)</span>
+                          <span className="text-[#16A34A] font-semibold">Standard</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                          <span>2. Tailored Application Letter referencing Ref #</span>
+                          <span className="text-[#16A34A] font-semibold">Essential</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                          <span>3. University Degree &amp; Official Student Copy</span>
+                          <span className="text-[#16A34A] font-semibold">Required</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                          <span>4. Renewed National ID (Fayda / Kebele ID)</span>
+                          <span className="text-[#16A34A] font-semibold">Verified</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Interactive Ask Hopeland AI Career & CV Advisor */}
-                <div className="bg-white rounded-2xl p-5 sm:p-6 border border-amber-200 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-[#0B132B] text-amber-400 flex items-center justify-center">
-                        <Sparkles className="w-4 h-4 fill-current" />
+                  {/* Interactive Ask Hopeland AI Career & CV Advisor */}
+                  <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0">
+                        <Sparkles className="w-4 h-4" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-extrabold text-slate-900">
-                          Ask Hopeland AI Career & CV Advisor
+                        <h3 className="text-sm font-bold text-[#0B132B]">
+                          Hopeland AI Career &amp; CV Advisor
                         </h3>
-                        <p className="text-[11px] text-slate-500">
-                          Instant Gemini AI guidance tailored for Ethiopian banks, NGOs, and corporate employers.
+                        <p className="text-xs text-slate-500">
+                          Instant guidance tailored for Ethiopian banks, NGOs, and corporate employers.
                         </p>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      'Banking CV tips for CBE & Awash',
-                      'NGO cover letter checklist',
-                      'Fresh graduate interview prep',
-                    ].map((prompt) => (
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        'Banking CV tips for CBE & Awash',
+                        'NGO cover letter checklist',
+                        'Fresh graduate interview prep',
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => handleAskCareerCoach(prompt)}
+                          disabled={isCareerCoachLoading}
+                          className="px-3 py-1.5 rounded-xl bg-[#F5F7FA] hover:bg-emerald-50 border border-slate-200 hover:border-[#16A34A]/50 text-[#0B132B] font-semibold text-xs transition-colors cursor-pointer"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={careerQuestion}
+                        onChange={(e) => setCareerQuestion(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && careerQuestion.trim()) {
+                            e.preventDefault();
+                            handleAskCareerCoach();
+                          }
+                        }}
+                        placeholder="Ask any CV, interview, or Ethiopian job search question..."
+                        className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-[#0B132B] outline-none focus:ring-2 focus:ring-[#16A34A]/20 focus:border-[#16A34A]"
+                      />
                       <button
-                        key={prompt}
                         type="button"
-                        onClick={() => handleAskCareerCoach(prompt)}
-                        disabled={isCareerCoachLoading}
-                        className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-bold text-[11px] transition-colors cursor-pointer"
+                        onClick={() => handleAskCareerCoach()}
+                        disabled={isCareerCoachLoading || !careerQuestion.trim()}
+                        className="px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
                       >
-                        {prompt}
+                        {isCareerCoachLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                        <span>{isCareerCoachLoading ? 'Thinking...' : 'Ask Advisor'}</span>
                       </button>
-                    ))}
-                  </div>
+                    </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="text"
-                      value={careerQuestion}
-                      onChange={(e) => setCareerQuestion(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && careerQuestion.trim()) {
-                          e.preventDefault();
-                          handleAskCareerCoach();
-                        }
-                      }}
-                      placeholder="Ask any CV, interview, or Ethiopian job search question..."
-                      className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-amber-400"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAskCareerCoach()}
-                      disabled={isCareerCoachLoading || !careerQuestion.trim()}
-                      className="px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 disabled:opacity-50 text-amber-400 font-extrabold text-xs inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
-                    >
-                      {isCareerCoachLoading ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5 fill-current" />
-                      )}
-                      <span>{isCareerCoachLoading ? 'Thinking...' : 'Ask AI Advisor'}</span>
-                    </button>
-                  </div>
+                    {careerCoachError && (
+                      <p className="text-xs text-rose-600 font-medium">{careerCoachError}</p>
+                    )}
 
-                  {careerCoachError && (
-                    <p className="text-xs text-rose-600 font-medium">{careerCoachError}</p>
-                  )}
-
-                  {careerCoachAdvice && (
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
-                      <div className="font-bold text-slate-900">AI Career Guidance</div>
-                      <p className="text-slate-700 leading-relaxed whitespace-pre-line">
-                        {careerCoachAdvice.adviceAnswer}
-                      </p>
-                      {careerCoachAdvice.profileStrengthTips?.length > 0 && (
-                        <div className="space-y-1 pt-1">
-                          <div className="text-[11px] font-bold uppercase text-amber-700">
-                            Actionable Tips
+                    {careerCoachAdvice && (
+                      <div className="p-4 rounded-xl bg-[#F5F7FA] border border-slate-200 space-y-3 text-xs sm:text-sm">
+                        <div className="font-bold text-[#0B132B]">Career Guidance</div>
+                        <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                          {careerCoachAdvice.adviceAnswer}
+                        </p>
+                        {careerCoachAdvice.profileStrengthTips?.length > 0 && (
+                          <div className="space-y-1 pt-1">
+                            <div className="text-xs font-bold uppercase text-[#16A34A]">
+                              Actionable Tips
+                            </div>
+                            <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                              {careerCoachAdvice.profileStrengthTips.map((tip, i) => (
+                                <li key={i}>{tip}</li>
+                              ))}
+                            </ul>
                           </div>
-                          <ul className="list-disc pl-4 space-y-1 text-slate-700">
-                            {careerCoachAdvice.profileStrengthTips.map((tip, i) => (
-                              <li key={i}>{tip}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* ABOUT US SECTION */}
-            <section id="about-section" className="bg-white py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200">
-              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-600">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Our Quality Promise</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <h2 className="text-2xl font-extrabold text-[#0B132B]">About HOPELAND JOBS</h2>
-                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                    {siteSettings.aboutText ||
-                      'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.'}
-                  </p>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Every vacancy is verified with confirmed application deadlines and official employer channels.
-                  </p>
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
-                  <h3 className="text-sm font-bold text-[#0B132B]">
-                    Why Ethiopian Candidates Choose HOPELAND JOBS:
-                  </h3>
-                  <div className="space-y-2 text-xs text-slate-700">
+                {/* Clean About HopelandJobs Summary */}
+                <div
+                  id="about-section"
+                  className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-4"
+                >
+                  <div className="space-y-3">
+                    <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Verified Quality Promise</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-[#0B132B]">About HOPELAND JOBS</h2>
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                      {siteSettings.aboutText ||
+                        'HOPELAND JOBS is Ethiopia’s trusted, verified recruitment information portal connecting professionals with genuine opportunities across banking, NGOs, embassies, aviation, hospitality, corporate organizations, and international career pathways.'}
+                    </p>
+                  </div>
+
+                  <div className="bg-[#F5F7FA] p-6 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs sm:text-sm text-slate-700">
                     <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span><strong>Verified Announcements Only:</strong> Every job has a confirmed deadline and employer.</span>
+                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                      <span><strong>Verified Vacancies:</strong> Confirmed deadlines and official employers.</span>
                     </div>
                     <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span><strong>10 GB Cloud Vault:</strong> Store and manage credentials persistently.</span>
+                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                      <span><strong>Direct Portals:</strong> Zero hidden third-party application fees.</span>
                     </div>
                     <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span><strong>Zero Application Fees:</strong> Direct connections to employer portals.</span>
+                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                      <span><strong>Instant Alerts:</strong> Personalized notifications when matching roles open.</span>
                     </div>
                   </div>
                 </div>
@@ -2854,6 +2723,11 @@ export default function App() {
               const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
               setUserNotifications(fresh.notifications);
               setUnreadNotificationsCount(fresh.unreadCount);
+              await dispatchLocalServiceWorkerPushFallback(
+                userProfile.uid,
+                fresh.notifications,
+                prefs || notificationPrefs
+              ).catch(() => 0);
             }
           }}
         />
@@ -2882,16 +2756,58 @@ export default function App() {
             onUpdateProfile={async (updated) => {
               await saveJobSeekerProfile(updated);
               setUserProfile(updated);
-              // Recalculate personalized recommendations and dispatch eligible job alerts right away
+
+              let latestPrefs = notificationPrefs;
+              // Because Save Changes is a real user click gesture, automatically enable phone bar push
+              // once mandatory experience, years of experience, and job expertise are complete (unless user disabled it)
+              if (hasCompletedMandatoryPreferences(updated) && latestPrefs?.manuallyDisabled !== true) {
+                if (!hasActiveDevicePush && getBrowserNotificationPermission() !== 'denied') {
+                  const pushInit = await requestAndEnableNotifications(updated.uid, {
+                    emailAlerts: false,
+                    websiteBell: true,
+                    email: updated.email,
+                  }).catch(() => null);
+                  if (pushInit?.preferences) {
+                    latestPrefs = pushInit.preferences;
+                    setNotificationPrefs(pushInit.preferences);
+                  }
+                  if (pushInit?.permissionStatus) {
+                    setBrowserPerm(pushInit.permissionStatus);
+                  }
+                  if (pushInit?.subscriptionActive) {
+                    setHasActiveDevicePush(true);
+                  }
+                }
+              }
+
+              // Recalculate personalized recommendations and dispatch eligible job alerts (max 3 strictly qualified jobs)
               await recalculateUserRecommendationsServer(updated.uid, updated.email, true).catch(() => null);
               const fresh = await fetchUserNotificationsServer(updated.uid, updated.email);
               setUserNotifications(fresh.notifications);
               setUnreadNotificationsCount(fresh.unreadCount);
+              if (latestPrefs?.manuallyDisabled !== true && fresh.notifications.length > 0) {
+                await dispatchLocalServiceWorkerPushFallback(
+                  updated.uid,
+                  fresh.notifications,
+                  latestPrefs
+                ).catch(() => 0);
+              }
             }}
             onUpdateNotificationPrefs={async (patch) => {
               if (!userProfile?.uid) return;
               const saved = await saveUserNotificationPreferences(userProfile.uid, patch, userProfile.email);
-              if (saved) setNotificationPrefs(saved);
+              if (saved) {
+                setNotificationPrefs(saved);
+                const health = await checkCurrentDevicePushHealth(
+                  userProfile.uid,
+                  saved,
+                  userProfile.email
+                );
+                setBrowserPerm(health.browserPermission);
+                setHasActiveDevicePush(
+                  saved.manuallyDisabled !== true && health.hasActiveSubscriptionOnThisDevice
+                );
+              }
             }}
             onEnableDevicePush={async () => {
               if (!userProfile?.uid) return;
@@ -2907,7 +2823,19 @@ export default function App() {
                 userProfile.email
               );
               setBrowserPerm(health.browserPermission);
-              setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+              setHasActiveDevicePush(
+                res.preferences?.manuallyDisabled !== true && health.hasActiveSubscriptionOnThisDevice
+              );
+              const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
+              setUserNotifications(fresh.notifications);
+              setUnreadNotificationsCount(fresh.unreadCount);
+              if (res.preferences?.manuallyDisabled !== true && fresh.notifications.length > 0) {
+                await dispatchLocalServiceWorkerPushFallback(
+                  userProfile.uid,
+                  fresh.notifications,
+                  res.preferences
+                ).catch(() => 0);
+              }
             }}
             onDisableDevicePush={async () => {
               if (!userProfile?.uid) return;
@@ -2919,7 +2847,7 @@ export default function App() {
                 userProfile.email
               );
               setBrowserPerm(health.browserPermission);
-              setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+              setHasActiveDevicePush(false);
             }}
             onMarkNotificationRead={async (notifId, read) => {
               if (!userProfile?.uid) return;

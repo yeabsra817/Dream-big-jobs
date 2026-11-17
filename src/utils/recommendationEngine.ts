@@ -8,6 +8,8 @@ export {
   isDeadlineExpired,
   isDeadlineApproaching,
   hasSufficientProfileForRecommendations,
+  hasCompletedMandatoryPreferences,
+  isStrictJobFitForUser,
   isVerifiedActiveVacancy,
   computeStaffOpportunityRecommendations,
 } from './recommendationCore';

@@ -16,6 +16,7 @@ export interface RecommendedOpportunity {
   matchScore: number;
   eligibilityStatus: 'Eligible' | 'Partially Qualified';
   isFullyQualified: boolean;
+  strictlyQualified?: boolean;
   matchReasons: string[];
   missingMandatoryQualifications: string[];
   requiredExperienceText: string;
@@ -167,7 +168,32 @@ function extractSectorTags(text: string): string[] {
 }
 
 function tokenizeProfileKeywords(profile: JobSeekerProfile) {
-  const stopWords = new Set(['and', 'the', 'for', 'with', 'of', 'in', 'to', 'at', 'or', 'on', 'officer', 'staff', 'job']);
+  const stopWords = new Set([
+    'and',
+    'the',
+    'for',
+    'with',
+    'of',
+    'in',
+    'to',
+    'at',
+    'or',
+    'on',
+    'officer',
+    'staff',
+    'job',
+    'senior',
+    'junior',
+    'assistant',
+    'associate',
+    'general',
+    'service',
+    'services',
+    'company',
+    'sector',
+    'private',
+    'public',
+  ]);
   const splitClean = (values: string[]) =>
     Array.from(
       new Set(
@@ -195,6 +221,7 @@ function tokenizeProfileKeywords(profile: JobSeekerProfile) {
     ]),
     skillTokens: (profile.skills || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseTokens: (profile.areasOfExpertise || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    expertiseWordTokens: splitClean([...(profile.areasOfExpertise || []), ...(profile.skills || [])]),
     interestTokens: (profile.professionalInterests || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     certTokens: (profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`.trim().toLowerCase()).filter(Boolean),
     studyTokens: splitClean((profile.education || []).map((e) => `${e.fieldOfStudy} ${e.qualification}`)),
@@ -251,20 +278,27 @@ export function hasSufficientProfileForRecommendations(profile: JobSeekerProfile
 
 export function hasCompletedMandatoryPreferences(profile: JobSeekerProfile | null | undefined): boolean {
   if (!profile) return false;
-  const hasExperience = Boolean(
+  const hasExperienceStatus = Boolean(
     profile.noExperience === true ||
-      (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
-      (profile.experience && profile.experience.length > 0) ||
-      (profile.previousPositions && profile.previousPositions.length > 0)
+      (Array.isArray(profile.experience) && profile.experience.length > 0) ||
+      (profile.currentPosition && profile.currentPosition.trim().length >= 2)
   );
-  const hasSectorOrRole = Boolean(
-    (profile.preferredSectors && profile.preferredSectors.length > 0) ||
-      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
-      (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2) ||
-      (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
-      (profile.skills && profile.skills.length > 0)
+  const hasYearsOfExperience = Boolean(
+    profile.noExperience === true ||
+      (profile.yearsOfExperience && /\d/.test(profile.yearsOfExperience))
   );
-  return hasExperience && hasSectorOrRole;
+  const hasJobExpertise = Boolean(
+    (Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0) ||
+      (Array.isArray(profile.skills) && profile.skills.length > 0)
+  );
+  return hasExperienceStatus && hasYearsOfExperience && hasJobExpertise;
+}
+
+export function isStrictJobFitForUser(rec: RecommendedOpportunity | null | undefined): boolean {
+  if (!rec) return false;
+  if (!rec.isFullyQualified) return false;
+  if (rec.strictlyQualified === false) return false;
+  return rec.matchScore >= 36;
 }
 
 export function isVerifiedActiveVacancy(v: Vacancy): boolean {
@@ -302,7 +336,8 @@ export function computeStaffOpportunityRecommendations(
   for (const v of domesticVacancies || []) {
     if (!isVerifiedActiveVacancy(v)) continue;
 
-    const combinedText = `${v.title} ${v.organization} ${v.category} ${v.requiredFieldOfStudy} ${v.educationQualification} ${(v.requiredSkills || []).join(' ')} ${v.description} ${(v.responsibilities || []).join(' ')} ${v.specialRequirements || ''}`.toLowerCase();
+    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(' ')} ${v.description} ${(v.responsibilities || []).join(' ')} ${v.specialRequirements || ''}`.toLowerCase();
+    const combinedText = `${roleAndReqText} ${v.organization} ${v.category}`.toLowerCase();
     const vacSectorTags = extractSectorTags(`${v.category} ${v.title} ${v.organization} ${v.description} ${v.isWashNgo ? 'wash' : ''}`);
 
     const missingMandatory: string[] = [];
@@ -326,41 +361,41 @@ export function computeStaffOpportunityRecommendations(
     let score = 0;
     const reasons: string[] = [];
 
-    // Role & Position Match
-    const matchedTitleWords = tokens.titleTokens.filter((t) => combinedText.includes(t));
+    // Role & Position Match (checked strictly against job title & job requirements, not org/category name)
+    const matchedTitleWords = tokens.titleTokens.filter((t) => roleAndReqText.includes(t));
     if (matchedTitleWords.length > 0) {
       score += Math.min(35, matchedTitleWords.length * 14);
       reasons.push(`Role alignment: ${matchedTitleWords.slice(0, 3).join(', ')}`);
     }
 
-    // Sector / Category Match (supports multi-sector & WASH/NGO/Banking/Embassies/Airlines/Other/etc.)
-    const matchedSectorTag = tokens.preferredSectorTags.find((tag) => vacSectorTags.includes(tag));
-    const wantsOtherOrAll = tokens.preferredSectorTags.includes('other') || tokens.preferredSectorsRaw.some((s) => /\b(other|all|any)\b/i.test(s));
+    // Sector / Category Match (supports multi-sector & WASH/NGO/Banking/Embassies/Airlines/etc.)
+    const matchedSectorTag = tokens.preferredSectorTags.find((tag) => tag !== 'other' && vacSectorTags.includes(tag));
     const directSectorMatch = tokens.preferredSectorsRaw.some((sec) =>
-      sec.split(/[\s,/&]+/).some((w) => w.length > 2 && `${v.category} ${v.title}`.toLowerCase().includes(w))
+      sec.split(/[\s,/&]+/).some((w) => w.length > 2 && !/^(other|all|any|general|sector)$/i.test(w) && `${v.category} ${v.title}`.toLowerCase().includes(w))
     );
-    if (matchedSectorTag || directSectorMatch || wantsOtherOrAll) {
-      score += matchedSectorTag || directSectorMatch ? 24 : 22;
+    if (matchedSectorTag || directSectorMatch) {
+      score += 24;
       reasons.push(
         v.isWashNgo
           ? 'Preferred Sector: WASH / Humanitarian NGO'
-          : matchedSectorTag || directSectorMatch
-          ? `Preferred Sector: ${v.category}`
-          : `General / Other Sector Match: ${v.category}`
+          : `Preferred Sector: ${v.category}`
       );
     }
 
-    // Skills & Areas of Expertise Match
+    // Skills & Areas of Expertise Match (exact phrase + tokenized keywords checked against role & requirements)
+    const matchedSkillPhrases = [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
+      (s) => s.length >= 2 && roleAndReqText.includes(s.toLowerCase())
+    );
+    const matchedExpertiseWords = tokens.expertiseWordTokens.filter((w) => roleAndReqText.includes(w));
     const matchedSkills = Array.from(
-      new Set(
-        [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
-          (s) => s.length >= 2 && combinedText.includes(s.toLowerCase())
-        )
-      )
+      new Set([
+        ...matchedSkillPhrases,
+        ...matchedExpertiseWords,
+      ])
     );
     if (matchedSkills.length > 0) {
-      score += Math.min(30, matchedSkills.length * 10);
-      reasons.push(`Matching skills: ${matchedSkills.slice(0, 3).join(', ')}`);
+      score += Math.min(34, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
+      reasons.push(`Matching expertise/skills: ${matchedSkills.slice(0, 3).join(', ')}`);
     }
 
     // Certifications Match
@@ -409,24 +444,28 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(`Preferred location: ${v.location}`);
     }
 
-    // Require genuine match signal before recommending (never recommend unrelated jobs)
-    const hasRelevantMatch =
+    // Direct role, expertise, skill, study, or certification fit (never sector-only noise)
+    const hasDirectDomainFit =
       matchedTitleWords.length > 0 ||
       matchedSkills.length > 0 ||
       matchedStudy.length > 0 ||
-      Boolean(matchedSectorTag || directSectorMatch || wantsOtherOrAll);
+      matchedCerts.length > 0;
 
-    if (!hasRelevantMatch || score < 22 || reasons.length === 0) continue;
+    // Exclude unrelated jobs from recommendations when score is weak or there is no genuine domain/sector connection
+    const hasRelevantMatch =
+      hasDirectDomainFit || Boolean(matchedSectorTag || directSectorMatch);
+
+    if (!hasRelevantMatch || score < 24 || reasons.length === 0) continue;
 
     // Exclude severely under-qualified jobs (e.g. PhD/Master's when rank < Bachelor's, or >5yr gap)
     if (reqYears !== null && reqYears - userExpYears > 5) continue;
     if (reqEduRank >= EDUCATION_RANK.phd && userEduRank < EDUCATION_RANK.master) continue;
 
     const isFullyQualified = missingMandatory.length === 0;
-    // Rank fully qualified higher than partially qualified
     const adjustedScore = isFullyQualified
       ? Math.min(99, score)
       : Math.max(30, Math.min(82, score - missingMandatory.length * 10));
+    const strictlyQualified = isFullyQualified && hasDirectDomainFit && adjustedScore >= 36;
 
     results.push({
       id: v.id,
@@ -440,6 +479,7 @@ export function computeStaffOpportunityRecommendations(
       matchScore: adjustedScore,
       eligibilityStatus: isFullyQualified ? 'Eligible' : 'Partially Qualified',
       isFullyQualified,
+      strictlyQualified,
       matchReasons: reasons.slice(0, 5),
       missingMandatoryQualifications: missingMandatory,
       requiredExperienceText: v.experienceYears || 'Not specified',
@@ -486,11 +526,13 @@ export function computeStaffOpportunityRecommendations(
       score += Math.min(35, matchedTitle.length * 14);
       reasons.push(`International role fit (${matchedTitle.slice(0, 3).join(', ')})`);
     }
-    const matchedSkills = Array.from(
-      new Set([...tokens.skillTokens, ...tokens.expertiseTokens].filter((s) => combinedText.includes(s)))
+    const matchedSkillPhrases = [...tokens.skillTokens, ...tokens.expertiseTokens].filter((s) =>
+      combinedText.includes(s)
     );
+    const matchedExpertiseWords = tokens.expertiseWordTokens.filter((w) => combinedText.includes(w));
+    const matchedSkills = Array.from(new Set([...matchedSkillPhrases, ...matchedExpertiseWords]));
     if (matchedSkills.length > 0) {
-      score += Math.min(25, matchedSkills.length * 10);
+      score += Math.min(30, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
       reasons.push(`Skill/expertise alignment: ${matchedSkills.slice(0, 3).join(', ')}`);
     }
     const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
@@ -506,6 +548,7 @@ export function computeStaffOpportunityRecommendations(
     if (score >= 28 && reasons.length >= 1 && (matchedTitle.length > 0 || matchedSkills.length > 0)) {
       if (reqYears !== null && reqYears - userExpYears > 5) continue;
       const isFullyQualified = missingMandatory.length === 0;
+      const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
       results.push({
         id: ij.id,
         sourceType: 'international_job',
@@ -515,9 +558,10 @@ export function computeStaffOpportunityRecommendations(
         category: ij.category || 'International Recruitment',
         salary: ij.salary && !/not stated/i.test(ij.salary) ? ij.salary : undefined,
         deadline: ij.applicationDeadline,
-        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? 'Eligible' : 'Partially Qualified',
         isFullyQualified,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedTitle.length > 0 || matchedSkills.length > 0),
         matchReasons: reasons,
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: ij.requiredExperience || 'Official requirements apply',
@@ -576,6 +620,7 @@ export function computeStaffOpportunityRecommendations(
 
     if (score >= 28 && reasons.length >= 1) {
       const isFullyQualified = missingMandatory.length === 0;
+      const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
       results.push({
         id: sc.id,
         sourceType: 'scholarship',
@@ -584,9 +629,10 @@ export function computeStaffOpportunityRecommendations(
         location: sc.country,
         category: `Scholarship (${sc.studyLevel})`,
         deadline: sc.applicationDeadline,
-        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? 'Eligible' : 'Partially Qualified',
         isFullyQualified,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedStudy.length > 0 || matchedDomain.length > 0),
         matchReasons: reasons,
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: sc.experienceCompensationNotes || 'Experience valued',

@@ -184,12 +184,13 @@ function buildFallbackPrefs(uid: string): NotificationPreferencesRecord {
     userId: uid,
     permissionStatus: 'default',
     subscriptionStatus: 'none',
+    manuallyDisabled: false,
     frequency: 'instant',
     promptDismissCount: 0,
     channels: {
       websiteBell: true,
-      browserPush: false,
-      mobilePush: false,
+      browserPush: true,
+      mobilePush: true,
       emailAlerts: false,
     },
     alertTypes: {
@@ -237,12 +238,18 @@ function mergePreferenceRecords(
 
   const mergedDevices = Array.from(deviceMap.values()).slice(0, 15);
   const hasAnyActiveDevice = mergedDevices.some((d) => d.active);
+  const isManuallyDisabled =
+    typeof newer?.manuallyDisabled === 'boolean'
+      ? newer.manuallyDisabled
+      : Boolean(older?.manuallyDisabled);
 
   const resolvedPerm =
     newer?.permissionStatus && newer.permissionStatus !== 'default'
       ? newer.permissionStatus
       : older?.permissionStatus || (hasAnyActiveDevice ? 'granted' : 'default');
-  const resolvedSubStatus = hasAnyActiveDevice
+  const resolvedSubStatus = isManuallyDisabled
+    ? 'revoked'
+    : hasAnyActiveDevice
     ? 'active'
     : newer?.subscriptionStatus || older?.subscriptionStatus || 'none';
 
@@ -251,6 +258,7 @@ function mergePreferenceRecords(
     ...(older || {}),
     ...(newer || {}),
     userId: uid,
+    manuallyDisabled: isManuallyDisabled,
     permissionStatus: resolvedPerm,
     subscriptionStatus: resolvedSubStatus,
     channels: {
@@ -447,6 +455,7 @@ export async function saveUserNotificationPreferences(
         userId: uid,
         permissionStatus: savedPrefs.permissionStatus,
         subscriptionStatus: savedPrefs.subscriptionStatus,
+        manuallyDisabled: Boolean(savedPrefs.manuallyDisabled),
         frequency: savedPrefs.frequency || 'instant',
         enabledAt: savedPrefs.enabledAt || null,
         permissionVerifiedAt: savedPrefs.permissionVerifiedAt || null,
@@ -729,6 +738,9 @@ export async function syncBrowserPushWithUserAccount(
   preferences: NotificationPreferencesRecord | null;
 }> {
   if (!uid) return { synced: false, preferences: null };
+  if (prefs?.manuallyDisabled === true) {
+    return { synced: false, preferences: prefs };
+  }
   const deviceMeta = getDeviceMetadata();
   const cachedAnon = readAnonPushCache();
   let subJson: PushSubscriptionJSON | null = existingBrowserSub?.toJSON() || null;
@@ -806,25 +818,27 @@ export async function syncBrowserPushWithUserAccount(
     try {
       localStorage.removeItem(ANON_PUSH_SUB_KEY);
     } catch {}
-    await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'granted',
-        subscriptionStatus: 'active',
-        enabledAt: finalPrefs?.enabledAt || new Date().toISOString(),
-        channels: {
-          websiteBell: true,
-          browserPush: true,
-          mobilePush:
-            Boolean(finalPrefs?.channels?.mobilePush) ||
-            deviceMeta.platform === 'android' ||
-            deviceMeta.platform === 'ios',
-          emailAlerts: Boolean(finalPrefs?.channels?.emailAlerts),
+      await saveUserNotificationPreferences(
+        uid,
+        {
+          permissionStatus: 'granted',
+          subscriptionStatus: 'active',
+          manuallyDisabled: false,
+          enabledAt: finalPrefs?.enabledAt || new Date().toISOString(),
+          channels: {
+            websiteBell: true,
+            browserPush: true,
+            mobilePush:
+              Boolean(finalPrefs?.channels?.mobilePush) ||
+              deviceMeta.platform === 'android' ||
+              deviceMeta.platform === 'ios' ||
+              true,
+            emailAlerts: false,
+          },
+          deviceSubscriptions: finalPrefs?.deviceSubscriptions,
         },
-        deviceSubscriptions: finalPrefs?.deviceSubscriptions,
-      },
-      email
-    ).catch(() => null);
+        email
+      ).catch(() => null);
     return { synced: true, preferences: finalPrefs };
   }
 
@@ -843,6 +857,14 @@ export async function checkCurrentDevicePushHealth(
   const browserPermission = getBrowserNotificationPermission();
   const deviceMeta = getDeviceMetadata();
   const { deviceId } = deviceMeta;
+
+  if (prefs?.manuallyDisabled === true) {
+    return {
+      browserPermission,
+      hasActiveSubscriptionOnThisDevice: false,
+      needsRenewalOnThisDevice: false,
+    };
+  }
 
   if (browserPermission === 'unsupported' || !isPushSupportedOnDevice()) {
     return {
@@ -957,6 +979,16 @@ export async function checkVisitorNotificationStatus(
 }> {
   const browserPermission = getBrowserNotificationPermission();
   const prefs = uid ? await fetchUserNotificationPreferences(uid, email).catch(() => null) : null;
+
+  if (uid && prefs?.manuallyDisabled === true) {
+    return {
+      shouldShowPopup: false,
+      reason: 'dismissed_cooldown',
+      browserPermission,
+      hasValidSubscription: false,
+      preferences: prefs,
+    };
+  }
 
   if (isIosSafariNeedsInstall()) {
     if (isPromptDismissedInSessionOrCooldown(prefs)) {
@@ -1139,6 +1171,10 @@ export function evaluateNotificationPromptRule(args: {
     | 'unsupported';
 } {
   const { prefs, browserPermission, hasActiveDeviceSub, needsDeviceRenewal, alreadyPromptedThisLogin } = args;
+
+  if (prefs?.manuallyDisabled === true) {
+    return { shouldShowModal: false, reason: 'already_active' };
+  }
 
   if (browserPermission === 'granted' && hasActiveDeviceSub) {
     return { shouldShowModal: false, reason: 'already_active' };
@@ -1358,14 +1394,15 @@ export async function requestAndEnableNotifications(
       const saved = await saveUserNotificationPreferences(
         uid,
         {
+          manuallyDisabled: false,
           permissionStatus: 'granted',
           subscriptionStatus: 'active',
           enabledAt: new Date().toISOString(),
           channels: {
             websiteBell: options.websiteBell !== false,
             browserPush: true,
-            mobilePush: deviceMeta.platform === 'android' || deviceMeta.platform === 'ios',
-            emailAlerts: useEmailAlerts,
+            mobilePush: true,
+            emailAlerts: false,
           },
           deviceSubscriptions: persistRes.serverPrefs?.deviceSubscriptions,
         },
@@ -1375,6 +1412,16 @@ export async function requestAndEnableNotifications(
       try {
         localStorage.removeItem(ANON_PUSH_SUB_KEY);
       } catch {}
+
+      // Immediately push up to 3 eligible unread job notifications to the newly subscribed phone/desktop bar
+      await withTimeout(
+        fetch(`/api/push/deliver-pending/${encodeURIComponent(uid)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...userHeaders(uid, options.email) },
+        }),
+        4000,
+        null as any
+      ).catch(() => null);
 
       return {
         success: true,
@@ -1475,15 +1522,15 @@ export async function disableDeviceNotifications(
     } catch {}
   }
 
-  const stillHasActive = Boolean(serverPrefs?.deviceSubscriptions?.some((d) => d.active));
   const saved = await saveUserNotificationPreferences(
     uid,
     {
-      subscriptionStatus: stillHasActive ? 'active' : 'none',
+      manuallyDisabled: true,
+      subscriptionStatus: 'revoked',
       channels: {
         websiteBell: true,
-        browserPush: stillHasActive,
-        mobilePush: stillHasActive,
+        browserPush: false,
+        mobilePush: false,
         emailAlerts: false,
       },
       deviceSubscriptions: serverPrefs?.deviceSubscriptions,
@@ -1494,8 +1541,78 @@ export async function disableDeviceNotifications(
   return {
     success: true,
     preferences: saved || serverPrefs,
-    message: 'Push notifications have been disabled on this device.',
+    message: 'Phone & browser push notifications have been disabled.',
   };
+}
+
+export async function dispatchLocalServiceWorkerPushFallback(
+  uid: string,
+  notifications: UserNotificationItem[],
+  prefs?: NotificationPreferencesRecord | null
+): Promise<number> {
+  if (typeof window === 'undefined' || !uid) return 0;
+  if (prefs?.manuallyDisabled === true) return 0;
+  if (getBrowserNotificationPermission() !== 'granted') return 0;
+  if (!('serviceWorker' in navigator)) return 0;
+
+  const storageKey = `hopelandjobs_sw_shown_${uid}`;
+  let shownMap: Record<string, number> = {};
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) shownMap = JSON.parse(raw);
+  } catch {
+    shownMap = {};
+  }
+
+  const pendingForBar = (notifications || [])
+    .filter(
+      (n) =>
+        n &&
+        !n.read &&
+        n.sourceType !== 'system' &&
+        n.channels?.push !== 'sent' &&
+        !shownMap[n.vacancyId] &&
+        !shownMap[n.id]
+    )
+    .slice(0, 3);
+
+  if (pendingForBar.length === 0) return 0;
+
+  try {
+    const reg = await registerServiceWorkerSafe();
+    if (!reg || typeof reg.showNotification !== 'function') return 0;
+
+    let displayed = 0;
+    for (const item of pendingForBar) {
+      await reg.showNotification(`HOPELANDJOBS — ${item.title}`, {
+        body: `${item.employer} (${item.location}) · ${
+          item.matchReasonSummary || `Matches your profile in ${item.category}`
+        }. Tap to view & apply.`,
+        icon: '/favicon.svg',
+        badge: '/favicon.svg',
+        tag: `vacancy-${item.vacancyId}`,
+        data: {
+          url:
+            item.sourceType === 'domestic_job'
+              ? `/?jobId=${encodeURIComponent(item.vacancyId)}&notificationId=${encodeURIComponent(item.id)}`
+              : item.jobUrl || '/',
+          jobId: item.vacancyId,
+          vacancyId: item.vacancyId,
+          notificationId: item.id,
+        },
+      });
+      shownMap[item.vacancyId] = Date.now();
+      shownMap[item.id] = Date.now();
+      displayed += 1;
+    }
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(shownMap));
+    } catch {}
+    return displayed;
+  } catch {
+    return 0;
+  }
 }
 
 export async function sendTestPushNotification(

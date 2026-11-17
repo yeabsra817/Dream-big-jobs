@@ -1,5 +1,27 @@
 [
   {
+    "id": "aud_1794921591493_logqs",
+    "action": "staff_profile_updated",
+    "actorEmail": "yeabsra45@gmail.com",
+    "actorUid": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+    "targetType": "staff_profile",
+    "targetId": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+    "summary": "Updated permanent profile for YEABSRA TEFFERA TEKLU",
+    "severity": "info",
+    "timestamp": "2026-11-17T13:19:51.493Z"
+  },
+  {
+    "id": "aud_1794921518491_cx1nc",
+    "action": "staff_profile_updated",
+    "actorEmail": "yeabsra45@gmail.com",
+    "actorUid": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+    "targetType": "staff_profile",
+    "targetId": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+    "summary": "Updated permanent profile for YEABSRA TEFFERA TEKLU",
+    "severity": "info",
+    "timestamp": "2026-11-17T13:18:38.491Z"
+  },
+  {
     "id": "aud_1794911641566_hbaoj",
     "action": "staff_profile_updated",
     "actorEmail": "yeabsra45@gmail.com",

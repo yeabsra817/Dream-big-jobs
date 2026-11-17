@@ -134,6 +134,7 @@ export interface NotificationPreferencesRecord {
   userId: string;
   permissionStatus: NotificationPermissionState;
   subscriptionStatus: NotificationSubscriptionStatus;
+  manuallyDisabled?: boolean;
   frequency?: NotificationFrequency;
   enabledAt?: string;
   permissionVerifiedAt?: string;
@@ -440,7 +441,7 @@ export function evaluateMandatoryProfileCompletion(
   const missingSections: string[] = [];
   let score = 0;
 
-  // 1. Personal information (20 pts): fullName, email, phone, locationCity
+  // 1. Personal information (15 pts): fullName, email, phone, locationCity
   const hasPersonal = Boolean(
     profile.fullName &&
       profile.fullName.trim().length >= 2 &&
@@ -452,45 +453,52 @@ export function evaluateMandatoryProfileCompletion(
       profile.locationCity.trim().length >= 2
   );
   if (hasPersonal) {
-    score += 20;
+    score += 15;
     completedSections.push('Personal Information');
   } else {
     missingSections.push('Personal Information (Name, Phone & City)');
   }
 
-  // 2. Education (20 pts)
+  // 2. Education (15 pts)
   const hasEducation = Boolean(Array.isArray(profile.education) && profile.education.length > 0);
   if (hasEducation) {
-    score += 20;
+    score += 15;
     completedSections.push('Education');
   } else {
     missingSections.push('Education History');
   }
 
-  // 3. Employment history or explicit no-experience selection (20 pts)
-  const hasEmploymentOrNone = Boolean(
+  // 3. Experience status & explicit Years of Experience (25 pts)
+  const hasExperienceStatus = Boolean(
     (Array.isArray(profile.experience) && profile.experience.length > 0) ||
-      profile.noExperience === true
+      profile.noExperience === true ||
+      (profile.currentPosition && profile.currentPosition.trim().length >= 2)
   );
-  if (hasEmploymentOrNone) {
-    score += 20;
-    completedSections.push(profile.noExperience ? 'Employment Status (No Prior Experience)' : 'Employment History');
+  const hasExplicitYears = Boolean(
+    profile.noExperience === true ||
+      (profile.yearsOfExperience && /\d/.test(profile.yearsOfExperience))
+  );
+  if (hasExperienceStatus && hasExplicitYears) {
+    score += 25;
+    completedSections.push(
+      profile.noExperience
+        ? 'Experience & Years (0 Years / Entry Level)'
+        : `Work Experience (${profile.yearsOfExperience})`
+    );
   } else {
-    missingSections.push('Employment History (or No-Experience selection)');
+    missingSections.push('Work Experience & Years of Experience');
   }
 
-  // 4. Current or previous job (15 pts)
-  const hasCurrentOrPreviousJob = Boolean(
-    (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
-      (Array.isArray(profile.previousPositions) && profile.previousPositions.length > 0) ||
-      (Array.isArray(profile.experience) && profile.experience.length > 0) ||
-      profile.noExperience === true
+  // 4. Job Expertise & Core Skills (20 pts)
+  const hasJobExpertise = Boolean(
+    (Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0) ||
+      (Array.isArray(profile.skills) && profile.skills.length > 0)
   );
-  if (hasCurrentOrPreviousJob) {
-    score += 15;
-    completedSections.push('Current or Previous Role');
+  if (hasJobExpertise) {
+    score += 20;
+    completedSections.push('Job Expertise & Skills');
   } else {
-    missingSections.push('Current or Previous Job Title');
+    missingSections.push('Job Expertise & Core Skills');
   }
 
   // 5. Industry (15 pts)

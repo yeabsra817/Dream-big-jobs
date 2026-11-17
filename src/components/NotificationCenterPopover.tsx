@@ -83,12 +83,12 @@ export const NotificationCenterPopover: React.FC<Props> = ({
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label={`Notifications (${unreadCount} unread)`}
         aria-expanded={isOpen}
-        className="relative min-h-[40px] min-w-[40px] px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 inline-flex items-center justify-center transition-colors cursor-pointer"
+        className="relative min-h-[40px] min-w-[40px] px-2.5 py-2 rounded-full bg-slate-50 hover:bg-slate-100 text-[#0B132B] border border-slate-200 inline-flex items-center justify-center transition-colors cursor-pointer"
         title="Job Alert Notifications"
       >
-        <Bell className="w-4 h-4 text-amber-400" />
+        <Bell className="w-4 h-4 text-[#0B132B]" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1.5 -right-1.5 min-w-[19px] h-[19px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black font-mono tabular-nums flex items-center justify-center border border-[#0B132B]">
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#16A34A] text-white text-[10px] font-bold font-mono tabular-nums flex items-center justify-center border-2 border-white">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
