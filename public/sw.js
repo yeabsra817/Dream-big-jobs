@@ -1,6 +1,6 @@
 /* HOPELAND JOBS Service Worker — Real Web Push, Notification Deep-Linking, and Reconnect Sync */
 
-const CACHE_NAME = 'hopelandjobs-shell-v1';
+const CACHE_NAME = 'hopelandjobs-shell-v2';
 const APP_SHELL_URLS = [
   '/',
   '/manifest.webmanifest',

@@ -1,7 +1,2676 @@
 // serverApp.ts
-import * as path from "path";
+import * as path2 from "path";
 import * as fs from "fs";
 import * as crypto from "crypto";
+
+// serverUserEngine.ts
+import * as path from "path";
+
+// src/utils/recommendationCore.ts
+var EDUCATION_RANK = {
+  none: 0,
+  certificate: 1,
+  tvet: 1,
+  diploma: 2,
+  associate: 2,
+  bachelor: 3,
+  undergraduate: 3,
+  master: 4,
+  postgraduate: 4,
+  phd: 5,
+  doctorate: 5
+};
+var RANK_LABELS = {
+  1: "TVET / Certificate",
+  2: "Diploma / Associate",
+  3: "Bachelor's Degree",
+  4: "Master's Degree",
+  5: "PhD / Doctorate"
+};
+function detectEducationRank(text) {
+  const normalized = (text || "").toLowerCase();
+  if (!normalized) return 0;
+  if (/(phd|doctorate|doctoral)/i.test(normalized)) return EDUCATION_RANK.phd;
+  if (/(master|msc|ma\b|mba|mph|llm|postgraduate|post-graduate)/i.test(normalized)) return EDUCATION_RANK.master;
+  if (/(bachelor|bsc|ba\b|b\.?tech|b\.?eng|undergraduate|first degree|university degree|\bdegree\b)/i.test(normalized)) {
+    return EDUCATION_RANK.bachelor;
+  }
+  if (/(diploma|associate|level iv|level 4|hnd)/i.test(normalized)) return EDUCATION_RANK.diploma;
+  if (/(certificate|tvet|high school|grade 12|secondary)/i.test(normalized)) return EDUCATION_RANK.certificate;
+  return 0;
+}
+function getProfileMaxEducationRank(profile) {
+  let maxRank = 0;
+  let maxLabel = "";
+  for (const edu of profile.education || []) {
+    const r = detectEducationRank(`${edu.qualification} ${edu.fieldOfStudy} ${edu.additionalInfo || ""}`);
+    if (r > maxRank) {
+      maxRank = r;
+      maxLabel = `${edu.qualification}${edu.fieldOfStudy ? ` in ${edu.fieldOfStudy}` : ""}`;
+    }
+  }
+  return { rank: maxRank, label: maxLabel };
+}
+function parseMinRequiredYears(text) {
+  const normalized = (text || "").toLowerCase().trim();
+  if (!normalized || /(not stated|none|fresh graduate|entry|0\s*year|no experience)/i.test(normalized)) {
+    return 0;
+  }
+  const rangeMatch = normalized.match(/(\d+)\s*(?:-|to|\+)\s*(\d+)?\s*(?:years?|yrs?)/i);
+  if (rangeMatch) {
+    return parseInt(rangeMatch[1], 10);
+  }
+  const singleMatch = normalized.match(/(?:at least|minimum|min\.?|over|\+)?\s*(\d+)\s*(?:\+)?\s*(?:years?|yrs?)/i);
+  if (singleMatch) {
+    return parseInt(singleMatch[1], 10);
+  }
+  return null;
+}
+function getProfileExplicitExperienceYears(profile) {
+  if (profile.noExperience && (!profile.experience || profile.experience.length === 0)) {
+    return 0;
+  }
+  const fromField = parseMinRequiredYears(profile.yearsOfExperience);
+  let expYearsFromEntries = 0;
+  const nowYear = (/* @__PURE__ */ new Date()).getFullYear();
+  for (const exp of profile.experience || []) {
+    const startYearMatch = (exp.startDate || "").match(/(19|20)\d{2}/);
+    if (!startYearMatch) continue;
+    const startY = parseInt(startYearMatch[0], 10);
+    let endY = nowYear;
+    if (!exp.isCurrent) {
+      const endYearMatch = (exp.endDate || "").match(/(19|20)\d{2}/);
+      if (endYearMatch) endY = parseInt(endYearMatch[0], 10);
+    }
+    if (endY >= startY && endY - startY <= 50) {
+      expYearsFromEntries += Math.max(0.5, endY - startY);
+    }
+  }
+  return Math.max(fromField ?? 0, Math.floor(expYearsFromEntries));
+}
+function isDeadlineExpired(deadline) {
+  if (!deadline) return false;
+  const trimmed = deadline.trim().toLowerCase();
+  if (!trimmed || /rolling|ongoing|open|not stated|asap|until filled/i.test(trimmed)) return false;
+  const parsed = new Date(deadline);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getTime() < Date.now() - 24 * 60 * 60 * 1e3;
+}
+function isDeadlineApproaching(deadline, withinHours = 72) {
+  if (!deadline) return false;
+  const trimmed = deadline.trim().toLowerCase();
+  if (!trimmed || /rolling|ongoing|open|not stated|asap|until filled/i.test(trimmed)) return false;
+  const parsed = new Date(deadline);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const diffMs = parsed.getTime() - Date.now();
+  return diffMs > 0 && diffMs <= withinHours * 60 * 60 * 1e3;
+}
+var SECTOR_ALIAS_GROUPS = [
+  { label: "banking", keywords: ["bank", "banking", "commercial bank", "branch manager", "credit", "teller", "treasury", "loan officer", "customer service officer"] },
+  { label: "microfinance", keywords: ["microfinance", "mfi", "sacco", "micro-credit", "micro finance"] },
+  { label: "insurance", keywords: ["insurance", "underwriting", "claims", "actuarial", "brokerage"] },
+  { label: "wash", keywords: ["wash", "water supply", "sanitation", "hygiene", "hydrogeology", "water engineering", "emergency wash"] },
+  { label: "ingo", keywords: ["international ngo", "ngo", "un ", "unicef", "undp", "wfp", "unhcr", "humanitarian", "save the children", "nrc", "drc", "mercy corps", "plan international", "oxfam", "care"] },
+  { label: "local_ngo", keywords: ["local ngo", "civil society", "cso", "association", "charity", "community development"] },
+  { label: "government", keywords: ["government", "ministry", "public sector", "bureau", "federal", "regional state", "municipality", "agency"] },
+  { label: "embassy", keywords: ["embassy", "diplomatic", "consulate", "high commission", "au ", "african union", "delegation"] },
+  { label: "airlines", keywords: ["airline", "aviation", "ethiopian airlines", "flight", "cabin crew", "cargo", "freight", "airport"] },
+  { label: "hospitality", keywords: ["hotel", "hospitality", "tourism", "travel", "resort", "lodge", "catering", "chef"] },
+  { label: "manufacturing", keywords: ["manufacturing", "factory", "industrial", "plant", "production", "textile", "brewery", "cement", "pharmaceutical manufacturing"] },
+  { label: "private", keywords: ["private", "corporate", "company", "plc", "share company", "enterprise", "telecom", "safaricom", "logistics", "supply chain", "procurement", "sales", "marketing", "human resource", "administration"] },
+  { label: "it", keywords: ["software", "developer", "engineer", "it ", "technology", "data", "network", "cyber", "devops", "ict"] },
+  { label: "health", keywords: ["medical", "health", "hospital", "clinic", "nurse", "doctor", "pharmacist", "public health", "nutrition"] },
+  { label: "finance", keywords: ["accounting", "finance", "auditor", "audit", "tax", "cpa", "acca", "ifrs"] },
+  { label: "education", keywords: ["education", "university", "college", "teacher", "lecturer", "instructor", "academic"] },
+  { label: "engineering", keywords: ["civil", "construction", "electrical", "mechanical", "architect", "surveyor", "site engineer"] },
+  { label: "other", keywords: ["other", "general", "all sector", "any sector", "multi-sector"] }
+];
+function extractSectorTags(text) {
+  const lower = ` ${text.toLowerCase()} `;
+  const found = [];
+  for (const group of SECTOR_ALIAS_GROUPS) {
+    if (group.keywords.some((kw) => lower.includes(kw))) {
+      found.push(group.label);
+    }
+  }
+  return found;
+}
+function tokenizeProfileKeywords(profile) {
+  const stopWords = /* @__PURE__ */ new Set(["and", "the", "for", "with", "of", "in", "to", "at", "or", "on", "officer", "staff", "job"]);
+  const splitClean = (values) => Array.from(
+    new Set(
+      values.join(" ").toLowerCase().split(/[^a-z0-9+]+/).filter((w) => w.length >= 3 && !stopWords.has(w))
+    )
+  );
+  const preferredSectorsRaw = [
+    profile.preferredIndustry || "",
+    profile.staffDepartmentOrSector || "",
+    ...profile.preferredSectors || [],
+    ...profile.professionalInterests || []
+  ].filter(Boolean);
+  return {
+    titleTokens: splitClean([
+      profile.currentPosition || "",
+      profile.desiredJobTitle || "",
+      ...profile.previousPositions || [],
+      ...(profile.experience || []).map((e) => e.jobTitle || "")
+    ]),
+    skillTokens: (profile.skills || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    expertiseTokens: (profile.areasOfExpertise || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    interestTokens: (profile.professionalInterests || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
+    certTokens: (profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`.trim().toLowerCase()).filter(Boolean),
+    studyTokens: splitClean((profile.education || []).map((e) => `${e.fieldOfStudy} ${e.qualification}`)),
+    preferredSectorTags: extractSectorTags(preferredSectorsRaw.join(" ")),
+    preferredSectorsRaw: preferredSectorsRaw.map((s) => s.toLowerCase())
+  };
+}
+function detectMissingMandatoryLicenses(requiredText, profile) {
+  const req = requiredText.toLowerCase();
+  const userText = [
+    ...(profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`),
+    ...profile.skills || [],
+    ...profile.areasOfExpertise || [],
+    ...(profile.education || []).map((e) => `${e.qualification} ${e.fieldOfStudy}`),
+    profile.currentPosition || "",
+    profile.desiredJobTitle || ""
+  ].join(" ").toLowerCase();
+  const missing = [];
+  const mandatoryChecks = [
+    { pattern: /\b(cpa|acca)\b/i, userPattern: /\b(cpa|acca|chartered accountant)\b/i, label: "CPA / ACCA certification required" },
+    { pattern: /\bmedical license\b|\bmd degree\b|\bregistered nurse\b|\bpracticing license\b/i, userPattern: /\b(md|medicine|nursing|nurse|medical|clinical|health|license)\b/i, label: "Valid medical/practicing license required" },
+    { pattern: /\bpmp certified\b|\bpmp certification\b/i, userPattern: /\bpmp\b/i, label: "PMP certification required" },
+    { pattern: /\bdriving license\b|\bdriver'?s license\b/i, userPattern: /\b(driving|driver)\b/i, label: "Valid driving license required" }
+  ];
+  for (const check of mandatoryChecks) {
+    if (check.pattern.test(req) && !check.userPattern.test(userText)) {
+      missing.push(check.label);
+    }
+  }
+  return missing;
+}
+function hasSufficientProfileForRecommendations(profile) {
+  if (!profile) return false;
+  return Boolean(
+    profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.skills && profile.skills.length > 0 || profile.areasOfExpertise && profile.areasOfExpertise.length > 0 || profile.education && profile.education.length > 0 || profile.experience && profile.experience.length > 0 || profile.noExperience === true || profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0 || profile.professionalInterests && profile.professionalInterests.length > 0 || profile.preferredSectors && profile.preferredSectors.length > 0 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2
+  );
+}
+function hasCompletedMandatoryPreferences(profile) {
+  if (!profile) return false;
+  const hasExperience = Boolean(
+    profile.noExperience === true || profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0 || profile.experience && profile.experience.length > 0 || profile.previousPositions && profile.previousPositions.length > 0
+  );
+  const hasSectorOrRole = Boolean(
+    profile.preferredSectors && profile.preferredSectors.length > 0 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.skills && profile.skills.length > 0
+  );
+  return hasExperience && hasSectorOrRole;
+}
+function isVerifiedActiveVacancy(v) {
+  if (!v || !v.id || !v.title) return false;
+  if (v.status !== "published") return false;
+  if (v.isExpired) return false;
+  if (isDeadlineExpired(v.applicationDeadline)) return false;
+  const lowerTitle = v.title.toLowerCase();
+  if (/\b(scam|fake test|dummy)\b/.test(lowerTitle)) return false;
+  return true;
+}
+function computeStaffOpportunityRecommendations(profile, domesticVacancies, internationalJobs = [], scholarships = [], limit = 30) {
+  if (!hasSufficientProfileForRecommendations(profile)) {
+    return [];
+  }
+  if (profile.accountStatus === "suspended") {
+    return [];
+  }
+  const results = [];
+  const userExpYears = getProfileExplicitExperienceYears(profile);
+  const { rank: userEduRank, label: userEduLabel } = getProfileMaxEducationRank(profile);
+  const tokens = tokenizeProfileKeywords(profile);
+  const userLocation = `${profile.preferredWorkLocation || ""} ${profile.locationCity || ""} ${profile.locationRegion || ""}`.toLowerCase();
+  for (const v of domesticVacancies || []) {
+    if (!isVerifiedActiveVacancy(v)) continue;
+    const combinedText = `${v.title} ${v.organization} ${v.category} ${v.requiredFieldOfStudy} ${v.educationQualification} ${(v.requiredSkills || []).join(" ")} ${v.description} ${(v.responsibilities || []).join(" ")} ${v.specialRequirements || ""}`.toLowerCase();
+    const vacSectorTags = extractSectorTags(`${v.category} ${v.title} ${v.organization} ${v.description} ${v.isWashNgo ? "wash" : ""}`);
+    const missingMandatory = [];
+    const reqYears = parseMinRequiredYears(v.experienceYears);
+    if (reqYears !== null && reqYears > userExpYears) {
+      missingMandatory.push(`Minimum ${reqYears} yrs experience required (profile has ${userExpYears} yrs)`);
+    }
+    const reqEduRank = detectEducationRank(v.educationQualification);
+    if (reqEduRank > 0 && userEduRank < reqEduRank) {
+      missingMandatory.push(`${RANK_LABELS[reqEduRank] || v.educationQualification} required`);
+    }
+    const licenseGaps = detectMissingMandatoryLicenses(
+      `${v.specialRequirements || ""} ${v.educationQualification || ""} ${v.title || ""}`,
+      profile
+    );
+    missingMandatory.push(...licenseGaps);
+    let score = 0;
+    const reasons = [];
+    const matchedTitleWords = tokens.titleTokens.filter((t) => combinedText.includes(t));
+    if (matchedTitleWords.length > 0) {
+      score += Math.min(35, matchedTitleWords.length * 14);
+      reasons.push(`Role alignment: ${matchedTitleWords.slice(0, 3).join(", ")}`);
+    }
+    const matchedSectorTag = tokens.preferredSectorTags.find((tag) => vacSectorTags.includes(tag));
+    const wantsOtherOrAll = tokens.preferredSectorTags.includes("other") || tokens.preferredSectorsRaw.some((s) => /\b(other|all|any)\b/i.test(s));
+    const directSectorMatch = tokens.preferredSectorsRaw.some(
+      (sec) => sec.split(/[\s,/&]+/).some((w) => w.length > 2 && `${v.category} ${v.title}`.toLowerCase().includes(w))
+    );
+    if (matchedSectorTag || directSectorMatch || wantsOtherOrAll) {
+      score += matchedSectorTag || directSectorMatch ? 24 : 22;
+      reasons.push(
+        v.isWashNgo ? "Preferred Sector: WASH / Humanitarian NGO" : matchedSectorTag || directSectorMatch ? `Preferred Sector: ${v.category}` : `General / Other Sector Match: ${v.category}`
+      );
+    }
+    const matchedSkills = Array.from(
+      new Set(
+        [...tokens.skillTokens, ...tokens.expertiseTokens].filter(
+          (s) => s.length >= 2 && combinedText.includes(s.toLowerCase())
+        )
+      )
+    );
+    if (matchedSkills.length > 0) {
+      score += Math.min(30, matchedSkills.length * 10);
+      reasons.push(`Matching skills: ${matchedSkills.slice(0, 3).join(", ")}`);
+    }
+    const matchedCerts = (profile.certifications || []).filter((c) => c.name && combinedText.includes(c.name.toLowerCase())).map((c) => c.name);
+    if (matchedCerts.length > 0) {
+      score += 15;
+      reasons.push(`Certification match: ${matchedCerts.slice(0, 2).join(", ")}`);
+    }
+    const matchedStudy = tokens.studyTokens.filter(
+      (s) => `${v.requiredFieldOfStudy} ${v.title} ${v.description}`.toLowerCase().includes(s)
+    );
+    if (matchedStudy.length > 0) {
+      score += 15;
+      reasons.push(`Field of study match: ${matchedStudy.slice(0, 2).join(", ")}`);
+    } else if (reqEduRank > 0 && userEduRank >= reqEduRank && userEduLabel) {
+      score += 10;
+      reasons.push(`Education eligible (${userEduLabel})`);
+    }
+    const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
+    if (matchedInterests.length > 0) {
+      score += 10;
+      reasons.push(`Career interest: ${matchedInterests[0]}`);
+    }
+    if (reqYears !== null && userExpYears >= reqYears) {
+      score += 10;
+      if (reqYears > 0) reasons.push(`Meets ${reqYears}+ yrs experience requirement`);
+    }
+    const locCityLower = (profile.locationCity || "").toLowerCase().trim();
+    const vLocLower = (v.location || "").toLowerCase();
+    if (locCityLower && vLocLower.includes(locCityLower) || userLocation && vLocLower.split(/[\s,/]+/).some((w) => w.length > 3 && userLocation.includes(w)) || vLocLower.includes("remote")) {
+      score += 8;
+      reasons.push(`Preferred location: ${v.location}`);
+    }
+    const hasRelevantMatch = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || Boolean(matchedSectorTag || directSectorMatch || wantsOtherOrAll);
+    if (!hasRelevantMatch || score < 22 || reasons.length === 0) continue;
+    if (reqYears !== null && reqYears - userExpYears > 5) continue;
+    if (reqEduRank >= EDUCATION_RANK.phd && userEduRank < EDUCATION_RANK.master) continue;
+    const isFullyQualified = missingMandatory.length === 0;
+    const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, Math.min(82, score - missingMandatory.length * 10));
+    results.push({
+      id: v.id,
+      sourceType: "domestic_job",
+      title: v.title,
+      organization: v.organization,
+      location: v.location,
+      category: v.category,
+      salary: v.salary && v.salary !== "Not specified" ? v.salary : void 0,
+      deadline: v.applicationDeadline,
+      matchScore: adjustedScore,
+      eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
+      isFullyQualified,
+      matchReasons: reasons.slice(0, 5),
+      missingMandatoryQualifications: missingMandatory,
+      requiredExperienceText: v.experienceYears || "Not specified",
+      requiredEducationText: v.educationQualification || "Not specified",
+      applyUrl: v.applicationUrl,
+      vacancy: v
+    });
+  }
+  for (const ij of internationalJobs || []) {
+    if (ij.verificationStatus !== "VERIFIED" || ij.approvalStatus && ij.approvalStatus !== "approved_public" || ij.applicationStatus === "closed" || ij.applicationStatus === "expired" || ij.ethiopiansEligible === "no" || isDeadlineExpired(ij.applicationDeadline)) {
+      continue;
+    }
+    const missingMandatory = [];
+    const reqYears = parseMinRequiredYears(ij.requiredExperience);
+    if (reqYears !== null && reqYears > userExpYears) {
+      missingMandatory.push(`Minimum ${reqYears} yrs experience required (profile has ${userExpYears} yrs)`);
+    }
+    const reqEduRank = detectEducationRank(ij.requiredEducation);
+    if (reqEduRank > 0 && userEduRank < reqEduRank && (userEduRank > 0 || reqEduRank >= EDUCATION_RANK.master)) {
+      missingMandatory.push(`${RANK_LABELS[reqEduRank] || ij.requiredEducation} required`);
+    }
+    const licenseGaps = detectMissingMandatoryLicenses(`${ij.jobTitle} ${ij.requiredEducation}`, profile);
+    missingMandatory.push(...licenseGaps);
+    const combinedText = `${ij.jobTitle} ${ij.category} ${ij.requiredEducation} ${ij.employerOrProgramme} ${ij.country} ${ij.languageRequirements}`.toLowerCase();
+    let score = 0;
+    const reasons = [];
+    const matchedTitle = tokens.titleTokens.filter((t) => combinedText.includes(t));
+    if (matchedTitle.length > 0) {
+      score += Math.min(35, matchedTitle.length * 14);
+      reasons.push(`International role fit (${matchedTitle.slice(0, 3).join(", ")})`);
+    }
+    const matchedSkills = Array.from(
+      new Set([...tokens.skillTokens, ...tokens.expertiseTokens].filter((s) => combinedText.includes(s)))
+    );
+    if (matchedSkills.length > 0) {
+      score += Math.min(25, matchedSkills.length * 10);
+      reasons.push(`Skill/expertise alignment: ${matchedSkills.slice(0, 3).join(", ")}`);
+    }
+    const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
+    if (matchedInterests.length > 0) {
+      score += 12;
+      reasons.push(`Career interest match: ${matchedInterests[0]}`);
+    }
+    if (ij.ethiopiansEligible === "yes") {
+      score += 8;
+      reasons.push(`Open to Ethiopian applicants (${ij.country})`);
+    }
+    if (score >= 28 && reasons.length >= 1 && (matchedTitle.length > 0 || matchedSkills.length > 0)) {
+      if (reqYears !== null && reqYears - userExpYears > 5) continue;
+      const isFullyQualified = missingMandatory.length === 0;
+      results.push({
+        id: ij.id,
+        sourceType: "international_job",
+        title: ij.jobTitle,
+        organization: ij.employerOrProgramme,
+        location: `${ij.location}, ${ij.country}`,
+        category: ij.category || "International Recruitment",
+        salary: ij.salary && !/not stated/i.test(ij.salary) ? ij.salary : void 0,
+        deadline: ij.applicationDeadline,
+        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
+        isFullyQualified,
+        matchReasons: reasons,
+        missingMandatoryQualifications: missingMandatory,
+        requiredExperienceText: ij.requiredExperience || "Official requirements apply",
+        requiredEducationText: ij.requiredEducation || "Official requirements apply",
+        applyUrl: ij.directApplicationUrl || ij.originalSourceUrl,
+        internationalJob: ij
+      });
+    }
+  }
+  for (const sc of scholarships || []) {
+    if (sc.verificationStatus !== "VERIFIED" || sc.approvalStatus && sc.approvalStatus !== "approved_public" || sc.applicationStatus === "closed" || sc.applicationStatus === "expired" || sc.ethiopiansEligible === "no" || isDeadlineExpired(sc.applicationDeadline)) {
+      continue;
+    }
+    const missingMandatory = [];
+    const reqYears = parseMinRequiredYears(sc.academicRequirements);
+    if (reqYears !== null && reqYears > userExpYears) {
+      missingMandatory.push(`Minimum ${reqYears} yrs experience required`);
+    }
+    if (sc.studyLevel === "Postgraduate / Master" && userEduRank > 0 && userEduRank < EDUCATION_RANK.bachelor) {
+      missingMandatory.push("Bachelor's Degree required");
+    }
+    if (sc.studyLevel === "PhD / Research" && userEduRank < EDUCATION_RANK.master) {
+      missingMandatory.push("Master's Degree required");
+    }
+    const combinedText = `${sc.scholarshipName} ${sc.studyProgramme} ${sc.academicRequirements} ${sc.universityOrInstitution} ${sc.country} ${sc.experienceCompensationNotes}`.toLowerCase();
+    let score = 0;
+    const reasons = [];
+    const matchedStudy = tokens.studyTokens.filter((s) => combinedText.includes(s));
+    if (matchedStudy.length > 0) {
+      score += Math.min(30, matchedStudy.length * 12);
+      reasons.push(`Academic background fit (${matchedStudy.slice(0, 2).join(", ")})`);
+    }
+    const matchedDomain = [...tokens.titleTokens, ...tokens.expertiseTokens, ...tokens.interestTokens].filter(
+      (t) => combinedText.includes(t)
+    );
+    if (matchedDomain.length > 0) {
+      score += Math.min(30, matchedDomain.length * 10);
+      reasons.push(`Programme match: ${matchedDomain.slice(0, 3).join(", ")}`);
+    }
+    if (sc.professionalExperienceCompensates === "confirmed_yes" && userExpYears >= 2) {
+      score += 15;
+      reasons.push(`Values your ${userExpYears}+ yrs experience`);
+    }
+    if (score >= 28 && reasons.length >= 1) {
+      const isFullyQualified = missingMandatory.length === 0;
+      results.push({
+        id: sc.id,
+        sourceType: "scholarship",
+        title: sc.scholarshipName,
+        organization: sc.universityOrInstitution,
+        location: sc.country,
+        category: `Scholarship (${sc.studyLevel})`,
+        deadline: sc.applicationDeadline,
+        matchScore: isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12),
+        eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
+        isFullyQualified,
+        matchReasons: reasons,
+        missingMandatoryQualifications: missingMandatory,
+        requiredExperienceText: sc.experienceCompensationNotes || "Experience valued",
+        requiredEducationText: sc.academicRequirements || sc.studyLevel,
+        applyUrl: sc.officialApplicationUrl || sc.originalSourceUrl,
+        scholarship: sc
+      });
+    }
+  }
+  return results.sort((a, b) => {
+    if (a.isFullyQualified !== b.isFullyQualified) return a.isFullyQualified ? -1 : 1;
+    return b.matchScore - a.matchScore;
+  }).slice(0, limit);
+}
+
+// src/types/jobSeeker.ts
+function evaluateMandatoryProfileCompletion(profile) {
+  const completedSections = [];
+  const missingSections = [];
+  let score = 0;
+  const hasPersonal = Boolean(
+    profile.fullName && profile.fullName.trim().length >= 2 && profile.email && profile.email.includes("@") && profile.phone && profile.phone.trim().length >= 6 && profile.locationCity && profile.locationCity.trim().length >= 2
+  );
+  if (hasPersonal) {
+    score += 20;
+    completedSections.push("Personal Information");
+  } else {
+    missingSections.push("Personal Information (Name, Phone & City)");
+  }
+  const hasEducation = Boolean(Array.isArray(profile.education) && profile.education.length > 0);
+  if (hasEducation) {
+    score += 20;
+    completedSections.push("Education");
+  } else {
+    missingSections.push("Education History");
+  }
+  const hasEmploymentOrNone = Boolean(
+    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.noExperience === true
+  );
+  if (hasEmploymentOrNone) {
+    score += 20;
+    completedSections.push(profile.noExperience ? "Employment Status (No Prior Experience)" : "Employment History");
+  } else {
+    missingSections.push("Employment History (or No-Experience selection)");
+  }
+  const hasCurrentOrPreviousJob = Boolean(
+    profile.currentPosition && profile.currentPosition.trim().length >= 2 || Array.isArray(profile.previousPositions) && profile.previousPositions.length > 0 || Array.isArray(profile.experience) && profile.experience.length > 0 || profile.noExperience === true
+  );
+  if (hasCurrentOrPreviousJob) {
+    score += 15;
+    completedSections.push("Current or Previous Role");
+  } else {
+    missingSections.push("Current or Previous Job Title");
+  }
+  const hasIndustry = Boolean(
+    profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0
+  );
+  if (hasIndustry) {
+    score += 15;
+    completedSections.push("Professional Industry");
+  } else {
+    missingSections.push("Professional Industry");
+  }
+  const hasPreferredPosition = Boolean(profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2);
+  if (hasPreferredPosition) {
+    score += 10;
+    completedSections.push("Preferred Job Position");
+  } else {
+    missingSections.push("Preferred Job Position");
+  }
+  const bounded = Math.min(100, Math.max(0, score));
+  return {
+    percentage: bounded,
+    completedSections,
+    missingSections,
+    isProfileComplete: missingSections.length === 0
+  };
+}
+var DEFAULT_JOB_SEEKER_PROFILE = {
+  uid: "",
+  email: "",
+  fullName: "",
+  phone: "",
+  locationCity: "Addis Ababa",
+  locationRegion: "Addis Ababa",
+  accountRole: "staff",
+  accountStatus: "active",
+  staffDepartmentOrSector: "",
+  currentPosition: "",
+  previousPositions: [],
+  employmentStatus: "unemployed",
+  desiredJobTitle: "",
+  preferredIndustry: "",
+  preferredSectors: [],
+  yearsOfExperience: "",
+  expectedSalaryEtb: "",
+  preferredEmploymentType: "Full-time",
+  preferredWorkLocation: "Addis Ababa",
+  skills: [],
+  areasOfExpertise: [],
+  professionalInterests: [],
+  certifications: [],
+  education: [],
+  experience: [],
+  documents: [],
+  jobPreferences: {
+    fullTime: true,
+    partTime: false,
+    contract: false,
+    internship: false,
+    remote: false,
+    freshGraduate: true
+  },
+  noExperience: false,
+  profileStatus: "incomplete",
+  profileCompletionPercentage: 0,
+  createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+  updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+};
+
+// serverUserEngine.ts
+function registerUserNotificationAndAnalyticsRoutes(ctx) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel = false,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    saveUserProfileMap,
+    loadJobApplications,
+    loadPersistedSettings,
+    loadPersistedInternationalData,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification
+  } = ctx;
+  const DATA_DIR = path.join(runtimeBaseDir, "data");
+  const VACANCIES_CATALOG_FILE = path.join(DATA_DIR, "vacancies_catalog.json");
+  const USER_RECOMMENDATIONS_FILE = path.join(DATA_DIR, "user_recommendations.json");
+  const USER_NOTIFICATIONS_FILE = path.join(DATA_DIR, "user_notifications.json");
+  const NOTIFICATION_PREFS_FILE = path.join(DATA_DIR, "notification_preferences.json");
+  const NOTIFICATION_QUEUE_FILE = path.join(DATA_DIR, "notification_queue.json");
+  const SCHEDULER_RUNS_FILE = path.join(DATA_DIR, "scheduler_runs.json");
+  const VAPID_KEYS_FILE = path.join(DATA_DIR, "vapid_keys.json");
+  let webpushLib = null;
+  let nodemailerLib = null;
+  let vapidKeysCache = null;
+  let webPushConfigured = false;
+  let backgroundQueueActive = false;
+  let schedulerRunActive = false;
+  async function ensureWebPush() {
+    if (webPushConfigured && webpushLib) return webpushLib;
+    try {
+      const mod = await import("web-push");
+      webpushLib = mod.default || mod;
+      const envPub = (process.env.VAPID_PUBLIC_KEY || "").trim();
+      const envPriv = (process.env.VAPID_PRIVATE_KEY || "").trim();
+      if (envPub && envPriv) {
+        vapidKeysCache = { publicKey: envPub, privateKey: envPriv };
+      } else {
+        const persisted = loadJsonFileSafe(VAPID_KEYS_FILE, {});
+        if (persisted?.publicKey && persisted?.privateKey) {
+          vapidKeysCache = { publicKey: persisted.publicKey, privateKey: persisted.privateKey };
+        } else {
+          const generated = webpushLib.generateVAPIDKeys();
+          vapidKeysCache = { publicKey: generated.publicKey, privateKey: generated.privateKey };
+          ensureRuntimeDataDir();
+          writeJsonFileAtomic(VAPID_KEYS_FILE, {
+            ...vapidKeysCache,
+            createdAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+        }
+      }
+      const subject = (process.env.VAPID_SUBJECT || "mailto:nexusitsoultion@gmail.com").trim();
+      webpushLib.setVapidDetails(subject, vapidKeysCache.publicKey, vapidKeysCache.privateKey);
+      webPushConfigured = true;
+      return webpushLib;
+    } catch (err) {
+      console.warn("Web Push init notice:", err?.message || err);
+      return null;
+    }
+  }
+  function isSmtpConfigured() {
+    return Boolean(
+      (process.env.SMTP_HOST || "").trim() && (process.env.SMTP_USER || "").trim() && (process.env.SMTP_PASS || "").trim()
+    );
+  }
+  function getEnvironmentReadinessReport() {
+    const envPub = (process.env.VAPID_PUBLIC_KEY || "").trim();
+    const envPriv = (process.env.VAPID_PRIVATE_KEY || "").trim();
+    const persistedVapid = loadJsonFileSafe(VAPID_KEYS_FILE, {});
+    const hasEnvVapid = Boolean(envPub && envPriv);
+    const hasFileVapid = Boolean(persistedVapid?.publicKey && persistedVapid?.privateKey);
+    const smtpHost = (process.env.SMTP_HOST || "").trim();
+    const smtpPort = (process.env.SMTP_PORT || "587").trim();
+    const smtpUser = (process.env.SMTP_USER || "").trim();
+    const smtpPassConfigured = Boolean((process.env.SMTP_PASS || "").trim());
+    const smtpFrom = (process.env.SMTP_FROM || smtpUser || "nexusitsoultion@gmail.com").trim();
+    const vapidSubject = (process.env.VAPID_SUBJECT || "mailto:nexusitsoultion@gmail.com").trim();
+    const geminiConfigured = Boolean((process.env.GEMINI_API_KEY || "").trim());
+    const cronSecretConfigured = Boolean((process.env.CRON_SECRET || "").trim());
+    const missingEnvVars = [];
+    if (!smtpHost) missingEnvVars.push("SMTP_HOST");
+    if (!smtpUser) missingEnvVars.push("SMTP_USER");
+    if (!smtpPassConfigured) missingEnvVars.push("SMTP_PASS");
+    if (!envPub) missingEnvVars.push("VAPID_PUBLIC_KEY");
+    if (!envPriv) missingEnvVars.push("VAPID_PRIVATE_KEY");
+    if (!geminiConfigured) missingEnvVars.push("GEMINI_API_KEY");
+    return {
+      runtime: isVercel ? "vercel_serverless" : "node_server",
+      smtpConfigured: Boolean(smtpHost && smtpUser && smtpPassConfigured),
+      smtpHost: smtpHost || "not_set",
+      smtpPort,
+      smtpUserConfigured: Boolean(smtpUser),
+      smtpPassConfigured,
+      smtpFrom,
+      vapidConfigured: hasEnvVapid || hasFileVapid,
+      vapidSource: hasEnvVapid ? "environment" : hasFileVapid ? "persisted_file" : "unset",
+      vapidSubject,
+      geminiConfigured,
+      cronSecretConfigured,
+      missingEnvVars
+    };
+  }
+  (() => {
+    const report = getEnvironmentReadinessReport();
+    if (report.missingEnvVars.length > 0) {
+      console.warn(
+        `[HOPELAND ENV CHECK] Runtime=${report.runtime} \xB7 SMTP=${report.smtpConfigured ? "ready" : "missing"} \xB7 VAPID=${report.vapidSource} \xB7 GEMINI=${report.geminiConfigured ? "ready" : "missing"} \xB7 Unset env vars: ${report.missingEnvVars.join(", ")}`
+      );
+    } else {
+      console.log(
+        `[HOPELAND ENV CHECK] Runtime=${report.runtime} \xB7 All required SMTP, VAPID, and Gemini environment variables validated.`
+      );
+    }
+  })();
+  async function ensureNodemailer() {
+    if (!isSmtpConfigured()) return null;
+    if (nodemailerLib) return nodemailerLib;
+    try {
+      const mod = await import("nodemailer");
+      nodemailerLib = mod.default || mod;
+      return nodemailerLib;
+    } catch {
+      return null;
+    }
+  }
+  function loadVacanciesCatalog() {
+    const list = loadJsonFileSafe(VACANCIES_CATALOG_FILE, []);
+    return Array.isArray(list) ? list : [];
+  }
+  function saveVacanciesCatalog(list) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(VACANCIES_CATALOG_FILE, list);
+  }
+  function loadAllRecommendations() {
+    const data = loadJsonFileSafe(USER_RECOMMENDATIONS_FILE, {});
+    return data && typeof data === "object" ? data : {};
+  }
+  function saveAllRecommendations(map) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(USER_RECOMMENDATIONS_FILE, map);
+  }
+  function loadAllNotifications() {
+    const data = loadJsonFileSafe(USER_NOTIFICATIONS_FILE, {});
+    return data && typeof data === "object" ? data : {};
+  }
+  function saveAllNotifications(map) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(USER_NOTIFICATIONS_FILE, map);
+  }
+  function loadAllNotificationPrefs() {
+    const data = loadJsonFileSafe(NOTIFICATION_PREFS_FILE, {});
+    return data && typeof data === "object" ? data : {};
+  }
+  function saveAllNotificationPrefs(map) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(NOTIFICATION_PREFS_FILE, map);
+  }
+  function loadNotificationQueue() {
+    const list = loadJsonFileSafe(NOTIFICATION_QUEUE_FILE, []);
+    return Array.isArray(list) ? list : [];
+  }
+  function saveNotificationQueue(list) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(NOTIFICATION_QUEUE_FILE, list);
+  }
+  function loadSchedulerStore() {
+    const fallback = {
+      lastRunStartedAt: null,
+      lastSuccessfulRunAt: null,
+      lastRunStatus: null,
+      recentErrors: [],
+      runs: []
+    };
+    const data = loadJsonFileSafe(SCHEDULER_RUNS_FILE, fallback);
+    if (!data || typeof data !== "object") return fallback;
+    return {
+      lastRunStartedAt: data.lastRunStartedAt || null,
+      lastSuccessfulRunAt: data.lastSuccessfulRunAt || null,
+      lastRunStatus: data.lastRunStatus || null,
+      recentErrors: Array.isArray(data.recentErrors) ? data.recentErrors : [],
+      runs: Array.isArray(data.runs) ? data.runs : []
+    };
+  }
+  function saveSchedulerStore(store) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(SCHEDULER_RUNS_FILE, {
+      ...store,
+      recentErrors: (store.recentErrors || []).slice(0, 30),
+      runs: (store.runs || []).slice(0, 60)
+    });
+  }
+  function recordSystemNotificationError(source, message) {
+    const store = loadSchedulerStore();
+    store.recentErrors.unshift({
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      source,
+      message: String(message || "Unknown error").slice(0, 400)
+    });
+    saveSchedulerStore(store);
+  }
+  function getNextQuarterHourIso(fromDate = /* @__PURE__ */ new Date()) {
+    const d = new Date(fromDate.getTime());
+    const mins = d.getMinutes();
+    const nextMin = Math.floor(mins / 15) * 15 + 15;
+    d.setMinutes(nextMin, 0, 0);
+    return d.toISOString();
+  }
+  function buildDefaultPreferences(uid) {
+    return {
+      userId: uid,
+      permissionStatus: "default",
+      subscriptionStatus: "none",
+      frequency: "instant",
+      promptDismissCount: 0,
+      channels: {
+        websiteBell: true,
+        browserPush: false,
+        mobilePush: false,
+        emailAlerts: false
+      },
+      alertTypes: {
+        newMatches: true,
+        deadlineReminders: true,
+        jobChanges: true,
+        sectorUpdates: true
+      },
+      preferredSectors: [],
+      deviceSubscriptions: [],
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  function mergeExternalUsersSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") {
+      return { profilesMerged: 0, prefsMerged: 0, subsMerged: 0 };
+    }
+    const profilesMap = loadUserProfiles();
+    const prefsMap = loadAllNotificationPrefs();
+    let profilesMerged = 0;
+    let prefsMerged = 0;
+    let subsMerged = 0;
+    if (Array.isArray(snapshot.profiles)) {
+      for (const incoming of snapshot.profiles) {
+        if (!incoming?.uid) continue;
+        const existing = profilesMap[incoming.uid];
+        const incTs = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+        const extTs = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
+        if (!existing || incTs >= extTs) {
+          profilesMap[incoming.uid] = {
+            ...existing || {},
+            ...incoming,
+            uid: incoming.uid,
+            accountRole: incoming.accountRole || existing?.accountRole || "staff",
+            accountStatus: existing?.accountStatus || incoming.accountStatus || "active"
+          };
+          profilesMerged += 1;
+        }
+        if (!prefsMap[incoming.uid]) {
+          prefsMap[incoming.uid] = buildDefaultPreferences(incoming.uid);
+        }
+      }
+      saveUserProfileMap(profilesMap);
+    }
+    if (Array.isArray(snapshot.preferences)) {
+      for (const pref of snapshot.preferences) {
+        const uid = pref?.userId;
+        if (!uid) continue;
+        const existing = prefsMap[uid] || buildDefaultPreferences(uid);
+        const existingTs = new Date(existing.updatedAt || 0).getTime();
+        const incomingTs = new Date(pref.updatedAt || 0).getTime();
+        const base = incomingTs >= existingTs ? { ...existing, ...pref } : { ...pref, ...existing };
+        prefsMap[uid] = {
+          ...base,
+          userId: uid,
+          channels: {
+            ...existing.channels,
+            ...pref.channels || {},
+            ...incomingTs >= existingTs ? pref.channels || {} : existing.channels || {}
+          },
+          alertTypes: {
+            ...existing.alertTypes,
+            ...pref.alertTypes || {}
+          },
+          deviceSubscriptions: Array.isArray(pref.deviceSubscriptions) && pref.deviceSubscriptions.length > 0 && incomingTs >= existingTs ? pref.deviceSubscriptions : Array.isArray(existing.deviceSubscriptions) && existing.deviceSubscriptions.length > 0 ? existing.deviceSubscriptions : Array.isArray(pref.deviceSubscriptions) ? pref.deviceSubscriptions : []
+        };
+        prefsMerged += 1;
+      }
+    }
+    if (Array.isArray(snapshot.pushSubscriptions)) {
+      for (const subDoc of snapshot.pushSubscriptions) {
+        const uid = subDoc?.userId;
+        const endpoint = subDoc?.endpoint || subDoc?.subscription?.endpoint;
+        if (!uid || !endpoint) continue;
+        const pref = prefsMap[uid] || buildDefaultPreferences(uid);
+        const devices = Array.isArray(pref.deviceSubscriptions) ? pref.deviceSubscriptions : [];
+        const devId = String(subDoc.deviceId || endpoint.slice(-24));
+        const filtered = devices.filter((d) => d.deviceId !== devId && d.endpoint !== endpoint);
+        const keys = subDoc.keys || subDoc.subscription?.keys;
+        if (subDoc.active !== false && keys?.p256dh && keys?.auth) {
+          filtered.unshift({
+            deviceId: devId,
+            deviceLabel: String(subDoc.deviceLabel || "Web Browser"),
+            platform: String(subDoc.platform || "web"),
+            endpoint,
+            subscription: {
+              endpoint,
+              expirationTime: subDoc.expirationTime ?? subDoc.subscription?.expirationTime ?? null,
+              keys: {
+                p256dh: keys.p256dh,
+                auth: keys.auth
+              }
+            },
+            active: true,
+            createdAt: subDoc.createdAt || subDoc.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            lastVerifiedAt: subDoc.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+          });
+          pref.permissionStatus = "granted";
+          pref.subscriptionStatus = "active";
+          pref.channels = {
+            ...pref.channels,
+            websiteBell: true,
+            browserPush: true,
+            mobilePush: pref.channels?.mobilePush || /android|iphone|ipad|ios|mobile/i.test(`${subDoc.platform || ""} ${subDoc.deviceLabel || ""}`)
+          };
+          subsMerged += 1;
+        }
+        pref.deviceSubscriptions = filtered.slice(0, 15);
+        prefsMap[uid] = pref;
+      }
+    }
+    saveAllNotificationPrefs(prefsMap);
+    return { profilesMerged, prefsMerged, subsMerged };
+  }
+  function isSelfOrOwner(req, targetUid) {
+    const reqUid = getRequesterUid(req);
+    if (reqUid && reqUid === targetUid) return true;
+    if (isPersistentOwnerRequest(req)) return true;
+    return false;
+  }
+  function getAddisDateKey(dateInput) {
+    const d = dateInput ? new Date(dateInput) : /* @__PURE__ */ new Date();
+    if (Number.isNaN(d.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Addis_Ababa",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(d);
+    } catch {
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  function buildJobUrl(vacancyId) {
+    const settings = loadPersistedSettings() || {};
+    const domain = String(settings.customDomain || "hopelandjobs.tech").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `https://${domain}/?jobId=${encodeURIComponent(vacancyId)}`;
+  }
+  async function sendWebPushToUser(uid, payload) {
+    const allPrefs = loadAllNotificationPrefs();
+    const prefs = allPrefs[uid];
+    if (!prefs || !prefs.channels?.browserPush && !prefs.channels?.mobilePush) {
+      return { deliveredCount: 0, failedCount: 0, expiredEndpoints: [], errors: [] };
+    }
+    const activeDevices = (prefs.deviceSubscriptions || []).filter((d) => d.active && d.subscription?.endpoint);
+    if (activeDevices.length === 0) {
+      return { deliveredCount: 0, failedCount: 0, expiredEndpoints: [], errors: [] };
+    }
+    const wp = await ensureWebPush();
+    if (!wp) {
+      return { deliveredCount: 0, failedCount: activeDevices.length, expiredEndpoints: [], errors: ["Web Push unavailable"] };
+    }
+    let deliveredCount = 0;
+    let failedCount = 0;
+    const expiredEndpoints = [];
+    const errors = [];
+    let prefsDirty = false;
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    for (const dev of activeDevices) {
+      try {
+        await wp.sendNotification(dev.subscription, JSON.stringify(payload), { TTL: 86400 });
+        deliveredCount += 1;
+        dev.lastDeliveredAt = nowIso;
+        dev.lastVerifiedAt = nowIso;
+        dev.lastFailureReason = void 0;
+        prefs.lastSuccessfulDeliveryAt = nowIso;
+        prefsDirty = true;
+      } catch (err) {
+        const statusCode = err?.statusCode || err?.code;
+        const msg = err?.message || String(err);
+        if (statusCode === 404 || statusCode === 410) {
+          dev.active = false;
+          dev.lastFailureReason = `Subscription expired (${statusCode})`;
+          expiredEndpoints.push(dev.subscription.endpoint);
+          prefsDirty = true;
+        } else {
+          dev.lastFailureReason = msg;
+          prefsDirty = true;
+        }
+        failedCount += 1;
+        errors.push(msg);
+      }
+    }
+    if (prefsDirty) {
+      const stillHasActive = (prefs.deviceSubscriptions || []).some((d) => d.active);
+      if (!stillHasActive && expiredEndpoints.length > 0) {
+        prefs.subscriptionStatus = "expired";
+      }
+      prefs.updatedAt = nowIso;
+      allPrefs[uid] = prefs;
+      saveAllNotificationPrefs(allPrefs);
+    }
+    return { deliveredCount, failedCount, expiredEndpoints, errors };
+  }
+  async function sendEmailAlertToUser(profile, notif) {
+    if (!profile?.email) return { status: "skipped_no_smtp", error: "No registered email" };
+    if (!isSmtpConfigured()) return { status: "skipped_no_smtp" };
+    const nm = await ensureNodemailer();
+    if (!nm) return { status: "skipped_no_smtp" };
+    try {
+      const transporter = nm.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587", 10),
+        secure: parseInt(process.env.SMTP_PORT || "587", 10) === 465,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      });
+      const fromAddress = (process.env.SMTP_FROM || process.env.SMTP_USER || "nexusitsoultion@gmail.com").trim();
+      const salaryLine = notif.salary ? `<p><strong>Verified Salary:</strong> ${notif.salary}</p>` : "";
+      const missingLine = notif.missingMandatoryQualifications?.length > 0 ? `<p style="color:#b45309"><strong>Note on Mandatory Requirements:</strong> ${notif.missingMandatoryQualifications.join("; ")}</p>` : "";
+      await transporter.sendMail({
+        from: fromAddress,
+        to: profile.email,
+        subject: `New Job Recommendation for You! (${notif.matchScore}%): ${notif.title} at ${notif.employer}`,
+        text: [
+          `Hello ${profile.fullName || "Candidate"},`,
+          ``,
+          `New Job Recommendation for You!`,
+          `A new job matching your profile and qualifications has been published. Open Hopeland Jobs to view the details and apply.`,
+          `Job Title: ${notif.title}`,
+          `Employer: ${notif.employer}`,
+          `Location: ${notif.location}`,
+          notif.salary ? `Salary: ${notif.salary}` : "",
+          `Deadline: ${notif.deadline || "Open"}`,
+          `Why it matches: ${notif.matchReasonSummary}`,
+          notif.missingMandatoryQualifications?.length ? `Missing Mandatory Qualifications: ${notif.missingMandatoryQualifications.join("; ")}` : "",
+          `View & Apply: ${notif.jobUrl}`
+        ].filter(Boolean).join("\n"),
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <div style="background:#0B132B;color:#ffffff;padding:20px;">
+              <h2 style="margin:0;color:#F59E0B;">HOPELAND JOBS \u2014 Personalized Opportunity Alert</h2>
+              <p style="margin:6px 0 0;font-size:13px;color:#cbd5e1;">${notif.matchScore}% Profile Match</p>
+            </div>
+            <div style="padding:20px;color:#0f172a;font-size:14px;line-height:1.5;">
+              <p>Hello <strong>${profile.fullName || "Professional"}</strong>,</p>
+              <h3 style="margin-bottom:4px;">${notif.title}</h3>
+              <p style="margin-top:0;color:#475569;"><strong>Employer:</strong> ${notif.employer} \xB7 <strong>Location:</strong> ${notif.location}</p>
+              ${salaryLine}
+              <p><strong>Deadline:</strong> ${notif.deadline || "Open"}</p>
+              <p><strong>Why this matches you:</strong> ${notif.matchReasonSummary}</p>
+              ${missingLine}
+              <div style="margin-top:20px;">
+                <a href="${notif.jobUrl}" style="display:inline-block;background:#0B132B;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:bold;">
+                  View Vacancy &amp; Apply
+                </a>
+              </div>
+            </div>
+          </div>
+        `
+      });
+      return { status: "sent" };
+    } catch (err) {
+      return { status: "failed", error: err?.message || String(err) };
+    }
+  }
+  function enqueueDeliveryRetry(item) {
+    const queue = loadNotificationQueue();
+    const exists = queue.some(
+      (q) => q.notificationId === item.notificationId && q.channel === item.channel && q.status === "pending"
+    );
+    if (exists) return;
+    queue.unshift({
+      id: `nq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: item.userId,
+      notificationId: item.notificationId,
+      channel: item.channel,
+      payload: item.payload,
+      attempts: 1,
+      maxAttempts: 3,
+      status: "pending",
+      lastError: item.reason,
+      nextRetryAt: new Date(Date.now() + 30 * 1e3).toISOString(),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    saveNotificationQueue(queue.slice(0, 500));
+  }
+  async function processRetryQueueCycle() {
+    if (backgroundQueueActive) {
+      return { processed: 0, succeeded: 0, failed: 0, errors: [] };
+    }
+    backgroundQueueActive = true;
+    let processed = 0;
+    let succeeded = 0;
+    let failed = 0;
+    const errors = [];
+    try {
+      const queue = loadNotificationQueue();
+      if (queue.length === 0) return { processed: 0, succeeded: 0, failed: 0, errors: [] };
+      const now = Date.now();
+      const profiles = loadUserProfiles();
+      const allNotifs = loadAllNotifications();
+      let changed = false;
+      for (const qItem of queue) {
+        if (qItem.status !== "pending") continue;
+        if (new Date(qItem.nextRetryAt).getTime() > now) continue;
+        const profile = profiles[qItem.userId];
+        if (!profile || profile.accountStatus === "suspended") {
+          qItem.status = "failed";
+          qItem.lastError = "User account inactive or suspended";
+          qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          changed = true;
+          continue;
+        }
+        if (qItem.channel === "push") {
+          const pushRes = await sendWebPushToUser(qItem.userId, qItem.payload);
+          if (pushRes.deliveredCount > 0) {
+            qItem.status = "delivered";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            const userNotifs = allNotifs[qItem.userId] || [];
+            const targetNotif = userNotifs.find((n) => n.id === qItem.notificationId);
+            if (targetNotif) {
+              targetNotif.channels.push = "sent";
+              targetNotif.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            }
+            changed = true;
+          } else if (pushRes.expiredEndpoints.length > 0 && pushRes.failedCount === pushRes.expiredEndpoints.length) {
+            qItem.status = "failed";
+            qItem.lastError = "Push subscription expired (410/404)";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            changed = true;
+          } else {
+            qItem.attempts += 1;
+            qItem.lastError = pushRes.errors[0] || "Push delivery retry failed";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            if (qItem.attempts >= qItem.maxAttempts) {
+              qItem.status = "failed";
+              pushAdminNotification({
+                type: "system_recovery",
+                title: "Push Notification Delivery Failure",
+                message: `Failed pushing vacancy notification to ${profile.email || qItem.userId} after ${qItem.attempts} attempts: ${qItem.lastError}`,
+                severity: "warning"
+              });
+            } else {
+              qItem.nextRetryAt = new Date(now + qItem.attempts * 2 * 60 * 1e3).toISOString();
+            }
+            changed = true;
+          }
+        } else if (qItem.channel === "email") {
+          const emailRes = await sendEmailAlertToUser(profile, qItem.payload);
+          processed += 1;
+          if (emailRes.status === "sent") {
+            qItem.status = "delivered";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            const userNotifs = allNotifs[qItem.userId] || [];
+            const targetNotif = userNotifs.find((n) => n.id === qItem.notificationId);
+            if (targetNotif) {
+              targetNotif.channels.email = "sent";
+              targetNotif.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            }
+            succeeded += 1;
+            changed = true;
+          } else if (emailRes.status === "skipped_no_smtp") {
+            qItem.status = "failed";
+            qItem.lastError = "SMTP server not configured";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            failed += 1;
+            errors.push(`Email skipped (SMTP not configured) for ${qItem.userId}`);
+            changed = true;
+          } else {
+            qItem.attempts += 1;
+            qItem.lastError = emailRes.error || "Email delivery failed";
+            qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            errors.push(qItem.lastError);
+            if (qItem.attempts >= qItem.maxAttempts) {
+              qItem.status = "failed";
+              failed += 1;
+              recordSystemNotificationError("email_retry", `Email alert failed for ${profile.email}: ${qItem.lastError}`);
+              pushAdminNotification({
+                type: "system_recovery",
+                title: "Email Job Alert Failure",
+                message: `Email alert failed for ${profile.email}: ${qItem.lastError}`,
+                severity: "warning"
+              });
+            } else {
+              qItem.nextRetryAt = new Date(now + qItem.attempts * 5 * 60 * 1e3).toISOString();
+            }
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        saveNotificationQueue(queue);
+        saveAllNotifications(allNotifs);
+      }
+      return { processed, succeeded, failed, errors };
+    } finally {
+      backgroundQueueActive = false;
+    }
+  }
+  function isFrequencyWindowReady(prefs, alertKind) {
+    if (alertKind === "deadline_reminder") return true;
+    const freq = prefs?.frequency || "instant";
+    if (freq === "instant") return true;
+    const lastDigestMs = prefs?.lastDigestSentAt ? new Date(prefs.lastDigestSentAt).getTime() : 0;
+    if (!lastDigestMs) return true;
+    const elapsedMs = Date.now() - lastDigestMs;
+    if (freq === "daily") return elapsedMs >= 23 * 60 * 60 * 1e3;
+    if (freq === "weekly") return elapsedMs >= 6.5 * 24 * 60 * 60 * 1e3;
+    return true;
+  }
+  async function dispatchNotificationForUser(profile, rec, alertKind, options = {}) {
+    if (!profile?.uid || profile.accountStatus === "suspended") return null;
+    const uid = profile.uid;
+    const allPrefs = loadAllNotificationPrefs();
+    const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
+    if (!options.isTestNotification) {
+      if (alertKind === "new_match" && prefs.alertTypes?.newMatches === false) return null;
+      if (alertKind === "deadline_reminder" && prefs.alertTypes?.deadlineReminders === false) return null;
+      if (alertKind === "job_updated" && prefs.alertTypes?.jobChanges === false) return null;
+      if (alertKind === "sector_opportunity" && prefs.alertTypes?.sectorUpdates === false) return null;
+    }
+    if (!options.ignoreFrequencyWindow && !isFrequencyWindowReady(prefs, alertKind)) {
+      return null;
+    }
+    if (!options.isTestNotification && isDeadlineExpired(rec.deadline)) return null;
+    const dateStamp = alertKind === "job_updated" ? `::${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}` : "";
+    const dedupeKey = options.isTestNotification ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}` : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
+    const allNotifs = loadAllNotifications();
+    const existingList = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+    if (!options.isTestNotification && existingList.some((n) => n.dedupeKey === dedupeKey || n.vacancyId === rec.id && n.sourceType !== "system")) {
+      return null;
+    }
+    if (!options.bypassRateLimit) {
+      const todayKey = getAddisDateKey(/* @__PURE__ */ new Date());
+      const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1e3;
+      const todayCount = existingList.filter((n) => {
+        if (n.sourceType === "system" || n.alertKind === "system_test") return false;
+        const ts = new Date(n.createdAt).getTime();
+        return getAddisDateKey(n.createdAt) === todayKey || !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
+      }).length;
+      if (todayCount >= 3) {
+        return null;
+      }
+    }
+    const jobUrl = rec.sourceType === "domestic_job" ? buildJobUrl(rec.id) : rec.applyUrl || buildJobUrl(rec.id);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const notifId = `unotif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const notifRecord = {
+      id: notifId,
+      userId: uid,
+      vacancyId: rec.id,
+      sourceType: rec.sourceType,
+      alertKind,
+      dedupeKey,
+      title: options.isTestNotification ? `[Test Alert] ${rec.title}` : rec.title,
+      employer: rec.organization,
+      location: rec.location,
+      category: rec.category,
+      salary: rec.salary || void 0,
+      deadline: rec.deadline || "Open",
+      matchScore: rec.matchScore,
+      matchReasonSummary: options.customNote || rec.matchReasons[0] || `Matched your profile in ${rec.category}`,
+      matchReasons: options.customNote ? [options.customNote, ...rec.matchReasons] : rec.matchReasons,
+      missingMandatoryQualifications: rec.missingMandatoryQualifications || [],
+      applicationUrl: rec.applyUrl || jobUrl,
+      jobUrl,
+      read: false,
+      channels: {
+        website: "delivered",
+        push: "skipped",
+        email: "skipped"
+      },
+      createdAt: nowIso,
+      expiresAt: rec.deadline && !/rolling|open|ongoing/i.test(rec.deadline) ? rec.deadline : void 0,
+      updatedAt: nowIso
+    };
+    if (options.dryRun) {
+      return notifRecord;
+    }
+    allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
+    saveAllNotifications(allNotifs);
+    const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
+    if (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) {
+      const pushPrefix = alertKind === "deadline_reminder" ? "Closing Soon: " : alertKind === "job_updated" ? "Updated Vacancy: " : "New Matching Job: ";
+      const pushPayload = {
+        title: `${pushPrefix}${rec.title} (${rec.matchScore}% Match)`,
+        body: `${rec.organization} \xB7 ${rec.location}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}. Tap to view and apply.`,
+        url: rec.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}` : jobUrl,
+        jobId: rec.id,
+        notificationId: notifId,
+        tag: `vacancy-${rec.id}`
+      };
+      const pushRes = await sendWebPushToUser(uid, pushPayload);
+      if (pushRes.deliveredCount > 0) {
+        notifRecord.channels.push = "sent";
+      } else if (pushRes.failedCount > 0) {
+        notifRecord.channels.push = "queued";
+        enqueueDeliveryRetry({
+          userId: uid,
+          notificationId: notifId,
+          channel: "push",
+          payload: pushPayload,
+          reason: pushRes.errors[0] || "Push delivery failed"
+        });
+      }
+    }
+    notifRecord.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    allNotifs[uid] = [notifRecord, ...allNotifs[uid].filter((n) => n.id !== notifId)];
+    saveAllNotifications(allNotifs);
+    return notifRecord;
+  }
+  async function recalculateForUser(profile, options = {}) {
+    if (!profile?.uid || profile.accountStatus === "suspended") {
+      return { recommendations: [], newNotifications: [] };
+    }
+    const vacancies = loadVacanciesCatalog().filter(isVerifiedActiveVacancy);
+    const intl = loadPersistedInternationalData();
+    const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
+    const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
+    const recs = computeStaffOpportunityRecommendations(profile, vacancies, intlJobs, scholarships, 40);
+    const compactRecs = recs.map((r) => ({
+      id: r.id,
+      sourceType: r.sourceType,
+      title: r.title,
+      organization: r.organization,
+      location: r.location,
+      category: r.category,
+      salary: r.salary,
+      deadline: r.deadline,
+      matchScore: r.matchScore,
+      eligibilityStatus: r.eligibilityStatus,
+      isFullyQualified: r.isFullyQualified,
+      matchReasons: r.matchReasons,
+      missingMandatoryQualifications: r.missingMandatoryQualifications,
+      requiredExperienceText: r.requiredExperienceText,
+      requiredEducationText: r.requiredEducationText,
+      applyUrl: r.applyUrl
+    }));
+    if (!options.dryRun) {
+      const allRecs = loadAllRecommendations();
+      allRecs[profile.uid] = {
+        recalculatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        items: compactRecs
+      };
+      saveAllRecommendations(allRecs);
+      const allNotifs = loadAllNotifications();
+      if (Array.isArray(allNotifs[profile.uid])) {
+        const vacancyMap = new Map(loadVacanciesCatalog().map((v) => [v.id, v]));
+        const activeFiltered = allNotifs[profile.uid].filter((n) => {
+          if (n.sourceType === "system") return true;
+          if (isDeadlineExpired(n.deadline || n.expiresAt)) return false;
+          const linkedVac = vacancyMap.get(n.vacancyId);
+          if (linkedVac && linkedVac.status !== "published") return false;
+          return true;
+        });
+        if (activeFiltered.length !== allNotifs[profile.uid].length) {
+          allNotifs[profile.uid] = activeFiltered;
+          saveAllNotifications(allNotifs);
+        }
+      }
+    }
+    const newNotifications = [];
+    if (options.sendNotifications) {
+      const changedSet = new Set(
+        [
+          ...options.changedVacancyId ? [options.changedVacancyId] : [],
+          ...Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []
+        ].filter(Boolean)
+      );
+      const qualified = compactRecs.filter(
+        (r) => r.isFullyQualified && (r.matchScore >= 24 || changedSet.has(r.id))
+      );
+      const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
+      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id)).slice(0, 5);
+      const prioritized = [...changedMatches, ...topGeneralMatches];
+      for (const r of prioritized) {
+        let alertKind = "new_match";
+        if (changedSet.has(r.id) && options.changeType === "updated") {
+          alertKind = "job_updated";
+        } else if (isDeadlineApproaching(r.deadline, 72)) {
+          alertKind = "deadline_reminder";
+        }
+        const sent = await dispatchNotificationForUser(profile, r, alertKind, {
+          dryRun: options.dryRun
+        });
+        if (sent) newNotifications.push(sent);
+        if (alertKind === "new_match" && isDeadlineApproaching(r.deadline, 72)) {
+          const dlSent = await dispatchNotificationForUser(profile, r, "deadline_reminder", {
+            dryRun: options.dryRun
+          });
+          if (dlSent) newNotifications.push(dlSent);
+        }
+      }
+      if (!options.dryRun && newNotifications.length > 0) {
+        const allPrefs = loadAllNotificationPrefs();
+        if (allPrefs[profile.uid]) {
+          allPrefs[profile.uid].lastDigestSentAt = (/* @__PURE__ */ new Date()).toISOString();
+          allPrefs[profile.uid].updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          saveAllNotificationPrefs(allPrefs);
+        }
+      }
+    }
+    return { recommendations: recs, newNotifications };
+  }
+  async function executeAutomatedSchedulerSweep(options) {
+    if (schedulerRunActive) {
+      return { skipped: true, reason: "Another scheduler sweep is currently running." };
+    }
+    schedulerRunActive = true;
+    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const startMs = Date.now();
+    const errors = [];
+    let usersEvaluated = 0;
+    let usersEligibleForAlerts = 0;
+    let recommendationsUpdated = 0;
+    let notificationsCreated = 0;
+    let pushAttempted = 0;
+    let pushSucceeded = 0;
+    let pushFailed = 0;
+    let emailAttempted = 0;
+    let emailSucceeded = 0;
+    let emailFailed = 0;
+    let retriesProcessed = 0;
+    try {
+      const store = loadSchedulerStore();
+      store.lastRunStartedAt = startedAt;
+      saveSchedulerStore(store);
+      if (!options.dryRun) {
+        const retryStats = await processRetryQueueCycle();
+        retriesProcessed = retryStats.processed;
+        if (retryStats.errors.length > 0) {
+          errors.push(...retryStats.errors.slice(0, 5));
+        }
+      }
+      const profiles = Object.values(loadUserProfiles() || {}).filter(
+        (p) => p?.uid && p.accountStatus !== "suspended"
+      );
+      for (const prof of profiles) {
+        try {
+          usersEvaluated += 1;
+          const result = await recalculateForUser(prof, {
+            sendNotifications: true,
+            changedVacancyId: options.changedVacancyId,
+            changeType: options.changeType,
+            dryRun: options.dryRun
+          });
+          if (result.recommendations.length > 0) {
+            recommendationsUpdated += result.recommendations.length;
+            usersEligibleForAlerts += 1;
+          }
+          for (const notif of result.newNotifications) {
+            notificationsCreated += 1;
+            if (notif.channels?.push === "sent") {
+              pushAttempted += 1;
+              pushSucceeded += 1;
+            } else if (notif.channels?.push === "failed" || notif.channels?.push === "queued") {
+              pushAttempted += 1;
+              pushFailed += 1;
+            }
+            if (notif.channels?.email === "sent") {
+              emailAttempted += 1;
+              emailSucceeded += 1;
+            } else if (notif.channels?.email === "failed" || notif.channels?.email === "queued") {
+              emailAttempted += 1;
+              emailFailed += 1;
+            }
+          }
+        } catch (userErr) {
+          errors.push(`User ${prof.uid}: ${userErr?.message || String(userErr)}`);
+        }
+      }
+      const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const status = errors.length === 0 ? "success" : usersEvaluated > 0 ? "partial" : "failed";
+      const runRecord = {
+        id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger: options.trigger,
+        status,
+        dryRun: Boolean(options.dryRun),
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(1, Date.now() - startMs),
+        usersEvaluated,
+        usersEligibleForAlerts,
+        recommendationsUpdated,
+        notificationsCreated,
+        pushAttempted,
+        pushSucceeded,
+        pushFailed,
+        emailAttempted,
+        emailSucceeded,
+        emailFailed,
+        retriesProcessed,
+        errorSummary: errors[0] || void 0,
+        errors: errors.slice(0, 10)
+      };
+      const nextStore = loadSchedulerStore();
+      nextStore.lastRunStartedAt = startedAt;
+      nextStore.lastRunStatus = status;
+      if (status !== "failed") {
+        nextStore.lastSuccessfulRunAt = finishedAt;
+      }
+      if (errors.length > 0) {
+        for (const msg of errors.slice(0, 5)) {
+          nextStore.recentErrors.unshift({
+            timestamp: finishedAt,
+            source: options.trigger,
+            message: msg.slice(0, 400)
+          });
+        }
+      }
+      nextStore.runs.unshift(runRecord);
+      saveSchedulerStore(nextStore);
+      return { skipped: false, run: runRecord };
+    } catch (fatalErr) {
+      const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const msg = fatalErr?.message || String(fatalErr);
+      const runRecord = {
+        id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger: options.trigger,
+        status: "failed",
+        dryRun: Boolean(options.dryRun),
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(1, Date.now() - startMs),
+        usersEvaluated,
+        usersEligibleForAlerts,
+        recommendationsUpdated,
+        notificationsCreated,
+        pushAttempted,
+        pushSucceeded,
+        pushFailed,
+        emailAttempted,
+        emailSucceeded,
+        emailFailed,
+        retriesProcessed,
+        errorSummary: msg,
+        errors: [msg]
+      };
+      const nextStore = loadSchedulerStore();
+      nextStore.lastRunStatus = "failed";
+      nextStore.recentErrors.unshift({ timestamp: finishedAt, source: options.trigger, message: msg });
+      nextStore.runs.unshift(runRecord);
+      saveSchedulerStore(nextStore);
+      return { skipped: false, run: runRecord };
+    } finally {
+      schedulerRunActive = false;
+    }
+  }
+  function buildAdminSchedulerStatus() {
+    const envReport = getEnvironmentReadinessReport();
+    const store = loadSchedulerStore();
+    const queue = loadNotificationQueue();
+    const allNotifs = loadAllNotifications();
+    const allPrefs = loadAllNotificationPrefs();
+    const allRecs = loadAllRecommendations();
+    const profiles = loadUserProfiles();
+    let totalNotificationsSent = 0;
+    let pushDeliveriesCount = 0;
+    let emailDeliveriesCount = 0;
+    let failedDeliveriesCount = 0;
+    for (const list of Object.values(allNotifs)) {
+      if (!Array.isArray(list)) continue;
+      for (const n of list) {
+        totalNotificationsSent += 1;
+        if (n.channels?.push === "sent") pushDeliveriesCount += 1;
+        if (n.channels?.email === "sent") emailDeliveriesCount += 1;
+        if (n.channels?.push === "failed" || n.channels?.email === "failed") {
+          failedDeliveriesCount += 1;
+        }
+      }
+    }
+    const queuePending = queue.filter((q) => q.status === "pending").length;
+    const queueFailed = queue.filter((q) => q.status === "failed").length;
+    const activePushSubscriptionsCount = Object.values(allPrefs).reduce((acc, pref) => {
+      const devices = Array.isArray(pref?.deviceSubscriptions) ? pref.deviceSubscriptions : [];
+      return acc + devices.filter((d) => d.active).length;
+    }, 0);
+    const usersReceivingRecommendationsCount = Object.values(profiles).filter(
+      (p) => p?.uid && p.accountStatus !== "suspended" && (allRecs[p.uid]?.items?.length || 0) > 0
+    ).length;
+    const schedulerStatus = schedulerRunActive ? "running" : store.lastRunStatus === "failed" ? "error" : "idle";
+    return {
+      success: true,
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      environment: envReport,
+      scheduler: {
+        status: schedulerStatus,
+        cronPath: "/api/vacancies/sync",
+        cronSchedule: "Event-Driven (Instant on Job Publish)",
+        lastRunStartedAt: store.lastRunStartedAt,
+        lastSuccessfulRunAt: store.lastSuccessfulRunAt,
+        lastRunStatus: store.lastRunStatus,
+        nextScheduledRunAt: "Instant on Job Publish"
+      },
+      totals: {
+        totalNotificationsSent,
+        successfulDeliveries: pushDeliveriesCount + emailDeliveriesCount + totalNotificationsSent,
+        failedDeliveries: queueFailed + failedDeliveriesCount,
+        pendingNotifications: queuePending,
+        pushDeliveriesCount,
+        emailDeliveriesCount,
+        usersReceivingRecommendationsCount,
+        activePushSubscriptionsCount
+      },
+      recentErrors: store.recentErrors.slice(0, 15),
+      recentRuns: store.runs.slice(0, 20)
+    };
+  }
+  let bulkRecalcInProgress = false;
+  function triggerBackgroundRecalcAllUsers(options = {}) {
+    if (bulkRecalcInProgress) return;
+    bulkRecalcInProgress = true;
+    const profiles = Object.values(loadUserProfiles() || {}).filter(
+      (p) => p?.uid && p.accountStatus !== "suspended"
+    );
+    let idx = 0;
+    const processNextChunk = async () => {
+      try {
+        const chunk = profiles.slice(idx, idx + 5);
+        idx += 5;
+        for (const prof of chunk) {
+          await recalculateForUser(prof, options).catch(() => {
+          });
+        }
+        if (idx < profiles.length) {
+          setImmediate(() => {
+            void processNextChunk();
+          });
+        } else {
+          bulkRecalcInProgress = false;
+        }
+      } catch {
+        bulkRecalcInProgress = false;
+      }
+    };
+    setImmediate(() => {
+      void processNextChunk();
+    });
+  }
+  if (!isVercel) {
+    const retryTimer = setInterval(() => {
+      void processRetryQueueCycle();
+    }, 2 * 60 * 1e3);
+    if (typeof retryTimer?.unref === "function") retryTimer.unref();
+    const schedulerTimer = setInterval(() => {
+      void executeAutomatedSchedulerSweep({ trigger: "background_interval" });
+    }, 15 * 60 * 1e3);
+    if (typeof schedulerTimer?.unref === "function") schedulerTimer.unref();
+  }
+  app.get("/api/push/vapid-public-key", async (_req, res) => {
+    const wp = await ensureWebPush();
+    if (!wp || !vapidKeysCache?.publicKey) {
+      res.status(503).json({ error: "Web Push VAPID keys are unavailable." });
+      return;
+    }
+    res.json({ publicKey: vapidKeysCache.publicKey });
+  });
+  app.post("/api/push/subscribe/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { deviceId, deviceLabel, platform, subscription } = req.body || {};
+    if (!subscription?.endpoint) {
+      res.status(400).json({ error: "Valid push subscription endpoint is required." });
+      return;
+    }
+    const allPrefs = loadAllNotificationPrefs();
+    const existing = allPrefs[uid] || buildDefaultPreferences(uid);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const cleanDeviceId = String(deviceId || subscription.endpoint.slice(-24)).trim();
+    const devices = Array.isArray(existing.deviceSubscriptions) ? existing.deviceSubscriptions : [];
+    const filtered = devices.filter(
+      (d) => d.deviceId !== cleanDeviceId && d.endpoint !== subscription.endpoint
+    );
+    const isMobile = /android|iphone|ipad|ios|mobile/i.test(`${platform || ""} ${deviceLabel || ""}`);
+    filtered.unshift({
+      deviceId: cleanDeviceId,
+      deviceLabel: String(deviceLabel || "Web Browser").slice(0, 120),
+      platform: String(platform || "web").slice(0, 60),
+      endpoint: subscription.endpoint,
+      subscription,
+      active: true,
+      createdAt: nowIso,
+      lastVerifiedAt: nowIso
+    });
+    const updated = {
+      ...existing,
+      userId: uid,
+      permissionStatus: "granted",
+      subscriptionStatus: "active",
+      enabledAt: existing.enabledAt || nowIso,
+      permissionVerifiedAt: nowIso,
+      channels: {
+        ...existing.channels,
+        websiteBell: true,
+        browserPush: true,
+        mobilePush: existing.channels?.mobilePush || isMobile
+      },
+      deviceSubscriptions: filtered.slice(0, 15),
+      updatedAt: nowIso
+    };
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    res.json({ success: true, preferences: updated });
+  });
+  app.post("/api/push/unsubscribe/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { deviceId, endpoint } = req.body || {};
+    const allPrefs = loadAllNotificationPrefs();
+    const existing = allPrefs[uid] || buildDefaultPreferences(uid);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const nextDevices = (existing.deviceSubscriptions || []).map((d) => {
+      const matches = deviceId && d.deviceId === String(deviceId) || endpoint && (d.endpoint === String(endpoint) || d.subscription?.endpoint === String(endpoint)) || !deviceId && !endpoint;
+      if (matches) {
+        return {
+          ...d,
+          active: false,
+          lastFailureReason: "Disabled by user",
+          lastVerifiedAt: nowIso
+        };
+      }
+      return d;
+    });
+    const stillHasActive = nextDevices.some((d) => d.active);
+    const updated = {
+      ...existing,
+      userId: uid,
+      subscriptionStatus: stillHasActive ? "active" : "none",
+      channels: {
+        ...existing.channels,
+        browserPush: stillHasActive ? Boolean(existing.channels?.browserPush) : false,
+        mobilePush: stillHasActive ? Boolean(existing.channels?.mobilePush) : false
+      },
+      deviceSubscriptions: nextDevices,
+      updatedAt: nowIso
+    };
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    res.json({ success: true, preferences: updated });
+  });
+  app.post("/api/push/test/:uid", async (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const settings = loadPersistedSettings() || {};
+    const domain = String(settings.customDomain || "hopelandjobs.tech").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const pushRes = await sendWebPushToUser(uid, {
+      title: "HOPELAND JOBS \u2014 Notifications Active",
+      body: "Real-time personalized job alerts are verified and active on this device.",
+      url: "/",
+      jobId: "",
+      tag: `hopeland-test-${uid}`
+    });
+    res.json({
+      success: pushRes.deliveredCount > 0,
+      deliveredCount: pushRes.deliveredCount,
+      failedCount: pushRes.failedCount,
+      expiredEndpoints: pushRes.expiredEndpoints,
+      errors: pushRes.errors,
+      domain
+    });
+  });
+  app.get("/api/user/notification-preferences/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const allPrefs = loadAllNotificationPrefs();
+    const record = allPrefs[uid] || buildDefaultPreferences(uid);
+    res.json({ success: true, preferences: record });
+  });
+  app.post("/api/user/notification-preferences/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const body = req.body || {};
+    const allPrefs = loadAllNotificationPrefs();
+    const existing = allPrefs[uid] || buildDefaultPreferences(uid);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    let nextDevices = Array.isArray(existing.deviceSubscriptions) ? existing.deviceSubscriptions : [];
+    if (body.markDeviceExpired && typeof body.markDeviceExpired === "string") {
+      nextDevices = nextDevices.map(
+        (d) => d.deviceId === body.markDeviceExpired ? { ...d, active: false, lastFailureReason: "Device subscription invalid/expired" } : d
+      );
+    }
+    const validFreq = ["instant", "daily", "weekly"].includes(body.frequency) ? body.frequency : existing.frequency || "instant";
+    const updated = {
+      ...existing,
+      userId: uid,
+      permissionStatus: body.permissionStatus || existing.permissionStatus,
+      subscriptionStatus: body.subscriptionStatus || existing.subscriptionStatus,
+      frequency: validFreq,
+      enabledAt: body.permissionStatus === "granted" && !existing.enabledAt ? nowIso : body.enabledAt || existing.enabledAt,
+      permissionVerifiedAt: body.permissionVerifiedAt || nowIso,
+      promptDismissCount: typeof body.incrementDismiss === "boolean" && body.incrementDismiss ? (existing.promptDismissCount || 0) + 1 : body.promptDismissCount ?? existing.promptDismissCount ?? 0,
+      channels: {
+        ...existing.channels,
+        ...body.channels || {}
+      },
+      alertTypes: {
+        ...existing.alertTypes,
+        ...body.alertTypes || {}
+      },
+      preferredSectors: Array.isArray(body.preferredSectors) ? body.preferredSectors : existing.preferredSectors || [],
+      deviceSubscriptions: nextDevices,
+      updatedAt: nowIso
+    };
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    res.json({ success: true, preferences: updated });
+  });
+  app.get("/api/user/recommendations/:uid", async (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const profiles = loadUserProfiles();
+    const profile = profiles[uid];
+    if (!profile) {
+      res.json({ success: true, recommendations: [], recalculatedAt: null });
+      return;
+    }
+    const { recommendations } = await recalculateForUser(profile, { sendNotifications: false });
+    res.json({
+      success: true,
+      recommendations,
+      recalculatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
+  app.post("/api/user/recommendations/recalculate/:uid", async (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const profiles = loadUserProfiles();
+    const profile = profiles[uid];
+    if (!profile) {
+      res.status(404).json({ error: "Profile not found" });
+      return;
+    }
+    const sendNotifications = req.body?.sendNotifications !== false;
+    const { recommendations, newNotifications } = await recalculateForUser(profile, { sendNotifications });
+    res.json({
+      success: true,
+      recommendations,
+      newNotifications,
+      recalculatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
+  app.get("/api/user/notifications/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const allNotifs = loadAllNotifications();
+    const vacancyMap = new Map(loadVacanciesCatalog().map((v) => [v.id, v]));
+    const activeList = (allNotifs[uid] || []).filter((n) => {
+      if (n.sourceType === "system") return true;
+      if (isDeadlineExpired(n.deadline || n.expiresAt)) return false;
+      const v = vacancyMap.get(n.vacancyId);
+      if (v && v.status !== "published") return false;
+      return true;
+    });
+    const unreadCount = activeList.filter((n) => !n.read).length;
+    res.json({
+      success: true,
+      notifications: activeList,
+      unreadCount
+    });
+  });
+  app.post("/api/user/notifications/:uid/read", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { notificationId, markAll, read } = req.body || {};
+    const targetReadState = read === false ? false : true;
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const allNotifs = loadAllNotifications();
+    const current = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+    const next = current.map((n) => {
+      if (markAll || notificationId && n.id === notificationId) {
+        return {
+          ...n,
+          read: targetReadState,
+          readAt: targetReadState ? nowIso : void 0,
+          updatedAt: nowIso
+        };
+      }
+      return n;
+    });
+    allNotifs[uid] = next;
+    saveAllNotifications(allNotifs);
+    const unreadCount = next.filter((n) => !n.read).length;
+    res.json({ success: true, notifications: next, unreadCount });
+  });
+  app.post("/api/user/notifications/sync-reconnect/:uid", async (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const profiles = loadUserProfiles();
+    const profile = profiles[uid];
+    if (!profile) {
+      res.json({
+        success: true,
+        recommendations: [],
+        notifications: [],
+        unreadCount: 0,
+        newDeliveriesCount: 0,
+        syncedAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      return;
+    }
+    profile.lastActiveAt = (/* @__PURE__ */ new Date()).toISOString();
+    profiles[uid] = profile;
+    saveUserProfileMap(profiles);
+    const { recommendations, newNotifications } = await recalculateForUser(profile, { sendNotifications: true });
+    const allNotifs = loadAllNotifications();
+    const vacancyMap = new Map(loadVacanciesCatalog().map((v) => [v.id, v]));
+    const activeList = (allNotifs[uid] || []).filter((n) => {
+      if (n.sourceType === "system") return true;
+      if (isDeadlineExpired(n.deadline || n.expiresAt)) return false;
+      const v = vacancyMap.get(n.vacancyId);
+      if (v && v.status !== "published") return false;
+      return true;
+    });
+    const unreadCount = activeList.filter((n) => !n.read).length;
+    res.json({
+      success: true,
+      recommendations,
+      notifications: activeList,
+      unreadCount,
+      newDeliveriesCount: newNotifications.length,
+      syncedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  });
+  app.post("/api/vacancies/sync", async (req, res) => {
+    const {
+      vacancies: incomingList,
+      mode,
+      changedVacancyId,
+      changedVacancyIds,
+      changeType,
+      usersSnapshot
+    } = req.body || {};
+    if (!Array.isArray(incomingList)) {
+      res.status(400).json({ error: "vacancies array is required" });
+      return;
+    }
+    const existing = loadVacanciesCatalog();
+    if (existing.length > 0 && mode !== "seed_if_empty" && !isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required to sync vacancies catalog." });
+      return;
+    }
+    if (usersSnapshot && isPersistentOwnerRequest(req)) {
+      mergeExternalUsersSnapshot(usersSnapshot);
+    }
+    if (mode === "seed_if_empty" && existing.length > 0) {
+      res.json({ success: true, total: existing.length, seeded: false });
+      return;
+    }
+    const map = new Map(mode === "replace" ? [] : existing.map((v) => [v.id, v]));
+    const changedSet = new Set(
+      [
+        ...changedVacancyId ? [String(changedVacancyId)] : [],
+        ...Array.isArray(changedVacancyIds) ? changedVacancyIds.map(String) : []
+      ].filter(Boolean)
+    );
+    let newlyPublishedOrUpdatedId = changedVacancyId || "";
+    let resolvedChangeType = changeType;
+    for (const item of incomingList) {
+      if (!item?.id) continue;
+      const prev = map.get(item.id);
+      if (!prev && item.status === "published") {
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = "published";
+      } else if (prev && prev.status !== "published" && item.status === "published") {
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = "published";
+      } else if (prev && item.status === "published" && (prev.applicationDeadline !== item.applicationDeadline || prev.salary !== item.salary || prev.title !== item.title)) {
+        changedSet.add(item.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        if (!resolvedChangeType) resolvedChangeType = "updated";
+      }
+      map.set(item.id, item);
+    }
+    const merged = Array.from(map.values());
+    saveVacanciesCatalog(merged);
+    const changedIds = Array.from(changedSet);
+    let notificationsDispatched = 0;
+    let notifiedUsersCount = 0;
+    let emailsSent = 0;
+    let pushSent = 0;
+    if (mode === "seed_if_empty") {
+      triggerBackgroundRecalcAllUsers({
+        sendNotifications: false
+      });
+    } else {
+      const profiles = Object.values(loadUserProfiles() || {}).filter(
+        (p) => p?.uid && p.accountStatus !== "suspended"
+      );
+      for (const prof of profiles) {
+        try {
+          const result = await recalculateForUser(prof, {
+            sendNotifications: true,
+            changedVacancyId: newlyPublishedOrUpdatedId || void 0,
+            changedVacancyIds: changedIds.length > 0 ? changedIds : void 0,
+            changeType: resolvedChangeType
+          });
+          if (result.newNotifications.length > 0) {
+            notifiedUsersCount += 1;
+            notificationsDispatched += result.newNotifications.length;
+            for (const n of result.newNotifications) {
+              if (n.channels?.email === "sent") emailsSent += 1;
+              if (n.channels?.push === "sent") pushSent += 1;
+            }
+          }
+        } catch {
+        }
+      }
+    }
+    res.json({
+      success: true,
+      total: merged.length,
+      backgroundMatchingTriggered: true,
+      notifiedUsersCount,
+      notificationsDispatched,
+      emailsSent,
+      pushSent
+    });
+  });
+  app.post("/api/vacancies/delete", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ error: "ids array is required" });
+      return;
+    }
+    const idSet = new Set(ids);
+    const next = loadVacanciesCatalog().filter((v) => !idSet.has(v.id));
+    saveVacanciesCatalog(next);
+    triggerBackgroundRecalcAllUsers({ sendNotifications: false });
+    res.json({ success: true, remaining: next.length });
+  });
+  function computeRegisteredUserAnalytics() {
+    const profilesMap = loadUserProfiles();
+    const allPrefs = loadAllNotificationPrefs();
+    const allRecs = loadAllRecommendations();
+    const allNotifs = loadAllNotifications();
+    const allApps = loadJobApplications();
+    const queue = loadNotificationQueue();
+    const rawUsers = Object.values(profilesMap || {}).filter((u) => u && u.uid);
+    const now = Date.now();
+    const todayKey = getAddisDateKey(/* @__PURE__ */ new Date());
+    const monthPrefix = todayKey.slice(0, 7);
+    const yearPrefix = todayKey.slice(0, 4);
+    const weekAgoMs = now - 7 * 24 * 60 * 60 * 1e3;
+    const thirtyDaysAgoMs = now - 30 * 24 * 60 * 60 * 1e3;
+    const onlineWindowMs = now - 5 * 60 * 1e3;
+    const appsPerUser = /* @__PURE__ */ new Map();
+    for (const appItem of allApps || []) {
+      if (appItem?.userId) {
+        appsPerUser.set(appItem.userId, (appsPerUser.get(appItem.userId) || 0) + 1);
+      }
+    }
+    const emailGroups = /* @__PURE__ */ new Map();
+    const phoneGroups = /* @__PURE__ */ new Map();
+    let onlineUsersCount = 0;
+    let totalActiveUsers = 0;
+    let totalInactiveUsers = 0;
+    let totalSuspendedUsers = 0;
+    let newRegistrationsToday = 0;
+    let newRegistrationsThisWeek = 0;
+    let newRegistrationsThisMonth = 0;
+    let newRegistrationsThisYear = 0;
+    let completedProfilesCount = 0;
+    let incompleteProfilesCount = 0;
+    let completionSum = 0;
+    let notificationsEnabledCount = 0;
+    let usersReceivingRecommendationsCount = 0;
+    const sectorCounts = /* @__PURE__ */ new Map();
+    const educationCounts = /* @__PURE__ */ new Map();
+    const experienceCounts = /* @__PURE__ */ new Map();
+    const jobPrefCounts = /* @__PURE__ */ new Map();
+    const timelineCounts = /* @__PURE__ */ new Map();
+    for (let i = 13; i >= 0; i--) {
+      const k = getAddisDateKey(new Date(now - i * 24 * 60 * 60 * 1e3));
+      if (k) timelineCounts.set(k, 0);
+    }
+    const sanitizedUsers = rawUsers.map((u) => {
+      const regIso = u.createdAt || u.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      const lastActIso = u.lastActiveAt || u.lastLoginAt || u.updatedAt || regIso;
+      const regDateKey = getAddisDateKey(regIso);
+      const regMs = new Date(regIso).getTime() || 0;
+      const lastActMs = new Date(lastActIso).getTime() || regMs;
+      const isOnline = lastActMs >= onlineWindowMs;
+      if (isOnline) onlineUsersCount += 1;
+      if (regDateKey === todayKey) newRegistrationsToday += 1;
+      if (regMs >= weekAgoMs) newRegistrationsThisWeek += 1;
+      if (regDateKey.startsWith(monthPrefix)) newRegistrationsThisMonth += 1;
+      if (regDateKey.startsWith(yearPrefix)) newRegistrationsThisYear += 1;
+      if (regDateKey && timelineCounts.has(regDateKey)) {
+        timelineCounts.set(regDateKey, (timelineCounts.get(regDateKey) || 0) + 1);
+      }
+      const explicitStatus = u.accountStatus;
+      let accountStatus = "active";
+      if (explicitStatus === "suspended") {
+        accountStatus = "suspended";
+        totalSuspendedUsers += 1;
+        totalInactiveUsers += 1;
+      } else if (explicitStatus === "inactive" || now - lastActMs > thirtyDaysAgoMs) {
+        accountStatus = "inactive";
+        totalInactiveUsers += 1;
+      } else {
+        accountStatus = "active";
+        totalActiveUsers += 1;
+      }
+      const evalResult = evaluateMandatoryProfileCompletion(u);
+      const completionPct = evalResult.percentage;
+      const isProfileComplete = evalResult.isProfileComplete;
+      completionSum += completionPct;
+      if (isProfileComplete) completedProfilesCount += 1;
+      else incompleteProfilesCount += 1;
+      const eduList = Array.isArray(u.education) ? u.education : [];
+      const eduQuals = eduList.map((e) => `${e.qualification || ""} ${e.fieldOfStudy || ""}`).join(" ").toLowerCase();
+      let educationLevel = "Not Specified";
+      if (eduList.length > 0) {
+        if (/phd|doctor/i.test(eduQuals)) educationLevel = "PhD / Doctorate";
+        else if (/master|msc|mba|ma\b|mph/i.test(eduQuals)) educationLevel = "Master's Degree";
+        else if (/bachelor|bsc|ba\b|degree|undergraduate/i.test(eduQuals)) educationLevel = "Bachelor's Degree";
+        else if (/diploma|associate|level/i.test(eduQuals)) educationLevel = "Diploma / TVET";
+        else educationLevel = eduList[0]?.qualification || "Certificate / Other";
+      }
+      educationCounts.set(educationLevel, (educationCounts.get(educationLevel) || 0) + 1);
+      const rawYearsStr = String(u.yearsOfExperience || "");
+      const yrsNumMatch = rawYearsStr.match(/\d+/);
+      const expEntries = Array.isArray(u.experience) ? u.experience.length : 0;
+      let experienceBand = "Not Specified";
+      if (u.noExperience === true && expEntries === 0) {
+        experienceBand = "No Experience / Fresh Graduate";
+      } else if (yrsNumMatch) {
+        const y = parseInt(yrsNumMatch[0], 10);
+        if (y === 0) experienceBand = "No Experience / Fresh Graduate";
+        else if (y <= 2) experienceBand = "1-2 Years";
+        else if (y <= 5) experienceBand = "3-5 Years";
+        else experienceBand = "5+ Years";
+      } else if (expEntries > 0) {
+        experienceBand = expEntries === 1 ? "1-2 Years" : "3-5 Years";
+      }
+      experienceCounts.set(experienceBand, (experienceCounts.get(experienceBand) || 0) + 1);
+      const prefPos = String(u.desiredJobTitle || u.currentPosition || "Not Specified").trim() || "Not Specified";
+      jobPrefCounts.set(prefPos, (jobPrefCounts.get(prefPos) || 0) + 1);
+      const prefs = allPrefs[u.uid];
+      const hasActiveDevicePush = Boolean(prefs?.deviceSubscriptions?.some((d) => d.active));
+      const notificationsEnabled = Boolean(
+        prefs?.permissionStatus === "granted" || hasActiveDevicePush
+      );
+      if (notificationsEnabled) notificationsEnabledCount += 1;
+      const userRecs = allRecs[u.uid]?.items || [];
+      const recommendationsCount = Array.isArray(userRecs) ? userRecs.length : 0;
+      if (recommendationsCount > 0 && accountStatus !== "suspended") {
+        usersReceivingRecommendationsCount += 1;
+      }
+      const userNotifs = allNotifs[u.uid] || [];
+      const unreadNotificationsCount = userNotifs.filter((n) => !n.read && !isDeadlineExpired(n.deadline)).length;
+      const sectorLabel = String(u.preferredIndustry || u.preferredSectors?.[0] || u.staffDepartmentOrSector || "Unspecified").trim() || "Unspecified";
+      sectorCounts.set(sectorLabel, (sectorCounts.get(sectorLabel) || 0) + 1);
+      const normEmail = String(u.email || "").toLowerCase().trim();
+      if (normEmail) {
+        const arr = emailGroups.get(normEmail) || [];
+        arr.push({ uid: u.uid, email: normEmail });
+        emailGroups.set(normEmail, arr);
+      }
+      const normPhone = String(u.phone || "").replace(/\D/g, "");
+      if (normPhone.length >= 9) {
+        const keyPhone = normPhone.slice(-9);
+        const arr = phoneGroups.get(keyPhone) || [];
+        arr.push({ uid: u.uid, email: normEmail || u.uid });
+        phoneGroups.set(keyPhone, arr);
+      }
+      return {
+        uid: u.uid,
+        fullName: u.fullName || "Registered User",
+        email: u.email || "",
+        accountRole: u.accountRole || "staff",
+        accountStatus,
+        suspendedReason: u.suspendedReason || void 0,
+        locationCity: u.locationCity || "Addis Ababa",
+        desiredJobTitle: u.desiredJobTitle || u.currentPosition || "",
+        preferredIndustry: sectorLabel,
+        educationLevel,
+        experienceBand,
+        yearsOfExperience: rawYearsStr,
+        noExperience: Boolean(u.noExperience),
+        profileCompletionPercentage: completionPct,
+        completedSections: evalResult.completedSections,
+        missingSections: evalResult.missingSections,
+        isProfileComplete,
+        isOnline,
+        notificationsEnabled,
+        permissionStatus: prefs?.permissionStatus || "default",
+        subscriptionStatus: prefs?.subscriptionStatus || "none",
+        frequency: prefs?.frequency || "instant",
+        emailAlertsEnabled: Boolean(prefs?.channels?.emailAlerts),
+        recommendationsCount,
+        unreadNotificationsCount,
+        applicationsCount: appsPerUser.get(u.uid) || 0,
+        registeredAt: regIso,
+        lastActiveAt: lastActIso
+      };
+    });
+    const suspiciousDuplicates = [];
+    for (const [email, items] of emailGroups.entries()) {
+      if (items.length > 1) {
+        suspiciousDuplicates.push({
+          reason: `Duplicate email across ${items.length} accounts (${email})`,
+          uids: items.map((i) => i.uid),
+          emails: items.map((i) => i.email)
+        });
+      }
+    }
+    for (const [phoneSuffix, items] of phoneGroups.entries()) {
+      if (items.length > 1) {
+        suspiciousDuplicates.push({
+          reason: `Shared phone suffix (*${phoneSuffix}) across ${items.length} accounts`,
+          uids: items.map((i) => i.uid),
+          emails: items.map((i) => i.email)
+        });
+      }
+    }
+    let totalNotificationsSent = 0;
+    let pushDeliveriesCount = 0;
+    let emailDeliveriesCount = 0;
+    for (const list of Object.values(allNotifs)) {
+      if (!Array.isArray(list)) continue;
+      for (const n of list) {
+        totalNotificationsSent += 1;
+        if (n.channels?.push === "sent") pushDeliveriesCount += 1;
+        if (n.channels?.email === "sent") emailDeliveriesCount += 1;
+      }
+    }
+    const queuePending = queue.filter((q) => q.status === "pending").length;
+    const queueFailedItems = queue.filter((q) => q.status === "failed");
+    return {
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      metrics: {
+        totalRegisteredUsers: rawUsers.length,
+        onlineUsersCount,
+        totalActiveUsers,
+        totalInactiveUsers,
+        totalSuspendedUsers,
+        newRegistrationsToday,
+        newRegistrationsThisWeek,
+        newRegistrationsThisMonth,
+        newRegistrationsThisYear,
+        completedProfilesCount,
+        incompleteProfilesCount,
+        averageCompletionRate: rawUsers.length > 0 ? Math.round(completionSum / rawUsers.length) : 0,
+        notificationsEnabledCount,
+        usersReceivingRecommendationsCount
+      },
+      deliveryHealth: {
+        queuePending,
+        queueFailed: queueFailedItems.length,
+        totalNotificationsSent,
+        pushDeliveriesCount,
+        emailDeliveriesCount,
+        smtpConfigured: isSmtpConfigured(),
+        recentFailures: queueFailedItems.slice(0, 15).map((q) => ({
+          id: q.id,
+          userId: q.userId,
+          channel: q.channel,
+          reason: q.lastError || "Delivery error",
+          attempts: q.attempts,
+          updatedAt: q.updatedAt
+        }))
+      },
+      registrationTimeline: Array.from(timelineCounts.entries()).map(([date, count]) => ({ date, count })),
+      sectorBreakdown: Array.from(sectorCounts.entries()).map(([sector, count]) => ({ sector, count })).sort((a, b) => b.count - a.count).slice(0, 12),
+      educationBreakdown: Array.from(educationCounts.entries()).map(([level, count]) => ({ level, count })).sort((a, b) => b.count - a.count),
+      experienceBreakdown: Array.from(experienceCounts.entries()).map(([band, count]) => ({ band, count })).sort((a, b) => b.count - a.count),
+      jobPreferenceBreakdown: Array.from(jobPrefCounts.entries()).map(([position, count]) => ({ position, count })).sort((a, b) => b.count - a.count).slice(0, 10),
+      suspiciousDuplicates,
+      users: sanitizedUsers.sort(
+        (a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime()
+      )
+    };
+  }
+  app.get("/api/admin/user-analytics", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const summary = computeRegisteredUserAnalytics();
+    res.json({ success: true, ...summary });
+  });
+  app.post("/api/admin/users/:uid/status", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { uid } = req.params;
+    const { accountStatus, reason } = req.body || {};
+    if (!["active", "inactive", "suspended"].includes(String(accountStatus || ""))) {
+      res.status(400).json({ error: "Invalid accountStatus (active | inactive | suspended)." });
+      return;
+    }
+    const profiles = loadUserProfiles();
+    const target = profiles[uid];
+    if (!target) {
+      res.status(404).json({ error: "User account not found." });
+      return;
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    target.accountStatus = accountStatus;
+    if (accountStatus === "suspended") {
+      target.suspendedAt = nowIso;
+      target.suspendedReason = String(reason || "Suspended by administrator").slice(0, 300);
+    } else {
+      delete target.suspendedAt;
+      delete target.suspendedReason;
+    }
+    target.updatedAt = nowIso;
+    profiles[uid] = target;
+    saveUserProfileMap(profiles);
+    appendAuditLog({
+      action: `user_account_${accountStatus}`,
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "staff_profile",
+      targetId: uid,
+      summary: `Owner updated account status of ${target.fullName || target.email || uid} to ${accountStatus.toUpperCase()}${reason ? ` (${reason})` : ""}`,
+      severity: accountStatus === "suspended" ? "warning" : "info"
+    });
+    res.json({ success: true, uid, accountStatus, summary: computeRegisteredUserAnalytics() });
+  });
+  app.get("/api/admin/users/export.csv", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const summary = computeRegisteredUserAnalytics();
+    const headers = [
+      "UID",
+      "Full Name",
+      "Email",
+      "Account Role",
+      "Account Status",
+      "Location",
+      "Desired Role",
+      "Preferred Sector",
+      "Profile Completion %",
+      "Notifications Enabled",
+      "Push Permission",
+      "Recommendations Count",
+      "Applications Count",
+      "Registered At",
+      "Last Active At"
+    ];
+    const escapeCsv = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
+    const rows = summary.users.map(
+      (u) => [
+        u.uid,
+        u.fullName,
+        u.email,
+        u.accountRole,
+        u.accountStatus,
+        u.locationCity,
+        u.desiredJobTitle,
+        u.preferredIndustry,
+        u.profileCompletionPercentage,
+        u.notificationsEnabled ? "Yes" : "No",
+        u.permissionStatus,
+        u.recommendationsCount,
+        u.applicationsCount,
+        u.registeredAt,
+        u.lastActiveAt || ""
+      ].map(escapeCsv).join(",")
+    );
+    const csv = `\uFEFF${headers.map(escapeCsv).join(",")}
+${rows.join("\n")}`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="hopeland-registered-users-${getAddisDateKey()}.csv"`);
+    res.send(csv);
+  });
+  function isAuthorizedCronRequest(req) {
+    if (isPersistentOwnerRequest(req)) return true;
+    const expectedSecret = (process.env.CRON_SECRET || "").trim();
+    if (expectedSecret) {
+      const authHeader = String(req.headers.authorization || "").trim();
+      return authHeader === `Bearer ${expectedSecret}`;
+    }
+    return Boolean(req.headers["x-vercel-cron"]) || !isVercel;
+  }
+  app.all("/api/cron/notifications", async (req, res) => {
+    if (!isAuthorizedCronRequest(req)) {
+      res.status(401).json({ error: "Unauthorized Cron invocation" });
+      return;
+    }
+    const dryRun = req.query?.dryRun === "true" || req.body?.dryRun === true;
+    const result = await executeAutomatedSchedulerSweep({
+      trigger: "vercel_cron",
+      dryRun
+    });
+    res.status(result.skipped ? 409 : 200).json({
+      success: !result.skipped,
+      ...result,
+      status: buildAdminSchedulerStatus().scheduler
+    });
+  });
+  app.get("/api/admin/scheduler-status", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    res.json(buildAdminSchedulerStatus());
+  });
+  app.post("/api/admin/scheduler/run-now", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const dryRun = req.body?.dryRun === true;
+    const result = await executeAutomatedSchedulerSweep({
+      trigger: "manual_admin",
+      dryRun
+    });
+    if (!result.skipped && result.run && !dryRun) {
+      appendAuditLog({
+        action: "notification_scheduler_manual_run",
+        actorEmail: getRequesterEmail(req) || "owner",
+        targetType: "scheduler",
+        targetId: result.run.id,
+        summary: `Manual scheduler sweep finished (${result.run.status}): ${result.run.usersEvaluated} users checked, ${result.run.notificationsCreated} alerts dispatched`,
+        severity: result.run.status === "failed" ? "warning" : "info"
+      });
+    }
+    res.json({
+      success: !result.skipped,
+      ...result,
+      schedulerStatus: buildAdminSchedulerStatus()
+    });
+  });
+  app.post("/api/admin/scheduler/verify-smtp", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const envReport = getEnvironmentReadinessReport();
+    if (!envReport.smtpConfigured) {
+      res.json({
+        success: false,
+        configured: false,
+        verified: false,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: `SMTP credentials incomplete. Missing: ${envReport.missingEnvVars.filter((k) => k.startsWith("SMTP_")).join(", ")}`
+      });
+      return;
+    }
+    try {
+      const nm = await ensureNodemailer();
+      if (!nm) {
+        res.json({ success: false, configured: true, verified: false, message: "Nodemailer module unavailable." });
+        return;
+      }
+      const transporter = nm.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587", 10),
+        secure: parseInt(process.env.SMTP_PORT || "587", 10) === 465,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS
+        }
+      });
+      await transporter.verify();
+      res.json({
+        success: true,
+        configured: true,
+        verified: true,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: "SMTP server connection verified successfully."
+      });
+    } catch (err) {
+      const msg = err?.message || String(err);
+      recordSystemNotificationError("smtp_verify", msg);
+      res.json({
+        success: false,
+        configured: true,
+        verified: false,
+        host: envReport.smtpHost,
+        port: envReport.smtpPort,
+        from: envReport.smtpFrom,
+        message: `SMTP verification failed: ${msg}`
+      });
+    }
+  });
+  app.post("/api/admin/sync-registered-users", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const {
+      profiles: incomingProfiles,
+      preferences: incomingPrefs,
+      pushSubscriptions: incomingSubs
+    } = req.body || {};
+    const { profilesMerged, prefsMerged, subsMerged } = mergeExternalUsersSnapshot({
+      profiles: incomingProfiles,
+      preferences: incomingPrefs,
+      pushSubscriptions: incomingSubs
+    });
+    res.json({
+      success: true,
+      profilesMerged,
+      prefsMerged,
+      subsMerged,
+      totalRegisteredUsers: Object.keys(loadUserProfiles() || {}).length
+    });
+  });
+  app.post("/api/admin/notifications/send-test", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { targetUid, sendToAll, customNote } = req.body || {};
+    const profilesMap = loadUserProfiles();
+    const allProfiles = Object.values(profilesMap || {}).filter(
+      (p) => p?.uid && p.accountStatus !== "suspended"
+    );
+    const targets = targetUid ? allProfiles.filter((p) => p.uid === String(targetUid)) : sendToAll !== false ? allProfiles : allProfiles.slice(0, 1);
+    if (targets.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: "No saved active registered users found to notify."
+      });
+      return;
+    }
+    const activeVacancies = loadVacanciesCatalog().filter(isVerifiedActiveVacancy);
+    const intl = loadPersistedInternationalData();
+    const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
+    const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
+    const fallbackVacancy = activeVacancies[0];
+    let usersNotified = 0;
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    let pushSent = 0;
+    let pushQueued = 0;
+    const deliveries = [];
+    const errors = [];
+    for (const profile of targets) {
+      try {
+        const allPrefs = loadAllNotificationPrefs();
+        if (!allPrefs[profile.uid]) {
+          allPrefs[profile.uid] = buildDefaultPreferences(profile.uid);
+          saveAllNotificationPrefs(allPrefs);
+        }
+        const recs = computeStaffOpportunityRecommendations(profile, activeVacancies, intlJobs, scholarships, 5);
+        const topMatch = recs[0] || {
+          id: fallbackVacancy?.id || `test_alert_${Date.now()}`,
+          sourceType: "domestic_job",
+          title: fallbackVacancy?.title || "Hopeland Jobs \u2014 Live Personalized Job Alerts Active",
+          organization: fallbackVacancy?.organization || "Hopeland Jobs Ethiopia",
+          location: fallbackVacancy?.location || profile.locationCity || "Addis Ababa",
+          category: fallbackVacancy?.category || profile.preferredIndustry || "Banking & NGO Opportunities",
+          salary: fallbackVacancy?.salary && fallbackVacancy.salary !== "Not specified" ? fallbackVacancy.salary : void 0,
+          deadline: fallbackVacancy?.applicationDeadline || "Open",
+          matchScore: 95,
+          eligibilityStatus: "Eligible",
+          isFullyQualified: true,
+          matchReasons: [
+            String(customNote || "Automated job recommendation & notification test from Hopeland Jobs Admin.")
+          ],
+          missingMandatoryQualifications: [],
+          requiredExperienceText: fallbackVacancy?.experienceYears || profile.yearsOfExperience || "Not specified",
+          requiredEducationText: fallbackVacancy?.educationQualification || "Not specified",
+          applyUrl: fallbackVacancy?.applicationUrl
+        };
+        const sent = await dispatchNotificationForUser(profile, topMatch, "new_match", {
+          ignoreFrequencyWindow: true,
+          bypassRateLimit: true,
+          isTestNotification: true,
+          customNote: String(customNote || "").trim() || "Live test job recommendation message verifying your Website Bell, Email, and Push alerts on Hopeland Jobs."
+        });
+        if (sent) {
+          usersNotified += 1;
+          if (sent.channels?.email === "sent") emailsSent += 1;
+          else if (sent.channels?.email === "queued" || sent.channels?.email === "failed") emailsFailed += 1;
+          if (sent.channels?.push === "sent") pushSent += 1;
+          else if (sent.channels?.push === "queued" || sent.channels?.push === "failed") pushQueued += 1;
+          deliveries.push({
+            uid: profile.uid,
+            email: profile.email || "",
+            fullName: profile.fullName || "Registered User",
+            jobTitle: sent.title,
+            website: sent.channels?.website || "delivered",
+            emailStatus: sent.channels?.email || "skipped",
+            pushStatus: sent.channels?.push || "skipped"
+          });
+        }
+      } catch (err) {
+        errors.push(`${profile.email || profile.uid}: ${err?.message || String(err)}`);
+      }
+    }
+    appendAuditLog({
+      action: "admin_test_job_notification",
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "user_notifications",
+      targetId: targetUid || "all_saved_users",
+      summary: `Admin sent test job alert to ${usersNotified}/${targets.length} saved user(s) (Emails sent: ${emailsSent}, Push sent: ${pushSent}).`,
+      severity: "info"
+    });
+    res.json({
+      success: usersNotified > 0,
+      usersTargeted: targets.length,
+      usersNotified,
+      emailsSent,
+      emailsFailed,
+      pushSent,
+      pushQueued,
+      deliveries,
+      errors
+    });
+  });
+  return {
+    onUserProfileSaved: async (savedProfile, isNewRegistration) => {
+      if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
+      const allPrefs = loadAllNotificationPrefs();
+      if (!allPrefs[savedProfile.uid]) {
+        allPrefs[savedProfile.uid] = buildDefaultPreferences(savedProfile.uid);
+        saveAllNotificationPrefs(allPrefs);
+      }
+      const readyForMatch = hasSufficientProfileForRecommendations(savedProfile) || hasCompletedMandatoryPreferences(savedProfile);
+      const res = await recalculateForUser(savedProfile, {
+        sendNotifications: isNewRegistration || readyForMatch
+      }).catch(() => ({ recommendations: [], newNotifications: [] }));
+      return {
+        recommendationsCount: res.recommendations.length,
+        newNotificationsCount: res.newNotifications.length
+      };
+    },
+    getPersistentFilesForBackup: () => ({
+      vacanciesCatalog: loadVacanciesCatalog(),
+      userRecommendations: loadAllRecommendations(),
+      userNotifications: loadAllNotifications(),
+      notificationPreferences: loadAllNotificationPrefs(),
+      notificationQueue: loadNotificationQueue(),
+      schedulerRuns: loadSchedulerStore()
+    }),
+    restorePersistentFilesFromBackup: (d) => {
+      if (Array.isArray(d?.vacanciesCatalog)) saveVacanciesCatalog(d.vacanciesCatalog);
+      if (d?.userRecommendations && typeof d.userRecommendations === "object") saveAllRecommendations(d.userRecommendations);
+      if (d?.userNotifications && typeof d.userNotifications === "object") saveAllNotifications(d.userNotifications);
+      if (d?.notificationPreferences && typeof d.notificationPreferences === "object") saveAllNotificationPrefs(d.notificationPreferences);
+      if (Array.isArray(d?.notificationQueue)) saveNotificationQueue(d.notificationQueue);
+      if (d?.schedulerRuns && typeof d.schedulerRuns === "object") saveSchedulerStore(d.schedulerRuns);
+    },
+    getHealthCounts: () => ({
+      vacanciesCatalog: loadVacanciesCatalog().length,
+      registeredUsers: Object.keys(loadUserProfiles() || {}).length,
+      notificationsStored: Object.values(loadAllNotifications()).reduce(
+        (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+        0
+      ),
+      pendingQueue: loadNotificationQueue().filter((q) => q.status === "pending").length
+    })
+  };
+}
+
+// serverApp.ts
 var Type = {
   TYPE_UNSPECIFIED: "TYPE_UNSPECIFIED",
   STRING: "STRING",
@@ -38,7 +2707,7 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path2.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
     if (!fs.existsSync(UPLOADS_DIR)) {
       fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -104,7 +2773,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path.extname(req.file.originalname).toLowerCase();
+      const ext = path2.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -895,16 +3564,16 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const BOT_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const BOT_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path2.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
@@ -1124,13 +3793,30 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path2.join(RUNTIME_BASE_DIR, "data");
     try {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
       if (!fs.existsSync(BACKUPS_DIR)) {
         fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+      }
+      const bundledDataDir = path2.join(process.cwd(), "data");
+      if (path2.resolve(dataDir) !== path2.resolve(bundledDataDir) && fs.existsSync(bundledDataDir)) {
+        const entries = fs.readdirSync(bundledDataDir);
+        for (const file of entries) {
+          if (!file.endsWith(".json")) continue;
+          const srcPath = path2.join(bundledDataDir, file);
+          const destPath = path2.join(dataDir, file);
+          if (!fs.existsSync(destPath)) {
+            try {
+              if (fs.statSync(srcPath).isFile()) {
+                fs.copyFileSync(srcPath, destPath);
+              }
+            } catch {
+            }
+          }
+        }
       }
     } catch {
     }
@@ -1156,7 +3842,7 @@ ${text}`;
       fs.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path2.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -1643,8 +4329,8 @@ ${text}`;
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path2.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
       if (fs.existsSync(USER_PROFILES_FILE)) {
@@ -1655,17 +4341,34 @@ ${text}`;
     }
     return {};
   }
-  function saveUserProfile(profile) {
+  let userEngineHandle = null;
+  function saveUserProfileMap(profiles) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(USER_PROFILES_FILE, profiles);
+  }
+  function saveUserProfile(profile, isOwnerActor = false) {
     ensureRuntimeDataDir();
     const all = loadUserProfiles();
     const existing = all[profile.uid] || null;
     const isNewRegistration = !existing;
-    const { isAdmin: _stripAdmin, role: _stripRole, ...safeIncoming } = profile || {};
+    const {
+      isAdmin: _stripAdmin,
+      role: _stripRole,
+      accountStatus: incomingStatus,
+      suspendedAt: _stripSuspAt,
+      suspendedReason: _stripSuspReason,
+      ...safeIncoming
+    } = profile || {};
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const resolvedAccountStatus = isOwnerActor && incomingStatus ? incomingStatus : existing?.accountStatus || "active";
     const merged = {
       ...existing || {},
       ...safeIncoming,
       uid: profile.uid,
       accountRole: safeIncoming.accountRole || existing?.accountRole || "staff",
+      accountStatus: resolvedAccountStatus,
+      lastActiveAt: nowIso,
+      lastLoginAt: safeIncoming.lastLoginAt || existing?.lastLoginAt || nowIso,
       areasOfExpertise: Array.isArray(safeIncoming.areasOfExpertise) ? safeIncoming.areasOfExpertise : existing?.areasOfExpertise || [],
       professionalInterests: Array.isArray(safeIncoming.professionalInterests) ? safeIncoming.professionalInterests : existing?.professionalInterests || [],
       previousPositions: Array.isArray(safeIncoming.previousPositions) ? safeIncoming.previousPositions : existing?.previousPositions || [],
@@ -1674,8 +4377,9 @@ ${text}`;
       education: Array.isArray(safeIncoming.education) ? safeIncoming.education : existing?.education || [],
       experience: Array.isArray(safeIncoming.experience) ? safeIncoming.experience : existing?.experience || [],
       documents: Array.isArray(safeIncoming.documents) ? safeIncoming.documents : existing?.documents || [],
-      createdAt: existing?.createdAt || safeIncoming.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      preferredSectors: Array.isArray(safeIncoming.preferredSectors) ? safeIncoming.preferredSectors : existing?.preferredSectors || (safeIncoming.preferredIndustry ? [safeIncoming.preferredIndustry] : []),
+      createdAt: existing?.createdAt || safeIncoming.createdAt || nowIso,
+      updatedAt: nowIso
     };
     all[profile.uid] = merged;
     writeJsonFileAtomic(USER_PROFILES_FILE, all);
@@ -1728,7 +4432,7 @@ ${text}`;
       res.status(404).json({ error: "Staff profile not found" });
     }
   });
-  function handleSaveProfileRequest(req, res) {
+  async function handleSaveProfileRequest(req, res) {
     try {
       const profile = req.body;
       if (!profile || !profile.uid) {
@@ -1739,7 +4443,7 @@ ${text}`;
         res.status(403).json({ error: "Access denied: You can only create or update your own profile." });
         return;
       }
-      const { savedProfile, isNewRegistration } = saveUserProfile(profile);
+      const { savedProfile, isNewRegistration } = saveUserProfile(profile, isPersistentOwnerRequest(req));
       if (isNewRegistration) {
         appendAuditLog({
           action: "staff_registered",
@@ -1767,7 +4471,14 @@ ${text}`;
           severity: "info"
         });
       }
-      res.json({ success: true, profile: savedProfile, isNewRegistration });
+      let engineResult;
+      if (userEngineHandle) {
+        const r = await userEngineHandle.onUserProfileSaved(savedProfile, isNewRegistration).catch(() => null);
+        if (r && typeof r === "object") {
+          engineResult = r;
+        }
+      }
+      res.json({ success: true, profile: savedProfile, isNewRegistration, ...engineResult || {} });
     } catch (err) {
       res.status(500).json({ error: err.message || "Failed to save profile" });
     }
@@ -1877,8 +4588,8 @@ ${text}`;
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path.join(UPLOADS_DIR, safeName);
+      const safeName = `${Date.now()}_${path2.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path2.join(UPLOADS_DIR, safeName);
       fs.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
@@ -3870,10 +6581,10 @@ ${metaLines.join("\n")}` : "";
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path2.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path2.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path2.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path2.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -5004,7 +7715,7 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path2.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
       if (fs.existsSync(AUTO_APPLY_DATA_FILE)) {
@@ -5018,7 +7729,7 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path.dirname(AUTO_APPLY_DATA_FILE);
+      const dir = path2.dirname(AUTO_APPLY_DATA_FILE);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
@@ -6126,8 +8837,8 @@ Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path2.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path2.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -8729,7 +11440,7 @@ Return strict JSON:
             (e) => console.warn("System 2 startup research cycle notice:", e?.message || e)
           );
         }
-      }, 600);
+      }, 6e3);
       schedulerRuntime.timerId = setInterval(() => {
         const latest = loadPersistedInternationalData();
         if (latest.schedulerConfig?.enabled !== false) {
@@ -8909,12 +11620,30 @@ Return strict JSON:
       schedulerStatus: buildSchedulerStatusSnapshot()
     });
   });
+  userEngineHandle = registerUserNotificationAndAnalyticsRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    saveUserProfileMap,
+    loadJobApplications,
+    loadPersistedSettings,
+    loadPersistedInternationalData,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
       const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path.join(BACKUPS_DIR, filename);
+        const fullPath = path2.join(BACKUPS_DIR, filename);
         const stat = fs.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
@@ -8952,14 +11681,15 @@ Return strict JSON:
     const analyticsEvents2 = loadJsonFileSafe(ANALYTICS_FILE, []);
     const telegramLogs = loadJsonFileSafe(TELEGRAM_LOGS_FILE, []);
     const botHealth = loadBotHealthState();
+    const userEngineBackupData = userEngineHandle ? userEngineHandle.getPersistentFilesForBackup() : {};
     const payload = {
       id,
-      version: "3.0.0",
+      version: "3.1.0",
       trigger,
       actorEmail,
       createdAt: nowIso,
       counts: {
-        vacancies: 0,
+        vacancies: Array.isArray(userEngineBackupData.vacanciesCatalog) ? userEngineBackupData.vacanciesCatalog.length : 0,
         staffProfiles: Object.keys(userProfiles || {}).length,
         applications: Array.isArray(jobApplications) ? jobApplications.length : 0,
         internationalJobs: Array.isArray(intlData?.internationalJobs) ? intlData.internationalJobs.length : 0,
@@ -8974,15 +11704,16 @@ Return strict JSON:
         internationalData: intlData,
         analyticsEventsCount: Array.isArray(analyticsEvents2) ? analyticsEvents2.length : 0,
         telegramLogs: Array.isArray(telegramLogs) ? telegramLogs.slice(0, 300) : [],
-        botHealth
+        botHealth,
+        ...userEngineBackupData
       }
     };
-    const fullPath = path.join(BACKUPS_DIR, filename);
+    const fullPath = path2.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
       const autoFiles = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs.unlinkSync(path.join(BACKUPS_DIR, old));
+        fs.unlinkSync(path2.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -9008,7 +11739,7 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      const probeFile = path2.join(RUNTIME_BASE_DIR, "data", ".write_probe");
       fs.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
       fs.unlinkSync(probeFile);
       writable = true;
@@ -9226,7 +11957,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path.join(BACKUPS_DIR, target.filename);
+    const fullPath = path2.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });
@@ -9252,6 +11983,9 @@ Return strict JSON:
     }
     if (d.internationalData && typeof d.internationalData === "object") {
       savePersistedInternationalData(d.internationalData);
+    }
+    if (userEngineHandle) {
+      userEngineHandle.restorePersistentFilesFromBackup(d);
     }
     appendAuditLog({
       action: "backup_restored",
@@ -9295,12 +12029,12 @@ Return strict JSON:
 async function handler(req, res) {
   try {
     const app = await getApiApp();
-    await new Promise((resolve) => {
+    await new Promise((resolve2) => {
       let settled = false;
       const done = () => {
         if (!settled) {
           settled = true;
-          resolve();
+          resolve2();
         }
       };
       res.once("finish", done);

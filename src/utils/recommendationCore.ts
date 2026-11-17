@@ -91,6 +91,9 @@ export function parseMinRequiredYears(text?: string): number | null {
 }
 
 export function getProfileExplicitExperienceYears(profile: JobSeekerProfile): number {
+  if (profile.noExperience && (!profile.experience || profile.experience.length === 0)) {
+    return 0;
+  }
   const fromField = parseMinRequiredYears(profile.yearsOfExperience);
   let expYearsFromEntries = 0;
   const nowYear = new Date().getFullYear();
@@ -238,6 +241,7 @@ export function hasSufficientProfileForRecommendations(profile: JobSeekerProfile
       (profile.areasOfExpertise && profile.areasOfExpertise.length > 0) ||
       (profile.education && profile.education.length > 0) ||
       (profile.experience && profile.experience.length > 0) ||
+      profile.noExperience === true ||
       (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
       (profile.professionalInterests && profile.professionalInterests.length > 0) ||
       (profile.preferredSectors && profile.preferredSectors.length > 0) ||
@@ -248,7 +252,8 @@ export function hasSufficientProfileForRecommendations(profile: JobSeekerProfile
 export function hasCompletedMandatoryPreferences(profile: JobSeekerProfile | null | undefined): boolean {
   if (!profile) return false;
   const hasExperience = Boolean(
-    (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
+    profile.noExperience === true ||
+      (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
       (profile.experience && profile.experience.length > 0) ||
       (profile.previousPositions && profile.previousPositions.length > 0)
   );
@@ -309,9 +314,7 @@ export function computeStaffOpportunityRecommendations(
 
     const reqEduRank = detectEducationRank(v.educationQualification);
     if (reqEduRank > 0 && userEduRank < reqEduRank) {
-      if (userEduRank > 0 || reqEduRank >= EDUCATION_RANK.master) {
-        missingMandatory.push(`${RANK_LABELS[reqEduRank] || v.educationQualification} required`);
-      }
+      missingMandatory.push(`${RANK_LABELS[reqEduRank] || v.educationQualification} required`);
     }
 
     const licenseGaps = detectMissingMandatoryLicenses(

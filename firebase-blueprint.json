@@ -164,6 +164,9 @@
         "professionalInterests": { "type": "array", "description": "Career and professional interests" },
         "certifications": { "type": "array", "description": "Structured certifications and qualifications" },
         "savedJobIds": { "type": "array", "description": "Saved vacancy IDs synced across devices" },
+        "noExperience": { "type": "boolean", "description": "Explicit selection for fresh graduates or candidates with no prior work experience" },
+        "profileStatus": { "type": "string", "enum": ["complete", "incomplete"], "description": "Mandatory profile completion status" },
+        "profileCompletionPercentage": { "type": "number", "description": "Calculated mandatory completion percentage (0-100)" },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["uid", "email", "fullName"]
@@ -230,6 +233,7 @@
         "deviceLabel": { "type": "string", "maxLength": 150 },
         "platform": { "type": "string", "maxLength": 60 },
         "endpoint": { "type": "string", "maxLength": 1000 },
+        "keys": { "type": "object", "description": "Web Push encryption keys (p256dh and auth)" },
         "active": { "type": "boolean" },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },

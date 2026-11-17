@@ -46,6 +46,8 @@ service cloud.firestore {
         && (!('previousPositions' in data) || (data.previousPositions is list && data.previousPositions.size() <= 50))
         && (!('certifications' in data) || (data.certifications is list && data.certifications.size() <= 50))
         && (!('savedJobIds' in data) || (data.savedJobIds is list && data.savedJobIds.size() <= 200))
+        && (!('noExperience' in data) || data.noExperience is bool)
+        && (!('profileStatus' in data) || (data.profileStatus is string && data.profileStatus in ['complete', 'incomplete']))
         && !('isAdmin' in data)
         && !('role' in data);
     }
@@ -192,6 +194,7 @@ service cloud.firestore {
         && request.resource.data.userId is string && (request.resource.data.userId == request.auth.uid || isOwnerAdmin())
         && request.resource.data.deviceId is string && request.resource.data.deviceId.size() <= 128
         && request.resource.data.endpoint is string && request.resource.data.endpoint.size() <= 1000
+        && (!('keys' in request.resource.data) || request.resource.data.keys == null || request.resource.data.keys is map)
         && request.resource.data.active is bool;
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
     }

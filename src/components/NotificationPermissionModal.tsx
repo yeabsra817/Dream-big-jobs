@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Bell,
   CheckCircle2,
-  Mail,
   Smartphone,
   ShieldAlert,
   X,
@@ -34,11 +33,9 @@ export const NotificationPermissionModal: React.FC<Props> = ({
   uid,
   userEmail,
   reason,
-  initialEmailAlerts = true,
   onClose,
   onEnabled,
 }) => {
-  const [emailAlerts, setEmailAlerts] = useState(initialEmailAlerts);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
   const [currentPerm, setCurrentPerm] = useState<NotificationPermissionState>(() =>
@@ -55,7 +52,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
     setFeedback(null);
     try {
       const result = await requestAndEnableNotifications(uid, {
-        emailAlerts,
+        emailAlerts: false,
         websiteBell: true,
         email: userEmail,
       });
@@ -108,15 +105,15 @@ export const NotificationPermissionModal: React.FC<Props> = ({
             <div>
               <h2 id="notif-permission-title" className="text-base font-extrabold text-white">
                 {isBlocked
-                  ? 'Unblock Job Alert Notifications'
+                  ? 'Unblock Instant Job Push Alerts'
                   : reason === 'renew_device'
-                  ? 'Activate Alerts on This Device'
-                  : 'Never Miss Matched Job Vacancies'}
+                  ? 'Activate Push Alerts on This Device'
+                  : 'Instant Job Push Notifications'}
               </h2>
               <p className="text-xs text-slate-300 mt-0.5">
                 {reason === 'renew_device'
-                  ? 'Reconnect push alerts on this browser so new Ethiopian & international matches arrive immediately.'
-                  : 'Instant alerts across Banking, WASH, NGOs, Embassies, Airlines & verified sectors.'}
+                  ? 'Reconnect browser & mobile push alerts so newly published matching jobs arrive directly.'
+                  : 'Real-time Web Push straight to your Android or desktop notification panel — no email needed.'}
               </p>
             </div>
           </div>
@@ -151,44 +148,25 @@ export const NotificationPermissionModal: React.FC<Props> = ({
               <p className="text-amber-900 leading-relaxed">
                 In Safari on iOS, tap the <strong>Share</strong> icon and choose{' '}
                 <strong>Add to Home Screen</strong> to receive iOS lock-screen push notifications.
-                Your Website Notification Bell and Email Alerts will work right away!
+                Your Website Notification Bell will work right away!
               </p>
             </div>
           ) : (
             <div className="space-y-3 text-xs text-slate-700">
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Real-time matches based on your degree, experience, skills, and preferred sectors.</span>
+                <span>Instant push alerts delivered the moment a vacancy matches your education, experience, industry, and desired position.</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Smartphone className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>Works on desktop browsers, Android Chrome, and installed Home Screen apps.</span>
+                <span>Delivered directly to Android &amp; desktop notification panels with 1-tap open to apply.</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Automatic deadline reminders before closing dates — zero spam or fake postings.</span>
+                <span>Focused &amp; spam-free: max 3 job alerts per day, 1 notification per matching job, zero email required.</span>
               </div>
             </div>
           )}
-
-          {/* Email opt-in toggle */}
-          <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={emailAlerts}
-              onChange={(e) => setEmailAlerts(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-[#0B132B] rounded cursor-pointer"
-            />
-            <div className="text-xs">
-              <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5 text-slate-600" />
-                <span>Also send personalized email alerts</span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Sent to {userEmail || 'your registered email'} for high-score verified matches.
-              </p>
-            </div>
-          </label>
 
           {feedback && (
             <div
@@ -226,8 +204,8 @@ export const NotificationPermissionModal: React.FC<Props> = ({
                   {isLoading
                     ? 'Enabling...'
                     : isIosInstallNeeded
-                    ? 'Enable Bell & Email Alerts'
-                    : 'ENABLE NOTIFICATIONS'}
+                    ? 'Enable Notification Bell'
+                    : 'ENABLE PUSH NOTIFICATIONS'}
                 </span>
               </button>
             )}

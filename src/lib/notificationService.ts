@@ -1,5 +1,6 @@
 import {
   doc,
+  getDoc,
   setDoc,
   updateDoc,
   collection,
@@ -10,12 +11,14 @@ import {
 import {
   db,
   auth,
+  isUserAdmin,
   getOwnerAuthHeaders,
   sanitizeForFirestore,
   withTimeout,
 } from './firebase';
 import {
   AdminSchedulerStatusResponse,
+  NotificationDeviceSubscription,
   NotificationPermissionState,
   NotificationPreferencesRecord,
   RegisteredUserAnalyticsSummary,
@@ -102,9 +105,17 @@ export async function registerServiceWorkerSafe(): Promise<ServiceWorkerRegistra
   if (!swRegistrationPromise) {
     swRegistrationPromise = navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
-      .then((reg) => reg)
+      .then(async (reg) => {
+        try {
+          const readyReg = await withTimeout(navigator.serviceWorker.ready, 4000, reg);
+          return readyReg || reg;
+        } catch {
+          return reg;
+        }
+      })
       .catch((err) => {
         console.warn('Service Worker registration notice:', err?.message || err);
+        swRegistrationPromise = null;
         return null;
       });
   }
@@ -122,6 +133,38 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+function uint8ArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function isSubscriptionVapidMatch(sub: PushSubscription | null, vapidPublicKey: string): boolean {
+  if (!sub || !vapidPublicKey) return Boolean(sub);
+  try {
+    const existingBuf = sub.options?.applicationServerKey;
+    if (!existingBuf) return true;
+    const existingBytes = new Uint8Array(existingBuf);
+    const expectedBytes = urlBase64ToUint8Array(vapidPublicKey);
+    return uint8ArraysEqual(existingBytes, expectedBytes);
+  } catch {
+    return true;
+  }
+}
+
+async function fetchVapidPublicKeySafe(): Promise<string> {
+  try {
+    const res = await withTimeout(fetch('/api/push/vapid-public-key'), 3500, null as any);
+    if (res && res.ok) {
+      const data = await res.json();
+      return String(data?.publicKey || '').trim();
+    }
+  } catch {}
+  return '';
+}
+
 function userHeaders(uid: string, email?: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     'x-user-uid': uid,
@@ -131,31 +174,211 @@ function userHeaders(uid: string, email?: string | null): Record<string, string>
   return headers;
 }
 
+function buildSafeSubDocId(uid: string, deviceId: string): string {
+  return `${uid}_${deviceId}`.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
+}
+
+function buildFallbackPrefs(uid: string): NotificationPreferencesRecord {
+  return {
+    userId: uid,
+    permissionStatus: 'default',
+    subscriptionStatus: 'none',
+    frequency: 'instant',
+    promptDismissCount: 0,
+    channels: {
+      websiteBell: true,
+      browserPush: false,
+      mobilePush: false,
+      emailAlerts: false,
+    },
+    alertTypes: {
+      newMatches: true,
+      deadlineReminders: true,
+      jobChanges: true,
+      sectorUpdates: true,
+    },
+    deviceSubscriptions: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function mergePreferenceRecords(
+  uid: string,
+  serverPrefs: NotificationPreferencesRecord | null,
+  fsPrefs: NotificationPreferencesRecord | null,
+  fsDeviceSubs: NotificationDeviceSubscription[]
+): NotificationPreferencesRecord | null {
+  if (!serverPrefs && !fsPrefs && fsDeviceSubs.length === 0) return null;
+  const base = buildFallbackPrefs(uid);
+  const srvTs = new Date(serverPrefs?.updatedAt || 0).getTime();
+  const fsTs = new Date(fsPrefs?.updatedAt || 0).getTime();
+
+  const older = srvTs >= fsTs ? fsPrefs : serverPrefs;
+  const newer = srvTs >= fsTs ? serverPrefs : fsPrefs;
+
+  const deviceMap = new Map<string, NotificationDeviceSubscription>();
+  const addDevices = (list?: NotificationDeviceSubscription[]) => {
+    if (!Array.isArray(list)) return;
+    for (const d of list) {
+      if (!d?.deviceId && !d?.endpoint) continue;
+      const key = d.deviceId || d.endpoint || '';
+      const existing = deviceMap.get(key);
+      const existingTs = new Date(existing?.lastVerifiedAt || existing?.createdAt || 0).getTime();
+      const nextTs = new Date(d.lastVerifiedAt || d.createdAt || 0).getTime();
+      if (!existing || nextTs >= existingTs || (d.subscription?.keys?.p256dh && !existing.subscription?.keys?.p256dh)) {
+        deviceMap.set(key, d);
+      }
+    }
+  };
+  addDevices(older?.deviceSubscriptions);
+  addDevices(newer?.deviceSubscriptions);
+  addDevices(fsDeviceSubs);
+
+  const mergedDevices = Array.from(deviceMap.values()).slice(0, 15);
+  const hasAnyActiveDevice = mergedDevices.some((d) => d.active);
+
+  const resolvedPerm =
+    newer?.permissionStatus && newer.permissionStatus !== 'default'
+      ? newer.permissionStatus
+      : older?.permissionStatus || (hasAnyActiveDevice ? 'granted' : 'default');
+  const resolvedSubStatus = hasAnyActiveDevice
+    ? 'active'
+    : newer?.subscriptionStatus || older?.subscriptionStatus || 'none';
+
+  return {
+    ...base,
+    ...(older || {}),
+    ...(newer || {}),
+    userId: uid,
+    permissionStatus: resolvedPerm,
+    subscriptionStatus: resolvedSubStatus,
+    channels: {
+      ...base.channels,
+      ...(older?.channels || {}),
+      ...(newer?.channels || {}),
+    },
+    alertTypes: {
+      ...base.alertTypes,
+      ...(older?.alertTypes || {}),
+      ...(newer?.alertTypes || {}),
+    },
+    deviceSubscriptions: mergedDevices,
+  };
+}
+
 export async function fetchUserNotificationPreferences(
   uid: string,
   email?: string | null
 ): Promise<NotificationPreferencesRecord | null> {
   if (!uid) return null;
-  try {
-    const res = await fetch(`/api/user/notification-preferences/${encodeURIComponent(uid)}`, {
-      headers: userHeaders(uid, email),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.preferences) {
-        try {
-          localStorage.setItem(`hopelandjobs_notif_prefs_${uid}`, JSON.stringify(data.preferences));
-        } catch {}
-        return data.preferences as NotificationPreferencesRecord;
+
+  const fetchServer = async (): Promise<NotificationPreferencesRecord | null> => {
+    try {
+      const res = await withTimeout(
+        fetch(`/api/user/notification-preferences/${encodeURIComponent(uid)}`, {
+          headers: userHeaders(uid, email),
+        }),
+        3500,
+        null as any
+      );
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data?.preferences) return data.preferences as NotificationPreferencesRecord;
       }
+    } catch {}
+    return null;
+  };
+
+  const fetchFirestore = async (): Promise<{
+    prefs: NotificationPreferencesRecord | null;
+    devices: NotificationDeviceSubscription[];
+  }> => {
+    if (auth.currentUser?.uid !== uid && !isUserAdmin(auth.currentUser)) {
+      return { prefs: null, devices: [] };
     }
-  } catch {}
+    try {
+      const [prefSnap, subsSnap] = await Promise.all([
+        withTimeout(getDoc(doc(db, 'user_notification_preferences', uid)), 3500, null as any),
+        withTimeout(
+          getDocs(query(collection(db, 'push_subscriptions'), where('userId', '==', uid))),
+          3500,
+          null as any
+        ),
+      ]);
+
+      const prefs =
+        prefSnap && prefSnap.exists()
+          ? (prefSnap.data() as NotificationPreferencesRecord)
+          : null;
+
+      const devices: NotificationDeviceSubscription[] = [];
+      if (subsSnap && !subsSnap.empty) {
+        subsSnap.forEach((docSnap: any) => {
+          const d = docSnap.data();
+          if (!d?.endpoint) return;
+          devices.push({
+            deviceId: String(d.deviceId || docSnap.id),
+            deviceLabel: String(d.deviceLabel || 'Web Browser'),
+            platform: String(d.platform || 'web'),
+            endpoint: d.endpoint,
+            subscription: d.keys?.p256dh
+              ? {
+                  endpoint: d.endpoint,
+                  expirationTime: d.expirationTime ?? null,
+                  keys: {
+                    p256dh: d.keys.p256dh,
+                    auth: d.keys.auth,
+                  },
+                }
+              : undefined,
+            active: d.active !== false,
+            createdAt: d.createdAt || d.updatedAt || new Date().toISOString(),
+            lastVerifiedAt: d.updatedAt || new Date().toISOString(),
+          });
+        });
+      }
+      return { prefs, devices };
+    } catch {
+      return { prefs: null, devices: [] };
+    }
+  };
+
+  const [serverPrefs, fsResult] = await Promise.all([fetchServer(), fetchFirestore()]);
+  let cachedPrefs: NotificationPreferencesRecord | null = null;
   try {
     const cached = localStorage.getItem(`hopelandjobs_notif_prefs_${uid}`);
-    return cached ? (JSON.parse(cached) as NotificationPreferencesRecord) : null;
-  } catch {
-    return null;
+    cachedPrefs = cached ? (JSON.parse(cached) as NotificationPreferencesRecord) : null;
+  } catch {}
+
+  const merged = mergePreferenceRecords(
+    uid,
+    serverPrefs || cachedPrefs,
+    fsResult.prefs,
+    fsResult.devices
+  );
+
+  if (merged) {
+    try {
+      localStorage.setItem(`hopelandjobs_notif_prefs_${uid}`, JSON.stringify(merged));
+    } catch {}
+    // Rehydrate serverless memory/tmp if Firestore had newer device subscriptions or prefs
+    const serverHadDevices = Boolean(serverPrefs?.deviceSubscriptions?.some((d) => d.active && d.subscription?.keys?.p256dh));
+    const mergedActiveDevice = merged.deviceSubscriptions.find((d) => d.active && d.subscription?.keys?.p256dh);
+    if (!serverHadDevices && mergedActiveDevice?.subscription) {
+      fetch(`/api/push/subscribe/${encodeURIComponent(uid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...userHeaders(uid, email) },
+        body: JSON.stringify({
+          deviceId: mergedActiveDevice.deviceId,
+          deviceLabel: mergedActiveDevice.deviceLabel,
+          platform: mergedActiveDevice.platform,
+          subscription: mergedActiveDevice.subscription,
+        }),
+      }).catch(() => {});
+    }
   }
+
+  return merged;
 }
 
 export async function saveUserNotificationPreferences(
@@ -168,27 +391,56 @@ export async function saveUserNotificationPreferences(
 ): Promise<NotificationPreferencesRecord | null> {
   if (!uid) return null;
   let savedPrefs: NotificationPreferencesRecord | null = null;
+
+  let cachedBase: NotificationPreferencesRecord = buildFallbackPrefs(uid);
   try {
-    const res = await fetch(`/api/user/notification-preferences/${encodeURIComponent(uid)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...userHeaders(uid, email),
-      },
-      body: JSON.stringify(patch),
-    });
-    if (res.ok) {
+    const raw = localStorage.getItem(`hopelandjobs_notif_prefs_${uid}`);
+    if (raw) cachedBase = { ...cachedBase, ...JSON.parse(raw) };
+  } catch {}
+
+  try {
+    const res = await withTimeout(
+      fetch(`/api/user/notification-preferences/${encodeURIComponent(uid)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...userHeaders(uid, email),
+        },
+        body: JSON.stringify(patch),
+      }),
+      3500,
+      null as any
+    );
+    if (res && res.ok) {
       const data = await res.json();
       savedPrefs = data?.preferences || null;
-      if (savedPrefs) {
-        try {
-          localStorage.setItem(`hopelandjobs_notif_prefs_${uid}`, JSON.stringify(savedPrefs));
-        } catch {}
-      }
     }
   } catch {}
 
-  if (savedPrefs && auth.currentUser?.uid === uid) {
+  if (!savedPrefs) {
+    const nowIso = new Date().toISOString();
+    savedPrefs = {
+      ...cachedBase,
+      ...patch,
+      userId: uid,
+      channels: {
+        ...cachedBase.channels,
+        ...(patch.channels || {}),
+      },
+      alertTypes: {
+        ...cachedBase.alertTypes,
+        ...(patch.alertTypes || {}),
+      },
+      deviceSubscriptions: patch.deviceSubscriptions ?? cachedBase.deviceSubscriptions ?? [],
+      updatedAt: nowIso,
+    };
+  }
+
+  try {
+    localStorage.setItem(`hopelandjobs_notif_prefs_${uid}`, JSON.stringify(savedPrefs));
+  } catch {}
+
+  if (savedPrefs && (auth.currentUser?.uid === uid || isUserAdmin(auth.currentUser))) {
     try {
       const clean = sanitizeForFirestore({
         userId: uid,
@@ -198,15 +450,80 @@ export async function saveUserNotificationPreferences(
         enabledAt: savedPrefs.enabledAt || null,
         permissionVerifiedAt: savedPrefs.permissionVerifiedAt || null,
         lastSuccessfulDeliveryAt: savedPrefs.lastSuccessfulDeliveryAt || null,
+        promptDismissCount: savedPrefs.promptDismissCount ?? 0,
         channels: savedPrefs.channels,
         alertTypes: savedPrefs.alertTypes,
+        deviceSubscriptions: savedPrefs.deviceSubscriptions || [],
         updatedAt: savedPrefs.updatedAt,
       });
-      await withTimeout(setDoc(doc(db, 'user_notification_preferences', uid), clean, { merge: true }), 3000, undefined);
+      await withTimeout(setDoc(doc(db, 'user_notification_preferences', uid), clean, { merge: true }), 3500, undefined);
     } catch {}
   }
 
   return savedPrefs;
+}
+
+async function persistPushSubscriptionToFirestoreAndServer(
+  uid: string,
+  subJson: PushSubscriptionJSON,
+  deviceMeta: { deviceId: string; deviceLabel: string; platform: string },
+  email?: string | null
+): Promise<NotificationPreferencesRecord | null> {
+  const nowIso = new Date().toISOString();
+  let serverPrefs: NotificationPreferencesRecord | null = null;
+
+  try {
+    const subRes = await withTimeout(
+      fetch(`/api/push/subscribe/${encodeURIComponent(uid)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...userHeaders(uid, email),
+        },
+        body: JSON.stringify({
+          ...deviceMeta,
+          subscription: subJson,
+        }),
+      }),
+      4000,
+      null as any
+    );
+    if (subRes && subRes.ok) {
+      const data = await subRes.json();
+      serverPrefs = data?.preferences || null;
+    }
+  } catch {}
+
+  if (auth.currentUser?.uid === uid && subJson?.endpoint) {
+    const safeSubId = buildSafeSubDocId(uid, deviceMeta.deviceId);
+    try {
+      await withTimeout(
+        setDoc(
+          doc(db, 'push_subscriptions', safeSubId),
+          sanitizeForFirestore({
+            id: safeSubId,
+            userId: uid,
+            deviceId: deviceMeta.deviceId,
+            deviceLabel: deviceMeta.deviceLabel,
+            platform: deviceMeta.platform,
+            endpoint: subJson.endpoint,
+            expirationTime: subJson.expirationTime ?? null,
+            keys: {
+              p256dh: subJson.keys?.p256dh || '',
+              auth: subJson.keys?.auth || '',
+            },
+            active: true,
+            updatedAt: nowIso,
+          }),
+          { merge: true }
+        ),
+        3500,
+        undefined
+      );
+    } catch {}
+  }
+
+  return serverPrefs;
 }
 
 export async function checkCurrentDevicePushHealth(
@@ -219,7 +536,8 @@ export async function checkCurrentDevicePushHealth(
   needsRenewalOnThisDevice: boolean;
 }> {
   const browserPermission = getBrowserNotificationPermission();
-  const { deviceId } = getDeviceMetadata();
+  const deviceMeta = getDeviceMetadata();
+  const { deviceId } = deviceMeta;
 
   if (browserPermission === 'unsupported' || !isPushSupportedOnDevice()) {
     return {
@@ -241,27 +559,35 @@ export async function checkCurrentDevicePushHealth(
   }
 
   let browserSub: PushSubscription | null = null;
+  let reg: ServiceWorkerRegistration | null = null;
   try {
-    const reg = await registerServiceWorkerSafe();
+    reg = await registerServiceWorkerSafe();
     if (reg?.pushManager) {
       browserSub = await reg.pushManager.getSubscription();
     }
   } catch {}
 
-  const serverDevice = (prefs?.deviceSubscriptions || []).find((d) => d.deviceId === deviceId && d.active);
-  const hasActiveSubscriptionOnThisDevice = Boolean(
-    browserPermission === 'granted' && browserSub && serverDevice
-  );
-
-  // If browser granted permission and has a subscription not yet stored for this deviceId, sync silently!
-  if (browserPermission === 'granted' && browserSub && !serverDevice && prefs?.channels?.browserPush) {
-    const dev = getDeviceMetadata();
+  // Check if VAPID key changed on production; if granted and mismatched, silently renew subscription
+  const publicKey = browserSub ? await fetchVapidPublicKeySafe() : '';
+  if (browserPermission === 'granted' && browserSub && publicKey && !isSubscriptionVapidMatch(browserSub, publicKey)) {
     try {
-      await fetch(`/api/push/subscribe/${encodeURIComponent(uid)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...userHeaders(uid, email) },
-        body: JSON.stringify({ ...dev, subscription: browserSub.toJSON() }),
+      await browserSub.unsubscribe();
+      browserSub = await reg!.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
       });
+      await persistPushSubscriptionToFirestoreAndServer(uid, browserSub.toJSON(), deviceMeta, email);
+    } catch {}
+  }
+
+  const serverDevice = (prefs?.deviceSubscriptions || []).find((d) => d.deviceId === deviceId && d.active);
+  const subJson = browserSub?.toJSON();
+  const hasKeysSynced = Boolean(serverDevice?.subscription?.keys?.p256dh && serverDevice?.subscription?.keys?.auth);
+
+  // Sync silently if browser granted permission & holds a subscription not yet synced with full keys
+  if (browserPermission === 'granted' && browserSub && subJson?.endpoint && (!serverDevice || !hasKeysSynced)) {
+    try {
+      await persistPushSubscriptionToFirestoreAndServer(uid, subJson, deviceMeta, email);
       return {
         browserPermission: 'granted',
         hasActiveSubscriptionOnThisDevice: true,
@@ -269,6 +595,10 @@ export async function checkCurrentDevicePushHealth(
       };
     } catch {}
   }
+
+  const hasActiveSubscriptionOnThisDevice = Boolean(
+    browserPermission === 'granted' && browserSub && serverDevice
+  );
 
   const deviceMarkedExpired = Boolean(
     (prefs?.deviceSubscriptions || []).some((d) => d.deviceId === deviceId && !d.active)
@@ -285,8 +615,8 @@ export async function checkCurrentDevicePushHealth(
 }
 
 /**
- * Exact Req 10F Prompt State Evaluator:
- * Never repeatedly prompts once notifications are granted & active on the current device.
+ * Evaluates whether the notification permission modal should be shown.
+ * Never repeatedly prompts once push notifications are granted & active on the current device.
  */
 export function evaluateNotificationPromptRule(args: {
   prefs: NotificationPreferencesRecord | null;
@@ -305,15 +635,13 @@ export function evaluateNotificationPromptRule(args: {
   }
 
   if (browserPermission === 'denied') {
-    // Only show instructions on explicit demand or once per session if user enabled alerts before
     return { shouldShowModal: !alreadyPromptedThisLogin && prefs?.permissionStatus === 'granted', reason: 'blocked_in_browser' };
   }
 
   if (browserPermission === 'unsupported') {
-    // Website Bell + Email Alerts still active without browser push
-    const emailSet = Boolean(prefs?.enabledAt || prefs?.channels?.websiteBell);
+    const bellSet = Boolean(prefs?.enabledAt || prefs?.channels?.websiteBell);
     return {
-      shouldShowModal: !alreadyPromptedThisLogin && !prefs?.enabledAt && !emailSet,
+      shouldShowModal: !alreadyPromptedThisLogin && !bellSet,
       reason: 'unsupported',
     };
   }
@@ -348,6 +676,7 @@ export async function requestAndEnableNotifications(
 }> {
   const browserSupport = isPushSupportedOnDevice();
   const deviceMeta = getDeviceMetadata();
+  const useEmailAlerts = options.emailAlerts === true;
 
   if (!browserSupport) {
     const saved = await saveUserNotificationPreferences(
@@ -360,7 +689,7 @@ export async function requestAndEnableNotifications(
           websiteBell: options.websiteBell !== false,
           browserPush: false,
           mobilePush: false,
-          emailAlerts: options.emailAlerts !== false,
+          emailAlerts: useEmailAlerts,
         },
       },
       options.email
@@ -371,8 +700,8 @@ export async function requestAndEnableNotifications(
       subscriptionActive: false,
       preferences: saved,
       message: isIosSafariNeedsInstall()
-        ? 'Website bell and email job alerts enabled! Add Hopeland Jobs to your iPhone Home Screen to also receive iOS push alerts.'
-        : 'Website notification bell and email alerts are enabled for your account.',
+        ? 'Dashboard notification bell enabled! Add Hopeland Jobs to your iPhone Home Screen to also receive iOS lock-screen push alerts.'
+        : 'Website dashboard notification bell is enabled for your account.',
     };
   }
 
@@ -395,7 +724,7 @@ export async function requestAndEnableNotifications(
           websiteBell: options.websiteBell !== false,
           browserPush: false,
           mobilePush: false,
-          emailAlerts: options.emailAlerts !== false,
+          emailAlerts: useEmailAlerts,
         },
       },
       options.email
@@ -405,7 +734,7 @@ export async function requestAndEnableNotifications(
       permissionStatus: 'denied',
       subscriptionActive: false,
       preferences: saved,
-      message: 'Browser notifications are currently blocked. Enable Notifications for this site in your browser settings, then click Check Again.',
+      message: 'Browser notifications are currently blocked. Allow Notifications for this site in your browser settings, then click Check Again.',
     };
   }
 
@@ -420,7 +749,7 @@ export async function requestAndEnableNotifications(
           websiteBell: options.websiteBell !== false,
           browserPush: false,
           mobilePush: false,
-          emailAlerts: options.emailAlerts !== false,
+          emailAlerts: useEmailAlerts,
         },
       },
       options.email
@@ -430,23 +759,26 @@ export async function requestAndEnableNotifications(
       permissionStatus: 'default',
       subscriptionActive: false,
       preferences: saved,
-      message: 'Permission prompt was dismissed. Website notification bell remains active, and we will remind you on your next login.',
+      message: 'Permission prompt was dismissed. Website notification bell remains active, and you can enable push alerts anytime.',
     };
   }
 
-  // Permission granted -> register SW + subscribe with VAPID key
+  // Permission granted -> register SW + verify VAPID match + subscribe with full keys
   try {
     const reg = await registerServiceWorkerSafe();
     if (!reg?.pushManager) {
       throw new Error('Service Worker PushManager unavailable in this browser');
     }
-    const keyRes = await fetch('/api/push/vapid-public-key');
-    if (!keyRes.ok) {
+    const publicKey = await fetchVapidPublicKeySafe();
+    if (!publicKey) {
       throw new Error('Could not retrieve Web Push VAPID public key');
     }
-    const { publicKey } = await keyRes.json();
 
     let sub = await reg.pushManager.getSubscription();
+    if (sub && !isSubscriptionVapidMatch(sub, publicKey)) {
+      await sub.unsubscribe().catch(() => {});
+      sub = null;
+    }
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
@@ -454,55 +786,27 @@ export async function requestAndEnableNotifications(
       });
     }
 
-    const subRes = await fetch(`/api/push/subscribe/${encodeURIComponent(uid)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...userHeaders(uid, options.email),
-      },
-      body: JSON.stringify({
-        ...deviceMeta,
-        subscription: sub.toJSON(),
-      }),
-    });
-
-    const subData = subRes.ok ? await subRes.json() : null;
     const subJson = sub.toJSON();
-    if (auth.currentUser?.uid === uid && subJson?.endpoint) {
-      const safeSubId = `${uid}_${deviceMeta.deviceId}`.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
-      try {
-        await withTimeout(
-          setDoc(
-            doc(db, 'push_subscriptions', safeSubId),
-            sanitizeForFirestore({
-              id: safeSubId,
-              userId: uid,
-              deviceId: deviceMeta.deviceId,
-              deviceLabel: deviceMeta.deviceLabel,
-              platform: deviceMeta.platform,
-              endpoint: subJson.endpoint,
-              active: true,
-              updatedAt: new Date().toISOString(),
-            }),
-            { merge: true }
-          ),
-          3000,
-          undefined
-        );
-      } catch {}
-    }
+    const srvPrefs = await persistPushSubscriptionToFirestoreAndServer(
+      uid,
+      subJson,
+      deviceMeta,
+      options.email
+    );
 
     const saved = await saveUserNotificationPreferences(
       uid,
       {
         permissionStatus: 'granted',
         subscriptionStatus: 'active',
+        enabledAt: new Date().toISOString(),
         channels: {
           websiteBell: options.websiteBell !== false,
           browserPush: true,
           mobilePush: deviceMeta.platform === 'android' || deviceMeta.platform === 'ios',
-          emailAlerts: options.emailAlerts !== false,
+          emailAlerts: useEmailAlerts,
         },
+        deviceSubscriptions: srvPrefs?.deviceSubscriptions,
       },
       options.email
     );
@@ -511,8 +815,8 @@ export async function requestAndEnableNotifications(
       success: true,
       permissionStatus: 'granted',
       subscriptionActive: true,
-      preferences: saved || subData?.preferences || null,
-      message: 'Job alert notifications are now enabled across this device and your dashboard!',
+      preferences: saved || srvPrefs || null,
+      message: 'Push notifications are now enabled! Instant matching job alerts will arrive directly on this device.',
     };
   } catch (err: any) {
     const saved = await saveUserNotificationPreferences(
@@ -524,7 +828,7 @@ export async function requestAndEnableNotifications(
           websiteBell: options.websiteBell !== false,
           browserPush: false,
           mobilePush: false,
-          emailAlerts: options.emailAlerts !== false,
+          emailAlerts: useEmailAlerts,
         },
       },
       options.email
@@ -534,9 +838,96 @@ export async function requestAndEnableNotifications(
       permissionStatus: 'granted',
       subscriptionActive: false,
       preferences: saved,
-      message: `Permission granted! Website bell & email alerts are active (Push note: ${err?.message || 'browser push unavailable'}).`,
+      message: `Permission granted! Website notification bell is active (Push note: ${err?.message || 'browser push unavailable'}).`,
     };
   }
+}
+
+export async function disableDeviceNotifications(
+  uid: string,
+  email?: string | null
+): Promise<{
+  success: boolean;
+  preferences: NotificationPreferencesRecord | null;
+  message: string;
+}> {
+  const deviceMeta = getDeviceMetadata();
+  let unsubscribedEndpoint = '';
+
+  try {
+    const reg = await registerServiceWorkerSafe();
+    const sub = await reg?.pushManager?.getSubscription();
+    if (sub) {
+      unsubscribedEndpoint = sub.endpoint;
+      await sub.unsubscribe();
+    }
+  } catch {}
+
+  let serverPrefs: NotificationPreferencesRecord | null = null;
+  try {
+    const res = await withTimeout(
+      fetch(`/api/push/unsubscribe/${encodeURIComponent(uid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...userHeaders(uid, email) },
+        body: JSON.stringify({
+          deviceId: deviceMeta.deviceId,
+          endpoint: unsubscribedEndpoint || undefined,
+        }),
+      }),
+      3500,
+      null as any
+    );
+    if (res && res.ok) {
+      const data = await res.json();
+      serverPrefs = data?.preferences || null;
+    }
+  } catch {}
+
+  if (auth.currentUser?.uid === uid) {
+    const safeSubId = buildSafeSubDocId(uid, deviceMeta.deviceId);
+    try {
+      await withTimeout(
+        setDoc(
+          doc(db, 'push_subscriptions', safeSubId),
+          sanitizeForFirestore({
+            id: safeSubId,
+            userId: uid,
+            deviceId: deviceMeta.deviceId,
+            deviceLabel: deviceMeta.deviceLabel,
+            platform: deviceMeta.platform,
+            endpoint: unsubscribedEndpoint || 'disabled',
+            active: false,
+            updatedAt: new Date().toISOString(),
+          }),
+          { merge: true }
+        ),
+        3500,
+        undefined
+      );
+    } catch {}
+  }
+
+  const stillHasActive = Boolean(serverPrefs?.deviceSubscriptions?.some((d) => d.active));
+  const saved = await saveUserNotificationPreferences(
+    uid,
+    {
+      subscriptionStatus: stillHasActive ? 'active' : 'none',
+      channels: {
+        websiteBell: true,
+        browserPush: stillHasActive,
+        mobilePush: stillHasActive,
+        emailAlerts: false,
+      },
+      deviceSubscriptions: serverPrefs?.deviceSubscriptions,
+    },
+    email
+  );
+
+  return {
+    success: true,
+    preferences: saved || serverPrefs,
+    message: 'Push notifications have been disabled on this device.',
+  };
 }
 
 export async function sendTestPushNotification(
@@ -642,7 +1033,6 @@ export async function fetchUserNotificationsServer(
     }
   } catch {}
 
-  // Fallback to Firestore if offline server unavailable
   if (auth.currentUser?.uid === uid) {
     try {
       const q = query(collection(db, 'user_notifications'), where('userId', '==', uid));
@@ -712,6 +1102,28 @@ export async function syncNotificationsOnReconnect(
   return null;
 }
 
+async function gatherFirestoreUsersSnapshot(): Promise<{
+  profiles: any[];
+  preferences: any[];
+  pushSubscriptions: any[];
+} | null> {
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) return null;
+  try {
+    const [profilesSnap, prefsSnap, subsSnap] = await Promise.all([
+      withTimeout(getDocs(collection(db, 'job_seeker_profiles')), 3500, null as any),
+      withTimeout(getDocs(collection(db, 'user_notification_preferences')), 3500, null as any),
+      withTimeout(getDocs(collection(db, 'push_subscriptions')), 3500, null as any),
+    ]);
+    const profiles = profilesSnap ? profilesSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.uid) : [];
+    const preferences = prefsSnap ? prefsSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.userId) : [];
+    const pushSubscriptions = subsSnap ? subsSnap.docs.map((d: any) => d.data()).filter((s: any) => s?.userId && s?.endpoint) : [];
+    if (profiles.length === 0 && preferences.length === 0 && pushSubscriptions.length === 0) return null;
+    return { profiles, preferences, pushSubscriptions };
+  } catch {
+    return null;
+  }
+}
+
 export async function syncVacanciesToServerCatalog(
   vacancies: Vacancy[],
   options: {
@@ -729,6 +1141,9 @@ export async function syncVacanciesToServerCatalog(
 } | null> {
   if (!Array.isArray(vacancies) || vacancies.length === 0) return null;
   try {
+    const usersSnapshot =
+      options.mode !== 'seed_if_empty' ? await gatherFirestoreUsersSnapshot() : null;
+
     const res = await withTimeout(
       fetch('/api/vacancies/sync', {
         method: 'POST',
@@ -743,9 +1158,10 @@ export async function syncVacanciesToServerCatalog(
           changedVacancyId: options.changedVacancyId,
           changedVacancyIds: options.changedVacancyIds,
           changeType: options.changeType,
+          ...(usersSnapshot ? { usersSnapshot } : {}),
         }),
       }),
-      8500,
+      10000,
       null as any
     );
     if (res && res.ok) {
@@ -758,13 +1174,8 @@ export async function syncVacanciesToServerCatalog(
 export async function syncAllUsersFromFirestoreToServer(adminEmailOverride?: string): Promise<void> {
   if (!auth.currentUser) return;
   try {
-    const [profilesSnap, prefsSnap] = await Promise.all([
-      withTimeout(getDocs(collection(db, 'job_seeker_profiles')), 4000, null as any),
-      withTimeout(getDocs(collection(db, 'user_notification_preferences')), 4000, null as any),
-    ]);
-    const profiles = profilesSnap ? profilesSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.uid) : [];
-    const preferences = prefsSnap ? prefsSnap.docs.map((d: any) => d.data()).filter((p: any) => p?.userId) : [];
-    if (profiles.length === 0 && preferences.length === 0) return;
+    const snapshot = await gatherFirestoreUsersSnapshot();
+    if (!snapshot) return;
 
     await withTimeout(
       fetch('/api/admin/sync-registered-users', {
@@ -774,7 +1185,7 @@ export async function syncAllUsersFromFirestoreToServer(adminEmailOverride?: str
           ...getOwnerAuthHeaders(adminEmailOverride),
         },
         credentials: 'include',
-        body: JSON.stringify({ profiles, preferences }),
+        body: JSON.stringify(snapshot),
       }),
       4500,
       null as any

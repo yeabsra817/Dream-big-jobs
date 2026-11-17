@@ -121,6 +121,7 @@ import {
   checkCurrentDevicePushHealth,
   evaluateNotificationPromptRule,
   requestAndEnableNotifications,
+  disableDeviceNotifications,
   fetchUserNotificationsServer,
   markUserNotificationReadServer,
   syncNotificationsOnReconnect,
@@ -514,7 +515,13 @@ export default function App() {
                 await saveJobSeekerProfile(syncedProfile);
               }
             }
-              setUserProfile(syncedProfile);
+            // Touch lastActiveAt / lastLoginAt if stale (>2m)
+            const prevActMs = syncedProfile.lastActiveAt ? new Date(syncedProfile.lastActiveAt).getTime() : 0;
+            if (!prevActMs || Date.now() - prevActMs > 120000) {
+              syncedProfile = { ...syncedProfile, lastLoginAt: now, lastActiveAt: now, updatedAt: now };
+              saveJobSeekerProfile(syncedProfile).catch(() => {});
+            }
+            setUserProfile(syncedProfile);
             if (Array.isArray(syncedProfile.savedJobIds) && syncedProfile.savedJobIds.length > 0) {
               setSavedJobIds((prev) => {
                 const merged = new Set([...Array.from(prev), ...syncedProfile.savedJobIds!]);
@@ -535,11 +542,30 @@ export default function App() {
               phone: user.phoneNumber || '',
               authProvider: isGoogleUser ? 'google' : 'email',
               emailVerified: user.emailVerified,
+              noExperience: false,
+              profileStatus: 'incomplete',
+              profileCompletionPercentage: 0,
               savedJobIds: Array.from(savedJobIds).slice(0, 200),
+              lastLoginAt: now,
+              lastActiveAt: now,
               createdAt: now,
               updatedAt: now,
             };
             await saveJobSeekerProfile(newProfile);
+            await saveUserNotificationPreferences(
+              user.uid,
+              {
+                permissionStatus: 'default',
+                subscriptionStatus: 'none',
+                channels: {
+                  websiteBell: true,
+                  browserPush: false,
+                  mobilePush: false,
+                  emailAlerts: false,
+                },
+              },
+              user.email
+            ).catch(() => null);
             setUserProfile(newProfile);
           }
 
@@ -586,6 +612,21 @@ export default function App() {
       clearTimeout(prefetchTimer);
     };
   }, [hydrateUserNotificationsAndPrompt]);
+
+  // Real-time online heartbeat for signed-in users (keeps Admin Online Users count accurate)
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+    const heartbeat = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        const now = new Date().toISOString();
+        saveJobSeekerProfile({
+          ...userProfile,
+          lastActiveAt: now,
+        }).catch(() => {});
+      }
+    }, 60 * 1000);
+    return () => clearInterval(heartbeat);
+  }, [userProfile]);
 
   // Register Service Worker, PWA Install Prompt, Online/Offline Reconnect Sync & Deep-Link Message Handler
   useEffect(() => {
@@ -2669,7 +2710,7 @@ export default function App() {
           uid={userProfile.uid}
           userEmail={userProfile.email}
           reason={notificationModalReason}
-          initialEmailAlerts={notificationPrefs?.channels?.emailAlerts ?? true}
+          initialEmailAlerts={false}
           onClose={(dismissed) => {
             setIsNotificationModalOpen(false);
             if (dismissed && userProfile?.uid) {
@@ -2730,10 +2771,22 @@ export default function App() {
             onEnableDevicePush={async () => {
               if (!userProfile?.uid) return;
               const res = await requestAndEnableNotifications(userProfile.uid, {
-                emailAlerts: notificationPrefs?.channels?.emailAlerts ?? true,
+                emailAlerts: false,
                 websiteBell: true,
                 email: userProfile.email,
               });
+              if (res.preferences) setNotificationPrefs(res.preferences);
+              const health = await checkCurrentDevicePushHealth(
+                userProfile.uid,
+                res.preferences,
+                userProfile.email
+              );
+              setBrowserPerm(health.browserPermission);
+              setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+            }}
+            onDisableDevicePush={async () => {
+              if (!userProfile?.uid) return;
+              const res = await disableDeviceNotifications(userProfile.uid, userProfile.email);
               if (res.preferences) setNotificationPrefs(res.preferences);
               const health = await checkCurrentDevicePushHealth(
                 userProfile.uid,

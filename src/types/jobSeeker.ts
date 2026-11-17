@@ -98,6 +98,8 @@ export interface JobSeekerProfile {
   };
 
   savedJobIds?: string[];
+  noExperience?: boolean;
+  profileStatus?: 'complete' | 'incomplete';
   profileCompletionPercentage: number;
   createdAt: string;
   updatedAt: string;
@@ -265,14 +267,17 @@ export interface RegisteredUserAnalyticsSummary {
   generatedAt: string;
   metrics: {
     totalRegisteredUsers: number;
+    onlineUsersCount: number;
     totalActiveUsers: number;
     totalInactiveUsers: number;
     totalSuspendedUsers: number;
     newRegistrationsToday: number;
     newRegistrationsThisWeek: number;
     newRegistrationsThisMonth: number;
+    newRegistrationsThisYear: number;
     completedProfilesCount: number;
     incompleteProfilesCount: number;
+    averageCompletionRate: number;
     notificationsEnabledCount: number;
     usersReceivingRecommendationsCount: number;
   };
@@ -300,6 +305,18 @@ export interface RegisteredUserAnalyticsSummary {
     sector: string;
     count: number;
   }>;
+  educationBreakdown: Array<{
+    level: string;
+    count: number;
+  }>;
+  experienceBreakdown: Array<{
+    band: string;
+    count: number;
+  }>;
+  jobPreferenceBreakdown: Array<{
+    position: string;
+    count: number;
+  }>;
   suspiciousDuplicates: Array<{
     reason: string;
     uids: string[];
@@ -315,8 +332,15 @@ export interface RegisteredUserAnalyticsSummary {
     locationCity: string;
     desiredJobTitle: string;
     preferredIndustry: string;
+    educationLevel: string;
+    experienceBand: string;
+    yearsOfExperience: string;
+    noExperience?: boolean;
     profileCompletionPercentage: number;
+    completedSections: string[];
+    missingSections: string[];
     isProfileComplete: boolean;
+    isOnline?: boolean;
     notificationsEnabled: boolean;
     permissionStatus: NotificationPermissionState;
     subscriptionStatus: NotificationSubscriptionStatus;
@@ -363,56 +387,105 @@ export interface UserJobApplication {
   updatedAt: string;
 }
 
-export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): number {
+export interface ProfileCompletionEvaluation {
+  percentage: number;
+  completedSections: string[];
+  missingSections: string[];
+  isProfileComplete: boolean;
+}
+
+export function evaluateMandatoryProfileCompletion(
+  profile: Partial<JobSeekerProfile>
+): ProfileCompletionEvaluation {
+  const completedSections: string[] = [];
+  const missingSections: string[] = [];
   let score = 0;
-  const weights = {
-    fullName: 10,
-    email: 10,
-    phone: 8,
-    locationCity: 7,
-    desiredJobTitleOrPosition: 10,
-    skillsAndExpertise: 10,
-    education: 15,
-    experience: 15,
-    certificationsOrInterests: 5,
-    documents: 10,
+
+  // 1. Personal information (20 pts): fullName, email, phone, locationCity
+  const hasPersonal = Boolean(
+    profile.fullName &&
+      profile.fullName.trim().length >= 2 &&
+      profile.email &&
+      profile.email.includes('@') &&
+      profile.phone &&
+      profile.phone.trim().length >= 6 &&
+      profile.locationCity &&
+      profile.locationCity.trim().length >= 2
+  );
+  if (hasPersonal) {
+    score += 20;
+    completedSections.push('Personal Information');
+  } else {
+    missingSections.push('Personal Information (Name, Phone & City)');
+  }
+
+  // 2. Education (20 pts)
+  const hasEducation = Boolean(Array.isArray(profile.education) && profile.education.length > 0);
+  if (hasEducation) {
+    score += 20;
+    completedSections.push('Education');
+  } else {
+    missingSections.push('Education History');
+  }
+
+  // 3. Employment history or explicit no-experience selection (20 pts)
+  const hasEmploymentOrNone = Boolean(
+    (Array.isArray(profile.experience) && profile.experience.length > 0) ||
+      profile.noExperience === true
+  );
+  if (hasEmploymentOrNone) {
+    score += 20;
+    completedSections.push(profile.noExperience ? 'Employment Status (No Prior Experience)' : 'Employment History');
+  } else {
+    missingSections.push('Employment History (or No-Experience selection)');
+  }
+
+  // 4. Current or previous job (15 pts)
+  const hasCurrentOrPreviousJob = Boolean(
+    (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
+      (Array.isArray(profile.previousPositions) && profile.previousPositions.length > 0) ||
+      (Array.isArray(profile.experience) && profile.experience.length > 0) ||
+      profile.noExperience === true
+  );
+  if (hasCurrentOrPreviousJob) {
+    score += 15;
+    completedSections.push('Current or Previous Role');
+  } else {
+    missingSections.push('Current or Previous Job Title');
+  }
+
+  // 5. Industry (15 pts)
+  const hasIndustry = Boolean(
+    (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      (Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0)
+  );
+  if (hasIndustry) {
+    score += 15;
+    completedSections.push('Professional Industry');
+  } else {
+    missingSections.push('Professional Industry');
+  }
+
+  // 6. Preferred job position (10 pts)
+  const hasPreferredPosition = Boolean(profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2);
+  if (hasPreferredPosition) {
+    score += 10;
+    completedSections.push('Preferred Job Position');
+  } else {
+    missingSections.push('Preferred Job Position');
+  }
+
+  const bounded = Math.min(100, Math.max(0, score));
+  return {
+    percentage: bounded,
+    completedSections,
+    missingSections,
+    isProfileComplete: missingSections.length === 0,
   };
+}
 
-  if (profile.fullName && profile.fullName.trim().length > 2) score += weights.fullName;
-  if (profile.email && profile.email.includes('@')) score += weights.email;
-  if (profile.phone && profile.phone.trim().length > 5) score += weights.phone;
-  if (profile.locationCity && profile.locationCity.trim().length > 1) score += weights.locationCity;
-  if (
-    (profile.desiredJobTitle && profile.desiredJobTitle.trim().length > 2) ||
-    (profile.currentPosition && profile.currentPosition.trim().length > 2) ||
-    (profile.preferredSectors && profile.preferredSectors.length > 0) ||
-    (profile.preferredIndustry && profile.preferredIndustry.trim().length > 2)
-  ) {
-    score += weights.desiredJobTitleOrPosition;
-  }
-  if (
-    (profile.skills && profile.skills.length > 0) ||
-    (profile.areasOfExpertise && profile.areasOfExpertise.length > 0)
-  ) {
-    score += weights.skillsAndExpertise;
-  }
-  if (profile.education && profile.education.length > 0) score += weights.education;
-  if (
-    (profile.experience && profile.experience.length > 0) ||
-    (profile.previousPositions && profile.previousPositions.length > 0) ||
-    (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0)
-  ) {
-    score += weights.experience;
-  }
-  if (
-    (profile.certifications && profile.certifications.length > 0) ||
-    (profile.professionalInterests && profile.professionalInterests.length > 0)
-  ) {
-    score += weights.certificationsOrInterests;
-  }
-  if (profile.documents && profile.documents.length > 0) score += weights.documents;
-
-  return Math.min(100, Math.max(10, score));
+export function calculateProfileCompletion(profile: Partial<JobSeekerProfile>): number {
+  return evaluateMandatoryProfileCompletion(profile).percentage;
 }
 
 export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
@@ -429,9 +502,9 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
   previousPositions: [],
   employmentStatus: 'unemployed',
   desiredJobTitle: '',
-  preferredIndustry: 'Banking and Financial Institutions',
-  preferredSectors: ['Banking and Financial Institutions'],
-  yearsOfExperience: '0-1 Years (Entry Level)',
+  preferredIndustry: '',
+  preferredSectors: [],
+  yearsOfExperience: '',
   expectedSalaryEtb: '',
   preferredEmploymentType: 'Full-time',
   preferredWorkLocation: 'Addis Ababa',
@@ -450,7 +523,9 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
     remote: false,
     freshGraduate: true,
   },
-  profileCompletionPercentage: 20,
+  noExperience: false,
+  profileStatus: 'incomplete',
+  profileCompletionPercentage: 0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

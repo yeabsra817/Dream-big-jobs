@@ -38,7 +38,12 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
-import { JobSeekerProfile, UserJobApplication, ApplicationStatus } from '../types/jobSeeker';
+import {
+  JobSeekerProfile,
+  UserJobApplication,
+  ApplicationStatus,
+  evaluateMandatoryProfileCompletion,
+} from '../types/jobSeeker';
 import {
   AnalyticsEvent,
   AnalyticsPeriod,
@@ -1450,7 +1455,9 @@ export async function fetchJobSeekerProfile(uid: string): Promise<JobSeekerProfi
   };
 
   const [fsProfile, srvProfile] = await Promise.all([fromFirestore(), fromServer()]);
-  const resolved = srvProfile || fsProfile;
+  const fsTs = fsProfile ? new Date(fsProfile.updatedAt || fsProfile.createdAt || 0).getTime() : 0;
+  const srvTs = srvProfile ? new Date(srvProfile.updatedAt || srvProfile.createdAt || 0).getTime() : 0;
+  const resolved = fsProfile && (!srvProfile || fsTs >= srvTs) ? fsProfile : srvProfile;
   if (resolved) {
     const normalized: JobSeekerProfile = {
       ...resolved,
@@ -1489,14 +1496,20 @@ export async function saveJobSeekerProfile(profile: JobSeekerProfile): Promise<v
   if (!profile.uid) return;
 
   const { isAdmin: _stripA, role: _stripR, ...safeRest } = profile as any;
+  const completionEval = evaluateMandatoryProfileCompletion(safeRest);
+  const nowIso = new Date().toISOString();
   const cleanProfile = sanitizeForFirestore({
     ...safeRest,
     accountRole: safeRest.accountRole || 'staff',
+    noExperience: Boolean(safeRest.noExperience),
+    profileCompletionPercentage: completionEval.percentage,
+    profileStatus: completionEval.isProfileComplete ? 'complete' : 'incomplete',
     areasOfExpertise: Array.isArray(safeRest.areasOfExpertise) ? safeRest.areasOfExpertise : [],
     professionalInterests: Array.isArray(safeRest.professionalInterests) ? safeRest.professionalInterests : [],
     previousPositions: Array.isArray(safeRest.previousPositions) ? safeRest.previousPositions : [],
     certifications: Array.isArray(safeRest.certifications) ? safeRest.certifications : [],
-    updatedAt: new Date().toISOString(),
+    lastActiveAt: safeRest.lastActiveAt || nowIso,
+    updatedAt: nowIso,
   });
 
   // 1. Cache immediately in localStorage

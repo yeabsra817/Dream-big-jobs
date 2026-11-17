@@ -127,6 +127,11 @@ export const UserAuthModal: React.FC<Props> = ({
           phone: user.phoneNumber || '',
           authProvider: 'google',
           emailVerified: user.emailVerified,
+          noExperience: false,
+          profileStatus: 'incomplete',
+          profileCompletionPercentage: 0,
+          lastLoginAt: now,
+          lastActiveAt: now,
           createdAt: now,
           updatedAt: now,
         };
@@ -138,24 +143,18 @@ export const UserAuthModal: React.FC<Props> = ({
             : profile.fullName;
         const syncedPhotoUrl = user.photoURL || profile.photoUrl;
         const syncedEmail = user.email || profile.email;
-        const needsSync =
-          syncedFullName !== profile.fullName ||
-          syncedPhotoUrl !== profile.photoUrl ||
-          syncedEmail !== profile.email ||
-          !profile.emailVerified;
-
-        if (needsSync) {
-          profile = {
-            ...profile,
-            fullName: syncedFullName,
-            photoUrl: syncedPhotoUrl,
-            email: syncedEmail,
-            authProvider: profile.authProvider || 'google',
-            emailVerified: user.emailVerified || profile.emailVerified,
-            updatedAt: now,
-          };
-          await saveJobSeekerProfile(profile);
-        }
+        profile = {
+          ...profile,
+          fullName: syncedFullName,
+          photoUrl: syncedPhotoUrl,
+          email: syncedEmail,
+          authProvider: profile.authProvider || 'google',
+          emailVerified: user.emailVerified || profile.emailVerified,
+          lastLoginAt: now,
+          lastActiveAt: now,
+          updatedAt: now,
+        };
+        await saveJobSeekerProfile(profile);
       }
 
       // Track registration/login in GA4

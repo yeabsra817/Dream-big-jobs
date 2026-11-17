@@ -46,6 +46,7 @@ import {
   NotificationPermissionState,
   UserNotificationItem,
   calculateProfileCompletion,
+  evaluateMandatoryProfileCompletion,
 } from '../types/jobSeeker';
 import { Vacancy } from '../types/job';
 import { InternationalJob, ExperienceScholarship } from '../types/international';
@@ -105,6 +106,7 @@ interface Props {
   hasActiveDevicePush?: boolean;
   onUpdateNotificationPrefs?: (patch: Partial<NotificationPreferencesRecord>) => Promise<void>;
   onEnableDevicePush?: () => Promise<void>;
+  onDisableDevicePush?: () => Promise<void>;
   onMarkNotificationRead?: (id: string, read: boolean) => Promise<void>;
   onMarkAllNotificationsRead?: () => Promise<void>;
 }
@@ -127,6 +129,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   hasActiveDevicePush = false,
   onUpdateNotificationPrefs = async () => {},
   onEnableDevicePush = async () => {},
+  onDisableDevicePush = async () => {},
   onMarkNotificationRead = async () => {},
   onMarkAllNotificationsRead = async () => {},
 }) => {
@@ -150,6 +153,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   const [recFilter, setRecFilter] = useState<'all' | 'qualified'>('all');
   const [testPushFeedback, setTestPushFeedback] = useState<string | null>(null);
   const [isTestingPush, setIsTestingPush] = useState(false);
+  const [isDisablingPush, setIsDisablingPush] = useState(false);
 
   const [formProfile, setFormProfile] = useState<JobSeekerProfile>({
     ...profile,
@@ -240,27 +244,27 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     responsibilities: '',
   });
 
-  // Calculate live completion %
-  const completionPct = calculateProfileCompletion(formProfile);
+  // Calculate live mandatory profile completion
+  const completionEval = evaluateMandatoryProfileCompletion(formProfile);
+  const completionPct = completionEval.percentage;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const updated = {
+      const updated: JobSeekerProfile = {
         ...formProfile,
+        noExperience: Boolean(formProfile.noExperience),
         profileCompletionPercentage: completionPct,
+        profileStatus: completionEval.isProfileComplete ? 'complete' : 'incomplete',
         updatedAt: new Date().toISOString(),
       };
       await onUpdateProfile(updated);
-      const hasMandatoryReady =
-        Boolean(updated.yearsOfExperience?.trim() || (updated.experience?.length || 0) > 0) &&
-        Boolean((updated.preferredSectors?.length || 0) > 0 || updated.preferredIndustry?.trim() || updated.desiredJobTitle?.trim());
       setSaveToast(
-        hasMandatoryReady
-          ? 'Profile saved! Matching job recommendations & notifications are now active.'
-          : 'Profile saved! Add your experience & preferred job sector to activate automatic job alerts.'
+        completionEval.isProfileComplete
+          ? 'Profile 100% complete! Personalized recommendations and instant Web Push matching are now active.'
+          : `Profile saved (${completionPct}% complete). Missing: ${completionEval.missingSections.join(', ')}.`
       );
-      setTimeout(() => setSaveToast(null), 4000);
+      setTimeout(() => setSaveToast(null), 4500);
 
       trackAnalyticsEvent('profile_update', {
         title: 'Job Seeker Profile Updated',
@@ -312,7 +316,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
       achievements: newExp.achievements?.trim(),
     };
     const nextList = [...(formProfile.experience || []), item];
-    setFormProfile({ ...formProfile, experience: nextList });
+    setFormProfile({ ...formProfile, experience: nextList, noExperience: false });
     setIsAddingExp(false);
     setNewExp({ companyName: '', jobTitle: '', startDate: '', endDate: '', isCurrent: false, responsibilities: '' });
   };
@@ -467,10 +471,21 @@ export const JobSeekerDashboard: React.FC<Props> = ({
             </div>
 
             {/* Profile Completion Bar */}
-            <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 min-w-[220px]">
-              <div className="flex items-center justify-between text-xs font-bold mb-1.5">
-                <span className="text-slate-300">Profile Strength</span>
-                <span className="text-amber-400">{completionPct}%</span>
+            <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 min-w-[235px]">
+              <div className="flex items-center justify-between text-xs font-bold mb-1.5 gap-2">
+                <span className="text-slate-300">Profile Completion</span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                      completionEval.isProfileComplete
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    }`}
+                  >
+                    {completionEval.isProfileComplete ? 'Complete' : 'Incomplete'}
+                  </span>
+                  <span className="text-amber-400 font-mono tabular-nums">{completionPct}%</span>
+                </div>
               </div>
               <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
                 <div
@@ -479,7 +494,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                 />
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                {completionPct >= 80 ? '🌟 High visibility to employers' : 'Complete profile to boost job matches'}
+                {completionEval.isProfileComplete
+                  ? 'All 6 mandatory sections verified'
+                  : `${completionEval.missingSections.length} mandatory section(s) remaining`}
               </span>
             </div>
           </div>
@@ -603,6 +620,98 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     {savedVacancies.length}
                   </div>
                   <div className="text-[10px] text-slate-400 mt-0.5">Bookmarked opportunities</div>
+                </div>
+              </div>
+
+              {/* Mandatory Profile Completion Breakdown */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                      <ShieldCheck
+                        className={`w-4 h-4 ${
+                          completionEval.isProfileComplete ? 'text-emerald-600' : 'text-amber-600'
+                        }`}
+                      />
+                      <span>Mandatory Profile Completion ({completionPct}%)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Complete all mandatory sections below so Hopeland Jobs can match and deliver instant Web Push vacancy alerts.
+                    </p>
+                  </div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-black uppercase self-start ${
+                      completionEval.isProfileComplete
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-amber-100 text-amber-900 border border-amber-200'
+                    }`}
+                  >
+                    {completionEval.isProfileComplete ? 'Profile Complete' : 'Incomplete Profile'}
+                  </span>
+                </div>
+
+                <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${completionPct}%` }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2">
+                    <div className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Completed Sections ({completionEval.completedSections.length})</span>
+                    </div>
+                    {completionEval.completedSections.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">No mandatory sections completed yet.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {completionEval.completedSections.map((sec) => (
+                          <li key={sec} className="text-xs text-emerald-950 font-medium flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>{sec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2">
+                    <div className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                      <span>Missing Sections ({completionEval.missingSections.length})</span>
+                    </div>
+                    {completionEval.missingSections.length === 0 ? (
+                      <p className="text-xs text-emerald-800 font-semibold">
+                        All mandatory requirements completed! You are ready for instant job push alerts.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {completionEval.missingSections.map((miss) => {
+                          const targetTab: 'personal' | 'education' | 'experience' | 'professional' =
+                            /Personal/i.test(miss)
+                              ? 'personal'
+                              : /Education/i.test(miss)
+                              ? 'education'
+                              : /Employment History/i.test(miss)
+                              ? 'experience'
+                              : 'professional';
+                          return (
+                            <button
+                              key={miss}
+                              type="button"
+                              onClick={() => setActiveTab(targetTab)}
+                              className="text-left px-2.5 py-1.5 rounded-lg bg-white hover:bg-amber-100 border border-amber-200 text-xs font-bold text-amber-950 flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                            >
+                              <span>{miss}</span>
+                              <span className="text-[10px] text-amber-700 shrink-0">Complete →</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1057,7 +1166,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                       <span>Notification Channels &amp; Device Status</span>
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Control how Hopeland Jobs notifies you about matching vacancies across Website, Desktop/Mobile Push, and Email.
+                      Instant Web Push notifications directly to your Android or desktop notification panel (max 3 matching jobs/day, 1 per vacancy, no email alerts).
                     </p>
                   </div>
 
@@ -1072,26 +1181,46 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                         <span>
                           {browserNotificationPermission === 'denied'
                             ? 'Check Browser Permission'
-                            : 'ENABLE NOTIFICATIONS'}
+                            : 'ENABLE PUSH NOTIFICATIONS'}
                         </span>
                       </button>
                     )}
 
                     {hasActiveDevicePush && (
-                      <button
-                        type="button"
-                        disabled={isTestingPush}
-                        onClick={async () => {
-                          setIsTestingPush(true);
-                          const res = await sendTestPushNotification(formProfile.uid, formProfile.email);
-                          setTestPushFeedback(res.message);
-                          setIsTestingPush(false);
-                        }}
-                        className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isTestingPush ? 'Sending...' : 'Send Test Push Alert'}</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          disabled={isTestingPush}
+                          onClick={async () => {
+                            setIsTestingPush(true);
+                            const res = await sendTestPushNotification(formProfile.uid, formProfile.email);
+                            setTestPushFeedback(res.message);
+                            setIsTestingPush(false);
+                          }}
+                          className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                          <span>{isTestingPush ? 'Sending...' : 'Send Test Push Alert'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isDisablingPush}
+                          onClick={async () => {
+                            setIsDisablingPush(true);
+                            try {
+                              await onDisableDevicePush();
+                              setTestPushFeedback('Push notifications disabled for this device.');
+                            } finally {
+                              setIsDisablingPush(false);
+                            }
+                          }}
+                          className="min-h-[40px] px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-xs inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>{isDisablingPush ? 'Disabling...' : 'Disable Push Alerts'}</span>
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1116,7 +1245,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                         : browserNotificationPermission === 'denied'
                         ? 'Blocked in Browser Settings'
                         : browserNotificationPermission === 'unsupported'
-                        ? 'Bell & Email Mode'
+                        ? 'Website Bell Mode'
                         : 'Not Enabled Yet'}
                     </div>
                   </div>
@@ -1127,11 +1256,11 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     </div>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
-                    <div className="text-[11px] font-bold text-slate-500">Last Alert Synced</div>
+                    <div className="text-[11px] font-bold text-slate-500">Last Push Dispatched</div>
                     <div className="font-mono tabular-nums font-bold text-slate-800 mt-0.5">
                       {notificationPrefs?.lastSuccessfulDeliveryAt
                         ? new Date(notificationPrefs.lastSuccessfulDeliveryAt).toLocaleString()
-                        : 'Ready for matches'}
+                        : 'Ready for instant matches'}
                     </div>
                   </div>
                 </div>
@@ -1155,20 +1284,15 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                       {
                         key: 'browserPush' as const,
                         label: 'Desktop Browser Push Notifications',
-                        desc: 'Real-time Chrome, Edge, or Firefox push alerts even when tab is minimized.',
+                        desc: 'Instant Web Push alerts to Chrome, Edge, or Firefox even when Hopeland Jobs is closed.',
                       },
                       {
                         key: 'mobilePush' as const,
                         label: 'Mobile Push Notifications (Android / iOS PWA)',
-                        desc: 'Instant alerts on Android Chrome and iPhone/iPad Home Screen web apps.',
-                      },
-                      {
-                        key: 'emailAlerts' as const,
-                        label: 'Email Vacancy Alerts',
-                        desc: `Send personalized match summaries to ${formProfile.email}.`,
+                        desc: 'Instant alerts directly in your Android system tray or iPhone Home Screen web app.',
                       },
                     ].map((ch) => {
-                      const checked = notificationPrefs?.channels?.[ch.key] ?? (ch.key === 'websiteBell' || ch.key === 'emailAlerts');
+                      const checked = notificationPrefs?.channels?.[ch.key] ?? ch.key === 'websiteBell';
                       return (
                         <label
                           key={ch.key}
@@ -1184,8 +1308,9 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                                     websiteBell: true,
                                     browserPush: false,
                                     mobilePush: false,
-                                    emailAlerts: true,
+                                    emailAlerts: false,
                                   }),
+                                  emailAlerts: false,
                                   [ch.key]: e.target.checked,
                                 },
                               })
@@ -1572,23 +1697,27 @@ export const JobSeekerDashboard: React.FC<Props> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Current Position</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Current or Previous Job Title *
+                  </label>
                   <input
                     type="text"
                     value={formProfile.currentPosition || ''}
                     onChange={(e) => setFormProfile({ ...formProfile, currentPosition: e.target.value })}
-                    placeholder="e.g. WASH Project Coordinator / Credit Analyst"
+                    placeholder="e.g. WASH Project Coordinator / Credit Analyst / Fresh Graduate"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Desired Job Title *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Preferred Job Position *
+                  </label>
                   <input
                     type="text"
                     value={formProfile.desiredJobTitle}
                     onChange={(e) => setFormProfile({ ...formProfile, desiredJobTitle: e.target.value })}
-                    placeholder="e.g. Senior Accountant / Branch Manager"
+                    placeholder="e.g. Senior Accountant / Branch Manager / Software Engineer"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
                 </div>
@@ -1613,7 +1742,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                     type="text"
                     value={formProfile.yearsOfExperience}
                     onChange={(e) => setFormProfile({ ...formProfile, yearsOfExperience: e.target.value })}
-                    placeholder="e.g. 5 Years"
+                    placeholder="e.g. 5 Years or 0 Years (Fresh Graduate)"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
                   />
                 </div>
@@ -1630,14 +1759,36 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Primary Preferred Industry</label>
-                  <input
-                    type="text"
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Primary Professional Industry *
+                  </label>
+                  <select
                     value={formProfile.preferredIndustry}
-                    onChange={(e) => setFormProfile({ ...formProfile, preferredIndustry: e.target.value })}
-                    placeholder="e.g. WASH / NGO / Banking and Financial Institutions"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-amber-400 outline-none"
-                  />
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const existing = formProfile.preferredSectors || [];
+                      const nextSectors = val && !existing.includes(val) ? [val, ...existing] : existing;
+                      setFormProfile({
+                        ...formProfile,
+                        preferredIndustry: val,
+                        preferredSectors: nextSectors,
+                      });
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium bg-white focus:ring-2 focus:ring-amber-400 outline-none"
+                  >
+                    <option value="">Select Primary Industry...</option>
+                    <option value="Banking and Finance">Banking and Finance</option>
+                    {RECOMMENDED_SECTOR_OPTIONS.map((sec) => (
+                      <option key={sec} value={sec}>
+                        {sec}
+                      </option>
+                    ))}
+                    {formProfile.preferredIndustry &&
+                      formProfile.preferredIndustry !== 'Banking and Finance' &&
+                      !RECOMMENDED_SECTOR_OPTIONS.includes(formProfile.preferredIndustry) && (
+                        <option value={formProfile.preferredIndustry}>{formProfile.preferredIndustry}</option>
+                      )}
+                  </select>
                 </div>
               </div>
 
@@ -2096,11 +2247,11 @@ export const JobSeekerDashboard: React.FC<Props> = ({
           {/* ========================================================= */}
           {activeTab === 'experience' && (
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <h3 className="font-extrabold text-base text-slate-900">Work Experience</h3>
                   <p className="text-xs text-slate-500">
-                    Add previous banking, NGO, or corporate jobs to strengthen your application.
+                    Add previous banking, NGO, or corporate jobs, or confirm you are an entry-level candidate with no prior experience.
                   </p>
                 </div>
                 {!isAddingExp && (
@@ -2113,6 +2264,34 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </button>
                 )}
               </div>
+
+              {/* Explicit No-Experience Mandatory Option */}
+              <label className="flex items-start gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200 cursor-pointer hover:border-amber-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={Boolean(formProfile.noExperience)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormProfile({
+                      ...formProfile,
+                      noExperience: checked,
+                      yearsOfExperience:
+                        checked && !formProfile.yearsOfExperience?.trim()
+                          ? '0 Years'
+                          : formProfile.yearsOfExperience,
+                    });
+                  }}
+                  className="mt-0.5 w-4 h-4 accent-[#0B132B] cursor-pointer"
+                />
+                <div className="text-xs">
+                  <div className="font-extrabold text-slate-900">
+                    I have no prior work experience (Fresh Graduate / Entry Level)
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Select this option if you are entering the job market for the first time. This completes the mandatory Employment History &amp; Experience requirement so you receive entry-level job alerts.
+                  </div>
+                </div>
+              </label>
 
               {/* Add Exp Form */}
               {isAddingExp && (

@@ -10,6 +10,7 @@ import {
   isVerifiedActiveVacancy,
   RecommendedOpportunity,
 } from './src/utils/recommendationCore';
+import { evaluateMandatoryProfileCompletion } from './src/types/jobSeeker';
 
 export interface ServerUserEngineContext {
   app: Express;
@@ -313,7 +314,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         websiteBell: true,
         browserPush: false,
         mobilePush: false,
-        emailAlerts: true,
+        emailAlerts: false,
       },
       alertTypes: {
         newMatches: true,
@@ -325,6 +326,125 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       deviceSubscriptions: [],
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  function mergeExternalUsersSnapshot(snapshot: {
+    profiles?: any[];
+    preferences?: any[];
+    pushSubscriptions?: any[];
+  } | null | undefined) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      return { profilesMerged: 0, prefsMerged: 0, subsMerged: 0 };
+    }
+    const profilesMap = loadUserProfiles();
+    const prefsMap = loadAllNotificationPrefs();
+    let profilesMerged = 0;
+    let prefsMerged = 0;
+    let subsMerged = 0;
+
+    if (Array.isArray(snapshot.profiles)) {
+      for (const incoming of snapshot.profiles) {
+        if (!incoming?.uid) continue;
+        const existing = profilesMap[incoming.uid];
+        const incTs = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
+        const extTs = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
+        if (!existing || incTs >= extTs) {
+          profilesMap[incoming.uid] = {
+            ...(existing || {}),
+            ...incoming,
+            uid: incoming.uid,
+            accountRole: incoming.accountRole || existing?.accountRole || 'staff',
+            accountStatus: existing?.accountStatus || incoming.accountStatus || 'active',
+          };
+          profilesMerged += 1;
+        }
+        if (!prefsMap[incoming.uid]) {
+          prefsMap[incoming.uid] = buildDefaultPreferences(incoming.uid);
+        }
+      }
+      saveUserProfileMap(profilesMap);
+    }
+
+    if (Array.isArray(snapshot.preferences)) {
+      for (const pref of snapshot.preferences) {
+        const uid = pref?.userId;
+        if (!uid) continue;
+        const existing = prefsMap[uid] || buildDefaultPreferences(uid);
+        const existingTs = new Date(existing.updatedAt || 0).getTime();
+        const incomingTs = new Date(pref.updatedAt || 0).getTime();
+        const base = incomingTs >= existingTs ? { ...existing, ...pref } : { ...pref, ...existing };
+        prefsMap[uid] = {
+          ...base,
+          userId: uid,
+          channels: {
+            ...existing.channels,
+            ...(pref.channels || {}),
+            ...(incomingTs >= existingTs ? (pref.channels || {}) : (existing.channels || {})),
+          },
+          alertTypes: {
+            ...existing.alertTypes,
+            ...(pref.alertTypes || {}),
+          },
+          deviceSubscriptions:
+            Array.isArray(pref.deviceSubscriptions) && pref.deviceSubscriptions.length > 0 && incomingTs >= existingTs
+              ? pref.deviceSubscriptions
+              : Array.isArray(existing.deviceSubscriptions) && existing.deviceSubscriptions.length > 0
+              ? existing.deviceSubscriptions
+              : Array.isArray(pref.deviceSubscriptions)
+              ? pref.deviceSubscriptions
+              : [],
+        };
+        prefsMerged += 1;
+      }
+    }
+
+    if (Array.isArray(snapshot.pushSubscriptions)) {
+      for (const subDoc of snapshot.pushSubscriptions) {
+        const uid = subDoc?.userId;
+        const endpoint = subDoc?.endpoint || subDoc?.subscription?.endpoint;
+        if (!uid || !endpoint) continue;
+        const pref = prefsMap[uid] || buildDefaultPreferences(uid);
+        const devices: any[] = Array.isArray(pref.deviceSubscriptions) ? pref.deviceSubscriptions : [];
+        const devId = String(subDoc.deviceId || endpoint.slice(-24));
+        const filtered = devices.filter((d) => d.deviceId !== devId && d.endpoint !== endpoint);
+        const keys = subDoc.keys || subDoc.subscription?.keys;
+        if (subDoc.active !== false && keys?.p256dh && keys?.auth) {
+          filtered.unshift({
+            deviceId: devId,
+            deviceLabel: String(subDoc.deviceLabel || 'Web Browser'),
+            platform: String(subDoc.platform || 'web'),
+            endpoint,
+            subscription: {
+              endpoint,
+              expirationTime: subDoc.expirationTime ?? subDoc.subscription?.expirationTime ?? null,
+              keys: {
+                p256dh: keys.p256dh,
+                auth: keys.auth,
+              },
+            },
+            active: true,
+            createdAt: subDoc.createdAt || subDoc.updatedAt || new Date().toISOString(),
+            lastVerifiedAt: subDoc.updatedAt || new Date().toISOString(),
+          });
+          pref.permissionStatus = 'granted';
+          pref.subscriptionStatus = 'active';
+          pref.channels = {
+            ...pref.channels,
+            websiteBell: true,
+            browserPush: true,
+            mobilePush:
+              pref.channels?.mobilePush ||
+              /android|iphone|ipad|ios|mobile/i.test(`${subDoc.platform || ''} ${subDoc.deviceLabel || ''}`),
+          };
+          subsMerged += 1;
+        }
+        pref.deviceSubscriptions = filtered.slice(0, 15);
+        prefsMap[uid] = pref;
+      }
+    }
+
+    saveAllNotificationPrefs(prefsMap);
+    return { profilesMerged, prefsMerged, subsMerged };
   }
 
   function isSelfOrOwner(req: Request, targetUid: string): boolean {
@@ -703,18 +823,24 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
 
     const allNotifs = loadAllNotifications();
     const existingList: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
-    if (!options.isTestNotification && existingList.some((n) => n.dedupeKey === dedupeKey)) {
+    // Guarantee at most ONE notification per matching vacancy per user
+    if (
+      !options.isTestNotification &&
+      existingList.some((n) => n.dedupeKey === dedupeKey || (n.vacancyId === rec.id && n.sourceType !== 'system'))
+    ) {
       return null;
     }
 
-    // Rate limiting: prevent excessive notifications per user in a rolling 24h window (max 25/day)
+    // Strict daily limit: maximum of 3 job notifications per user per day
     if (!options.bypassRateLimit) {
+      const todayKey = getAddisDateKey(new Date());
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
-      const recent24hCount = existingList.filter((n) => {
+      const todayCount = existingList.filter((n) => {
+        if (n.sourceType === 'system' || n.alertKind === 'system_test') return false;
         const ts = new Date(n.createdAt).getTime();
-        return !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
+        return getAddisDateKey(n.createdAt) === todayKey || (!Number.isNaN(ts) && ts >= twentyFourHoursAgoMs);
       }).length;
-      if (recent24hCount >= 25) {
+      if (todayCount >= 3) {
         return null;
       }
     }
@@ -764,24 +890,25 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
     saveAllNotifications(allNotifs);
 
-    // Attempt Web Push (Desktop & Mobile) if subscribed
-    if (prefs.channels?.browserPush || prefs.channels?.mobilePush) {
+    // Real Web Push delivery directly to Android / desktop panel (Email is intentionally not used)
+    const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d: any) => d.active && d.subscription?.endpoint));
+    if (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) {
       const pushPrefix =
         alertKind === 'deadline_reminder'
           ? 'Closing Soon: '
           : alertKind === 'job_updated'
           ? 'Updated Vacancy: '
-          : 'New Job Recommendation for You! · ';
+          : 'New Matching Job: ';
       const pushPayload = {
         title: `${pushPrefix}${rec.title} (${rec.matchScore}% Match)`,
-        body: `${rec.organization} · ${rec.location}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}. Open Hopeland Jobs to view details and apply.`,
+        body: `${rec.organization} · ${rec.location}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}. Tap to view and apply.`,
         url:
           rec.sourceType === 'domestic_job'
             ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}`
             : jobUrl,
         jobId: rec.id,
         notificationId: notifId,
-        tag: dedupeKey,
+        tag: `vacancy-${rec.id}`,
       };
       const pushRes = await sendWebPushToUser(uid, pushPayload);
       if (pushRes.deliveredCount > 0) {
@@ -794,22 +921,6 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           channel: 'push',
           payload: pushPayload,
           reason: pushRes.errors[0] || 'Push delivery failed',
-        });
-      }
-    }
-
-    // Attempt Email notification if opted in
-    if (prefs.channels?.emailAlerts && profile.email) {
-      const emailRes = await sendEmailAlertToUser(profile, notifRecord);
-      notifRecord.channels.email = emailRes.status;
-      if (emailRes.status === 'failed') {
-        notifRecord.channels.email = 'queued';
-        enqueueDeliveryRetry({
-          userId: uid,
-          notificationId: notifId,
-          channel: 'email',
-          payload: notifRecord,
-          reason: emailRes.error || 'Email send failed',
         });
       }
     }
@@ -896,7 +1007,9 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           ...(Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []),
         ].filter(Boolean)
       );
-      const qualified = compactRecs.filter((r) => r.matchScore >= 22 || r.isFullyQualified);
+      const qualified = compactRecs.filter(
+        (r) => r.isFullyQualified && (r.matchScore >= 24 || changedSet.has(r.id))
+      );
       // Guarantee newly posted/updated jobs are never crowded out by older higher-scoring matches
       const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
       const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id)).slice(0, 5);
@@ -1147,12 +1260,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       environment: envReport,
       scheduler: {
         status: schedulerStatus,
-        cronPath: '/api/cron/notifications',
-        cronSchedule: '*/15 * * * *',
+        cronPath: '/api/vacancies/sync',
+        cronSchedule: 'Event-Driven (Instant on Job Publish)',
         lastRunStartedAt: store.lastRunStartedAt,
         lastSuccessfulRunAt: store.lastSuccessfulRunAt,
         lastRunStatus: store.lastRunStatus,
-        nextScheduledRunAt: getNextQuarterHourIso(),
+        nextScheduledRunAt: 'Instant on Job Publish',
       },
       totals: {
         totalNotificationsSent,
@@ -1281,6 +1394,52 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         mobilePush: existing.channels?.mobilePush || isMobile,
       },
       deviceSubscriptions: filtered.slice(0, 15),
+      updatedAt: nowIso,
+    };
+
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    res.json({ success: true, preferences: updated });
+  });
+
+  app.post('/api/push/unsubscribe/:uid', (req: Request, res: Response): void => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    const { deviceId, endpoint } = req.body || {};
+    const allPrefs = loadAllNotificationPrefs();
+    const existing = allPrefs[uid] || buildDefaultPreferences(uid);
+    const nowIso = new Date().toISOString();
+
+    const nextDevices = (existing.deviceSubscriptions || []).map((d: any) => {
+      const matches =
+        (deviceId && d.deviceId === String(deviceId)) ||
+        (endpoint && (d.endpoint === String(endpoint) || d.subscription?.endpoint === String(endpoint))) ||
+        (!deviceId && !endpoint);
+      if (matches) {
+        return {
+          ...d,
+          active: false,
+          lastFailureReason: 'Disabled by user',
+          lastVerifiedAt: nowIso,
+        };
+      }
+      return d;
+    });
+
+    const stillHasActive = nextDevices.some((d: any) => d.active);
+    const updated = {
+      ...existing,
+      userId: uid,
+      subscriptionStatus: stillHasActive ? 'active' : 'none',
+      channels: {
+        ...existing.channels,
+        browserPush: stillHasActive ? Boolean(existing.channels?.browserPush) : false,
+        mobilePush: stillHasActive ? Boolean(existing.channels?.mobilePush) : false,
+      },
+      deviceSubscriptions: nextDevices,
       updatedAt: nowIso,
     };
 
@@ -1532,7 +1691,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   // =========================================================================
 
   app.post('/api/vacancies/sync', async (req: Request, res: Response): Promise<void> => {
-    const { vacancies: incomingList, mode, changedVacancyId, changedVacancyIds, changeType } = req.body || {};
+    const {
+      vacancies: incomingList,
+      mode,
+      changedVacancyId,
+      changedVacancyIds,
+      changeType,
+      usersSnapshot,
+    } = req.body || {};
     if (!Array.isArray(incomingList)) {
       res.status(400).json({ error: 'vacancies array is required' });
       return;
@@ -1544,6 +1710,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       res.status(403).json({ error: 'Owner authorization required to sync vacancies catalog.' });
       return;
     }
+
+    // Merge inline Firestore snapshot (profiles, prefs, active push subscriptions) so serverless lambdas always have fresh targets
+    if (usersSnapshot && isPersistentOwnerRequest(req)) {
+      mergeExternalUsersSnapshot(usersSnapshot);
+    }
+
     if (mode === 'seed_if_empty' && existing.length > 0) {
       res.json({ success: true, total: existing.length, seeded: false });
       return;
@@ -1592,12 +1764,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     let pushSent = 0;
 
     if (mode === 'seed_if_empty') {
-      // Initial seed uses background non-blocking pass when persistent Node is active
+      // Initial seed updates recommendations quietly without blasting push
       triggerBackgroundRecalcAllUsers({
         sendNotifications: false,
       });
     } else {
-      // Await matching & notification dispatch directly so serverless deployments complete SMTP/Push before exiting
+      // Instant event-driven matching & Web Push delivery when jobs are published or updated
       const profiles = Object.values(loadUserProfiles() || {}).filter(
         (p: any) => p?.uid && p.accountStatus !== 'suspended'
       );
@@ -1665,8 +1837,10 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const now = Date.now();
     const todayKey = getAddisDateKey(new Date());
     const monthPrefix = todayKey.slice(0, 7);
+    const yearPrefix = todayKey.slice(0, 4);
     const weekAgoMs = now - 7 * 24 * 60 * 60 * 1000;
     const thirtyDaysAgoMs = now - 30 * 24 * 60 * 60 * 1000;
+    const onlineWindowMs = now - 5 * 60 * 1000;
 
     // App counts per user
     const appsPerUser = new Map<string, number>();
@@ -1680,18 +1854,24 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const emailGroups = new Map<string, Array<{ uid: string; email: string }>>();
     const phoneGroups = new Map<string, Array<{ uid: string; email: string }>>();
 
+    let onlineUsersCount = 0;
     let totalActiveUsers = 0;
     let totalInactiveUsers = 0;
     let totalSuspendedUsers = 0;
     let newRegistrationsToday = 0;
     let newRegistrationsThisWeek = 0;
     let newRegistrationsThisMonth = 0;
+    let newRegistrationsThisYear = 0;
     let completedProfilesCount = 0;
     let incompleteProfilesCount = 0;
+    let completionSum = 0;
     let notificationsEnabledCount = 0;
     let usersReceivingRecommendationsCount = 0;
 
     const sectorCounts = new Map<string, number>();
+    const educationCounts = new Map<string, number>();
+    const experienceCounts = new Map<string, number>();
+    const jobPrefCounts = new Map<string, number>();
     const timelineCounts = new Map<string, number>();
     // Pre-seed last 14 days
     for (let i = 13; i >= 0; i--) {
@@ -1705,10 +1885,13 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       const regDateKey = getAddisDateKey(regIso);
       const regMs = new Date(regIso).getTime() || 0;
       const lastActMs = new Date(lastActIso).getTime() || regMs;
+      const isOnline = lastActMs >= onlineWindowMs;
 
+      if (isOnline) onlineUsersCount += 1;
       if (regDateKey === todayKey) newRegistrationsToday += 1;
       if (regMs >= weekAgoMs) newRegistrationsThisWeek += 1;
       if (regDateKey.startsWith(monthPrefix)) newRegistrationsThisMonth += 1;
+      if (regDateKey.startsWith(yearPrefix)) newRegistrationsThisYear += 1;
       if (regDateKey && timelineCounts.has(regDateKey)) {
         timelineCounts.set(regDateKey, (timelineCounts.get(regDateKey) || 0) + 1);
       }
@@ -1727,15 +1910,52 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         totalActiveUsers += 1;
       }
 
-      const completionPct = Number(u.profileCompletionPercentage || 0);
-      const isProfileComplete = completionPct >= 70 && hasSufficientProfileForRecommendations(u);
+      const evalResult = evaluateMandatoryProfileCompletion(u);
+      const completionPct = evalResult.percentage;
+      const isProfileComplete = evalResult.isProfileComplete;
+      completionSum += completionPct;
       if (isProfileComplete) completedProfilesCount += 1;
       else incompleteProfilesCount += 1;
+
+      // Education classification
+      const eduList = Array.isArray(u.education) ? u.education : [];
+      const eduQuals = eduList.map((e: any) => `${e.qualification || ''} ${e.fieldOfStudy || ''}`).join(' ').toLowerCase();
+      let educationLevel = 'Not Specified';
+      if (eduList.length > 0) {
+        if (/phd|doctor/i.test(eduQuals)) educationLevel = 'PhD / Doctorate';
+        else if (/master|msc|mba|ma\b|mph/i.test(eduQuals)) educationLevel = "Master's Degree";
+        else if (/bachelor|bsc|ba\b|degree|undergraduate/i.test(eduQuals)) educationLevel = "Bachelor's Degree";
+        else if (/diploma|associate|level/i.test(eduQuals)) educationLevel = 'Diploma / TVET';
+        else educationLevel = eduList[0]?.qualification || 'Certificate / Other';
+      }
+      educationCounts.set(educationLevel, (educationCounts.get(educationLevel) || 0) + 1);
+
+      // Experience classification
+      const rawYearsStr = String(u.yearsOfExperience || '');
+      const yrsNumMatch = rawYearsStr.match(/\d+/);
+      const expEntries = Array.isArray(u.experience) ? u.experience.length : 0;
+      let experienceBand = 'Not Specified';
+      if (u.noExperience === true && expEntries === 0) {
+        experienceBand = 'No Experience / Fresh Graduate';
+      } else if (yrsNumMatch) {
+        const y = parseInt(yrsNumMatch[0], 10);
+        if (y === 0) experienceBand = 'No Experience / Fresh Graduate';
+        else if (y <= 2) experienceBand = '1-2 Years';
+        else if (y <= 5) experienceBand = '3-5 Years';
+        else experienceBand = '5+ Years';
+      } else if (expEntries > 0) {
+        experienceBand = expEntries === 1 ? '1-2 Years' : '3-5 Years';
+      }
+      experienceCounts.set(experienceBand, (experienceCounts.get(experienceBand) || 0) + 1);
+
+      // Job preferences classification
+      const prefPos = String(u.desiredJobTitle || u.currentPosition || 'Not Specified').trim() || 'Not Specified';
+      jobPrefCounts.set(prefPos, (jobPrefCounts.get(prefPos) || 0) + 1);
 
       const prefs = allPrefs[u.uid];
       const hasActiveDevicePush = Boolean(prefs?.deviceSubscriptions?.some((d: any) => d.active));
       const notificationsEnabled = Boolean(
-        prefs?.permissionStatus === 'granted' || hasActiveDevicePush || prefs?.channels?.emailAlerts
+        prefs?.permissionStatus === 'granted' || hasActiveDevicePush
       );
       if (notificationsEnabled) notificationsEnabledCount += 1;
 
@@ -1748,7 +1968,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       const userNotifs = allNotifs[u.uid] || [];
       const unreadNotificationsCount = userNotifs.filter((n: any) => !n.read && !isDeadlineExpired(n.deadline)).length;
 
-      const sectorLabel = String(u.preferredIndustry || u.staffDepartmentOrSector || 'Unspecified').trim();
+      const sectorLabel = String(u.preferredIndustry || u.preferredSectors?.[0] || u.staffDepartmentOrSector || 'Unspecified').trim() || 'Unspecified';
       sectorCounts.set(sectorLabel, (sectorCounts.get(sectorLabel) || 0) + 1);
 
       const normEmail = String(u.email || '').toLowerCase().trim();
@@ -1774,9 +1994,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         suspendedReason: u.suspendedReason || undefined,
         locationCity: u.locationCity || 'Addis Ababa',
         desiredJobTitle: u.desiredJobTitle || u.currentPosition || '',
-        preferredIndustry: u.preferredIndustry || 'Unspecified',
+        preferredIndustry: sectorLabel,
+        educationLevel,
+        experienceBand,
+        yearsOfExperience: rawYearsStr,
+        noExperience: Boolean(u.noExperience),
         profileCompletionPercentage: completionPct,
+        completedSections: evalResult.completedSections,
+        missingSections: evalResult.missingSections,
         isProfileComplete,
+        isOnline,
         notificationsEnabled,
         permissionStatus: prefs?.permissionStatus || 'default',
         subscriptionStatus: prefs?.subscriptionStatus || 'none',
@@ -1829,14 +2056,17 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       generatedAt: new Date().toISOString(),
       metrics: {
         totalRegisteredUsers: rawUsers.length,
+        onlineUsersCount,
         totalActiveUsers,
         totalInactiveUsers,
         totalSuspendedUsers,
         newRegistrationsToday,
         newRegistrationsThisWeek,
         newRegistrationsThisMonth,
+        newRegistrationsThisYear,
         completedProfilesCount,
         incompleteProfilesCount,
+        averageCompletionRate: rawUsers.length > 0 ? Math.round(completionSum / rawUsers.length) : 0,
         notificationsEnabledCount,
         usersReceivingRecommendationsCount,
       },
@@ -1861,6 +2091,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         .map(([sector, count]) => ({ sector, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 12),
+      educationBreakdown: Array.from(educationCounts.entries())
+        .map(([level, count]) => ({ level, count }))
+        .sort((a, b) => b.count - a.count),
+      experienceBreakdown: Array.from(experienceCounts.entries())
+        .map(([band, count]) => ({ band, count }))
+        .sort((a, b) => b.count - a.count),
+      jobPreferenceBreakdown: Array.from(jobPrefCounts.entries())
+        .map(([position, count]) => ({ position, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
       suspiciousDuplicates,
       users: sanitizedUsers.sort(
         (a, b) => new Date(b.registeredAt).getTime() - new Date(a.registeredAt).getTime()
@@ -2103,69 +2343,23 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       res.status(403).json({ error: 'Owner authorization required' });
       return;
     }
-    const { profiles: incomingProfiles, preferences: incomingPrefs } = req.body || {};
-    const profilesMap = loadUserProfiles();
-    const prefsMap = loadAllNotificationPrefs();
-
-    let profilesMerged = 0;
-    if (Array.isArray(incomingProfiles)) {
-      for (const incoming of incomingProfiles) {
-        if (!incoming?.uid) continue;
-        const existing = profilesMap[incoming.uid];
-        const incTs = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime();
-        const extTs = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
-        if (!existing || incTs >= extTs) {
-          profilesMap[incoming.uid] = {
-            ...(existing || {}),
-            ...incoming,
-            uid: incoming.uid,
-            accountRole: incoming.accountRole || existing?.accountRole || 'staff',
-            accountStatus: existing?.accountStatus || incoming.accountStatus || 'active',
-          };
-          profilesMerged += 1;
-        }
-        if (!prefsMap[incoming.uid]) {
-          prefsMap[incoming.uid] = buildDefaultPreferences(incoming.uid);
-        }
-      }
-      saveUserProfileMap(profilesMap);
-    }
-
-    let prefsMerged = 0;
-    if (Array.isArray(incomingPrefs)) {
-      for (const pref of incomingPrefs) {
-        const uid = pref?.userId;
-        if (!uid) continue;
-        const existing = prefsMap[uid] || buildDefaultPreferences(uid);
-        prefsMap[uid] = {
-          ...existing,
-          ...pref,
-          userId: uid,
-          channels: {
-            ...existing.channels,
-            ...(pref.channels || {}),
-          },
-          alertTypes: {
-            ...existing.alertTypes,
-            ...(pref.alertTypes || {}),
-          },
-          deviceSubscriptions:
-            Array.isArray(existing.deviceSubscriptions) && existing.deviceSubscriptions.length > 0
-              ? existing.deviceSubscriptions
-              : Array.isArray(pref.deviceSubscriptions)
-              ? pref.deviceSubscriptions
-              : [],
-        };
-        prefsMerged += 1;
-      }
-    }
-    saveAllNotificationPrefs(prefsMap);
+    const {
+      profiles: incomingProfiles,
+      preferences: incomingPrefs,
+      pushSubscriptions: incomingSubs,
+    } = req.body || {};
+    const { profilesMerged, prefsMerged, subsMerged } = mergeExternalUsersSnapshot({
+      profiles: incomingProfiles,
+      preferences: incomingPrefs,
+      pushSubscriptions: incomingSubs,
+    });
 
     res.json({
       success: true,
       profilesMerged,
       prefsMerged,
-      totalRegisteredUsers: Object.keys(profilesMap).length,
+      subsMerged,
+      totalRegisteredUsers: Object.keys(loadUserProfiles() || {}).length,
     });
   });
 

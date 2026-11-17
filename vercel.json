@@ -5,12 +5,6 @@
       "includeFiles": "data/*.json"
     }
   },
-  "crons": [
-    {
-      "path": "/api/cron/notifications",
-      "schedule": "*/15 * * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/:path*",
