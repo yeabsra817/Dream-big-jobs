@@ -1271,6 +1271,15 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   </div>
                 )}
 
+                {browserNotificationPermission === 'unsupported' && (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1.5">
+                    <div className="font-extrabold">Using an iPhone or iPad (iOS/iPadOS 16.4+)?</div>
+                    <p className="text-amber-900 leading-relaxed">
+                      Apple requires adding <strong>HopelandJobs</strong> to your Home Screen before lock-screen Web Push alerts can activate. In Safari, tap <strong>Share → Add to Home Screen</strong>, then open the installed app from your Home Screen and tap <strong>Enable Notifications</strong>.
+                    </p>
+                  </div>
+                )}
+
                 {/* Channel & Type Checkboxes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2.5">

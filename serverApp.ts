@@ -3281,6 +3281,39 @@ function applyAndValidateWashLabelServer(
   };
 }
 
+function buildTelegramAmharicPromoHtml(baseUrl: string): string {
+  const safeUrl = escapeHtml(baseUrl);
+  return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
+
+በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
+
+✅ በነፃ አካውንት ይክፈቱ።
+✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
+✅ የስራ ፍላጎትዎን ይምረጡ።
+✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
+
+🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
+
+🌐 ዛሬውኑ ይመዝገቡ፦
+<a href="${safeUrl}">${safeUrl}</a>`;
+}
+
+function buildTelegramAmharicPromoPlain(baseUrl: string): string {
+  return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
+
+በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
+
+✅ በነፃ አካውንት ይክፈቱ።
+✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
+✅ የስራ ፍላጎትዎን ይምረጡ።
+✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
+
+🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
+
+🌐 ዛሬውኑ ይመዝገቡ፦
+${baseUrl}`;
+}
+
 function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia', compactForCaption = false): string {
   const baseUrl = normalizeWebsiteDomain(domainOrUrl);
   const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || '')}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
@@ -3330,7 +3363,7 @@ function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _
   const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  const fullText = `${washPrefix}<b>Vacancy at ${orgName}</b>
+  const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
@@ -3342,7 +3375,11 @@ function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _
 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
 =&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
 
-  return fullText.length > 4000 ? fullText.slice(0, 3990) + '…' : fullText;
+  const promoHtml = buildTelegramAmharicPromoHtml(baseUrl);
+  const fullText = `${coreText}\n\n${promoHtml}`;
+  if (fullText.length <= 4000) return fullText;
+  const maxCore = Math.max(400, 3980 - promoHtml.length);
+  return `${coreText.slice(0, maxCore)}…\n\n${promoHtml}`;
 }
 
 function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
@@ -3381,7 +3418,7 @@ function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tec
   const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  const fullText = `${washPrefix}Vacancy at ${orgName}
+  const coreText = `${washPrefix}Vacancy at ${orgName}
 
 🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
@@ -3393,7 +3430,11 @@ function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tec
 🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
 =>See Detail:- ${baseUrl}`;
 
-  return fullText.length > 4000 ? fullText.slice(0, 3990) + '…' : fullText;
+  const promoPlain = buildTelegramAmharicPromoPlain(baseUrl);
+  const fullText = `${coreText}\n\n${promoPlain}`;
+  if (fullText.length <= 4000) return fullText;
+  const maxCore = Math.max(400, 3980 - promoPlain.length);
+  return `${coreText.slice(0, maxCore)}…\n\n${promoPlain}`;
 }
 
 async function sendTelegramVacancyMessage(

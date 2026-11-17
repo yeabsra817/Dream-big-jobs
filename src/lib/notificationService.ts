@@ -50,7 +50,7 @@ export function getDeviceMetadata(): { deviceId: string; deviceLabel: string; pl
   }
   const ua = navigator.userAgent || '';
   const isAndroid = /android/i.test(ua);
-  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isIos = /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
   const isEdge = /edg/i.test(ua);
   const isChrome = /chrome|crios/i.test(ua) && !isEdge;
   const isFirefox = /firefox|fxios/i.test(ua);
@@ -91,7 +91,8 @@ export function isPushSupportedOnDevice(): boolean {
 export function isIosSafariNeedsInstall(): boolean {
   if (typeof window === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isIos =
+    /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
   const isStandalone =
     (window.navigator as any).standalone === true ||
     window.matchMedia?.('(display-mode: standalone)')?.matches;
@@ -463,14 +464,202 @@ export async function saveUserNotificationPreferences(
   return savedPrefs;
 }
 
+const SESSION_DISMISS_KEY = 'hopelandjobs_notif_prompt_session_dismissed';
+const LOCAL_DISMISS_KEY = 'hopelandjobs_notif_prompt_dismiss_state';
+const ANON_PUSH_SUB_KEY = 'hopelandjobs_anon_push_sub';
+
+const FIRST_DISMISS_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REPEAT_DISMISS_COOLDOWN_MS = 72 * 60 * 60 * 1000; // 72 hours
+
+function sanitizeDeviceDocId(rawId: string): string {
+  const cleaned = String(rawId || 'device')
+    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .slice(0, 128);
+  return cleaned || `dev_${Date.now().toString(36)}`;
+}
+
+export function clearNotificationPromptDismissal(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(SESSION_DISMISS_KEY);
+    localStorage.removeItem(LOCAL_DISMISS_KEY);
+  } catch {}
+}
+
+export function isPromptDismissedInSessionOrCooldown(
+  prefs?: NotificationPreferencesRecord | null
+): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (sessionStorage.getItem(SESSION_DISMISS_KEY) === '1') {
+      return true;
+    }
+    const raw = localStorage.getItem(LOCAL_DISMISS_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { dismissedAt?: number; dismissCount?: number };
+    const dismissedAt = Number(parsed?.dismissedAt || 0);
+    if (!dismissedAt || Number.isNaN(dismissedAt)) return false;
+    const effectiveCount = Math.max(
+      Number(parsed?.dismissCount || 1),
+      Number(prefs?.promptDismissCount || 0)
+    );
+    const cooldownMs =
+      effectiveCount >= 2 ? REPEAT_DISMISS_COOLDOWN_MS : FIRST_DISMISS_COOLDOWN_MS;
+    return Date.now() - dismissedAt < cooldownMs;
+  } catch {
+    return false;
+  }
+}
+
+export async function recordNotificationPromptDismissal(
+  uid?: string | null,
+  email?: string | null
+): Promise<NotificationPreferencesRecord | null> {
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(SESSION_DISMISS_KEY, '1');
+      let prevCount = 0;
+      const existingRaw = localStorage.getItem(LOCAL_DISMISS_KEY);
+      if (existingRaw) {
+        const parsed = JSON.parse(existingRaw);
+        prevCount = Number(parsed?.dismissCount || 0);
+      }
+      localStorage.setItem(
+        LOCAL_DISMISS_KEY,
+        JSON.stringify({
+          dismissedAt: Date.now(),
+          dismissCount: prevCount + 1,
+        })
+      );
+    } catch {}
+  }
+
+  if (uid) {
+    return saveUserNotificationPreferences(uid, { incrementDismiss: true }, email).catch(() => null);
+  }
+  return null;
+}
+
+function saveAnonPushCache(deviceId: string, subJson: PushSubscriptionJSON): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      ANON_PUSH_SUB_KEY,
+      JSON.stringify({
+        deviceId: sanitizeDeviceDocId(deviceId),
+        subscription: subJson,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  } catch {}
+}
+
+function readAnonPushCache(): {
+  deviceId: string;
+  subscription: PushSubscriptionJSON;
+  updatedAt?: string;
+} | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(ANON_PUSH_SUB_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed?.subscription?.endpoint && parsed?.subscription?.keys?.p256dh && parsed?.subscription?.keys?.auth) {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+async function persistAnonymousPushSubscription(
+  subJson: PushSubscriptionJSON,
+  deviceMeta: { deviceId: string; deviceLabel: string; platform: string }
+): Promise<{ saved: boolean; serverSaved: boolean; firestoreSaved: boolean }> {
+  const endpoint = String(subJson?.endpoint || '').trim();
+  const p256dh = String(subJson?.keys?.p256dh || '').trim();
+  const authKey = String(subJson?.keys?.auth || '').trim();
+  if (!endpoint.startsWith('https://') || !p256dh || !authKey) {
+    return { saved: false, serverSaved: false, firestoreSaved: false };
+  }
+
+  const cleanDeviceId = sanitizeDeviceDocId(deviceMeta.deviceId);
+  const nowIso = new Date().toISOString();
+  let serverSaved = false;
+  let firestoreSaved = false;
+
+  try {
+    const res = await withTimeout(
+      fetch('/api/push/subscribe-anonymous', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: cleanDeviceId,
+          deviceLabel: deviceMeta.deviceLabel,
+          platform: deviceMeta.platform,
+          subscription: {
+            endpoint,
+            expirationTime: subJson.expirationTime ?? null,
+            keys: { p256dh, auth: authKey },
+          },
+        }),
+      }),
+      4000,
+      null as any
+    );
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      serverSaved = Boolean(data?.success && data?.saved);
+    }
+  } catch {}
+
+  try {
+    const payload = sanitizeForFirestore({
+      deviceId: cleanDeviceId,
+      deviceLabel: String(deviceMeta.deviceLabel || 'Web Browser').slice(0, 150),
+      platform: String(deviceMeta.platform || 'web').slice(0, 60),
+      endpoint: endpoint.slice(0, 1000),
+      expirationTime: typeof subJson.expirationTime === 'number' ? subJson.expirationTime : null,
+      keys: {
+        p256dh: p256dh.slice(0, 300),
+        auth: authKey.slice(0, 128),
+      },
+      active: true,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    await withTimeout(
+      setDoc(doc(db, 'anonymous_push_subscriptions', cleanDeviceId), payload, { merge: true }),
+      4000,
+      undefined
+    );
+    firestoreSaved = true;
+  } catch {}
+
+  const saved = serverSaved || firestoreSaved;
+  if (saved) {
+    saveAnonPushCache(cleanDeviceId, {
+      endpoint,
+      expirationTime: subJson.expirationTime ?? null,
+      keys: { p256dh, auth: authKey },
+    });
+  }
+  return { saved, serverSaved, firestoreSaved };
+}
+
 async function persistPushSubscriptionToFirestoreAndServer(
   uid: string,
   subJson: PushSubscriptionJSON,
   deviceMeta: { deviceId: string; deviceLabel: string; platform: string },
   email?: string | null
-): Promise<NotificationPreferencesRecord | null> {
+): Promise<{
+  serverPrefs: NotificationPreferencesRecord | null;
+  serverSaved: boolean;
+  firestoreSaved: boolean;
+}> {
   const nowIso = new Date().toISOString();
   let serverPrefs: NotificationPreferencesRecord | null = null;
+  let serverSaved = false;
+  let firestoreSaved = false;
 
   try {
     const subRes = await withTimeout(
@@ -489,8 +678,11 @@ async function persistPushSubscriptionToFirestoreAndServer(
       null as any
     );
     if (subRes && subRes.ok) {
-      const data = await subRes.json();
-      serverPrefs = data?.preferences || null;
+      const data = await subRes.json().catch(() => null);
+      if (data?.success) {
+        serverSaved = true;
+        serverPrefs = data?.preferences || null;
+      }
     }
   } catch {}
 
@@ -520,10 +712,123 @@ async function persistPushSubscriptionToFirestoreAndServer(
         3500,
         undefined
       );
+      firestoreSaved = true;
     } catch {}
   }
 
-  return serverPrefs;
+  return { serverPrefs, serverSaved, firestoreSaved };
+}
+
+export async function syncBrowserPushWithUserAccount(
+  uid: string,
+  email?: string | null,
+  existingBrowserSub?: PushSubscription | null,
+  prefs?: NotificationPreferencesRecord | null
+): Promise<{
+  synced: boolean;
+  preferences: NotificationPreferencesRecord | null;
+}> {
+  if (!uid) return { synced: false, preferences: null };
+  const deviceMeta = getDeviceMetadata();
+  const cachedAnon = readAnonPushCache();
+  let subJson: PushSubscriptionJSON | null = existingBrowserSub?.toJSON() || null;
+
+  if (!subJson && typeof window !== 'undefined' && getBrowserNotificationPermission() === 'granted' && isPushSupportedOnDevice()) {
+    try {
+      const reg = await registerServiceWorkerSafe();
+      const browserSub = await reg?.pushManager?.getSubscription();
+      if (browserSub) subJson = browserSub.toJSON();
+    } catch {}
+  }
+
+  if (!subJson && cachedAnon?.subscription) {
+    subJson = cachedAnon.subscription;
+  }
+
+  if (!subJson?.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
+    // Still attempt server claim in case an anonymous record exists by deviceId on the server
+    if (cachedAnon?.deviceId || deviceMeta.deviceId) {
+      try {
+        const res = await withTimeout(
+          fetch(`/api/push/claim-anonymous/${encodeURIComponent(uid)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...userHeaders(uid, email) },
+            body: JSON.stringify({ ...deviceMeta }),
+          }),
+          3500,
+          null as any
+        );
+        if (res && res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.claimed && data?.preferences) {
+            return { synced: true, preferences: data.preferences };
+          }
+        }
+      } catch {}
+    }
+    return { synced: false, preferences: prefs || null };
+  }
+
+  let claimedPrefs: NotificationPreferencesRecord | null = null;
+  let claimedOk = false;
+  try {
+    const claimRes = await withTimeout(
+      fetch(`/api/push/claim-anonymous/${encodeURIComponent(uid)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...userHeaders(uid, email) },
+        body: JSON.stringify({
+          deviceId: cachedAnon?.deviceId || deviceMeta.deviceId,
+          deviceLabel: deviceMeta.deviceLabel,
+          platform: deviceMeta.platform,
+          subscription: subJson,
+        }),
+      }),
+      4000,
+      null as any
+    );
+    if (claimRes && claimRes.ok) {
+      const data = await claimRes.json().catch(() => null);
+      if (data?.success) {
+        claimedOk = Boolean(data?.claimed);
+        claimedPrefs = data?.preferences || null;
+      }
+    }
+  } catch {}
+
+  const persistRes = await persistPushSubscriptionToFirestoreAndServer(
+    uid,
+    subJson,
+    deviceMeta,
+    email
+  );
+  const finalPrefs = persistRes.serverPrefs || claimedPrefs || prefs || null;
+  if (persistRes.serverSaved || persistRes.firestoreSaved || claimedOk) {
+    try {
+      localStorage.removeItem(ANON_PUSH_SUB_KEY);
+    } catch {}
+    await saveUserNotificationPreferences(
+      uid,
+      {
+        permissionStatus: 'granted',
+        subscriptionStatus: 'active',
+        enabledAt: finalPrefs?.enabledAt || new Date().toISOString(),
+        channels: {
+          websiteBell: true,
+          browserPush: true,
+          mobilePush:
+            Boolean(finalPrefs?.channels?.mobilePush) ||
+            deviceMeta.platform === 'android' ||
+            deviceMeta.platform === 'ios',
+          emailAlerts: Boolean(finalPrefs?.channels?.emailAlerts),
+        },
+        deviceSubscriptions: finalPrefs?.deviceSubscriptions,
+      },
+      email
+    ).catch(() => null);
+    return { synced: true, preferences: finalPrefs };
+  }
+
+  return { synced: false, preferences: finalPrefs };
 }
 
 export async function checkCurrentDevicePushHealth(
@@ -567,8 +872,7 @@ export async function checkCurrentDevicePushHealth(
     }
   } catch {}
 
-  // Check if VAPID key changed on production; if granted and mismatched, silently renew subscription
-  const publicKey = browserSub ? await fetchVapidPublicKeySafe() : '';
+  const publicKey = browserPermission === 'granted' ? await fetchVapidPublicKeySafe() : '';
   if (browserPermission === 'granted' && browserSub && publicKey && !isSubscriptionVapidMatch(browserSub, publicKey)) {
     try {
       await browserSub.unsubscribe();
@@ -576,23 +880,38 @@ export async function checkCurrentDevicePushHealth(
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
       });
-      await persistPushSubscriptionToFirestoreAndServer(uid, browserSub.toJSON(), deviceMeta, email);
+    } catch {}
+  } else if (browserPermission === 'granted' && !browserSub && reg?.pushManager && publicKey) {
+    // Permission is already granted in browser — silently create/restore subscription without showing popup
+    try {
+      browserSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+      });
     } catch {}
   }
 
   const serverDevice = (prefs?.deviceSubscriptions || []).find((d) => d.deviceId === deviceId && d.active);
   const subJson = browserSub?.toJSON();
   const hasKeysSynced = Boolean(serverDevice?.subscription?.keys?.p256dh && serverDevice?.subscription?.keys?.auth);
+  const anonPending = Boolean(readAnonPushCache());
 
-  // Sync silently if browser granted permission & holds a subscription not yet synced with full keys
-  if (browserPermission === 'granted' && browserSub && subJson?.endpoint && (!serverDevice || !hasKeysSynced)) {
+  // Sync silently if browser granted permission & holds a subscription not yet synced (or transitioning from anonymous)
+  if (
+    browserPermission === 'granted' &&
+    browserSub &&
+    subJson?.endpoint &&
+    (!serverDevice || !hasKeysSynced || anonPending)
+  ) {
     try {
-      await persistPushSubscriptionToFirestoreAndServer(uid, subJson, deviceMeta, email);
-      return {
-        browserPermission: 'granted',
-        hasActiveSubscriptionOnThisDevice: true,
-        needsRenewalOnThisDevice: false,
-      };
+      const syncResult = await syncBrowserPushWithUserAccount(uid, email, browserSub, prefs);
+      if (syncResult.synced) {
+        return {
+          browserPermission: 'granted',
+          hasActiveSubscriptionOnThisDevice: true,
+          needsRenewalOnThisDevice: false,
+        };
+      }
     } catch {}
   }
 
@@ -615,6 +934,190 @@ export async function checkCurrentDevicePushHealth(
 }
 
 /**
+ * Checks browser notification permission, active PushSubscription, VAPID match,
+ * dismissal cooldown, and account sync for ANY visitor (anonymous or signed-in).
+ */
+export async function checkVisitorNotificationStatus(
+  uid?: string | null,
+  email?: string | null
+): Promise<{
+  shouldShowPopup: boolean;
+  reason:
+    | 'first_time'
+    | 'not_enabled_yet'
+    | 'renew_device'
+    | 'blocked_in_browser'
+    | 'ios_install_required'
+    | 'already_active'
+    | 'dismissed_cooldown'
+    | 'unsupported';
+  browserPermission: NotificationPermissionState;
+  hasValidSubscription: boolean;
+  preferences: NotificationPreferencesRecord | null;
+}> {
+  const browserPermission = getBrowserNotificationPermission();
+  const prefs = uid ? await fetchUserNotificationPreferences(uid, email).catch(() => null) : null;
+
+  if (isIosSafariNeedsInstall()) {
+    if (isPromptDismissedInSessionOrCooldown(prefs)) {
+      return {
+        shouldShowPopup: false,
+        reason: 'dismissed_cooldown',
+        browserPermission: 'unsupported',
+        hasValidSubscription: false,
+        preferences: prefs,
+      };
+    }
+    return {
+      shouldShowPopup: true,
+      reason: 'ios_install_required',
+      browserPermission: 'unsupported',
+      hasValidSubscription: false,
+      preferences: prefs,
+    };
+  }
+
+  if (browserPermission === 'unsupported' || !isPushSupportedOnDevice()) {
+    return {
+      shouldShowPopup: false,
+      reason: 'unsupported',
+      browserPermission,
+      hasValidSubscription: false,
+      preferences: prefs,
+    };
+  }
+
+  // Logged-in path shares full device health & anonymous-claim sync
+  if (uid) {
+    const health = await checkCurrentDevicePushHealth(uid, prefs, email);
+    if (health.browserPermission === 'granted' && health.hasActiveSubscriptionOnThisDevice) {
+      clearNotificationPromptDismissal();
+      return {
+        shouldShowPopup: false,
+        reason: 'already_active',
+        browserPermission: 'granted',
+        hasValidSubscription: true,
+        preferences: prefs,
+      };
+    }
+
+    if (isPromptDismissedInSessionOrCooldown(prefs)) {
+      return {
+        shouldShowPopup: false,
+        reason: 'dismissed_cooldown',
+        browserPermission: health.browserPermission,
+        hasValidSubscription: false,
+        preferences: prefs,
+      };
+    }
+
+    if (health.browserPermission === 'denied') {
+      return {
+        shouldShowPopup: true,
+        reason: 'blocked_in_browser',
+        browserPermission: 'denied',
+        hasValidSubscription: false,
+        preferences: prefs,
+      };
+    }
+
+    if (health.needsRenewalOnThisDevice) {
+      return {
+        shouldShowPopup: true,
+        reason: 'renew_device',
+        browserPermission: health.browserPermission,
+        hasValidSubscription: false,
+        preferences: prefs,
+      };
+    }
+
+    return {
+      shouldShowPopup: true,
+      reason: prefs ? 'not_enabled_yet' : 'first_time',
+      browserPermission: health.browserPermission,
+      hasValidSubscription: false,
+      preferences: prefs,
+    };
+  }
+
+  // Anonymous visitor path
+  let browserSub: PushSubscription | null = null;
+  let reg: ServiceWorkerRegistration | null = null;
+  try {
+    reg = await registerServiceWorkerSafe();
+    if (reg?.pushManager) {
+      browserSub = await reg.pushManager.getSubscription();
+    }
+  } catch {}
+
+  if (browserPermission === 'granted') {
+    const publicKey = await fetchVapidPublicKeySafe();
+    if (browserSub && publicKey && !isSubscriptionVapidMatch(browserSub, publicKey)) {
+      try {
+        await browserSub.unsubscribe();
+        browserSub = await reg!.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+        });
+      } catch {}
+    } else if (!browserSub && reg?.pushManager && publicKey) {
+      // Browser already allows notifications — subscribe silently without showing popup
+      try {
+        browserSub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+        });
+      } catch {}
+    }
+
+    const subJson = browserSub?.toJSON();
+    if (browserSub && subJson?.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+      const deviceMeta = getDeviceMetadata();
+      const cachedAnon = readAnonPushCache();
+      if (!cachedAnon || cachedAnon.subscription?.endpoint !== subJson.endpoint) {
+        await persistAnonymousPushSubscription(subJson, deviceMeta).catch(() => null);
+      }
+      clearNotificationPromptDismissal();
+      return {
+        shouldShowPopup: false,
+        reason: 'already_active',
+        browserPermission: 'granted',
+        hasValidSubscription: true,
+        preferences: null,
+      };
+    }
+  }
+
+  if (isPromptDismissedInSessionOrCooldown(null)) {
+    return {
+      shouldShowPopup: false,
+      reason: 'dismissed_cooldown',
+      browserPermission,
+      hasValidSubscription: false,
+      preferences: null,
+    };
+  }
+
+  if (browserPermission === 'denied') {
+    return {
+      shouldShowPopup: true,
+      reason: 'blocked_in_browser',
+      browserPermission: 'denied',
+      hasValidSubscription: false,
+      preferences: null,
+    };
+  }
+
+  return {
+    shouldShowPopup: true,
+    reason: browserPermission === 'granted' ? 'renew_device' : 'first_time',
+    browserPermission,
+    hasValidSubscription: false,
+    preferences: null,
+  };
+}
+
+/**
  * Evaluates whether the notification permission modal should be shown.
  * Never repeatedly prompts once push notifications are granted & active on the current device.
  */
@@ -626,7 +1129,14 @@ export function evaluateNotificationPromptRule(args: {
   alreadyPromptedThisLogin: boolean;
 }): {
   shouldShowModal: boolean;
-  reason: 'first_time' | 'not_enabled_yet' | 'renew_device' | 'blocked_in_browser' | 'already_active' | 'unsupported';
+  reason:
+    | 'first_time'
+    | 'not_enabled_yet'
+    | 'renew_device'
+    | 'blocked_in_browser'
+    | 'ios_install_required'
+    | 'already_active'
+    | 'unsupported';
 } {
   const { prefs, browserPermission, hasActiveDeviceSub, needsDeviceRenewal, alreadyPromptedThisLogin } = args;
 
@@ -634,16 +1144,29 @@ export function evaluateNotificationPromptRule(args: {
     return { shouldShowModal: false, reason: 'already_active' };
   }
 
-  if (browserPermission === 'denied') {
-    return { shouldShowModal: !alreadyPromptedThisLogin && prefs?.permissionStatus === 'granted', reason: 'blocked_in_browser' };
+  if (isIosSafariNeedsInstall()) {
+    if (isPromptDismissedInSessionOrCooldown(prefs)) {
+      return { shouldShowModal: false, reason: 'ios_install_required' };
+    }
+    return { shouldShowModal: !alreadyPromptedThisLogin, reason: 'ios_install_required' };
   }
 
   if (browserPermission === 'unsupported') {
-    const bellSet = Boolean(prefs?.enabledAt || prefs?.channels?.websiteBell);
     return {
-      shouldShowModal: !alreadyPromptedThisLogin && !bellSet,
+      shouldShowModal: false,
       reason: 'unsupported',
     };
+  }
+
+  if (isPromptDismissedInSessionOrCooldown(prefs)) {
+    return {
+      shouldShowModal: false,
+      reason: browserPermission === 'denied' ? 'blocked_in_browser' : 'already_active',
+    };
+  }
+
+  if (browserPermission === 'denied') {
+    return { shouldShowModal: !alreadyPromptedThisLogin, reason: 'blocked_in_browser' };
   }
 
   if (needsDeviceRenewal) {
@@ -661,7 +1184,7 @@ export function evaluateNotificationPromptRule(args: {
 }
 
 export async function requestAndEnableNotifications(
-  uid: string,
+  uid?: string | null,
   options: {
     emailAlerts?: boolean;
     websiteBell?: boolean;
@@ -679,34 +1202,73 @@ export async function requestAndEnableNotifications(
   const useEmailAlerts = options.emailAlerts === true;
 
   if (!browserSupport) {
-    const saved = await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'unsupported',
-        subscriptionStatus: 'none',
-        enabledAt: new Date().toISOString(),
-        channels: {
-          websiteBell: options.websiteBell !== false,
-          browserPush: false,
-          mobilePush: false,
-          emailAlerts: useEmailAlerts,
+    if (uid) {
+      const saved = await saveUserNotificationPreferences(
+        uid,
+        {
+          permissionStatus: 'unsupported',
+          subscriptionStatus: 'none',
+          enabledAt: new Date().toISOString(),
+          channels: {
+            websiteBell: options.websiteBell !== false,
+            browserPush: false,
+            mobilePush: false,
+            emailAlerts: useEmailAlerts,
+          },
         },
-      },
-      options.email
-    );
+        options.email
+      );
+      return {
+        success: false,
+        permissionStatus: 'unsupported',
+        subscriptionActive: false,
+        preferences: saved,
+        message: isIosSafariNeedsInstall()
+          ? 'In Safari on iOS, tap Share and Add to Home Screen to enable Web Push alerts. Your Dashboard Notification Bell remains active.'
+          : 'Web Push notifications are not supported by this browser.',
+      };
+    }
     return {
-      success: true,
+      success: false,
       permissionStatus: 'unsupported',
       subscriptionActive: false,
-      preferences: saved,
+      preferences: null,
       message: isIosSafariNeedsInstall()
-        ? 'Dashboard notification bell enabled! Add Hopeland Jobs to your iPhone Home Screen to also receive iOS lock-screen push alerts.'
-        : 'Website dashboard notification bell is enabled for your account.',
+        ? 'In Safari on iOS, tap Share and Add to Home Screen to enable Web Push alerts.'
+        : 'Web Push notifications are not supported by this browser.',
     };
   }
 
+  // Never repeatedly call Notification.requestPermission() if browser permission is already denied
   let permResult: NotificationPermission = Notification.permission;
-  if (permResult !== 'granted') {
+  if (permResult === 'denied') {
+    const saved = uid
+      ? await saveUserNotificationPreferences(
+          uid,
+          {
+            permissionStatus: 'denied',
+            subscriptionStatus: 'revoked',
+            channels: {
+              websiteBell: options.websiteBell !== false,
+              browserPush: false,
+              mobilePush: false,
+              emailAlerts: useEmailAlerts,
+            },
+          },
+          options.email
+        )
+      : null;
+    return {
+      success: false,
+      permissionStatus: 'denied',
+      subscriptionActive: false,
+      preferences: saved,
+      message:
+        'Notifications are blocked in your browser settings. Follow the instructions above to allow notifications for this site, then check again.',
+    };
+  }
+
+  if (permResult === 'default') {
     try {
       permResult = await Notification.requestPermission();
     } catch {
@@ -715,63 +1277,52 @@ export async function requestAndEnableNotifications(
   }
 
   if (permResult === 'denied') {
-    const saved = await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'denied',
-        subscriptionStatus: 'revoked',
-        channels: {
-          websiteBell: options.websiteBell !== false,
-          browserPush: false,
-          mobilePush: false,
-          emailAlerts: useEmailAlerts,
-        },
-      },
-      options.email
-    );
+    const saved = uid
+      ? await saveUserNotificationPreferences(
+          uid,
+          {
+            permissionStatus: 'denied',
+            subscriptionStatus: 'revoked',
+            channels: {
+              websiteBell: options.websiteBell !== false,
+              browserPush: false,
+              mobilePush: false,
+              emailAlerts: useEmailAlerts,
+            },
+          },
+          options.email
+        )
+      : null;
     return {
       success: false,
       permissionStatus: 'denied',
       subscriptionActive: false,
       preferences: saved,
-      message: 'Browser notifications are currently blocked. Allow Notifications for this site in your browser settings, then click Check Again.',
+      message:
+        'Notifications were blocked by the browser. Please allow Notifications in your browser Site Settings to enable job alerts.',
     };
   }
 
   if (permResult !== 'granted') {
-    const saved = await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'default',
-        subscriptionStatus: 'none',
-        incrementDismiss: true,
-        channels: {
-          websiteBell: options.websiteBell !== false,
-          browserPush: false,
-          mobilePush: false,
-          emailAlerts: useEmailAlerts,
-        },
-      },
-      options.email
-    );
+    const saved = await recordNotificationPromptDismissal(uid, options.email);
     return {
       success: false,
       permissionStatus: 'default',
       subscriptionActive: false,
       preferences: saved,
-      message: 'Permission prompt was dismissed. Website notification bell remains active, and you can enable push alerts anytime.',
+      message: 'Notification prompt was dismissed. You can enable job alerts anytime.',
     };
   }
 
-  // Permission granted -> register SW + verify VAPID match + subscribe with full keys
+  // Permission granted -> register SW, verify production VAPID, subscribe, and confirm durable DB write
   try {
     const reg = await registerServiceWorkerSafe();
     if (!reg?.pushManager) {
-      throw new Error('Service Worker PushManager unavailable in this browser');
+      throw new Error('Production Service Worker PushManager is unavailable in this browser.');
     }
     const publicKey = await fetchVapidPublicKeySafe();
     if (!publicKey) {
-      throw new Error('Could not retrieve Web Push VAPID public key');
+      throw new Error('Could not retrieve production Web Push VAPID public key.');
     }
 
     let sub = await reg.pushManager.getSubscription();
@@ -787,58 +1338,75 @@ export async function requestAndEnableNotifications(
     }
 
     const subJson = sub.toJSON();
-    const srvPrefs = await persistPushSubscriptionToFirestoreAndServer(
-      uid,
-      subJson,
-      deviceMeta,
-      options.email
-    );
+    if (!subJson?.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
+      throw new Error('Browser created an incomplete push subscription without encryption keys.');
+    }
 
-    const saved = await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'granted',
-        subscriptionStatus: 'active',
-        enabledAt: new Date().toISOString(),
-        channels: {
-          websiteBell: options.websiteBell !== false,
-          browserPush: true,
-          mobilePush: deviceMeta.platform === 'android' || deviceMeta.platform === 'ios',
-          emailAlerts: useEmailAlerts,
+    if (uid) {
+      const persistRes = await persistPushSubscriptionToFirestoreAndServer(
+        uid,
+        subJson,
+        deviceMeta,
+        options.email
+      );
+      if (!persistRes.serverSaved && !persistRes.firestoreSaved) {
+        throw new Error(
+          'Push subscription could not be saved to our database. Please check your connection and try again.'
+        );
+      }
+
+      const saved = await saveUserNotificationPreferences(
+        uid,
+        {
+          permissionStatus: 'granted',
+          subscriptionStatus: 'active',
+          enabledAt: new Date().toISOString(),
+          channels: {
+            websiteBell: options.websiteBell !== false,
+            browserPush: true,
+            mobilePush: deviceMeta.platform === 'android' || deviceMeta.platform === 'ios',
+            emailAlerts: useEmailAlerts,
+          },
+          deviceSubscriptions: persistRes.serverPrefs?.deviceSubscriptions,
         },
-        deviceSubscriptions: srvPrefs?.deviceSubscriptions,
-      },
-      options.email
-    );
+        options.email
+      );
+      clearNotificationPromptDismissal();
+      try {
+        localStorage.removeItem(ANON_PUSH_SUB_KEY);
+      } catch {}
 
+      return {
+        success: true,
+        permissionStatus: 'granted',
+        subscriptionActive: true,
+        preferences: saved || persistRes.serverPrefs || null,
+        message: 'Instant job notifications are enabled and saved to your account!',
+      };
+    }
+
+    // Anonymous visitor path: persist to backend & anonymous_push_subscriptions before confirming success
+    const anonPersist = await persistAnonymousPushSubscription(subJson, deviceMeta);
+    if (!anonPersist.saved) {
+      throw new Error(
+        'Push subscription could not be saved to the database right now. Please try again.'
+      );
+    }
+    clearNotificationPromptDismissal();
     return {
       success: true,
       permissionStatus: 'granted',
       subscriptionActive: true,
-      preferences: saved || srvPrefs || null,
-      message: 'Push notifications are now enabled! Instant matching job alerts will arrive directly on this device.',
+      preferences: null,
+      message: 'Instant job alerts are active! Sign in or register anytime to sync them with your profile.',
     };
   } catch (err: any) {
-    const saved = await saveUserNotificationPreferences(
-      uid,
-      {
-        permissionStatus: 'granted',
-        subscriptionStatus: 'none',
-        channels: {
-          websiteBell: options.websiteBell !== false,
-          browserPush: false,
-          mobilePush: false,
-          emailAlerts: useEmailAlerts,
-        },
-      },
-      options.email
-    );
     return {
-      success: true,
+      success: false,
       permissionStatus: 'granted',
       subscriptionActive: false,
-      preferences: saved,
-      message: `Permission granted! Website notification bell is active (Push note: ${err?.message || 'browser push unavailable'}).`,
+      preferences: null,
+      message: err?.message || 'Unable to save your push subscription to the database. Please try again.',
     };
   }
 }
@@ -1342,3 +1910,202 @@ export async function sendAdminTestNotificationToUsers(
   });
   return res.json();
 }
+
+export async function sendAuthorizedDeviceTestPush(
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  statusCode?: number;
+  platform?: string;
+  deviceLabel?: string;
+  deliveredAt?: string;
+  message?: string;
+  error?: string;
+}> {
+  const deviceMeta = getDeviceMetadata();
+  let subJson: PushSubscriptionJSON | undefined;
+
+  if (isPushSupportedOnDevice()) {
+    try {
+      let perm = Notification.permission;
+      if (perm === 'default') {
+        perm = await Notification.requestPermission();
+      }
+      if (perm === 'granted') {
+        const reg = await registerServiceWorkerSafe();
+        const publicKey = await fetchVapidPublicKeySafe();
+        if (reg?.pushManager && publicKey) {
+          let sub = await reg.pushManager.getSubscription();
+          if (sub && !isSubscriptionVapidMatch(sub, publicKey)) {
+            await sub.unsubscribe().catch(() => {});
+            sub = null;
+          }
+          if (!sub) {
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+            });
+          }
+          const candidate = sub.toJSON();
+          if (candidate?.endpoint && candidate.keys?.p256dh && candidate.keys?.auth) {
+            subJson = candidate;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const res = await fetch('/api/admin/push/test-device', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      ...(subJson ? { subscription: subJson } : {}),
+      deviceLabel: deviceMeta.deviceLabel,
+      platform: deviceMeta.platform,
+    }),
+  });
+  return res.json();
+}
+
+const AMHARIC_SIGNUP_PROMO_DISMISS_KEY = 'hopelandjobs_amharic_signup_promo_dismiss';
+const AMHARIC_SIGNUP_PROMO_SESSION_KEY = 'hopelandjobs_amharic_signup_promo_session';
+const AMHARIC_PROMO_COOLDOWN_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+export function isAmharicSignupPromoDismissed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (sessionStorage.getItem(AMHARIC_SIGNUP_PROMO_SESSION_KEY) === '1') return true;
+    const raw = localStorage.getItem(AMHARIC_SIGNUP_PROMO_DISMISS_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { dismissedAt?: number };
+    const dismissedAt = Number(parsed?.dismissedAt || 0);
+    if (!dismissedAt || Number.isNaN(dismissedAt)) return false;
+    return Date.now() - dismissedAt < AMHARIC_PROMO_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function recordAmharicSignupPromoDismissed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(AMHARIC_SIGNUP_PROMO_SESSION_KEY, '1');
+    localStorage.setItem(
+      AMHARIC_SIGNUP_PROMO_DISMISS_KEY,
+      JSON.stringify({ dismissedAt: Date.now() })
+    );
+  } catch {}
+}
+
+export function clearAmharicSignupPromoDismissed(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(AMHARIC_SIGNUP_PROMO_SESSION_KEY);
+    localStorage.removeItem(AMHARIC_SIGNUP_PROMO_DISMISS_KEY);
+  } catch {}
+}
+
+export async function fetchAdminNotificationPolicy(
+  adminEmailOverride?: string
+): Promise<import('../types/jobSeeker').NotificationPolicyConfig | null> {
+  try {
+    const res = await fetch('/api/admin/notifications/policy', {
+      headers: getOwnerAuthHeaders(adminEmailOverride),
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.policy || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateAdminNotificationPolicy(
+  payload: {
+    defaultFrequency: 'instant' | 'daily' | 'weekly';
+    dailyCapPerUser: number;
+    allowPromotionalAnnouncements?: boolean;
+    applyFrequencyToExistingUsers?: boolean;
+  },
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  policy?: import('../types/jobSeeker').NotificationPolicyConfig;
+  usersUpdated?: number;
+  error?: string;
+}> {
+  const res = await fetch('/api/admin/notifications/policy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function updateAdminUserNotificationPreferences(
+  uid: string,
+  payload: {
+    frequency?: 'instant' | 'daily' | 'weekly';
+    websiteBell?: boolean;
+    browserPush?: boolean;
+    mobilePush?: boolean;
+  },
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  preferences?: NotificationPreferencesRecord;
+  summary?: RegisteredUserAnalyticsSummary;
+  error?: string;
+}> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(uid)}/notification-preferences`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function sendAdminBroadcastNotification(
+  payload: {
+    title: string;
+    message: string;
+    audience: 'all_subscribed' | 'completed_profiles' | 'by_sector' | 'all_registered';
+    sector?: string;
+    vacancyId?: string;
+  },
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  targetedUsersCount?: number;
+  websiteDeliveredCount?: number;
+  pushDeliveredCount?: number;
+  pushFailedCount?: number;
+  emailsSent?: number;
+  errors?: string[];
+  error?: string;
+}> {
+  const res = await fetch('/api/admin/notifications/broadcast', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+

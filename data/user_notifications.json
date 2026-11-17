@@ -134,38 +134,6 @@
       "updatedAt": "2026-11-16T16:54:33.564Z"
     },
     {
-      "id": "unotif_1794848073563_poh8xc",
-      "userId": "user_yeabsra_test",
-      "vacancyId": "job_1793785445321_22_a7emi",
-      "sourceType": "domestic_job",
-      "alertKind": "new_match",
-      "dedupeKey": "user_yeabsra_test::job_1793785445321_22_a7emi::new_match",
-      "title": "Human Capital Development Adviser — British Embassy Addis Ababa",
-      "employer": "Ethiopian Organization",
-      "location": "Addis Ababa",
-      "category": "Embassy and Diplomatic Jobs",
-      "salary": "USD 2,846.10 monthly before tax and statutory deductions.",
-      "deadline": "16 November 2026.",
-      "matchScore": 43,
-      "matchReasonSummary": "Role alignment: full, lead, senior",
-      "matchReasons": [
-        "Role alignment: full, lead, senior",
-        "Preferred location: Addis Ababa"
-      ],
-      "missingMandatoryQualifications": [],
-      "applicationUrl": "https://fco.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27475-27475-Human-Capital-Development-Adviser-G7-Human-Capital-Development-Team-ADD/en-GB",
-      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1793785445321_22_a7emi",
-      "read": false,
-      "channels": {
-        "website": "delivered",
-        "push": "skipped",
-        "email": "skipped_no_smtp"
-      },
-      "createdAt": "2026-11-16T16:54:33.563Z",
-      "expiresAt": "16 November 2026.",
-      "updatedAt": "2026-11-16T16:54:33.563Z"
-    },
-    {
       "id": "unotif_1794848073562_urvmh6",
       "userId": "user_yeabsra_test",
       "vacancyId": "job_1794643031646_9_ofu68",
@@ -399,38 +367,6 @@
       "updatedAt": "2026-11-16T16:54:33.608Z"
     },
     {
-      "id": "unotif_1794848073607_irbzio",
-      "userId": "google_7965616273726134",
-      "vacancyId": "job_1793785445321_22_a7emi",
-      "sourceType": "domestic_job",
-      "alertKind": "new_match",
-      "dedupeKey": "google_7965616273726134::job_1793785445321_22_a7emi::new_match",
-      "title": "Human Capital Development Adviser — British Embassy Addis Ababa",
-      "employer": "Ethiopian Organization",
-      "location": "Addis Ababa",
-      "category": "Embassy and Diplomatic Jobs",
-      "salary": "USD 2,846.10 monthly before tax and statutory deductions.",
-      "deadline": "16 November 2026.",
-      "matchScore": 43,
-      "matchReasonSummary": "Role alignment: full, lead, senior",
-      "matchReasons": [
-        "Role alignment: full, lead, senior",
-        "Preferred location: Addis Ababa"
-      ],
-      "missingMandatoryQualifications": [],
-      "applicationUrl": "https://fco.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27475-27475-Human-Capital-Development-Adviser-G7-Human-Capital-Development-Team-ADD/en-GB",
-      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1793785445321_22_a7emi",
-      "read": false,
-      "channels": {
-        "website": "delivered",
-        "push": "skipped",
-        "email": "skipped_no_smtp"
-      },
-      "createdAt": "2026-11-16T16:54:33.607Z",
-      "expiresAt": "16 November 2026.",
-      "updatedAt": "2026-11-16T16:54:33.607Z"
-    },
-    {
       "id": "unotif_1794848073606_m2g5eo",
       "userId": "google_7965616273726134",
       "vacancyId": "job_1794643031646_9_ofu68",
@@ -561,6 +497,404 @@
       "createdAt": "2026-11-16T16:54:33.602Z",
       "expiresAt": "November 20, 2026",
       "updatedAt": "2026-11-16T16:54:33.602Z"
+    }
+  ],
+  "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2": [
+    {
+      "id": "unotif_1794909250367_itp4v9",
+      "userId": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+      "vacancyId": "job_1794642198602_13_o7kar",
+      "sourceType": "domestic_job",
+      "alertKind": "deadline_reminder",
+      "dedupeKey": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2::job_1794642198602_13_o7kar::deadline_reminder",
+      "title": "Branch Business Relationship Manager – RMSME",
+      "employer": "Apply: https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2519&company=dashenbank",
+      "location": "Meki Branch, Oromia.",
+      "category": "Banking and Financial Institutions",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "November 20, 2026.",
+      "matchScore": 52,
+      "matchReasonSummary": "Role alignment: branch, manager",
+      "matchReasons": [
+        "Role alignment: branch, manager",
+        "Preferred Sector: Banking and Financial Institutions"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2519&company=dashenbank",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794642198602_13_o7kar",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T09:54:10.367Z",
+      "expiresAt": "November 20, 2026.",
+      "updatedAt": "2026-11-17T09:54:10.367Z"
+    },
+    {
+      "id": "unotif_1794909250364_c1tdq3",
+      "userId": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+      "vacancyId": "job_1794648445936_47_dxr29",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2::job_1794648445936_47_dxr29::new_match",
+      "title": "Intern – Programme Management",
+      "employer": "United Nations Office to the African Union (UNOAU)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 52,
+      "matchReasonSummary": "Preferred Sector: Education and Universities",
+      "matchReasons": [
+        "Preferred Sector: Education and Universities",
+        "Matching skills: communication",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287879",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445936_47_dxr29",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T09:54:10.364Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T09:54:10.365Z"
+    },
+    {
+      "id": "unotif_1794909250362_lq50no",
+      "userId": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2",
+      "vacancyId": "job_1794642856820_3_l975o",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2::job_1794642856820_3_l975o::new_match",
+      "title": "Manager, Strategic Planning and Monitoring",
+      "employer": "Commercial Nominees PLC",
+      "location": "Head Office, Addis Ababa",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "November 24, 2026",
+      "matchScore": 56,
+      "matchReasonSummary": "Role alignment: manager",
+      "matchReasons": [
+        "Role alignment: manager",
+        "Preferred Sector: Education and Universities",
+        "Matching skills: communication",
+        "Preferred location: Head Office, Addis Ababa"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://hopelandjobs.tech/?jobId=job_1794642856820_3_l975o",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794642856820_3_l975o",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T09:54:10.362Z",
+      "expiresAt": "November 24, 2026",
+      "updatedAt": "2026-11-17T09:54:10.362Z"
+    }
+  ],
+  "F25h34YBU1UPkMiFC1oK0r3KZxB3": [
+    {
+      "id": "unotif_1794910653673_8jnqzr",
+      "userId": "F25h34YBU1UPkMiFC1oK0r3KZxB3",
+      "vacancyId": "job_1794648445935_20_rmnca",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "F25h34YBU1UPkMiFC1oK0r3KZxB3::job_1794648445935_20_rmnca::new_match",
+      "title": "Lead Consultant – Twelfth Edition of Assessing Regional Integration in Africa (ARIA XII)",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287244",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_20_rmnca",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.673Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.673Z"
+    },
+    {
+      "id": "unotif_1794910653671_qkgbto",
+      "userId": "F25h34YBU1UPkMiFC1oK0r3KZxB3",
+      "vacancyId": "job_1794648445935_19_fx3k7",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "F25h34YBU1UPkMiFC1oK0r3KZxB3::job_1794648445935_19_fx3k7::new_match",
+      "title": "RITD/RIEDS – Consultant – APPM",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287999",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_19_fx3k7",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.671Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.672Z"
+    },
+    {
+      "id": "unotif_1794910653669_w43wjh",
+      "userId": "F25h34YBU1UPkMiFC1oK0r3KZxB3",
+      "vacancyId": "job_1794648445936_47_dxr29",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "F25h34YBU1UPkMiFC1oK0r3KZxB3::job_1794648445936_47_dxr29::new_match",
+      "title": "Intern – Programme Management",
+      "employer": "United Nations Office to the African Union (UNOAU)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 52,
+      "matchReasonSummary": "Preferred Sector: Education and Universities",
+      "matchReasons": [
+        "Preferred Sector: Education and Universities",
+        "Matching skills: communication",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287879",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445936_47_dxr29",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.669Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.670Z"
+    }
+  ],
+  "XPuREoTPhvTyYsvB14L3JpptCV53": [
+    {
+      "id": "unotif_1794910653743_jec8eq",
+      "userId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+      "vacancyId": "job_1794648445935_20_rmnca",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "XPuREoTPhvTyYsvB14L3JpptCV53::job_1794648445935_20_rmnca::new_match",
+      "title": "Lead Consultant – Twelfth Edition of Assessing Regional Integration in Africa (ARIA XII)",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287244",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_20_rmnca",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.743Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.743Z"
+    },
+    {
+      "id": "unotif_1794910653741_pqj7gf",
+      "userId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+      "vacancyId": "job_1794648445935_19_fx3k7",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "XPuREoTPhvTyYsvB14L3JpptCV53::job_1794648445935_19_fx3k7::new_match",
+      "title": "RITD/RIEDS – Consultant – APPM",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287999",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_19_fx3k7",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.741Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.741Z"
+    },
+    {
+      "id": "unotif_1794910653739_4f93ib",
+      "userId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+      "vacancyId": "job_1794648445936_47_dxr29",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "XPuREoTPhvTyYsvB14L3JpptCV53::job_1794648445936_47_dxr29::new_match",
+      "title": "Intern – Programme Management",
+      "employer": "United Nations Office to the African Union (UNOAU)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 52,
+      "matchReasonSummary": "Preferred Sector: Education and Universities",
+      "matchReasons": [
+        "Preferred Sector: Education and Universities",
+        "Matching skills: communication",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287879",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445936_47_dxr29",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.739Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.740Z"
+    }
+  ],
+  "xieFVTlwLcb3o5698g8nWSnyboc2": [
+    {
+      "id": "unotif_1794910653812_ndcpa3",
+      "userId": "xieFVTlwLcb3o5698g8nWSnyboc2",
+      "vacancyId": "job_1794648445935_20_rmnca",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "xieFVTlwLcb3o5698g8nWSnyboc2::job_1794648445935_20_rmnca::new_match",
+      "title": "Lead Consultant – Twelfth Edition of Assessing Regional Integration in Africa (ARIA XII)",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287244",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_20_rmnca",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.812Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.812Z"
+    },
+    {
+      "id": "unotif_1794910653810_g8ccfp",
+      "userId": "xieFVTlwLcb3o5698g8nWSnyboc2",
+      "vacancyId": "job_1794648445935_19_fx3k7",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "xieFVTlwLcb3o5698g8nWSnyboc2::job_1794648445935_19_fx3k7::new_match",
+      "title": "RITD/RIEDS – Consultant – APPM",
+      "employer": "United Nations Economic Commission for Africa (UNECA)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Government and Public Sector",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 42,
+      "matchReasonSummary": "Preferred Sector: Government and Public Sector",
+      "matchReasons": [
+        "Preferred Sector: Government and Public Sector",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287999",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445935_19_fx3k7",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.810Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.811Z"
+    },
+    {
+      "id": "unotif_1794910653808_kwzel9",
+      "userId": "xieFVTlwLcb3o5698g8nWSnyboc2",
+      "vacancyId": "job_1794648445936_47_dxr29",
+      "sourceType": "domestic_job",
+      "alertKind": "new_match",
+      "dedupeKey": "xieFVTlwLcb3o5698g8nWSnyboc2::job_1794648445936_47_dxr29::new_match",
+      "title": "Intern – Programme Management",
+      "employer": "United Nations Office to the African Union (UNOAU)",
+      "location": "Addis Ababa, Ethiopia",
+      "category": "Education and Universities",
+      "salary": "Attractive / Per Company Scale",
+      "deadline": "17 November 2026.",
+      "matchScore": 52,
+      "matchReasonSummary": "Preferred Sector: Education and Universities",
+      "matchReasons": [
+        "Preferred Sector: Education and Universities",
+        "Matching skills: communication",
+        "Preferred location: Addis Ababa, Ethiopia"
+      ],
+      "missingMandatoryQualifications": [],
+      "applicationUrl": "https://careers.un.org/jobSearchDescription/287879",
+      "jobUrl": "https://hopelandjobs.tech/?jobId=job_1794648445936_47_dxr29",
+      "read": false,
+      "channels": {
+        "website": "delivered",
+        "push": "skipped",
+        "email": "skipped"
+      },
+      "createdAt": "2026-11-17T10:17:33.808Z",
+      "expiresAt": "17 November 2026.",
+      "updatedAt": "2026-11-17T10:17:33.809Z"
     }
   ]
 }

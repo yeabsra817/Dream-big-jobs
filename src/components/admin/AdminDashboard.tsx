@@ -479,7 +479,7 @@ export const AdminDashboard: React.FC<Props> = ({
                 }`}
               >
                 <Users className="w-4 h-4 text-sky-400" />
-                <span>Registered Users</span>
+                <span>Push &amp; Registered Users</span>
               </button>
             )}
 

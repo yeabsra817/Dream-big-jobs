@@ -239,6 +239,23 @@
       },
       "required": ["id", "userId", "deviceId", "endpoint", "active", "updatedAt"]
     },
+    "AnonymousPushSubscription": {
+      "title": "Visitor Web Push Subscription",
+      "description": "Write-only visitor Web Push subscription prior to account sign-in or registration, claimed when the user logs in.",
+      "type": "object",
+      "properties": {
+        "deviceId": { "type": "string", "maxLength": 128 },
+        "deviceLabel": { "type": "string", "maxLength": 150 },
+        "platform": { "type": "string", "maxLength": 60 },
+        "endpoint": { "type": "string", "maxLength": 1000 },
+        "expirationTime": { "type": "number" },
+        "keys": { "type": "object", "description": "Web Push encryption keys (p256dh and auth)" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["deviceId", "endpoint", "keys", "active", "createdAt", "updatedAt"]
+    },
     "NotificationQueueItem": {
       "title": "Notification Delivery Retry Queue Item",
       "description": "Admin/server-only retry task for failed push or email deliveries.",
@@ -627,6 +644,10 @@
     "/push_subscriptions/{subId}": {
       "schema": "PushSubscriptionRecord",
       "description": "Device-level Web Push subscription records strictly isolated per user"
+    },
+    "/anonymous_push_subscriptions/{deviceId}": {
+      "schema": "AnonymousPushSubscription",
+      "description": "Write-only anonymous visitor Web Push subscriptions keyed by deviceId prior to account sync"
     },
     "/notification_queue/{queueId}": {
       "schema": "NotificationQueueItem",

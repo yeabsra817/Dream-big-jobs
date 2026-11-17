@@ -20,6 +20,7 @@ import {
   Download,
   WifiOff,
   RefreshCw,
+  Share,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
 import {
@@ -63,7 +64,10 @@ interface Props {
   onOpenNotificationPreferences?: () => void;
   onPromptEnableNotifications?: () => void;
   canInstallApp?: boolean;
+  canShowIosInstallGuide?: boolean;
+  isStandaloneApp?: boolean;
   onInstallApp?: () => void;
+  onOpenIosInstallGuide?: () => void;
   isOnline?: boolean;
   isSyncingReconnect?: boolean;
 }
@@ -101,7 +105,10 @@ export const Navbar: React.FC<Props> = ({
   onOpenNotificationPreferences = () => {},
   onPromptEnableNotifications = () => {},
   canInstallApp = false,
+  canShowIosInstallGuide = false,
+  isStandaloneApp = false,
   onInstallApp,
+  onOpenIosInstallGuide,
   isOnline = true,
   isSyncingReconnect = false,
 }) => {
@@ -144,14 +151,24 @@ export const Navbar: React.FC<Props> = ({
                 <span>Syncing alerts...</span>
               </span>
             )}
-            {canInstallApp && onInstallApp && (
+            {!isStandaloneApp && canInstallApp && onInstallApp && (
               <button
                 type="button"
                 onClick={onInstallApp}
-                className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-400 text-slate-950 hover:bg-amber-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 hover:bg-amber-300 transition-colors cursor-pointer"
               >
                 <Download className="w-3 h-3" />
                 <span>Install App</span>
+              </button>
+            )}
+            {!isStandaloneApp && !canInstallApp && canShowIosInstallGuide && onOpenIosInstallGuide && (
+              <button
+                type="button"
+                onClick={onOpenIosInstallGuide}
+                className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 hover:bg-amber-300 transition-colors cursor-pointer"
+              >
+                <Share className="w-3 h-3" />
+                <span>Add to Home Screen</span>
               </button>
             )}
             <button
@@ -588,6 +605,32 @@ export const Navbar: React.FC<Props> = ({
           )}
 
           <div className="pt-3 border-t border-slate-800 flex flex-col gap-2">
+            {!isStandaloneApp && canInstallApp && onInstallApp && (
+              <button
+                type="button"
+                onClick={() => {
+                  onInstallApp();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm py-3 rounded-xl shadow-sm cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Install HopelandJobs App</span>
+              </button>
+            )}
+            {!isStandaloneApp && !canInstallApp && canShowIosInstallGuide && onOpenIosInstallGuide && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenIosInstallGuide();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-sm py-3 rounded-xl shadow-sm cursor-pointer"
+              >
+                <Share className="w-4 h-4" />
+                <span>Add to iPhone Home Screen (Push Alerts)</span>
+              </button>
+            )}
             <a
               href={siteSettings.telegramChannelUrl || 'https://t.me/DreamBigJobsEthiopia'}
               target="_blank"

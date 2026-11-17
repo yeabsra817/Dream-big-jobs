@@ -98,6 +98,14 @@ async function setupServer() {
       express.static(path.join(__dirname, 'dist'), {
         maxAge: '1h',
         etag: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(`${path.sep}sw.js`) || filePath.endsWith('/sw.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Service-Worker-Allowed', '/');
+          } else if (filePath.endsWith('.webmanifest')) {
+            res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+          }
+        },
       })
     );
     app.get('*', (req: Request, res: Response) => {

@@ -1,0 +1,29 @@
+{
+  "lastRunStartedAt": "2026-11-17T09:37:35.599Z",
+  "lastSuccessfulRunAt": "2026-11-17T09:37:35.852Z",
+  "lastRunStatus": "success",
+  "recentErrors": [],
+  "runs": [
+    {
+      "id": "run_1794908255852_devd",
+      "trigger": "background_interval",
+      "status": "success",
+      "dryRun": false,
+      "startedAt": "2026-11-17T09:37:35.599Z",
+      "finishedAt": "2026-11-17T09:37:35.852Z",
+      "durationMs": 253,
+      "usersEvaluated": 6,
+      "usersEligibleForAlerts": 6,
+      "recommendationsUpdated": 240,
+      "notificationsCreated": 0,
+      "pushAttempted": 0,
+      "pushSucceeded": 0,
+      "pushFailed": 0,
+      "emailAttempted": 0,
+      "emailSucceeded": 0,
+      "emailFailed": 0,
+      "retriesProcessed": 0,
+      "errors": []
+    }
+  ]
+}

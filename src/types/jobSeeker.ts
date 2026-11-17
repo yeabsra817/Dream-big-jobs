@@ -157,6 +157,14 @@ export interface NotificationPreferencesRecord {
   updatedAt: string;
 }
 
+export interface NotificationPolicyConfig {
+  defaultFrequency: NotificationFrequency;
+  dailyCapPerUser: number;
+  allowPromotionalAnnouncements: boolean;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
 export interface SchedulerRunRecord {
   id: string;
   trigger: 'vercel_cron' | 'background_interval' | 'manual_admin';
@@ -217,6 +225,35 @@ export interface AdminSchedulerStatusResponse {
     usersReceivingRecommendationsCount: number;
     activePushSubscriptionsCount: number;
   };
+  pushStats?: {
+    totalSubscribedUsers: number;
+    anonymousActiveDevices: number;
+    androidSubscriptions: number;
+    iphoneSubscriptions: number;
+    desktopSubscriptions: number;
+    activeSubscriptions: number;
+    invalidOrExpiredSubscriptions: number;
+    notificationsSentToday: number;
+    pushAcceptedCount: number;
+    pushFailedCount: number;
+  };
+  notificationHistory?: Array<{
+    id: string;
+    timestamp: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    jobId: string;
+    jobTitle: string;
+    employer: string;
+    category: string;
+    platform: 'android' | 'ios' | 'desktop' | 'other';
+    deviceLabel: string;
+    status: 'accepted' | 'failed' | 'expired';
+    statusCode?: number;
+    error?: string;
+    isTest?: boolean;
+  }>;
   recentErrors: Array<{
     timestamp: string;
     source: string;
@@ -332,6 +369,8 @@ export interface RegisteredUserAnalyticsSummary {
     locationCity: string;
     desiredJobTitle: string;
     preferredIndustry: string;
+    currentOrPreviousEmployer?: string;
+    educationSummary?: string;
     educationLevel: string;
     experienceBand: string;
     yearsOfExperience: string;

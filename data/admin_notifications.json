@@ -1,5 +1,14 @@
 [
   {
+    "id": "notif_1794909250310_sl7tr",
+    "type": "staff_registered",
+    "title": "New Staff Profile Registered",
+    "message": "YEABSRA TEFFERA TEKLU (Profile saved) joined permanently.",
+    "severity": "info",
+    "acknowledged": false,
+    "createdAt": "2026-11-17T09:54:10.310Z"
+  },
+  {
     "id": "notif_1794853854205_v9bsn",
     "type": "security_update",
     "title": "Developer Password Hash Updated",

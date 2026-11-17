@@ -22,23 +22,34 @@ import {
   Building2,
   Sparkles,
   Radio,
+  Smartphone,
+  Monitor,
+  History,
+  Sliders,
+  Megaphone,
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   AdminSchedulerStatusResponse,
   JobSeekerProfile,
+  NotificationFrequency,
   NotificationPreferencesRecord,
   RegisteredUserAnalyticsSummary,
   evaluateMandatoryProfileCompletion,
 } from '../../types/jobSeeker';
 import {
+  fetchAdminNotificationPolicy,
   fetchAdminSchedulerStatus,
   fetchRegisteredUserAnalyticsAdmin,
+  sendAdminBroadcastNotification,
   sendAdminTestNotificationToUsers,
+  sendAuthorizedDeviceTestPush,
   syncAllUsersFromFirestoreToServer,
   triggerAdminSchedulerRun,
+  updateAdminNotificationPolicy,
   updateAdminUserAccountStatus,
+  updateAdminUserNotificationPreferences,
 } from '../../lib/notificationService';
 import {
   auth,
@@ -147,8 +158,24 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
   const [schedulerStatus, setSchedulerStatus] = useState<AdminSchedulerStatusResponse | null>(null);
   const [isRunningScheduler, setIsRunningScheduler] = useState(false);
   const [isSendingTestAlert, setIsSendingTestAlert] = useState(false);
+  const [isTestingThisDevice, setIsTestingThisDevice] = useState(false);
   const [testingUid, setTestingUid] = useState<string | null>(null);
   const [testAlertResult, setTestAlertResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Admin Broadcast & Notification Frequency Policy State
+  const [policyDefaultFreq, setPolicyDefaultFreq] = useState<NotificationFrequency>('instant');
+  const [policyDailyCap, setPolicyDailyCap] = useState<number>(3);
+  const [applyPolicyToExisting, setApplyPolicyToExisting] = useState<boolean>(false);
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  const [updatingFreqUid, setUpdatingFreqUid] = useState<string | null>(null);
+
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastAudience, setBroadcastAudience] = useState<
+    'all_subscribed' | 'completed_profiles' | 'by_sector' | 'all_registered'
+  >('all_subscribed');
+  const [broadcastSector, setBroadcastSector] = useState('');
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -341,6 +368,21 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
           emailGroups.set(normEmail, arr);
         }
 
+        const expList = Array.isArray(u.experience) ? u.experience : [];
+        const currentOrPreviousEmployer =
+          String(
+            expList[0]?.companyName ||
+              u.staffDepartmentOrSector ||
+              baseUser?.currentOrPreviousEmployer ||
+              (u.noExperience ? 'Fresh Graduate / No Prior Employer' : 'Not Specified')
+          ).trim() || 'Not Specified';
+
+        const eduList = Array.isArray(u.education) ? u.education : [];
+        const firstEdu = eduList[0];
+        const educationSummary = firstEdu
+          ? `${firstEdu.qualification || educationLevel}${firstEdu.fieldOfStudy ? ` in ${firstEdu.fieldOfStudy}` : ''}`
+          : baseUser?.educationSummary || educationLevel;
+
         return {
           uid,
           fullName: u.fullName || 'Registered User',
@@ -351,6 +393,8 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
           locationCity: u.locationCity || 'Addis Ababa',
           desiredJobTitle: u.desiredJobTitle || u.currentPosition || '',
           preferredIndustry: sectorLabel,
+          currentOrPreviousEmployer,
+          educationSummary,
           educationLevel,
           experienceBand,
           yearsOfExperience: String(u.yearsOfExperience || ''),
@@ -452,9 +496,10 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
     setError(null);
     try {
       await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
-      const [data, sched] = await Promise.all([
+      const [data, sched, policy] = await Promise.all([
         fetchRegisteredUserAnalyticsAdmin(adminEmail || undefined),
         fetchAdminSchedulerStatus(adminEmail || undefined),
+        fetchAdminNotificationPolicy(adminEmail || undefined),
       ]);
       if (data) {
         setServerBaseline(data);
@@ -468,6 +513,10 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
       }
       if (sched) {
         setSchedulerStatus(sched);
+      }
+      if (policy) {
+        setPolicyDefaultFreq(policy.defaultFrequency || 'instant');
+        setPolicyDailyCap(policy.dailyCapPerUser || 3);
       }
     } catch (err: any) {
       if (fsProfilesRef.current.size === 0) {
@@ -659,7 +708,7 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
         adminEmail || undefined
       );
       if (res.success) {
-        const msg = `Test alert delivered to ${res.usersNotified}/${res.usersTargeted} user(s): Website Bell (${res.usersNotified}), Web Push delivered (${res.pushSent}).`;
+        const msg = `Test push alert delivered to ${res.usersNotified}/${res.usersTargeted} user(s): Website Bell (${res.usersNotified}), Web Push delivered (${res.pushSent}).`;
         setTestAlertResult({ ok: true, message: msg });
         setActionToast(msg);
         await loadAnalytics();
@@ -673,6 +722,141 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
     } finally {
       setIsSendingTestAlert(false);
       setTestingUid(null);
+    }
+  };
+
+  const handleTestAuthorizedDevicePush = async () => {
+    setIsTestingThisDevice(true);
+    setTestAlertResult(null);
+    setError(null);
+    try {
+      const res = await sendAuthorizedDeviceTestPush(adminEmail || undefined);
+      if (res.success) {
+        const msg = res.message || `Real Web Push accepted for ${res.deviceLabel || 'this device'}.`;
+        setTestAlertResult({ ok: true, message: msg });
+        setActionToast(msg);
+        await loadAnalytics();
+      } else {
+        setTestAlertResult({
+          ok: false,
+          message: res.error || 'Could not send test push to this device.',
+        });
+      }
+      setTimeout(() => setActionToast(null), 6000);
+    } catch (err: any) {
+      setTestAlertResult({
+        ok: false,
+        message: err?.message || 'Authorized device push test failed.',
+      });
+    } finally {
+      setIsTestingThisDevice(false);
+    }
+  };
+
+  const handleSaveNotificationPolicy = async () => {
+    setIsSavingPolicy(true);
+    setError(null);
+    setTestAlertResult(null);
+    try {
+      const res = await updateAdminNotificationPolicy(
+        {
+          defaultFrequency: policyDefaultFreq,
+          dailyCapPerUser: policyDailyCap,
+          applyFrequencyToExistingUsers: applyPolicyToExisting,
+        },
+        adminEmail || undefined
+      );
+      if (res.success && res.policy) {
+        setPolicyDefaultFreq(res.policy.defaultFrequency);
+        setPolicyDailyCap(res.policy.dailyCapPerUser);
+        setApplyPolicyToExisting(false);
+        const msg = `Notification policy saved: default frequency=${res.policy.defaultFrequency}, max ${res.policy.dailyCapPerUser}/day${
+          res.usersUpdated ? ` (${res.usersUpdated} user records updated)` : ''
+        }.`;
+        setActionToast(msg);
+        setTestAlertResult({ ok: true, message: msg });
+        await loadAnalytics();
+      } else {
+        setTestAlertResult({ ok: false, message: res.error || 'Failed to save notification policy.' });
+      }
+      setTimeout(() => setActionToast(null), 5000);
+    } catch (err: any) {
+      setTestAlertResult({ ok: false, message: err?.message || 'Policy update failed.' });
+    } finally {
+      setIsSavingPolicy(false);
+    }
+  };
+
+  const handleUpdateUserFrequency = async (uid: string, nextFreq: NotificationFrequency) => {
+    setUpdatingFreqUid(uid);
+    setError(null);
+    try {
+      const res = await updateAdminUserNotificationPreferences(
+        uid,
+        { frequency: nextFreq },
+        adminEmail || undefined
+      );
+      if (res.success) {
+        if (res.summary) {
+          setServerBaseline(res.summary);
+          recomputeLiveSummary(res.summary);
+        } else {
+          await loadAnalytics();
+        }
+        setActionToast(`Updated user notification frequency to ${nextFreq.toUpperCase()}.`);
+        setTimeout(() => setActionToast(null), 3500);
+      } else {
+        setError(res.error || 'Failed updating user notification frequency.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed updating user notification frequency.');
+    } finally {
+      setUpdatingFreqUid(null);
+    }
+  };
+
+  const handleSendAdminBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+      setTestAlertResult({ ok: false, message: 'Please enter both an announcement title and message.' });
+      return;
+    }
+    setIsSendingBroadcast(true);
+    setTestAlertResult(null);
+    setError(null);
+    try {
+      await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
+      const res = await sendAdminBroadcastNotification(
+        {
+          title: broadcastTitle.trim(),
+          message: broadcastMessage.trim(),
+          audience: broadcastAudience,
+          ...(broadcastAudience === 'by_sector' && broadcastSector.trim()
+            ? { sector: broadcastSector.trim() }
+            : {}),
+        },
+        adminEmail || undefined
+      );
+      if (res.success) {
+        const msg = `Announcement delivered to ${res.targetedUsersCount || 0} user(s): Website Bell (${
+          res.websiteDeliveredCount || 0
+        }), Web Push (${res.pushDeliveredCount || 0}).`;
+        setTestAlertResult({ ok: true, message: msg });
+        setActionToast(msg);
+        setBroadcastTitle('');
+        setBroadcastMessage('');
+        await loadAnalytics();
+      } else {
+        setTestAlertResult({
+          ok: false,
+          message: res.error || 'No users matched the selected broadcast audience.',
+        });
+      }
+      setTimeout(() => setActionToast(null), 6000);
+    } catch (err: any) {
+      setTestAlertResult({ ok: false, message: err?.message || 'Broadcast failed.' });
+    } finally {
+      setIsSendingBroadcast(false);
     }
   };
 
@@ -722,6 +906,8 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
         u.email.toLowerCase().includes(q) ||
         u.desiredJobTitle.toLowerCase().includes(q) ||
         u.preferredIndustry.toLowerCase().includes(q) ||
+        (u.currentOrPreviousEmployer || '').toLowerCase().includes(q) ||
+        (u.educationSummary || '').toLowerCase().includes(q) ||
         u.educationLevel.toLowerCase().includes(q) ||
         u.experienceBand.toLowerCase().includes(q) ||
         u.locationCity.toLowerCase().includes(q)
@@ -1206,14 +1392,14 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
         </div>
       )}
 
-      {/* Event-Driven Instant Push Console */}
+      {/* Push Notification Management & Device Telemetry */}
       {schedulerStatus && (
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 space-y-5">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 space-y-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200">
             <div>
               <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#0B132B]" />
-                <span>Event-Driven Instant Push Engine</span>
+                <Bell className="w-4 h-4 text-amber-500" />
+                <span>Push Notification Management &amp; Cross-Platform Delivery</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Trigger: <span className="font-mono text-slate-700">{schedulerStatus.scheduler.cronPath}</span> · Mode:{' '}
@@ -1223,6 +1409,16 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleTestAuthorizedDevicePush}
+                disabled={isTestingThisDevice}
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>{isTestingThisDevice ? 'Testing Device...' : 'Send Test Push to This Device'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => handleSendTestToSavedUsers()}
@@ -1272,6 +1468,86 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
             </div>
           )}
 
+          {/* Cross-Platform Subscription & Delivery Metrics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[11px] font-bold text-slate-500">Subscribed Users</div>
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 mt-1">
+                {schedulerStatus.pushStats?.totalSubscribedUsers ?? 0}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5 tabular-nums">
+                +{schedulerStatus.pushStats?.anonymousActiveDevices ?? 0} guest devices
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+              <div className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                <Smartphone className="w-3 h-3" />
+                <span>Android</span>
+              </div>
+              <div className="text-xl font-black font-mono tabular-nums text-emerald-900 mt-1">
+                {schedulerStatus.pushStats?.androidSubscriptions ?? 0}
+              </div>
+              <div className="text-[10px] text-emerald-700 mt-0.5">Active devices</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200">
+              <div className="text-[11px] font-bold text-sky-800 flex items-center gap-1">
+                <Smartphone className="w-3 h-3" />
+                <span>iPhone / iPad</span>
+              </div>
+              <div className="text-xl font-black font-mono tabular-nums text-sky-900 mt-1">
+                {schedulerStatus.pushStats?.iphoneSubscriptions ?? 0}
+              </div>
+              <div className="text-[10px] text-sky-700 mt-0.5">iOS 16.4+ PWA</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                <Monitor className="w-3 h-3" />
+                <span>Desktop</span>
+              </div>
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 mt-1">
+                {schedulerStatus.pushStats?.desktopSubscriptions ?? 0}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Windows &amp; Mac</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200">
+              <div className="text-[11px] font-bold text-emerald-700">Active Subs</div>
+              <div className="text-xl font-black font-mono tabular-nums text-emerald-800 mt-1">
+                {schedulerStatus.pushStats?.activeSubscriptions ?? schedulerStatus.totals.activePushSubscriptionsCount}
+              </div>
+              <div className="text-[10px] text-emerald-700 mt-0.5">Verified endpoints</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200">
+              <div className="text-[11px] font-bold text-amber-800">Invalid / Expired</div>
+              <div className="text-xl font-black font-mono tabular-nums text-amber-900 mt-1">
+                {schedulerStatus.pushStats?.invalidOrExpiredSubscriptions ?? 0}
+              </div>
+              <div className="text-[10px] text-amber-700 mt-0.5">404/410 &amp; disabled</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[11px] font-bold text-slate-600">Sent Today</div>
+              <div className="text-xl font-black font-mono tabular-nums text-slate-900 mt-1">
+                {schedulerStatus.pushStats?.notificationsSentToday ?? 0}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Max 3/user/day</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="text-[11px] font-bold text-slate-600">Accepted / Failed</div>
+              <div className="text-lg font-black font-mono tabular-nums text-slate-900 mt-1">
+                <span className="text-emerald-700">{schedulerStatus.pushStats?.pushAcceptedCount ?? schedulerStatus.totals.pushDeliveriesCount}</span>
+                <span className="text-slate-400 mx-1">/</span>
+                <span className="text-rose-600">{schedulerStatus.pushStats?.pushFailedCount ?? schedulerStatus.totals.failedDeliveries}</span>
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Push service status</div>
+            </div>
+          </div>
+
           {/* VAPID & Environment Telemetry */}
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-700">
             <span>
@@ -1299,6 +1575,245 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
               Cron Limit Mode:{' '}
               <strong className="text-emerald-700">Event-Driven (Vercel Hobby Compatible)</strong>
             </span>
+          </div>
+
+          {/* Admin Targeted Announcement Broadcast + Platform Notification Frequency Controls */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 pt-4 border-t border-slate-200">
+            {/* Targeted Announcement / Job Alert Broadcast Composer */}
+            <form
+              onSubmit={handleSendAdminBroadcast}
+              className="lg:col-span-7 bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                  <Megaphone className="w-4 h-4 text-amber-600" />
+                  <span>Send Announcement or Targeted Job Alert (Push + Website Bell)</span>
+                </h4>
+                <span className="text-[10px] font-bold text-slate-500">Zero Email</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Target Audience
+                  </label>
+                  <select
+                    value={broadcastAudience}
+                    onChange={(e) => setBroadcastAudience(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="all_subscribed">All Push-Subscribed Users</option>
+                    <option value="completed_profiles">Completed Profiles Only</option>
+                    <option value="by_sector">Filter by Sector / Industry</option>
+                    <option value="all_registered">All Active Registered Users</option>
+                  </select>
+                </div>
+
+                {broadcastAudience === 'by_sector' ? (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Sector / Keyword
+                    </label>
+                    <input
+                      type="text"
+                      value={broadcastSector}
+                      onChange={(e) => setBroadcastSector(e.target.value)}
+                      placeholder="e.g. Banking, WASH, NGO..."
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Notification Title
+                    </label>
+                    <input
+                      type="text"
+                      value={broadcastTitle}
+                      onChange={(e) => setBroadcastTitle(e.target.value)}
+                      placeholder="e.g. አዳዲስ የባንክና የNGO ስራዎች ወጥተዋል!"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {broadcastAudience === 'by_sector' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Notification Title
+                  </label>
+                  <input
+                    type="text"
+                    value={broadcastTitle}
+                    onChange={(e) => setBroadcastTitle(e.target.value)}
+                    placeholder="e.g. New Banking & NGO Vacancies Published!"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Alert Message Body
+                </label>
+                <textarea
+                  rows={2}
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  placeholder="Write an announcement or vacancy alert message for matching registered users..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSendingBroadcast}
+                  className="min-h-[38px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <Send className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{isSendingBroadcast ? 'Sending Broadcast...' : 'Send Targeted Alert Now'}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Platform Notification Frequency & Daily Limit Policy */}
+            <div className="lg:col-span-5 bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 flex flex-col justify-between">
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-[#0B132B]" />
+                  <span>Notification Frequency &amp; Daily Limit Policy</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Default Delivery Cadence
+                    </label>
+                    <select
+                      value={policyDefaultFreq}
+                      onChange={(e) => setPolicyDefaultFreq(e.target.value as NotificationFrequency)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="instant">Instant (On Publish)</option>
+                      <option value="daily">Daily Digest (24h)</option>
+                      <option value="weekly">Weekly Summary</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Max Alerts / User / Day
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={policyDailyCap}
+                      onChange={(e) =>
+                        setPolicyDailyCap(Math.min(10, Math.max(1, Number(e.target.value) || 3)))
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={applyPolicyToExisting}
+                    onChange={(e) => setApplyPolicyToExisting(e.target.checked)}
+                    className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                  />
+                  <span>Also apply this frequency to all existing registered users</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveNotificationPolicy}
+                  disabled={isSavingPolicy}
+                  className="min-h-[38px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{isSavingPolicy ? 'Saving Policy...' : 'Save Frequency Policy'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Job Notification History Log */}
+          <div className="pt-4 border-t border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                <History className="w-4 h-4 text-slate-600" />
+                <span>Job Notification History ({schedulerStatus.notificationHistory?.length || 0})</span>
+              </h4>
+              <span className="text-[11px] text-slate-500">Latest real push delivery requests</span>
+            </div>
+
+            {!schedulerStatus.notificationHistory || schedulerStatus.notificationHistory.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500">
+                No push notifications have been dispatched yet. Publish a matching vacancy or tap <strong>Send Test Push to This Device</strong> above to inspect live push delivery logs.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600">
+                      <th className="py-2.5 px-3">Time</th>
+                      <th className="py-2.5 px-3">Recipient</th>
+                      <th className="py-2.5 px-3">Vacancy / Alert</th>
+                      <th className="py-2.5 px-3">Platform &amp; Device</th>
+                      <th className="py-2.5 px-3">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {schedulerStatus.notificationHistory.slice(0, 20).map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50/70">
+                        <td className="py-2 px-3 font-mono tabular-nums text-[11px] text-slate-500 whitespace-nowrap">
+                          {new Date(item.timestamp).toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-slate-800">{item.userName}</div>
+                          {item.userEmail && <div className="text-[10px] text-slate-500">{item.userEmail}</div>}
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="font-semibold text-slate-900">{item.jobTitle}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {item.employer}
+                            {item.isTest ? ' · Test Push' : ''}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-bold uppercase text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 mr-1.5">
+                            {item.platform}
+                          </span>
+                          <span className="text-[11px] text-slate-600">{item.deviceLabel}</span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span
+                            className={`font-bold text-[11px] px-2 py-0.5 rounded ${
+                              item.status === 'accepted'
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : item.status === 'expired'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-rose-50 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            {item.status.toUpperCase()}
+                            {item.statusCode ? ` (${item.statusCode})` : ''}
+                          </span>
+                          {item.error && <div className="text-[10px] text-rose-700 mt-0.5 line-clamp-1">{item.error}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1458,9 +1973,14 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
                     </td>
                     <td className="py-3 px-4">
                       <div className="font-semibold text-slate-800">{u.desiredJobTitle || 'Not specified'}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {u.preferredIndustry} · {u.educationLevel} · {u.experienceBand}
+                      <div className="text-[11px] text-slate-600">
+                        {u.preferredIndustry} · {u.educationSummary || u.educationLevel} · {u.experienceBand}
                       </div>
+                      {u.currentOrPreviousEmployer && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Employer: {u.currentOrPreviousEmployer}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4 max-w-[260px]">
                       <div className="flex items-center gap-2">
@@ -1495,8 +2015,22 @@ export const UserAnalyticsCenter: React.FC<Props> = ({ adminEmail }) => {
                       <div className="font-semibold text-slate-800">
                         {u.notificationsEnabled ? 'Enabled' : 'Disabled'} ({u.permissionStatus})
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        Subscription: {u.subscriptionStatus}
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                        <span>Sub: {u.subscriptionStatus}</span>
+                        <span>·</span>
+                        <select
+                          aria-label={`Notification frequency for ${u.fullName}`}
+                          value={u.frequency || 'instant'}
+                          disabled={updatingFreqUid === u.uid}
+                          onChange={(e) =>
+                            handleUpdateUserFrequency(u.uid, e.target.value as NotificationFrequency)
+                          }
+                          className="px-1.5 py-0.5 rounded border border-slate-200 bg-white text-[10px] font-bold text-slate-700 cursor-pointer"
+                        >
+                          <option value="instant">Instant</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                        </select>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-slate-900">

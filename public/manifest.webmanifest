@@ -1,6 +1,7 @@
 {
+  "id": "/",
   "name": "HOPELAND JOBS — Ethiopia & International Career Portal",
-  "short_name": "HOPELAND JOBS",
+  "short_name": "HopelandJobs",
   "description": "Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts.",
   "start_url": "/",
   "scope": "/",

@@ -109,6 +109,7 @@ import {
   NotificationPreferencesRecord,
   NotificationPermissionState,
   UserNotificationItem,
+  evaluateMandatoryProfileCompletion,
 } from './types/jobSeeker';
 import {
   computeStaffOpportunityRecommendations,
@@ -119,7 +120,9 @@ import {
   fetchUserNotificationPreferences,
   saveUserNotificationPreferences,
   checkCurrentDevicePushHealth,
-  evaluateNotificationPromptRule,
+  checkVisitorNotificationStatus,
+  recordNotificationPromptDismissal,
+  syncBrowserPushWithUserAccount,
   requestAndEnableNotifications,
   disableDeviceNotifications,
   fetchUserNotificationsServer,
@@ -129,8 +132,12 @@ import {
   syncAllUsersFromFirestoreToServer,
   deleteVacanciesFromServerCatalog,
   recalculateUserRecommendationsServer,
+  isAmharicSignupPromoDismissed,
+  recordAmharicSignupPromoDismissed,
 } from './lib/notificationService';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
+import { AmharicSignupPromoModal } from './components/AmharicSignupPromoModal';
+import { usePWAInstall } from './hooks/usePWAInstall';
 import {
   fetchCustomerVisitCount,
   generateVisitCountAiInsights,
@@ -249,15 +256,29 @@ export default function App() {
   );
   const [hasActiveDevicePush, setHasActiveDevicePush] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isAmharicPromoOpen, setIsAmharicPromoOpen] = useState(false);
   const [notificationModalReason, setNotificationModalReason] = useState<
-    'first_time' | 'not_enabled_yet' | 'renew_device' | 'blocked_in_browser' | 'unsupported'
+    | 'first_time'
+    | 'not_enabled_yet'
+    | 'renew_device'
+    | 'blocked_in_browser'
+    | 'ios_install_required'
+    | 'unsupported'
   >('first_time');
   const alreadyPromptedThisLoginRef = React.useRef(false);
+  const visitorPromptCheckedRef = React.useRef(false);
+  const visitorPromptTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
   const [isSyncingReconnect, setIsSyncingReconnect] = useState(false);
-  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [isIosInstallGuideOpen, setIsIosInstallGuideOpen] = useState(false);
+  const {
+    isInstalled: isStandaloneApp,
+    isInstallable: canInstallNativeApp,
+    canShowIosInstallGuide,
+    install: triggerNativeAppInstall,
+  } = usePWAInstall();
 
   // Saved Jobs Bookmarking State
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(() => {
@@ -298,22 +319,29 @@ export default function App() {
   const [isCareerCoachLoading, setIsCareerCoachLoading] = useState(false);
   const [careerCoachError, setCareerCoachError] = useState<string | null>(null);
 
-  // Helper to load user notifications, device push health & enforce Req 10F prompt rule
+  // Helper to sync existing/anonymous browser push subscription, load notifications, and apply visitor opt-in rules
   const hydrateUserNotificationsAndPrompt = React.useCallback(
     async (uid: string, email?: string | null, evaluatePrompt = true) => {
       if (!uid) return;
       try {
-        const [prefs, notifRes] = await Promise.all([
-          fetchUserNotificationPreferences(uid, email),
+        if (visitorPromptTimerRef.current) {
+          clearTimeout(visitorPromptTimerRef.current);
+          visitorPromptTimerRef.current = null;
+        }
+
+        // Automatically sync any previously granted anonymous or browser push subscription with this account
+        await syncBrowserPushWithUserAccount(uid, email).catch(() => null);
+
+        const [status, notifRes] = await Promise.all([
+          checkVisitorNotificationStatus(uid, email),
           fetchUserNotificationsServer(uid, email),
         ]);
-        setNotificationPrefs(prefs);
+        const freshPrefs = status.preferences || (await fetchUserNotificationPreferences(uid, email).catch(() => null));
+        setNotificationPrefs(freshPrefs);
         setUserNotifications(notifRes.notifications);
         setUnreadNotificationsCount(notifRes.unreadCount);
-
-        const health = await checkCurrentDevicePushHealth(uid, prefs, email);
-        setBrowserPerm(health.browserPermission);
-        setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+        setBrowserPerm(status.browserPermission);
+        setHasActiveDevicePush(status.hasValidSubscription);
 
         // Background recommendation + missed match refresh
         recalculateUserRecommendationsServer(uid, email, true)
@@ -327,17 +355,19 @@ export default function App() {
           })
           .catch(() => {});
 
-        if (evaluatePrompt && !alreadyPromptedThisLoginRef.current) {
-          const rule = evaluateNotificationPromptRule({
-            prefs,
-            browserPermission: health.browserPermission,
-            hasActiveDeviceSub: health.hasActiveSubscriptionOnThisDevice,
-            needsDeviceRenewal: health.needsRenewalOnThisDevice,
-            alreadyPromptedThisLogin: alreadyPromptedThisLoginRef.current,
-          });
-          alreadyPromptedThisLoginRef.current = true;
-          if (rule.shouldShowModal && rule.reason !== 'already_active') {
-            setNotificationModalReason(rule.reason);
+        if (status.hasValidSubscription) {
+          setIsNotificationModalOpen(false);
+          return;
+        }
+
+        if (evaluatePrompt && !alreadyPromptedThisLoginRef.current && status.shouldShowPopup) {
+          if (
+            status.reason !== 'already_active' &&
+            status.reason !== 'dismissed_cooldown' &&
+            status.reason !== 'unsupported'
+          ) {
+            alreadyPromptedThisLoginRef.current = true;
+            setNotificationModalReason(status.reason);
             setIsNotificationModalOpen(true);
           }
         }
@@ -455,6 +485,7 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
+        setIsAmharicPromoOpen(false);
         setAnalyticsUserId(user.uid || null);
 
         // Instant synchronous hydration from local cache before cloud sync completes
@@ -593,6 +624,38 @@ export default function App() {
           setIsOwnerAuthorized(false);
           setAdminEmail(null);
         }
+
+        // Check unregistered visitors: display the non-intrusive Amharic signup & notification promo popup cleanly
+        if (!visitorPromptCheckedRef.current) {
+          visitorPromptCheckedRef.current = true;
+          if (visitorPromptTimerRef.current) clearTimeout(visitorPromptTimerRef.current);
+          visitorPromptTimerRef.current = setTimeout(async () => {
+            if (auth.currentUser) return;
+            try {
+              const status = await checkVisitorNotificationStatus(null, null);
+              setBrowserPerm(status.browserPermission);
+              setHasActiveDevicePush(status.hasValidSubscription);
+
+              if (!isAmharicSignupPromoDismissed()) {
+                alreadyPromptedThisLoginRef.current = true;
+                setIsNotificationModalOpen(false);
+                setIsAmharicPromoOpen(true);
+                return;
+              }
+
+              if (
+                status.shouldShowPopup &&
+                status.reason !== 'already_active' &&
+                status.reason !== 'dismissed_cooldown' &&
+                status.reason !== 'unsupported'
+              ) {
+                alreadyPromptedThisLoginRef.current = true;
+                setNotificationModalReason(status.reason);
+                setIsNotificationModalOpen(true);
+              }
+            } catch {}
+          }, 1100);
+        }
       }
     });
 
@@ -610,6 +673,10 @@ export default function App() {
       unsubscribe();
       clearInterval(visitInterval);
       clearTimeout(prefetchTimer);
+      if (visitorPromptTimerRef.current) {
+        clearTimeout(visitorPromptTimerRef.current);
+        visitorPromptTimerRef.current = null;
+      }
     };
   }, [hydrateUserNotificationsAndPrompt]);
 
@@ -658,11 +725,7 @@ export default function App() {
         triggerReconnectSync();
       }
     };
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredInstallPrompt(e);
-    };
-    const handleSwMessage = (event: MessageEvent) => {
+    const handleSwMessage = async (event: MessageEvent) => {
       if (event.data?.type === 'HOPELAND_RECONNECT_SYNC_TRIGGER') {
         triggerReconnectSync();
       } else if (event.data?.type === 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION') {
@@ -677,10 +740,30 @@ export default function App() {
             .catch(() => {});
         }
         if (resolvedJobId) {
-          const found = vacancies.find((v) => v.id === resolvedJobId);
+          setIsAdminView(false);
+          setActiveExpansionView(null);
+          setSelectedCategory(null);
+          setSelectedLocation(null);
+          setIsAllCategoriesView(false);
+          let found = vacancies.find(
+            (v) => v.id === resolvedJobId || v.id.toLowerCase() === String(resolvedJobId).toLowerCase()
+          );
+          if (!found) {
+            try {
+              const latest = await fetchPublishedVacancies();
+              if (latest.length > 0) {
+                setVacancies(latest);
+                found = latest.find(
+                  (v) => v.id === resolvedJobId || v.id.toLowerCase() === String(resolvedJobId).toLowerCase()
+                );
+              }
+            } catch {}
+          }
           if (found) {
             setSelectedVacancy(found);
-          } else if (typeof window !== 'undefined') {
+            document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+          }
+          if (typeof window !== 'undefined') {
             window.history.replaceState({}, '', `/?jobId=${encodeURIComponent(resolvedJobId)}`);
           }
         }
@@ -690,7 +773,6 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', handleSwMessage);
     }
@@ -699,7 +781,6 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', handleSwMessage);
       }
@@ -1516,16 +1597,13 @@ export default function App() {
           setNotificationModalReason(browserPerm === 'denied' ? 'blocked_in_browser' : 'not_enabled_yet');
           setIsNotificationModalOpen(true);
         }}
-        canInstallApp={Boolean(deferredInstallPrompt)}
+        canInstallApp={canInstallNativeApp}
+        canShowIosInstallGuide={canShowIosInstallGuide}
+        isStandaloneApp={isStandaloneApp}
         onInstallApp={async () => {
-          if (!deferredInstallPrompt) return;
-          try {
-            await deferredInstallPrompt.prompt();
-            await deferredInstallPrompt.userChoice;
-          } finally {
-            setDeferredInstallPrompt(null);
-          }
+          await triggerNativeAppInstall();
         }}
+        onOpenIosInstallGuide={() => setIsIosInstallGuideOpen(true)}
         isOnline={isOnline}
         isSyncingReconnect={isSyncingReconnect}
       />
@@ -2671,6 +2749,8 @@ export default function App() {
             initialMode={userAuthModalMode}
             onClose={() => setIsUserAuthModalOpen(false)}
             onSuccess={async (user, profile) => {
+              setIsAmharicPromoOpen(false);
+              const signedUpMode = userAuthModalMode === 'signup';
               if (user) {
                 setCurrentUser(user);
                 setAnalyticsUserId(user.uid || null);
@@ -2682,13 +2762,17 @@ export default function App() {
                 setUserProfile(profile);
               }
               setIsUserAuthModalOpen(false);
+              let resolvedProfile = profile || null;
               if (user?.uid) {
                 try {
                   const [p, apps] = await Promise.all([
                     profile ? Promise.resolve(profile) : fetchJobSeekerProfile(user.uid),
                     fetchUserApplications(user.uid),
                   ]);
-                  if (p) setUserProfile(p);
+                  if (p) {
+                    setUserProfile(p);
+                    resolvedProfile = p;
+                  }
                   setUserApplications(apps);
                   await hydrateUserNotificationsAndPrompt(user.uid, user.email, true);
                 } catch {}
@@ -2697,24 +2781,57 @@ export default function App() {
               }
               if (applyTargetVacancy) {
                 setIsApplicationModalOpen(true);
+              } else if (
+                signedUpMode ||
+                (resolvedProfile && !evaluateMandatoryProfileCompletion(resolvedProfile).isProfileComplete)
+              ) {
+                setJobSeekerInitialTab('professional');
+                setIsJobSeekerDashboardOpen(true);
               }
             }}
           />
         </Suspense>
       )}
 
-      {/* Notification Permission Prompt Modal (Strict Req 10 Rules) */}
-      {isNotificationModalOpen && userProfile?.uid && (
+      {/* Amharic Job Registration & Daily Push Notification Promotion Popup (Unregistered Visitors) */}
+      {isAmharicPromoOpen && !currentUser && (
+        <AmharicSignupPromoModal
+          isOpen={isAmharicPromoOpen}
+          hasActiveDevicePush={hasActiveDevicePush}
+          onClose={(dismissed) => {
+            setIsAmharicPromoOpen(false);
+            if (dismissed) {
+              recordAmharicSignupPromoDismissed();
+            }
+          }}
+          onSignUpClick={() => {
+            setIsAmharicPromoOpen(false);
+            recordAmharicSignupPromoDismissed();
+            setUserAuthModalMode('signup');
+            setIsUserAuthModalOpen(true);
+          }}
+          onNotificationsEnabled={() => {
+            setBrowserPerm('granted');
+            setHasActiveDevicePush(true);
+          }}
+        />
+      )}
+
+      {/* Automatic Visitor & Account Notification Opt-In Modal */}
+      {isNotificationModalOpen && (
         <NotificationPermissionModal
           isOpen={isNotificationModalOpen}
-          uid={userProfile.uid}
-          userEmail={userProfile.email}
+          uid={userProfile?.uid || null}
+          userEmail={userProfile?.email || null}
           reason={notificationModalReason}
           initialEmailAlerts={false}
           onClose={(dismissed) => {
             setIsNotificationModalOpen(false);
-            if (dismissed && userProfile?.uid) {
-              saveUserNotificationPreferences(userProfile.uid, { incrementDismiss: true }, userProfile.email)
+            if (dismissed) {
+              recordNotificationPromptDismissal(
+                userProfile?.uid || null,
+                userProfile?.email || null
+              )
                 .then((p) => {
                   if (p) setNotificationPrefs(p);
                 })
@@ -2724,12 +2841,20 @@ export default function App() {
           onEnabled={async (prefs) => {
             if (prefs) setNotificationPrefs(prefs);
             setIsNotificationModalOpen(false);
-            const health = await checkCurrentDevicePushHealth(userProfile.uid, prefs, userProfile.email);
-            setBrowserPerm(health.browserPermission);
-            setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
-            const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
-            setUserNotifications(fresh.notifications);
-            setUnreadNotificationsCount(fresh.unreadCount);
+            setBrowserPerm('granted');
+            setHasActiveDevicePush(true);
+            if (userProfile?.uid) {
+              const health = await checkCurrentDevicePushHealth(
+                userProfile.uid,
+                prefs,
+                userProfile.email
+              );
+              setBrowserPerm(health.browserPermission);
+              setHasActiveDevicePush(health.hasActiveSubscriptionOnThisDevice);
+              const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
+              setUserNotifications(fresh.notifications);
+              setUnreadNotificationsCount(fresh.unreadCount);
+            }
           }}
         />
       )}
@@ -2903,6 +3028,56 @@ export default function App() {
             }}
           />
         </Suspense>
+      )}
+
+      {/* iPhone / iPad Add to Home Screen Guide Modal */}
+      {isIosInstallGuideOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+            <div className="bg-[#0B132B] text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-extrabold">Add HopelandJobs to iPhone / iPad</h3>
+                <p className="text-xs text-slate-300 mt-0.5">Enable instant lock-screen job alerts (iOS 16.4+)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIosInstallGuideOpen(false)}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-xs text-slate-700 leading-relaxed">
+              <p className="font-medium text-slate-800">
+                Follow these 3 quick steps in Safari to install HopelandJobs on your Home Screen and unlock instant iPhone notifications:
+              </p>
+              <ol className="space-y-3 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-950">
+                <li>
+                  <strong>1. Tap the Share button</strong> at the bottom (or top) bar of Safari.
+                </li>
+                <li>
+                  <strong>2. Scroll down and tap Add to Home Screen</strong>, then confirm <strong>Add</strong>.
+                </li>
+                <li>
+                  <strong>3. Open HopelandJobs from your Home Screen</strong> and tap <strong>Enable Notifications</strong>.
+                </li>
+              </ol>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsIosInstallGuideOpen(false)}
+                  className="min-h-[42px] px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer"
+                >
+                  Got It
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

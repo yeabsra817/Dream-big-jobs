@@ -553,6 +553,39 @@ export function normalizeWebsiteDomain(domainOrUrl?: string): string {
   return `https://${clean}`;
 }
 
+export function buildTelegramAmharicPromoHtml(baseUrl: string): string {
+  const safeUrl = escapeHtml(baseUrl);
+  return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
+
+በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
+
+✅ በነፃ አካውንት ይክፈቱ።
+✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
+✅ የስራ ፍላጎትዎን ይምረጡ።
+✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
+
+🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
+
+🌐 ዛሬውኑ ይመዝገቡ፦
+<a href="${safeUrl}">${safeUrl}</a>`;
+}
+
+export function buildTelegramAmharicPromoPlain(baseUrl: string): string {
+  return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
+
+በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
+
+✅ በነፃ አካውንት ይክፈቱ።
+✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
+✅ የስራ ፍላጎትዎን ይምረጡ።
+✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
+
+🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
+
+🌐 ዛሬውኑ ይመዝገቡ፦
+${baseUrl}`;
+}
+
 export function buildTelegramJobHtml(
   vacancy: any,
   customDomainOrUrl = 'hopelandjobs.tech',
@@ -607,7 +640,7 @@ export function buildTelegramJobHtml(
 
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  return `${washPrefix}<b>Vacancy at ${orgName}</b>
+  const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
@@ -618,6 +651,8 @@ ${applyLine ? `${applyLine}\n` : ''}
 
 🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
 =&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
+
+  return `${coreText}\n\n${buildTelegramAmharicPromoHtml(baseUrl)}`;
 }
 
 export function buildTelegramJobPlainText(
@@ -662,7 +697,7 @@ export function buildTelegramJobPlainText(
 
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  return `${washPrefix}Vacancy at ${orgName}
+  const coreText = `${washPrefix}Vacancy at ${orgName}
 
 🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
@@ -673,6 +708,8 @@ ${applyLine ? `${applyLine}\n` : ''}
 
 🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
 =>See Detail:- ${baseUrl}`;
+
+  return `${coreText}\n\n${buildTelegramAmharicPromoPlain(baseUrl)}`;
 }
 
 /**

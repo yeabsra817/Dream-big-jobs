@@ -199,6 +199,34 @@ service cloud.firestore {
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
     }
 
+    function isValidAnonymousPushSubWrite(data, deviceIdParam) {
+      return data.keys().hasAll(['deviceId', 'endpoint', 'keys', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['deviceId', 'deviceLabel', 'platform', 'endpoint', 'expirationTime', 'keys', 'active', 'createdAt', 'updatedAt'])
+        && data.deviceId is string && data.deviceId == deviceIdParam && data.deviceId.size() <= 128
+        && (!('deviceLabel' in data) || (data.deviceLabel is string && data.deviceLabel.size() <= 150))
+        && (!('platform' in data) || (data.platform is string && data.platform.size() <= 60))
+        && data.endpoint is string && data.endpoint.size() >= 10 && data.endpoint.size() <= 1000 && data.endpoint.matches('^https://.*')
+        && (!('expirationTime' in data) || data.expirationTime == null || data.expirationTime is number)
+        && data.keys is map
+        && data.keys.keys().hasAll(['p256dh', 'auth'])
+        && data.keys.keys().hasOnly(['p256dh', 'auth'])
+        && data.keys.p256dh is string && data.keys.p256dh.size() >= 10 && data.keys.p256dh.size() <= 300
+        && data.keys.auth is string && data.keys.auth.size() >= 10 && data.keys.auth.size() <= 128
+        && data.active is bool
+        && data.createdAt is string && data.createdAt.size() <= 100
+        && data.updatedAt is string && data.updatedAt.size() <= 100;
+    }
+
+    // Write-only visitor Web Push subscriptions (claimed on user login/signup; zero public read/list)
+    match /anonymous_push_subscriptions/{deviceId} {
+      allow get, list, delete: if isOwnerAdmin();
+      allow create: if isValidId(deviceId)
+        && isValidAnonymousPushSubWrite(request.resource.data, deviceId);
+      allow update: if isValidId(deviceId)
+        && isValidAnonymousPushSubWrite(request.resource.data, deviceId)
+        && request.resource.data.deviceId == resource.data.deviceId;
+    }
+
     // Server / Admin-only Notification Retry Queue & Scheduler Execution History
     match /notification_queue/{queueId} {
       allow read, write: if isOwnerAdmin();

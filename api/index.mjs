@@ -585,6 +585,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
   const NOTIFICATION_PREFS_FILE = path.join(DATA_DIR, "notification_preferences.json");
   const NOTIFICATION_QUEUE_FILE = path.join(DATA_DIR, "notification_queue.json");
   const SCHEDULER_RUNS_FILE = path.join(DATA_DIR, "scheduler_runs.json");
+  const ANONYMOUS_PUSH_FILE = path.join(DATA_DIR, "anonymous_push_subscriptions.json");
+  const PUSH_DELIVERY_LOGS_FILE = path.join(DATA_DIR, "push_delivery_logs.json");
+  const NOTIFICATION_POLICY_FILE = path.join(DATA_DIR, "notification_policy.json");
   const VAPID_KEYS_FILE = path.join(DATA_DIR, "vapid_keys.json");
   let webpushLib = null;
   let nodemailerLib = null;
@@ -721,6 +724,14 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     ensureRuntimeDataDir();
     writeJsonFileAtomic(NOTIFICATION_PREFS_FILE, map);
   }
+  function loadAnonymousPushSubscriptions() {
+    const data = loadJsonFileSafe(ANONYMOUS_PUSH_FILE, {});
+    return data && typeof data === "object" ? data : {};
+  }
+  function saveAnonymousPushSubscriptions(map) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(ANONYMOUS_PUSH_FILE, map);
+  }
   function loadNotificationQueue() {
     const list = loadJsonFileSafe(NOTIFICATION_QUEUE_FILE, []);
     return Array.isArray(list) ? list : [];
@@ -728,6 +739,27 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
   function saveNotificationQueue(list) {
     ensureRuntimeDataDir();
     writeJsonFileAtomic(NOTIFICATION_QUEUE_FILE, list);
+  }
+  function loadPushDeliveryLogs() {
+    const list = loadJsonFileSafe(PUSH_DELIVERY_LOGS_FILE, []);
+    return Array.isArray(list) ? list : [];
+  }
+  function appendPushDeliveryLog(entry) {
+    const list = loadPushDeliveryLogs();
+    list.unshift({
+      id: `pdl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      ...entry
+    });
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(PUSH_DELIVERY_LOGS_FILE, list.slice(0, 250));
+  }
+  function normalizeDevicePlatform(platform, deviceLabel, endpoint) {
+    const combined = `${platform || ""} ${deviceLabel || ""} ${endpoint || ""}`.toLowerCase();
+    if (/iphone|ipad|ipod|\bios\b|web\.push\.apple\.com/.test(combined)) return "ios";
+    if (/android/.test(combined)) return "android";
+    if (/desktop|windows|macos|mac\b|linux|chrome|edge|firefox|safari|web/.test(combined)) return "desktop";
+    return "other";
   }
   function loadSchedulerStore() {
     const fallback = {
@@ -771,12 +803,36 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     d.setMinutes(nextMin, 0, 0);
     return d.toISOString();
   }
+  function loadNotificationPolicy() {
+    const fallback = {
+      defaultFrequency: "instant",
+      dailyCapPerUser: 3,
+      allowPromotionalAnnouncements: true,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const data = loadJsonFileSafe(NOTIFICATION_POLICY_FILE, fallback);
+    const freq = ["instant", "daily", "weekly"].includes(data?.defaultFrequency) ? data.defaultFrequency : "instant";
+    const capNum = Number(data?.dailyCapPerUser);
+    const dailyCapPerUser = Number.isFinite(capNum) ? Math.min(10, Math.max(1, Math.round(capNum))) : 3;
+    return {
+      defaultFrequency: freq,
+      dailyCapPerUser,
+      allowPromotionalAnnouncements: data?.allowPromotionalAnnouncements !== false,
+      updatedAt: String(data?.updatedAt || fallback.updatedAt),
+      updatedBy: data?.updatedBy ? String(data.updatedBy) : void 0
+    };
+  }
+  function saveNotificationPolicy(policy) {
+    ensureRuntimeDataDir();
+    writeJsonFileAtomic(NOTIFICATION_POLICY_FILE, policy);
+  }
   function buildDefaultPreferences(uid) {
+    const policy = loadNotificationPolicy();
     return {
       userId: uid,
       permissionStatus: "default",
       subscriptionStatus: "none",
-      frequency: "instant",
+      frequency: policy.defaultFrequency,
       promptDismissCount: 0,
       channels: {
         websiteBell: true,
@@ -935,6 +991,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     if (!wp) {
       return { deliveredCount: 0, failedCount: activeDevices.length, expiredEndpoints: [], errors: ["Web Push unavailable"] };
     }
+    const profile = loadUserProfiles()[uid] || {};
+    const userName = String(profile.fullName || "Registered User");
+    const userEmail = String(profile.email || "");
     let deliveredCount = 0;
     let failedCount = 0;
     const expiredEndpoints = [];
@@ -942,19 +1001,37 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     let prefsDirty = false;
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
     for (const dev of activeDevices) {
+      const normalizedPlatform = normalizeDevicePlatform(dev.platform, dev.deviceLabel, dev.subscription?.endpoint);
       try {
-        await wp.sendNotification(dev.subscription, JSON.stringify(payload), { TTL: 86400 });
+        const pushRes = await wp.sendNotification(dev.subscription, JSON.stringify(payload), { TTL: 86400, timeout: 5e3 });
         deliveredCount += 1;
         dev.lastDeliveredAt = nowIso;
         dev.lastVerifiedAt = nowIso;
         dev.lastFailureReason = void 0;
         prefs.lastSuccessfulDeliveryAt = nowIso;
         prefsDirty = true;
+        appendPushDeliveryLog({
+          userId: uid,
+          userName,
+          userEmail,
+          deviceId: String(dev.deviceId || "device"),
+          platform: normalizedPlatform,
+          deviceLabel: String(dev.deviceLabel || "Browser"),
+          jobId: String(payload.jobId || ""),
+          jobTitle: String(payload.jobTitle || payload.title || "Job Alert"),
+          employer: String(payload.employer || "Hopeland Jobs"),
+          category: String(payload.category || ""),
+          status: "accepted",
+          statusCode: Number(pushRes?.statusCode || 201),
+          isTest: Boolean(payload.isTest)
+        });
       } catch (err) {
-        const statusCode = err?.statusCode || err?.code;
+        const statusCode = Number(err?.statusCode || err?.code || 0) || void 0;
         const msg = err?.message || String(err);
-        if (statusCode === 404 || statusCode === 410) {
+        const isExpired = statusCode === 404 || statusCode === 410;
+        if (isExpired) {
           dev.active = false;
+          dev.expiredAt = nowIso;
           dev.lastFailureReason = `Subscription expired (${statusCode})`;
           expiredEndpoints.push(dev.subscription.endpoint);
           prefsDirty = true;
@@ -964,6 +1041,22 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         }
         failedCount += 1;
         errors.push(msg);
+        appendPushDeliveryLog({
+          userId: uid,
+          userName,
+          userEmail,
+          deviceId: String(dev.deviceId || "device"),
+          platform: normalizedPlatform,
+          deviceLabel: String(dev.deviceLabel || "Browser"),
+          jobId: String(payload.jobId || ""),
+          jobTitle: String(payload.jobTitle || payload.title || "Job Alert"),
+          employer: String(payload.employer || "Hopeland Jobs"),
+          category: String(payload.category || ""),
+          status: isExpired ? "expired" : "failed",
+          statusCode,
+          error: msg.slice(0, 220),
+          isTest: Boolean(payload.isTest)
+        });
       }
     }
     if (prefsDirty) {
@@ -1210,6 +1303,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       return null;
     }
     if (!options.bypassRateLimit) {
+      const policy = loadNotificationPolicy();
       const todayKey = getAddisDateKey(/* @__PURE__ */ new Date());
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1e3;
       const todayCount = existingList.filter((n) => {
@@ -1217,7 +1311,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         const ts = new Date(n.createdAt).getTime();
         return getAddisDateKey(n.createdAt) === todayKey || !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
       }).length;
-      if (todayCount >= 3) {
+      if (todayCount >= policy.dailyCapPerUser) {
         return null;
       }
     }
@@ -1260,14 +1354,20 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     saveAllNotifications(allNotifs);
     const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
     if (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) {
-      const pushPrefix = alertKind === "deadline_reminder" ? "Closing Soon: " : alertKind === "job_updated" ? "Updated Vacancy: " : "New Matching Job: ";
+      const pushTitle = options.isTestNotification ? `HOPELANDJOBS \u2014 Test Job Notification!` : alertKind === "deadline_reminder" ? `HOPELANDJOBS \u2014 Closing Soon: ${rec.title}` : alertKind === "job_updated" ? `HOPELANDJOBS \u2014 Updated Job Matching Your Profile!` : `HOPELANDJOBS \u2014 New Job Matching Your Profile!`;
+      const pushBody = `${rec.title} \u2014 ${rec.organization} (${rec.location})
+${options.customNote ? options.customNote : `Matches your profile in ${rec.category}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}.`} Tap to view the job and apply.`;
       const pushPayload = {
-        title: `${pushPrefix}${rec.title} (${rec.matchScore}% Match)`,
-        body: `${rec.organization} \xB7 ${rec.location}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}. Tap to view and apply.`,
+        title: pushTitle,
+        body: pushBody,
         url: rec.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}` : jobUrl,
         jobId: rec.id,
         notificationId: notifId,
-        tag: `vacancy-${rec.id}`
+        tag: `vacancy-${rec.id}`,
+        jobTitle: rec.title,
+        employer: rec.organization,
+        category: rec.category,
+        isTest: Boolean(options.isTestNotification)
       };
       const pushRes = await sendWebPushToUser(uid, pushPayload);
       if (pushRes.deliveredCount > 0) {
@@ -1531,9 +1631,13 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     const queue = loadNotificationQueue();
     const allNotifs = loadAllNotifications();
     const allPrefs = loadAllNotificationPrefs();
+    const anonSubs = loadAnonymousPushSubscriptions();
     const allRecs = loadAllRecommendations();
     const profiles = loadUserProfiles();
+    const deliveryLogs = loadPushDeliveryLogs();
+    const todayKey = getAddisDateKey(/* @__PURE__ */ new Date());
     let totalNotificationsSent = 0;
+    let notificationsSentToday = 0;
     let pushDeliveriesCount = 0;
     let emailDeliveriesCount = 0;
     let failedDeliveriesCount = 0;
@@ -1541,6 +1645,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       if (!Array.isArray(list)) continue;
       for (const n of list) {
         totalNotificationsSent += 1;
+        if (getAddisDateKey(n.createdAt) === todayKey) notificationsSentToday += 1;
         if (n.channels?.push === "sent") pushDeliveriesCount += 1;
         if (n.channels?.email === "sent") emailDeliveriesCount += 1;
         if (n.channels?.push === "failed" || n.channels?.email === "failed") {
@@ -1550,10 +1655,46 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     }
     const queuePending = queue.filter((q) => q.status === "pending").length;
     const queueFailed = queue.filter((q) => q.status === "failed").length;
-    const activePushSubscriptionsCount = Object.values(allPrefs).reduce((acc, pref) => {
+    let totalSubscribedUsers = 0;
+    let activePushSubscriptionsCount = 0;
+    let invalidOrExpiredSubscriptions = 0;
+    let androidSubscriptions = 0;
+    let iphoneSubscriptions = 0;
+    let desktopSubscriptions = 0;
+    let anonymousActiveDevices = 0;
+    for (const pref of Object.values(allPrefs)) {
       const devices = Array.isArray(pref?.deviceSubscriptions) ? pref.deviceSubscriptions : [];
-      return acc + devices.filter((d) => d.active).length;
-    }, 0);
+      let userHasActive = false;
+      for (const dev of devices) {
+        if (dev?.active && (dev?.endpoint || dev?.subscription?.endpoint)) {
+          userHasActive = true;
+          activePushSubscriptionsCount += 1;
+          const plat = normalizeDevicePlatform(dev.platform, dev.deviceLabel, dev.endpoint || dev.subscription?.endpoint);
+          if (plat === "android") androidSubscriptions += 1;
+          else if (plat === "ios") iphoneSubscriptions += 1;
+          else if (plat === "desktop") desktopSubscriptions += 1;
+        } else if (dev?.endpoint || dev?.subscription?.endpoint) {
+          invalidOrExpiredSubscriptions += 1;
+        }
+      }
+      if (userHasActive) totalSubscribedUsers += 1;
+    }
+    for (const anon of Object.values(anonSubs)) {
+      if (anon?.active && (anon?.endpoint || anon?.subscription?.endpoint)) {
+        anonymousActiveDevices += 1;
+        activePushSubscriptionsCount += 1;
+        const plat = normalizeDevicePlatform(anon.platform, anon.deviceLabel, anon.endpoint || anon.subscription?.endpoint);
+        if (plat === "android") androidSubscriptions += 1;
+        else if (plat === "ios") iphoneSubscriptions += 1;
+        else if (plat === "desktop") desktopSubscriptions += 1;
+      } else if (anon?.endpoint || anon?.subscription?.endpoint) {
+        invalidOrExpiredSubscriptions += 1;
+      }
+    }
+    const acceptedLogs = deliveryLogs.filter((l) => l.status === "accepted").length;
+    const failedLogs = deliveryLogs.filter((l) => l.status === "failed" || l.status === "expired").length;
+    const pushAcceptedCount = Math.max(acceptedLogs, pushDeliveriesCount);
+    const pushFailedCount = Math.max(failedLogs, failedDeliveriesCount + queueFailed);
     const usersReceivingRecommendationsCount = Object.values(profiles).filter(
       (p) => p?.uid && p.accountStatus !== "suspended" && (allRecs[p.uid]?.items?.length || 0) > 0
     ).length;
@@ -1581,6 +1722,19 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         usersReceivingRecommendationsCount,
         activePushSubscriptionsCount
       },
+      pushStats: {
+        totalSubscribedUsers,
+        anonymousActiveDevices,
+        androidSubscriptions,
+        iphoneSubscriptions,
+        desktopSubscriptions,
+        activeSubscriptions: activePushSubscriptionsCount,
+        invalidOrExpiredSubscriptions,
+        notificationsSentToday,
+        pushAcceptedCount,
+        pushFailedCount
+      },
+      notificationHistory: deliveryLogs.slice(0, 40),
       recentErrors: store.recentErrors.slice(0, 15),
       recentRuns: store.runs.slice(0, 20)
     };
@@ -1683,6 +1837,131 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     allPrefs[uid] = updated;
     saveAllNotificationPrefs(allPrefs);
     res.json({ success: true, preferences: updated });
+  });
+  app.post("/api/push/subscribe-anonymous", (req, res) => {
+    const { deviceId, deviceLabel, platform, subscription } = req.body || {};
+    const endpoint = String(subscription?.endpoint || "").trim();
+    const p256dh = String(subscription?.keys?.p256dh || "").trim();
+    const authKey = String(subscription?.keys?.auth || "").trim();
+    if (!endpoint.startsWith("https://") || endpoint.length > 1e3 || !p256dh || !authKey) {
+      res.status(400).json({ error: "Valid HTTPS push subscription with encryption keys is required." });
+      return;
+    }
+    const cleanDeviceId = String(deviceId || endpoint.slice(-24)).replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
+    if (!cleanDeviceId) {
+      res.status(400).json({ error: "Valid deviceId is required." });
+      return;
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const anonMap = loadAnonymousPushSubscriptions();
+    for (const [key, item] of Object.entries(anonMap)) {
+      if (key !== cleanDeviceId && (item?.endpoint === endpoint || item?.subscription?.endpoint === endpoint)) {
+        delete anonMap[key];
+      }
+    }
+    const existing = anonMap[cleanDeviceId];
+    anonMap[cleanDeviceId] = {
+      deviceId: cleanDeviceId,
+      deviceLabel: String(deviceLabel || "Web Browser").slice(0, 150),
+      platform: String(platform || "web").slice(0, 60),
+      endpoint,
+      subscription: {
+        endpoint,
+        expirationTime: subscription?.expirationTime ?? null,
+        keys: { p256dh, auth: authKey }
+      },
+      active: true,
+      createdAt: existing?.createdAt || nowIso,
+      updatedAt: nowIso
+    };
+    saveAnonymousPushSubscriptions(anonMap);
+    res.json({
+      success: true,
+      saved: true,
+      deviceId: cleanDeviceId,
+      updatedAt: nowIso
+    });
+  });
+  app.post("/api/push/claim-anonymous/:uid", (req, res) => {
+    const { uid } = req.params;
+    if (!isSelfOrOwner(req, uid)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const { deviceId, deviceLabel, platform, subscription } = req.body || {};
+    const cleanDeviceId = deviceId ? String(deviceId).replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128) : "";
+    const requestedEndpoint = String(subscription?.endpoint || "").trim();
+    const anonMap = loadAnonymousPushSubscriptions();
+    let matchedAnonKey = null;
+    let matchedAnonRecord = null;
+    if (cleanDeviceId && anonMap[cleanDeviceId]) {
+      matchedAnonKey = cleanDeviceId;
+      matchedAnonRecord = anonMap[cleanDeviceId];
+    } else if (requestedEndpoint) {
+      for (const [k, rec] of Object.entries(anonMap)) {
+        if (rec?.endpoint === requestedEndpoint || rec?.subscription?.endpoint === requestedEndpoint) {
+          matchedAnonKey = k;
+          matchedAnonRecord = rec;
+          break;
+        }
+      }
+    }
+    const resolvedSub = subscription?.endpoint?.startsWith("https://") && subscription?.keys?.p256dh && subscription?.keys?.auth ? subscription : matchedAnonRecord?.subscription || null;
+    const allPrefs = loadAllNotificationPrefs();
+    const existingPrefs = allPrefs[uid] || buildDefaultPreferences(uid);
+    if (!resolvedSub?.endpoint) {
+      res.json({ success: true, claimed: false, preferences: existingPrefs });
+      return;
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const targetDeviceId = cleanDeviceId || matchedAnonRecord?.deviceId || resolvedSub.endpoint.slice(-24).replace(/[^a-zA-Z0-9_\-]/g, "_");
+    const targetLabel = String(deviceLabel || matchedAnonRecord?.deviceLabel || "Web Browser").slice(0, 150);
+    const targetPlatform = String(platform || matchedAnonRecord?.platform || "web").slice(0, 60);
+    const isMobile = /android|iphone|ipad|ios|mobile/i.test(`${targetPlatform} ${targetLabel}`);
+    const devices = Array.isArray(existingPrefs.deviceSubscriptions) ? existingPrefs.deviceSubscriptions : [];
+    const filtered = devices.filter(
+      (d) => d.deviceId !== targetDeviceId && d.endpoint !== resolvedSub.endpoint
+    );
+    filtered.unshift({
+      deviceId: targetDeviceId,
+      deviceLabel: targetLabel,
+      platform: targetPlatform,
+      endpoint: resolvedSub.endpoint,
+      subscription: {
+        endpoint: resolvedSub.endpoint,
+        expirationTime: resolvedSub.expirationTime ?? null,
+        keys: {
+          p256dh: resolvedSub.keys?.p256dh || "",
+          auth: resolvedSub.keys?.auth || ""
+        }
+      },
+      active: true,
+      createdAt: matchedAnonRecord?.createdAt || nowIso,
+      lastVerifiedAt: nowIso
+    });
+    const updated = {
+      ...existingPrefs,
+      userId: uid,
+      permissionStatus: "granted",
+      subscriptionStatus: "active",
+      enabledAt: existingPrefs.enabledAt || nowIso,
+      permissionVerifiedAt: nowIso,
+      channels: {
+        ...existingPrefs.channels,
+        websiteBell: true,
+        browserPush: true,
+        mobilePush: existingPrefs.channels?.mobilePush || isMobile
+      },
+      deviceSubscriptions: filtered.slice(0, 15),
+      updatedAt: nowIso
+    };
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    if (matchedAnonKey && anonMap[matchedAnonKey]) {
+      delete anonMap[matchedAnonKey];
+      saveAnonymousPushSubscriptions(anonMap);
+    }
+    res.json({ success: true, claimed: true, preferences: updated });
   });
   app.post("/api/push/unsubscribe/:uid", (req, res) => {
     const { uid } = req.params;
@@ -2179,6 +2458,12 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         arr.push({ uid: u.uid, email: normEmail || u.uid });
         phoneGroups.set(keyPhone, arr);
       }
+      const expList = Array.isArray(u.experience) ? u.experience : [];
+      const currentOrPreviousEmployer = String(
+        expList[0]?.companyName || u.staffDepartmentOrSector || (u.noExperience ? "Fresh Graduate / No Prior Employer" : "Not Specified")
+      ).trim();
+      const firstEdu = eduList[0];
+      const educationSummary = firstEdu ? `${firstEdu.qualification || educationLevel}${firstEdu.fieldOfStudy ? ` in ${firstEdu.fieldOfStudy}` : ""}` : educationLevel;
       return {
         uid: u.uid,
         fullName: u.fullName || "Registered User",
@@ -2189,6 +2474,8 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         locationCity: u.locationCity || "Addis Ababa",
         desiredJobTitle: u.desiredJobTitle || u.currentPosition || "",
         preferredIndustry: sectorLabel,
+        currentOrPreviousEmployer,
+        educationSummary,
         educationLevel,
         experienceBand,
         yearsOfExperience: rawYearsStr,
@@ -2347,6 +2634,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       "Account Role",
       "Account Status",
       "Location",
+      "Current/Previous Employer",
+      "Education",
+      "Experience",
       "Desired Role",
       "Preferred Sector",
       "Profile Completion %",
@@ -2366,6 +2656,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         u.accountRole,
         u.accountStatus,
         u.locationCity,
+        u.currentOrPreviousEmployer || "",
+        u.educationSummary || u.educationLevel,
+        u.experienceBand,
         u.desiredJobTitle,
         u.preferredIndustry,
         u.profileCompletionPercentage,
@@ -2625,6 +2918,357 @@ ${rows.join("\n")}`;
       errors
     });
   });
+  app.post("/api/admin/push/test-device", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { subscription, deviceLabel, platform, customTitle, customBody } = req.body || {};
+    const wp = await ensureWebPush();
+    if (!wp) {
+      res.status(503).json({
+        success: false,
+        error: "Web Push VAPID configuration is unavailable on this server."
+      });
+      return;
+    }
+    let targetSub = subscription?.endpoint ? subscription : null;
+    let resolvedLabel = String(deviceLabel || "Authorized Admin Device");
+    let resolvedPlatform = normalizeDevicePlatform(platform, resolvedLabel, targetSub?.endpoint);
+    let resolvedUid = getRequesterEmail(req) || "owner";
+    if (!targetSub) {
+      const allPrefs = loadAllNotificationPrefs();
+      const anonSubs = loadAnonymousPushSubscriptions();
+      for (const pref of Object.values(allPrefs)) {
+        const activeDev = (pref?.deviceSubscriptions || []).find(
+          (d) => d.active && d.subscription?.endpoint
+        );
+        if (activeDev) {
+          targetSub = activeDev.subscription;
+          resolvedLabel = activeDev.deviceLabel || resolvedLabel;
+          resolvedPlatform = normalizeDevicePlatform(
+            activeDev.platform,
+            resolvedLabel,
+            targetSub.endpoint
+          );
+          resolvedUid = pref.userId || resolvedUid;
+          break;
+        }
+      }
+      if (!targetSub) {
+        const activeAnon = Object.values(anonSubs).find(
+          (a) => a?.active && a?.subscription?.endpoint
+        );
+        if (activeAnon) {
+          targetSub = activeAnon.subscription;
+          resolvedLabel = activeAnon.deviceLabel || resolvedLabel;
+          resolvedPlatform = normalizeDevicePlatform(
+            activeAnon.platform,
+            resolvedLabel,
+            targetSub.endpoint
+          );
+        }
+      }
+    }
+    if (!targetSub?.endpoint || !targetSub?.keys?.p256dh || !targetSub?.keys?.auth) {
+      res.status(400).json({
+        success: false,
+        error: "No active Web Push subscription available on this device. Click Enable Notifications first, then retry."
+      });
+      return;
+    }
+    const payload = {
+      title: String(customTitle || "HOPELANDJOBS \u2014 Test Notification Active!"),
+      body: String(
+        customBody || "Direct real-time push notifications are configured and working on your device. Tap to open HopelandJobs."
+      ),
+      url: "/",
+      jobId: "",
+      tag: `hopeland-admin-test-${Date.now()}`
+    };
+    try {
+      const pushRes = await wp.sendNotification(targetSub, JSON.stringify(payload), { TTL: 86400, timeout: 5e3 });
+      const statusCode = Number(pushRes?.statusCode || 201);
+      appendPushDeliveryLog({
+        userId: resolvedUid,
+        userName: "Authorized Test Device",
+        userEmail: getRequesterEmail(req) || "",
+        deviceId: targetSub.endpoint.slice(-24),
+        platform: resolvedPlatform,
+        deviceLabel: resolvedLabel,
+        jobId: "",
+        jobTitle: payload.title,
+        employer: "HOPELAND JOBS Admin Console",
+        category: "Admin Push Test",
+        status: "accepted",
+        statusCode,
+        isTest: true
+      });
+      appendAuditLog({
+        action: "admin_device_push_test",
+        actorEmail: getRequesterEmail(req) || "owner",
+        targetType: "push_subscription",
+        summary: `Authorized device Web Push test accepted (${statusCode}) on ${resolvedLabel} [${resolvedPlatform}]`,
+        severity: "info"
+      });
+      res.json({
+        success: true,
+        statusCode,
+        platform: resolvedPlatform,
+        deviceLabel: resolvedLabel,
+        deliveredAt: (/* @__PURE__ */ new Date()).toISOString(),
+        message: `Real Web Push accepted by push service (HTTP ${statusCode}) for ${resolvedLabel}.`
+      });
+    } catch (err) {
+      const statusCode = Number(err?.statusCode || err?.code || 0) || void 0;
+      const errMsg = err?.message || String(err);
+      const isExpired = statusCode === 404 || statusCode === 410;
+      appendPushDeliveryLog({
+        userId: resolvedUid,
+        userName: "Authorized Test Device",
+        userEmail: getRequesterEmail(req) || "",
+        deviceId: targetSub.endpoint.slice(-24),
+        platform: resolvedPlatform,
+        deviceLabel: resolvedLabel,
+        jobId: "",
+        jobTitle: payload.title,
+        employer: "HOPELAND JOBS Admin Console",
+        category: "Admin Push Test",
+        status: isExpired ? "expired" : "failed",
+        statusCode,
+        error: errMsg.slice(0, 220),
+        isTest: true
+      });
+      res.status(statusCode === 404 || statusCode === 410 ? 410 : 502).json({
+        success: false,
+        statusCode,
+        platform: resolvedPlatform,
+        deviceLabel: resolvedLabel,
+        error: isExpired ? `Device push subscription expired (${statusCode}). Please re-enable notifications on this device.` : `Push delivery failed: ${errMsg}`
+      });
+    }
+  });
+  app.get("/api/admin/notifications/policy", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    res.json({ success: true, policy: loadNotificationPolicy() });
+  });
+  app.post("/api/admin/notifications/policy", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { defaultFrequency, dailyCapPerUser, allowPromotionalAnnouncements, applyFrequencyToExistingUsers } = req.body || {};
+    const current = loadNotificationPolicy();
+    const nextFreq = ["instant", "daily", "weekly"].includes(defaultFrequency) ? defaultFrequency : current.defaultFrequency;
+    const capParsed = Number(dailyCapPerUser);
+    const nextCap = Number.isFinite(capParsed) ? Math.min(10, Math.max(1, Math.round(capParsed))) : current.dailyCapPerUser;
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const updatedPolicy = {
+      defaultFrequency: nextFreq,
+      dailyCapPerUser: nextCap,
+      allowPromotionalAnnouncements: typeof allowPromotionalAnnouncements === "boolean" ? allowPromotionalAnnouncements : current.allowPromotionalAnnouncements,
+      updatedAt: nowIso,
+      updatedBy: getRequesterEmail(req) || "owner"
+    };
+    saveNotificationPolicy(updatedPolicy);
+    let usersUpdated = 0;
+    if (applyFrequencyToExistingUsers === true) {
+      const allPrefs = loadAllNotificationPrefs();
+      const profiles = loadUserProfiles();
+      for (const uid of Object.keys(profiles || {})) {
+        const pref = allPrefs[uid] || buildDefaultPreferences(uid);
+        allPrefs[uid] = { ...pref, frequency: nextFreq, updatedAt: nowIso };
+        usersUpdated += 1;
+      }
+      saveAllNotificationPrefs(allPrefs);
+    }
+    appendAuditLog({
+      action: "admin_notification_policy_updated",
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "notification_policy",
+      summary: `Updated platform notification policy: default frequency=${nextFreq}, dailyCap=${nextCap}${usersUpdated > 0 ? `, applied to ${usersUpdated} users` : ""}.`,
+      severity: "info"
+    });
+    res.json({ success: true, policy: updatedPolicy, usersUpdated });
+  });
+  app.post("/api/admin/users/:uid/notification-preferences", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const { uid } = req.params;
+    const profiles = loadUserProfiles();
+    if (!profiles[uid]) {
+      res.status(404).json({ error: "Registered user not found." });
+      return;
+    }
+    const { frequency, websiteBell, browserPush, mobilePush } = req.body || {};
+    const allPrefs = loadAllNotificationPrefs();
+    const existing = allPrefs[uid] || buildDefaultPreferences(uid);
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const nextFreq = ["instant", "daily", "weekly"].includes(frequency) ? frequency : existing.frequency || "instant";
+    const updated = {
+      ...existing,
+      userId: uid,
+      frequency: nextFreq,
+      channels: {
+        ...existing.channels,
+        ...typeof websiteBell === "boolean" ? { websiteBell } : {},
+        ...typeof browserPush === "boolean" ? { browserPush } : {},
+        ...typeof mobilePush === "boolean" ? { mobilePush } : {},
+        emailAlerts: false
+      },
+      updatedAt: nowIso
+    };
+    allPrefs[uid] = updated;
+    saveAllNotificationPrefs(allPrefs);
+    appendAuditLog({
+      action: "admin_user_notification_prefs_updated",
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "user_notification_preferences",
+      targetId: uid,
+      summary: `Admin updated notification settings for ${profiles[uid].email || uid}: frequency=${nextFreq}`,
+      severity: "info"
+    });
+    res.json({
+      success: true,
+      preferences: updated,
+      summary: computeRegisteredUserAnalytics()
+    });
+  });
+  app.post("/api/admin/notifications/broadcast", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const {
+      title,
+      message,
+      audience = "all_subscribed",
+      sector,
+      vacancyId
+    } = req.body || {};
+    const cleanTitle = String(title || "").trim().slice(0, 140);
+    const cleanMessage = String(message || "").trim().slice(0, 600);
+    if (!cleanTitle || !cleanMessage) {
+      res.status(400).json({ error: "Both notification title and message are required." });
+      return;
+    }
+    const profiles = Object.values(loadUserProfiles() || {}).filter(
+      (p) => p?.uid && p.accountStatus !== "suspended"
+    );
+    const allPrefs = loadAllNotificationPrefs();
+    const sectorNeedle = String(sector || "").trim().toLowerCase();
+    const targets = profiles.filter((p) => {
+      const pref = allPrefs[p.uid];
+      const hasActiveDevice = Boolean(pref?.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
+      const isPushReady = pref?.permissionStatus === "granted" || pref?.subscriptionStatus === "active" || hasActiveDevice;
+      const evalRes = evaluateMandatoryProfileCompletion(p);
+      if (audience === "all_subscribed") return isPushReady;
+      if (audience === "completed_profiles") return evalRes.isProfileComplete;
+      if (audience === "by_sector") {
+        if (!sectorNeedle) return true;
+        const userText = `${p.preferredIndustry || ""} ${(p.preferredSectors || []).join(" ")} ${p.desiredJobTitle || ""}`.toLowerCase();
+        return userText.includes(sectorNeedle);
+      }
+      return true;
+    });
+    if (targets.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: "No matching registered users found for the selected audience."
+      });
+      return;
+    }
+    const linkedVacancy = vacancyId ? loadVacanciesCatalog().find((v) => v.id === String(vacancyId)) : null;
+    const targetUrl = linkedVacancy ? buildJobUrl(linkedVacancy.id) : "https://hopelandjobs.tech/";
+    const relUrl = linkedVacancy ? `/?jobId=${encodeURIComponent(linkedVacancy.id)}` : "/";
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const allNotifs = loadAllNotifications();
+    let websiteDeliveredCount = 0;
+    let pushDeliveredCount = 0;
+    let pushFailedCount = 0;
+    const errors = [];
+    for (const p of targets) {
+      const uid = p.uid;
+      const notifId = `unotif_bc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const notifRecord = {
+        id: notifId,
+        userId: uid,
+        vacancyId: linkedVacancy?.id || `announcement_${Date.now()}`,
+        sourceType: linkedVacancy ? "domestic_job" : "system",
+        alertKind: linkedVacancy ? "sector_opportunity" : "system_test",
+        dedupeKey: `admin_broadcast::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        title: cleanTitle,
+        employer: linkedVacancy?.organization || "HOPELAND JOBS Announcement",
+        location: linkedVacancy?.location || p.locationCity || "Ethiopia",
+        category: linkedVacancy?.category || (sector ? String(sector) : "Job Announcement"),
+        deadline: linkedVacancy?.applicationDeadline || "Open",
+        matchScore: 100,
+        matchReasonSummary: cleanMessage,
+        matchReasons: [cleanMessage],
+        missingMandatoryQualifications: [],
+        applicationUrl: linkedVacancy?.applicationUrl || targetUrl,
+        jobUrl: targetUrl,
+        read: false,
+        channels: {
+          website: "delivered",
+          push: "skipped",
+          email: "skipped"
+        },
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      const existingList = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+      allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
+      websiteDeliveredCount += 1;
+      const pref = allPrefs[uid];
+      const hasDevices = Boolean(pref?.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
+      if (pref && (pref.channels?.browserPush || pref.channels?.mobilePush || hasDevices)) {
+        const pushRes = await sendWebPushToUser(uid, {
+          title: cleanTitle,
+          body: cleanMessage,
+          url: `${relUrl}${relUrl.includes("?") ? "&" : "?"}notificationId=${encodeURIComponent(notifId)}`,
+          jobId: linkedVacancy?.id || "",
+          notificationId: notifId,
+          tag: linkedVacancy ? `vacancy-${linkedVacancy.id}` : `announcement-${Date.now()}`,
+          jobTitle: linkedVacancy?.title || cleanTitle,
+          employer: linkedVacancy?.organization || "HOPELAND JOBS",
+          category: linkedVacancy?.category || (sector ? String(sector) : "Announcement")
+        });
+        if (pushRes.deliveredCount > 0) {
+          notifRecord.channels.push = "sent";
+          pushDeliveredCount += pushRes.deliveredCount;
+        } else if (pushRes.failedCount > 0) {
+          notifRecord.channels.push = "failed";
+          pushFailedCount += pushRes.failedCount;
+          if (pushRes.errors[0]) errors.push(`${p.email || uid}: ${pushRes.errors[0]}`);
+        }
+      }
+    }
+    saveAllNotifications(allNotifs);
+    appendAuditLog({
+      action: "admin_notification_broadcast",
+      actorEmail: getRequesterEmail(req) || "owner",
+      targetType: "user_notifications",
+      targetId: linkedVacancy?.id || audience,
+      summary: `Broadcast "${cleanTitle}" sent to ${targets.length} user(s) [${audience}${sector ? `:${sector}` : ""}] \u2014 Website Bell: ${websiteDeliveredCount}, Web Push: ${pushDeliveredCount}`,
+      severity: "info"
+    });
+    res.json({
+      success: true,
+      targetedUsersCount: targets.length,
+      websiteDeliveredCount,
+      pushDeliveredCount,
+      pushFailedCount,
+      emailsSent: 0,
+      audience,
+      errors: errors.slice(0, 10)
+    });
+  });
   return {
     onUserProfileSaved: async (savedProfile, isNewRegistration) => {
       if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
@@ -2647,6 +3291,8 @@ ${rows.join("\n")}`;
       userRecommendations: loadAllRecommendations(),
       userNotifications: loadAllNotifications(),
       notificationPreferences: loadAllNotificationPrefs(),
+      notificationPolicy: loadNotificationPolicy(),
+      anonymousPushSubscriptions: loadAnonymousPushSubscriptions(),
       notificationQueue: loadNotificationQueue(),
       schedulerRuns: loadSchedulerStore()
     }),
@@ -2655,12 +3301,15 @@ ${rows.join("\n")}`;
       if (d?.userRecommendations && typeof d.userRecommendations === "object") saveAllRecommendations(d.userRecommendations);
       if (d?.userNotifications && typeof d.userNotifications === "object") saveAllNotifications(d.userNotifications);
       if (d?.notificationPreferences && typeof d.notificationPreferences === "object") saveAllNotificationPrefs(d.notificationPreferences);
+      if (d?.notificationPolicy && typeof d.notificationPolicy === "object") saveNotificationPolicy(d.notificationPolicy);
+      if (d?.anonymousPushSubscriptions && typeof d.anonymousPushSubscriptions === "object") saveAnonymousPushSubscriptions(d.anonymousPushSubscriptions);
       if (Array.isArray(d?.notificationQueue)) saveNotificationQueue(d.notificationQueue);
       if (d?.schedulerRuns && typeof d.schedulerRuns === "object") saveSchedulerStore(d.schedulerRuns);
     },
     getHealthCounts: () => ({
       vacanciesCatalog: loadVacanciesCatalog().length,
       registeredUsers: Object.keys(loadUserProfiles() || {}).length,
+      anonymousPushSubscriptions: Object.keys(loadAnonymousPushSubscriptions() || {}).length,
       notificationsStored: Object.values(loadAllNotifications()).reduce(
         (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
         0
@@ -5398,6 +6047,37 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
       plainText: nextPlain
     };
   }
+  function buildTelegramAmharicPromoHtml(baseUrl) {
+    const safeUrl = escapeHtml(baseUrl);
+    return `\u{1F4E2} <b>\u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!</b>
+
+\u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
+
+\u2705 \u1260\u1290\u1343 \u12A0\u12AB\u12CD\u1295\u1275 \u12ED\u12AD\u1348\u1271\u1362
+\u2705 \u12E8\u130D\u120D \u1355\u122E\u134B\u12ED\u120D\u12CE\u1295 \u1219\u1209 \u1260\u1219\u1209 \u12ED\u1219\u1209\u1362
+\u2705 \u12E8\u1235\u122B \u134D\u120B\u130E\u1275\u12CE\u1295 \u12ED\u121D\u1228\u1321\u1362
+\u2705 \u12E8\u12F5\u1228\u1308\u1339\u1295 \u121B\u1233\u12C8\u1242\u12EB \u12EB\u1265\u1229 (Enable Notifications)\u1362
+
+\u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
+
+\u{1F310} \u12DB\u122C\u12CD\u1291 \u12ED\u1218\u12DD\u1308\u1261\u1366
+<a href="${safeUrl}">${safeUrl}</a>`;
+  }
+  function buildTelegramAmharicPromoPlain(baseUrl) {
+    return `\u{1F4E2} \u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!
+
+\u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
+
+\u2705 \u1260\u1290\u1343 \u12A0\u12AB\u12CD\u1295\u1275 \u12ED\u12AD\u1348\u1271\u1362
+\u2705 \u12E8\u130D\u120D \u1355\u122E\u134B\u12ED\u120D\u12CE\u1295 \u1219\u1209 \u1260\u1219\u1209 \u12ED\u1219\u1209\u1362
+\u2705 \u12E8\u1235\u122B \u134D\u120B\u130E\u1275\u12CE\u1295 \u12ED\u121D\u1228\u1321\u1362
+\u2705 \u12E8\u12F5\u1228\u1308\u1339\u1295 \u121B\u1233\u12C8\u1242\u12EB \u12EB\u1265\u1229 (Enable Notifications)\u1362
+
+\u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
+
+\u{1F310} \u12DB\u122C\u12CD\u1291 \u12ED\u1218\u12DD\u1308\u1261\u1366
+${baseUrl}`;
+  }
   function buildTelegramJobHtml(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia", compactForCaption = false) {
     const baseUrl = normalizeWebsiteDomain(domainOrUrl);
     const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || "")}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
@@ -5443,7 +6123,7 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
     const detailsBlock = metaLines.length > 0 ? `
 ${metaLines.join("\n")}` : "";
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 <b>WASH JOB</b>\n\n" : "";
-    const fullText = `${washPrefix}<b>Vacancy at ${orgName}</b>
+    const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
 
 \u{1F530} <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
 
@@ -5454,7 +6134,15 @@ ${metaLines.join("\n")}` : "";
 
 \u{1F530} <b>\u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}</b>
 =&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
-    return fullText.length > 4e3 ? fullText.slice(0, 3990) + "\u2026" : fullText;
+    const promoHtml = buildTelegramAmharicPromoHtml(baseUrl);
+    const fullText = `${coreText}
+
+${promoHtml}`;
+    if (fullText.length <= 4e3) return fullText;
+    const maxCore = Math.max(400, 3980 - promoHtml.length);
+    return `${coreText.slice(0, maxCore)}\u2026
+
+${promoHtml}`;
   }
   function buildTelegramJobPlainText(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
     const baseUrl = normalizeWebsiteDomain(domainOrUrl);
@@ -5488,7 +6176,7 @@ ${metaLines.join("\n")}` : "";
     const detailsBlock = metaLines.length > 0 ? `
 ${metaLines.join("\n")}` : "";
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 WASH JOB\n\n" : "";
-    const fullText = `${washPrefix}Vacancy at ${orgName}
+    const coreText = `${washPrefix}Vacancy at ${orgName}
 
 \u{1F530} ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
 
@@ -5499,7 +6187,15 @@ ${metaLines.join("\n")}` : "";
 
 \u{1F530} \u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}
 =>See Detail:- ${baseUrl}`;
-    return fullText.length > 4e3 ? fullText.slice(0, 3990) + "\u2026" : fullText;
+    const promoPlain = buildTelegramAmharicPromoPlain(baseUrl);
+    const fullText = `${coreText}
+
+${promoPlain}`;
+    if (fullText.length <= 4e3) return fullText;
+    const maxCore = Math.max(400, 3980 - promoPlain.length);
+    return `${coreText.slice(0, maxCore)}\u2026
+
+${promoPlain}`;
   }
   async function sendTelegramVacancyMessage(token, channel, vacancy, domainOrUrl, dryRun = false, fallbackChannelId, options) {
     const persisted = loadPersistedSettings() || {};
