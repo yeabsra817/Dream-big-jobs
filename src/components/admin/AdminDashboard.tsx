@@ -55,6 +55,7 @@ import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
+import { AppBrandLogo } from '../AppBrandLogo';
 
 interface Props {
   adminEmail: string | null;
@@ -287,9 +288,13 @@ export const AdminDashboard: React.FC<Props> = ({
               </button>
 
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm">
-                  <Shield className="w-5 h-5 fill-current" />
-                </div>
+                {siteSettings.appLogoUrl ? (
+                  <AppBrandLogo logoUrl={siteSettings.appLogoUrl} size="md" variant="amber" />
+                ) : (
+                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm">
+                    <Shield className="w-5 h-5 fill-current" />
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-lg text-white">

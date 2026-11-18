@@ -1,24 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Search,
-  Filter,
   MapPin,
-  Calendar,
   Briefcase,
   Building,
   Clock,
   Sparkles,
   Send,
   ChevronRight,
-  ShieldCheck,
   Coins,
   GraduationCap,
   Heart,
+  Globe,
 } from 'lucide-react';
 import { Vacancy, CategoryMeta, ETHIOPIAN_LOCATIONS } from '../types/job';
+import { JobSeekerProfile } from '../types/jobSeeker';
 import { CategoryIcon } from './CategoryIcon';
 import { getDaysLeft, isExpired } from '../utils/helpers';
+import {
+  assessVacancyExperienceMatch,
+  hasProfileExperienceSignals,
+} from '../utils/recommendationEngine';
 
 interface Props {
   category: CategoryMeta;
@@ -29,6 +32,7 @@ interface Props {
   onToggleSaveJob?: (id: string) => void;
   onSelectLocation?: (city: string) => void;
   telegramUrl: string;
+  userProfile?: JobSeekerProfile | null;
 }
 
 export const CategoryView: React.FC<Props> = ({
@@ -40,11 +44,18 @@ export const CategoryView: React.FC<Props> = ({
   onToggleSaveJob,
   onSelectLocation,
   telegramUrl,
+  userProfile = null,
 }) => {
+  const hasExpSignals = useMemo(() => hasProfileExperienceSignals(userProfile), [userProfile]);
+  const [viewMode, setViewMode] = useState<'experience' | 'all'>('all');
+  const userToggledModeRef = useRef(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
-  const [sortBy, setSortBy] = useState<'latest' | 'deadline'>('latest');
+  const [sortBy, setSortBy] = useState<'recommended' | 'latest' | 'deadline'>(() =>
+    hasExpSignals ? 'recommended' : 'latest'
+  );
 
   // Filter only published and active vacancies for this category
   const categoryVacancies = useMemo(() => {
@@ -53,10 +64,34 @@ export const CategoryView: React.FC<Props> = ({
     );
   }, [vacancies, category.name]);
 
+  const assessedCategoryVacancies = useMemo(() => {
+    return categoryVacancies.map((vacancy) => ({
+      vacancy,
+      match: assessVacancyExperienceMatch(userProfile, vacancy),
+    }));
+  }, [categoryVacancies, userProfile]);
+
+  const experienceMatchedCount = useMemo(
+    () => assessedCategoryVacancies.filter((item) => item.match.isMatch).length,
+    [assessedCategoryVacancies]
+  );
+
+  useEffect(() => {
+    if (hasExpSignals && experienceMatchedCount > 0 && !userToggledModeRef.current) {
+      setViewMode('experience');
+      setSortBy('recommended');
+    } else if (!hasExpSignals || experienceMatchedCount === 0) {
+      setViewMode('all');
+    }
+  }, [hasExpSignals, experienceMatchedCount, category.name]);
+
   // Apply search and filters
-  const filteredVacancies = useMemo(() => {
-    return categoryVacancies
-      .filter((v) => {
+  const filteredVacancyItems = useMemo(() => {
+    return assessedCategoryVacancies
+      .filter(({ vacancy: v, match }) => {
+        if (viewMode === 'experience' && hasExpSignals && experienceMatchedCount > 0 && !match.isMatch) {
+          return false;
+        }
         const matchesSearch =
           !searchQuery.trim() ||
           v.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,17 +110,38 @@ export const CategoryView: React.FC<Props> = ({
         return matchesSearch && matchesLocation && matchesType;
       })
       .sort((a, b) => {
+        if (sortBy === 'recommended' && hasExpSignals) {
+          if (a.match.isMatch !== b.match.isMatch) return a.match.isMatch ? -1 : 1;
+          if (a.match.isMatch && b.match.isMatch) {
+            if (a.match.meetsYearsRequirement !== b.match.meetsYearsRequirement) {
+              return a.match.meetsYearsRequirement ? -1 : 1;
+            }
+            if (a.match.matchType !== b.match.matchType) {
+              return a.match.matchType === 'direct' ? -1 : 1;
+            }
+            if (a.match.score !== b.match.score) return b.match.score - a.match.score;
+          }
+        }
         if (sortBy === 'deadline') {
-          const tA = Date.parse(a.applicationDeadline) || Infinity;
-          const tB = Date.parse(b.applicationDeadline) || Infinity;
+          const tA = Date.parse(a.vacancy.applicationDeadline) || Infinity;
+          const tB = Date.parse(b.vacancy.applicationDeadline) || Infinity;
           return tA - tB;
         }
         // Default latest
-        const dateA = new Date(a.publishedAt || a.createdAt).getTime();
-        const dateB = new Date(b.publishedAt || b.createdAt).getTime();
+        const dateA = new Date(a.vacancy.publishedAt || a.vacancy.createdAt).getTime();
+        const dateB = new Date(b.vacancy.publishedAt || b.vacancy.createdAt).getTime();
         return dateB - dateA;
       });
-  }, [categoryVacancies, searchQuery, selectedLocation, selectedType, sortBy]);
+  }, [
+    assessedCategoryVacancies,
+    viewMode,
+    hasExpSignals,
+    experienceMatchedCount,
+    searchQuery,
+    selectedLocation,
+    selectedType,
+    sortBy,
+  ]);
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] pb-20">
@@ -140,7 +196,47 @@ export const CategoryView: React.FC<Props> = ({
 
       {/* Filter and Search Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6">
-        <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-200">
+        <div className="bg-white rounded-2xl p-4 shadow-md border border-slate-200 space-y-3">
+          {hasExpSignals && experienceMatchedCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('experience');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'experience'
+                      ? 'bg-[#0B132B] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${viewMode === 'experience' ? 'text-amber-400' : 'text-emerald-600'}`} />
+                  <span>Based on Your Experience ({experienceMatchedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'all'
+                      ? 'bg-[#16A34A] text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>See All in Sector ({categoryVacancies.length})</span>
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-500 font-medium">
+                Prioritizing direct &amp; related-field matches first
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
             {/* Search Input */}
             <div className="md:col-span-5 relative">
@@ -190,9 +286,10 @@ export const CategoryView: React.FC<Props> = ({
             <div className="md:col-span-2">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as 'recommended' | 'latest' | 'deadline')}
                 className="w-full py-2.5 px-3 rounded-xl border border-slate-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-sm outline-none bg-white font-medium text-slate-700"
               >
+                {hasExpSignals && <option value="recommended">Sort: Experience Fit</option>}
                 <option value="latest">Sort: Latest</option>
                 <option value="deadline">Sort: Deadline</option>
               </select>
@@ -205,7 +302,7 @@ export const CategoryView: React.FC<Props> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold text-slate-600">
-            Showing <strong className="text-slate-900">{filteredVacancies.length}</strong> of{' '}
+            Showing <strong className="text-slate-900">{filteredVacancyItems.length}</strong> of{' '}
             {categoryVacancies.length} verified vacancies
           </p>
           <a
@@ -220,7 +317,7 @@ export const CategoryView: React.FC<Props> = ({
           </a>
         </div>
 
-        {filteredVacancies.length === 0 ? (
+        {filteredVacancyItems.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm max-w-xl mx-auto my-8">
             <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4">
               <Briefcase className="w-8 h-8" />
@@ -233,9 +330,21 @@ export const CategoryView: React.FC<Props> = ({
             <p className="text-sm text-slate-500 mb-6 leading-relaxed">
               {categoryVacancies.length === 0
                 ? 'The administrator verifies and posts all vacancies personally. New genuine vacancies in this sector will appear as soon as they are approved.'
-                : 'Try clearing your search terms or selecting "All Locations" to see all available vacancies.'}
+                : 'Try clearing your search terms or viewing all jobs in this sector.'}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              {viewMode === 'experience' && categoryVacancies.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#16A34A] text-white font-semibold text-xs hover:bg-[#15803D] transition-colors cursor-pointer"
+                >
+                  See All {categoryVacancies.length} Jobs in Sector
+                </button>
+              )}
               {categoryVacancies.length > 0 && (
                 <button
                   onClick={() => {
@@ -262,7 +371,7 @@ export const CategoryView: React.FC<Props> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredVacancies.map((vacancy) => {
+            {filteredVacancyItems.map(({ vacancy, match }) => {
               const daysInfo = getDaysLeft(vacancy.applicationDeadline);
 
               return (
@@ -273,6 +382,20 @@ export const CategoryView: React.FC<Props> = ({
                 >
                   {/* Left: Info */}
                   <div className="flex-1">
+                    {match.isMatch && (
+                      <div className="mb-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold ${
+                            match.matchType === 'direct'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-sky-50 text-sky-800 border border-sky-200'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <span>{match.badgeLabel}</span>
+                        </span>
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md">
                         <Building className="w-3.5 h-3.5 text-slate-500" />

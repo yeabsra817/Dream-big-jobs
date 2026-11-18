@@ -68,6 +68,8 @@
         "contactEmail": { "type": "string", "maxLength": 150, "description": "Support and inquiries email" },
         "contactPhone": { "type": "string", "maxLength": 50, "description": "Support telephone number" },
         "aboutText": { "type": "string", "maxLength": 5000, "description": "About DREAM BIG JOBS summary" },
+        "appLogoUrl": { "type": "string", "maxLength": 300000, "description": "Developer-configured custom app logo URL or compressed PNG data URI" },
+        "appLogoUpdatedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp when custom app logo was last updated" },
         "updatedAt": { "type": "string", "maxLength": 100, "description": "Timestamp of update" }
       }
     },
@@ -196,10 +198,11 @@
         "id": { "type": "string", "maxLength": 128 },
         "userId": { "type": "string", "maxLength": 128 },
         "vacancyId": { "type": "string", "maxLength": 128 },
-        "alertKind": { "type": "string", "enum": ["new_match", "deadline_reminder", "job_updated", "sector_opportunity", "system_test"] },
+        "alertKind": { "type": "string", "enum": ["new_match", "apply_reminder", "deadline_reminder", "job_updated", "sector_opportunity", "system_test"] },
         "dedupeKey": { "type": "string", "maxLength": 256 },
         "title": { "type": "string", "maxLength": 250 },
         "employer": { "type": "string", "maxLength": 200 },
+        "topJobs": { "type": "array", "description": "Up to 3 top recommended jobs included in inactive-user reminder notifications" },
         "read": { "type": "boolean" },
         "createdAt": { "type": "string", "maxLength": 100 }
       },
@@ -217,6 +220,8 @@
         "permissionVerifiedAt": { "type": "string", "maxLength": 100 },
         "lastSuccessfulDeliveryAt": { "type": "string", "maxLength": 100 },
         "lastDigestSentAt": { "type": "string", "maxLength": 100 },
+        "lastInactiveReminderSentAt": { "type": "string", "maxLength": 100 },
+        "inactiveReminderCount": { "type": "number" },
         "frequency": { "type": "string", "enum": ["instant", "daily", "weekly"] },
         "updatedAt": { "type": "string", "maxLength": 100 }
       },

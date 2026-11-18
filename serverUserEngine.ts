@@ -9,7 +9,13 @@ import {
   isVerifiedActiveVacancy,
   RecommendedOpportunity,
 } from './src/utils/recommendationCore';
-import { evaluateMandatoryProfileCompletion } from './src/types/jobSeeker';
+import { evaluateMandatoryProfileCompletion, NotificationTopJobSummary } from './src/types/jobSeeker';
+import {
+  buildTop3MobilePushPayload,
+  isInactiveReminderDueForUser,
+  isUserInactiveForThreeDayCheck,
+  THREE_DAYS_MS,
+} from './src/utils/inactiveReminderFormat';
 
 export interface ServerUserEngineContext {
   app: Express;
@@ -303,6 +309,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   function loadSchedulerStore(): {
     lastRunStartedAt: string | null;
     lastSuccessfulRunAt: string | null;
+    lastInactiveCheckAt: string | null;
     lastRunStatus: 'success' | 'partial' | 'failed' | null;
     recentErrors: Array<{ timestamp: string; source: string; message: string }>;
     runs: any[];
@@ -310,6 +317,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const fallback = {
       lastRunStartedAt: null,
       lastSuccessfulRunAt: null,
+      lastInactiveCheckAt: null,
       lastRunStatus: null,
       recentErrors: [],
       runs: [],
@@ -319,6 +327,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     return {
       lastRunStartedAt: data.lastRunStartedAt || null,
       lastSuccessfulRunAt: data.lastSuccessfulRunAt || null,
+      lastInactiveCheckAt: data.lastInactiveCheckAt || null,
       lastRunStatus: data.lastRunStatus || null,
       recentErrors: Array.isArray(data.recentErrors) ? data.recentErrors : [],
       runs: Array.isArray(data.runs) ? data.runs : [],
@@ -328,6 +337,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   function saveSchedulerStore(store: {
     lastRunStartedAt: string | null;
     lastSuccessfulRunAt: string | null;
+    lastInactiveCheckAt?: string | null;
     lastRunStatus: 'success' | 'partial' | 'failed' | null;
     recentErrors: Array<{ timestamp: string; source: string; message: string }>;
     runs: any[];
@@ -580,6 +590,11 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       jobId: string;
       notificationId?: string;
       tag: string;
+      icon?: string;
+      badge?: string;
+      actionType?: 'open_job' | 'open_recommendations';
+      topJobs?: NotificationTopJobSummary[];
+      timestamp?: number;
       jobTitle?: string;
       employer?: string;
       category?: string;
@@ -821,7 +836,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         const profile = profiles[qItem.userId];
         if (!profile || profile.accountStatus === 'suspended') {
           qItem.status = 'failed';
-          qItem.lastError = 'User account inactive or suspended';
+          qItem.lastError = 'User account suspended';
           qItem.updatedAt = new Date().toISOString();
           changed = true;
           continue;
@@ -915,8 +930,19 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
   }
 
+  function getAppliedVacancyIdsForUser(uid: string): Set<string> {
+    const appliedSet = new Set<string>();
+    const apps = loadJobApplications() || [];
+    for (const appItem of apps) {
+      if (appItem?.userId === uid && appItem?.vacancyId) {
+        appliedSet.add(String(appItem.vacancyId));
+      }
+    }
+    return appliedSet;
+  }
+
   function isFrequencyWindowReady(prefs: any, alertKind: string): boolean {
-    if (alertKind === 'deadline_reminder') return true;
+    if (alertKind === 'deadline_reminder' || alertKind === 'apply_reminder') return true;
     const freq = (prefs?.frequency || 'instant') as 'instant' | 'daily' | 'weekly';
     if (freq === 'instant') return true;
     const lastDigestMs = prefs?.lastDigestSentAt ? new Date(prefs.lastDigestSentAt).getTime() : 0;
@@ -930,7 +956,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   async function dispatchNotificationForUser(
     profile: any,
     rec: RecommendedOpportunity,
-    alertKind: 'new_match' | 'deadline_reminder' | 'job_updated' | 'sector_opportunity',
+    alertKind: 'new_match' | 'apply_reminder' | 'deadline_reminder' | 'job_updated' | 'sector_opportunity',
     options: {
       dryRun?: boolean;
       ignoreFrequencyWindow?: boolean;
@@ -951,7 +977,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       // Respect user opt-out for push & job alerts
       if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) return null;
       // Check user alert-type preferences
-      if (alertKind === 'new_match' && prefs.alertTypes?.newMatches === false) return null;
+      if ((alertKind === 'new_match' || alertKind === 'apply_reminder') && prefs.alertTypes?.newMatches === false) return null;
       if (alertKind === 'deadline_reminder' && prefs.alertTypes?.deadlineReminders === false) return null;
       if (alertKind === 'job_updated' && prefs.alertTypes?.jobChanges === false) return null;
       if (alertKind === 'sector_opportunity' && prefs.alertTypes?.sectorUpdates === false) return null;
@@ -962,23 +988,56 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       return null;
     }
 
-    // Never send notifications for expired/closed vacancies
-    if (!options.isTestNotification && isDeadlineExpired(rec.deadline)) return null;
-
-    const dateStamp = alertKind === 'job_updated' ? `::${new Date().toISOString().slice(0, 10)}` : '';
-    const dedupeKey = options.isTestNotification
-      ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
+    // Never send notifications or reminders for expired/closed or already-applied vacancies
+    if (!options.isTestNotification) {
+      if (isDeadlineExpired(rec.deadline)) return null;
+      const appliedIds = getAppliedVacancyIdsForUser(uid);
+      if (appliedIds.has(rec.id)) return null;
+    }
 
     const allNotifs = loadAllNotifications();
     const existingList: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
-    // Guarantee at most ONE notification per matching vacancy per user
-    if (
-      !options.isTestNotification &&
-      existingList.some((n) => n.dedupeKey === dedupeKey || (n.vacancyId === rec.id && n.sourceType !== 'system'))
-    ) {
+    const existingForVacancy = existingList
+      .filter((n) => n.vacancyId === rec.id && n.sourceType !== 'system')
+      .sort((a, b) => {
+        const ta = new Date(a.lastRemindedAt || a.updatedAt || a.createdAt || 0).getTime();
+        const tb = new Date(b.lastRemindedAt || b.updatedAt || b.createdAt || 0).getTime();
+        return tb - ta;
+      });
+    const latestExisting = existingForVacancy[0] || null;
+
+    let reminderCount = 0;
+    const dateStamp = alertKind === 'job_updated' ? `::${new Date().toISOString().slice(0, 10)}` : '';
+
+    if (!options.isTestNotification && latestExisting) {
+      if (alertKind === 'apply_reminder') {
+        const lastSentMs = new Date(
+          latestExisting.lastRemindedAt || latestExisting.updatedAt || latestExisting.createdAt || 0
+        ).getTime();
+        if (Number.isNaN(lastSentMs) || Date.now() - lastSentMs < THREE_DAYS_MS) {
+          return null;
+        }
+        reminderCount = (Number(latestExisting.reminderCount) || 0) + 1;
+      } else if (alertKind === 'job_updated') {
+        const updateKey = `${uid}::${rec.id}::job_updated${dateStamp}`;
+        if (existingList.some((n) => n.dedupeKey === updateKey)) {
+          return null;
+        }
+        reminderCount = Number(latestExisting.reminderCount) || 0;
+      } else {
+        // Initial match already dispatched for this vacancy
+        return null;
+      }
+    } else if (alertKind === 'apply_reminder' && !options.isTestNotification) {
+      // No prior notification exists yet for this vacancy; let initial new_match handle it first
       return null;
     }
+
+    const dedupeKey = options.isTestNotification
+      ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      : alertKind === 'apply_reminder'
+      ? `${uid}::${rec.id}::apply_reminder::${reminderCount}`
+      : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
 
     // Strict daily limit: maximum 3 job notifications per user per day
     if (!options.bypassRateLimit) {
@@ -988,8 +1047,9 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1000;
       const todayCount = existingList.filter((n) => {
         if (n.sourceType === 'system' || n.alertKind === 'system_test') return false;
-        const ts = new Date(n.createdAt).getTime();
-        return getAddisDateKey(n.createdAt) === todayKey || (!Number.isNaN(ts) && ts >= twentyFourHoursAgoMs);
+        const activityIso = n.lastRemindedAt || n.createdAt;
+        const ts = new Date(activityIso).getTime();
+        return getAddisDateKey(activityIso) === todayKey || (!Number.isNaN(ts) && ts >= twentyFourHoursAgoMs);
       }).length;
       if (todayCount >= effectiveCap) {
         return null;
@@ -1000,6 +1060,19 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const nowIso = new Date().toISOString();
     const notifId = `unotif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+    const notifTitle = options.isTestNotification
+      ? `[Test Alert] ${rec.title}`
+      : alertKind === 'apply_reminder'
+      ? `Reminder to Apply: ${rec.title}`
+      : rec.title;
+
+    const reminderSummary =
+      alertKind === 'apply_reminder'
+        ? `3-Day Apply Reminder (#${reminderCount}): You still qualify for this open position in ${rec.category}${
+            rec.deadline && rec.deadline !== 'Open' ? ` (Deadline: ${rec.deadline})` : ''
+          }. Open to apply now.`
+        : options.customNote || rec.matchReasons[0] || `Matched your profile in ${rec.category}`;
+
     const notifRecord: any = {
       id: notifId,
       userId: uid,
@@ -1007,22 +1080,26 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       sourceType: rec.sourceType,
       alertKind,
       dedupeKey,
-      title: options.isTestNotification ? `[Test Alert] ${rec.title}` : rec.title,
+      title: notifTitle,
       employer: rec.organization,
       location: rec.location,
       category: rec.category,
       salary: rec.salary || undefined,
       deadline: rec.deadline || 'Open',
       matchScore: rec.matchScore,
-      matchReasonSummary:
-        options.customNote ||
-        rec.matchReasons[0] ||
-        `Matched your profile in ${rec.category}`,
-      matchReasons: options.customNote ? [options.customNote, ...rec.matchReasons] : rec.matchReasons,
+      matchReasonSummary: reminderSummary,
+      matchReasons:
+        alertKind === 'apply_reminder'
+          ? [reminderSummary, ...rec.matchReasons]
+          : options.customNote
+          ? [options.customNote, ...rec.matchReasons]
+          : rec.matchReasons,
       missingMandatoryQualifications: rec.missingMandatoryQualifications || [],
       applicationUrl: rec.applyUrl || jobUrl,
       jobUrl,
       read: false,
+      reminderCount,
+      lastRemindedAt: nowIso,
       channels: {
         website: 'delivered',
         push: 'skipped',
@@ -1037,8 +1114,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       return notifRecord;
     }
 
-    // Save immediately to persistent Website Notification store
-    allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
+    // Save immediately to persistent Website Notification store (keeping one fresh active item per vacancy)
+    const remainingForUser =
+      alertKind === 'apply_reminder' || alertKind === 'job_updated'
+        ? existingList.filter((n) => !(n.vacancyId === rec.id && n.sourceType !== 'system'))
+        : existingList;
+    allNotifs[uid] = [notifRecord, ...remainingForUser].slice(0, 150);
     saveAllNotifications(allNotifs);
 
     // Real Web Push delivery directly to Android / iPhone PWA / Desktop notification panel
@@ -1049,27 +1130,42 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       hasPushDevices
     ) {
       const pushTitle = options.isTestNotification
-        ? `HOPELANDJOBS — Test Job Notification!`
+        ? `Hopeland Jobs · Test Job Notification`
+        : alertKind === 'apply_reminder'
+        ? `Hopeland Jobs · Reminder: Apply for ${rec.title}`
         : alertKind === 'deadline_reminder'
-        ? `HOPELANDJOBS — Closing Soon: ${rec.title}`
+        ? `Hopeland Jobs · Closing Soon: ${rec.title}`
         : alertKind === 'job_updated'
-        ? `HOPELANDJOBS — Updated Job Matching Your Profile!`
-        : `HOPELANDJOBS — New Job Matching Your Profile!`;
-      const pushBody = `${rec.title} — ${rec.organization} (${rec.location})\n${
-        options.customNote
-          ? options.customNote
-          : `Matches your qualifications in ${rec.category}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}.`
-      } Tap to view the job and apply.`;
+        ? `Hopeland Jobs · Updated Job Matching Your Profile`
+        : `Hopeland Jobs · New Job Matching Your Profile`;
+      const pushBody =
+        alertKind === 'apply_reminder'
+          ? `${rec.organization} (${rec.location}) · Recommended for your profile${
+              rec.deadline && rec.deadline !== 'Open' ? ` · Deadline: ${rec.deadline}` : ''
+            }. Tap to view and apply now!`
+          : `${rec.title} — ${rec.organization} (${rec.location})\n${
+              options.customNote
+                ? options.customNote
+                : `Matches your qualifications in ${rec.category}${rec.deadline ? ` · Deadline: ${rec.deadline}` : ''}.`
+            } Tap to view the job and apply.`;
+      const pushTag =
+        alertKind === 'apply_reminder'
+          ? `vacancy-${rec.id}-rem-${reminderCount}`
+          : `vacancy-${rec.id}`;
       const pushPayload = {
         title: pushTitle,
         body: pushBody,
         url:
           rec.sourceType === 'domestic_job'
-            ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}`
+            ? `/?jobId=${encodeURIComponent(rec.id)}&apply=1&notificationId=${encodeURIComponent(notifId)}`
             : jobUrl,
         jobId: rec.id,
         notificationId: notifId,
-        tag: `vacancy-${rec.id}`,
+        tag: pushTag,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-badge-96x96.png',
+        actionType: 'open_job' as const,
+        timestamp: Date.now(),
         jobTitle: rec.title,
         employer: rec.organization,
         category: rec.category,
@@ -1178,16 +1274,68 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         ].filter(Boolean)
       );
 
-      // Strictly only jobs the user fulfills with verified qualification & domain fit (max 3 jobs)
-      const qualified = compactRecs.filter((r) => isStrictJobFitForUser(r as RecommendedOpportunity));
-      const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
-      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id));
-      const prioritized = [...changedMatches, ...topGeneralMatches].slice(0, 3);
+      const appliedIds = getAppliedVacancyIdsForUser(profile.uid);
+      const userExistingNotifs: any[] = Array.isArray(loadAllNotifications()[profile.uid])
+        ? loadAllNotifications()[profile.uid]
+        : [];
+      const latestByVacancy = new Map<string, any>();
+      for (const n of userExistingNotifs) {
+        if (!n?.vacancyId || n.sourceType === 'system') continue;
+        const prev = latestByVacancy.get(n.vacancyId);
+        const prevTs = prev ? new Date(prev.lastRemindedAt || prev.updatedAt || prev.createdAt || 0).getTime() : -1;
+        const currTs = new Date(n.lastRemindedAt || n.updatedAt || n.createdAt || 0).getTime();
+        if (!prev || currTs > prevTs) {
+          latestByVacancy.set(n.vacancyId, n);
+        }
+      }
+
+      // Strictly only open, un-applied jobs the user fulfills with verified qualification & domain fit
+      const qualifiedOpen = compactRecs.filter(
+        (r) =>
+          isStrictJobFitForUser(r as RecommendedOpportunity) &&
+          !appliedIds.has(r.id) &&
+          !isDeadlineExpired(r.deadline)
+      );
+
+      const nowMs = Date.now();
+      const changedMatches = changedSet.size > 0 ? qualifiedOpen.filter((r) => changedSet.has(r.id)) : [];
+      const neverNotifiedMatches = qualifiedOpen.filter(
+        (r) => !changedSet.has(r.id) && !latestByVacancy.has(r.id)
+      );
+      const isRoutineWithoutVacancyChange = changedSet.size === 0;
+      const userIsThreeDaysInactive = isUserInactiveForThreeDayCheck(profile);
+
+      // Routine apply reminders for 3-day inactive users are handled as a consolidated Top-3 Push notification
+      const dueReminderMatches =
+        isRoutineWithoutVacancyChange && userIsThreeDaysInactive
+          ? []
+          : qualifiedOpen
+              .filter((r) => {
+                if (changedSet.has(r.id)) return false;
+                const prev = latestByVacancy.get(r.id);
+                if (!prev) return false;
+                const lastMs = new Date(prev.lastRemindedAt || prev.updatedAt || prev.createdAt || 0).getTime();
+                return !Number.isNaN(lastMs) && nowMs - lastMs >= THREE_DAYS_MS;
+              })
+              .sort((a, b) => {
+                const prevA = latestByVacancy.get(a.id);
+                const prevB = latestByVacancy.get(b.id);
+                const msA = new Date(prevA?.lastRemindedAt || prevA?.updatedAt || prevA?.createdAt || 0).getTime();
+                const msB = new Date(prevB?.lastRemindedAt || prevB?.updatedAt || prevB?.createdAt || 0).getTime();
+                return msA - msB;
+              });
+
+      const prioritized = [...changedMatches, ...neverNotifiedMatches, ...dueReminderMatches];
 
       for (const r of prioritized) {
         if (newNotifications.length >= 3) break;
-        const alertKind: 'new_match' | 'job_updated' =
-          changedSet.has(r.id) && options.changeType === 'updated' ? 'job_updated' : 'new_match';
+        const existingForR = latestByVacancy.get(r.id);
+        let alertKind: 'new_match' | 'apply_reminder' | 'job_updated' = 'new_match';
+        if (changedSet.has(r.id) && options.changeType === 'updated' && existingForR) {
+          alertKind = 'job_updated';
+        } else if (existingForR) {
+          alertKind = 'apply_reminder';
+        }
         const sent = await dispatchNotificationForUser(profile, r as RecommendedOpportunity, alertKind, {
           dryRun: options.dryRun,
         });
@@ -1205,6 +1353,252 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
 
     return { recommendations: recs, newNotifications };
+  }
+
+  /**
+   * 3-Day Inactive Users Top-3 Recommended Jobs Push Check:
+   * Identifies registered non-suspended users who haven't been active for >= 3 days,
+   * selects up to 3 unapplied strictly-matched recommended jobs for their profile,
+   * and sends one consolidated airline-style mobile bar push notification reminding them to apply.
+   */
+  async function runInactiveUsersThreeDayCheck(options: {
+    dryRun?: boolean;
+    force?: boolean;
+    targetUid?: string;
+    nowMs?: number;
+  } = {}): Promise<{
+    checkedAt: string;
+    usersEvaluated: number;
+    inactiveUsersFound: number;
+    remindersCreated: number;
+    pushAttempted: number;
+    pushSucceeded: number;
+    pushFailed: number;
+    details: Array<{
+      uid: string;
+      email: string;
+      topJobsCount: number;
+      pushStatus: string;
+      notificationId?: string;
+      pushTitle?: string;
+      pushBody?: string;
+    }>;
+  }> {
+    const nowMs = options.nowMs ?? Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const profiles = Object.values(loadUserProfiles() || {}).filter(
+      (p: any) =>
+        p?.uid &&
+        p.accountStatus !== 'suspended' &&
+        (!options.targetUid || p.uid === options.targetUid)
+    );
+
+    const activeVacancies = loadVacanciesCatalog().filter(isVerifiedActiveVacancy);
+    const intl = loadPersistedInternationalData();
+    const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
+    const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
+
+    const allPrefs = loadAllNotificationPrefs();
+    const allNotifs = loadAllNotifications();
+
+    let usersEvaluated = 0;
+    let inactiveUsersFound = 0;
+    let remindersCreated = 0;
+    let pushAttempted = 0;
+    let pushSucceeded = 0;
+    let pushFailed = 0;
+    const details: Array<{
+      uid: string;
+      email: string;
+      topJobsCount: number;
+      pushStatus: string;
+      notificationId?: string;
+      pushTitle?: string;
+      pushBody?: string;
+    }> = [];
+
+    let prefsChanged = false;
+    let notifsChanged = false;
+
+    for (const profile of profiles) {
+      usersEvaluated += 1;
+      const uid = profile.uid;
+      const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
+
+      // Must be inactive (>= 3 days since last activity or explicit inactive status)
+      if (!isUserInactiveForThreeDayCheck(profile, nowMs)) continue;
+      inactiveUsersFound += 1;
+
+      // Enforce 3-day repeat cadence & opt-out & profile readiness
+      if (!isInactiveReminderDueForUser(prefs, nowMs, Boolean(options.force))) continue;
+      if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) continue;
+      if (prefs.alertTypes?.newMatches === false) continue;
+      if (!hasCompletedMandatoryPreferences(profile)) continue;
+
+      const appliedIds = getAppliedVacancyIdsForUser(uid);
+      const recs = computeStaffOpportunityRecommendations(profile, activeVacancies, intlJobs, scholarships, 40);
+      const top3 = recs
+        .filter(
+          (r) =>
+            isStrictJobFitForUser(r) &&
+            !appliedIds.has(r.id) &&
+            !isDeadlineExpired(r.deadline)
+        )
+        .slice(0, 3);
+
+      if (top3.length === 0) continue;
+
+      const topJobs: NotificationTopJobSummary[] = top3.map((r) => ({
+        id: r.id,
+        sourceType: r.sourceType,
+        title: r.title,
+        organization: r.organization,
+        location: r.location,
+        deadline: r.deadline || 'Open',
+        matchScore: r.matchScore,
+        applyUrl: r.applyUrl,
+        jobUrl: r.sourceType === 'domestic_job' ? buildJobUrl(r.id) : r.applyUrl || buildJobUrl(r.id),
+      }));
+
+      const nextCycle = (Number(prefs.inactiveReminderCount) || 0) + 1;
+      const notifId = `unotif_inact3_${nowMs}_${Math.random().toString(36).slice(2, 7)}`;
+      const pushPayload = buildTop3MobilePushPayload({
+        topJobs,
+        notifId,
+        cycleNumber: nextCycle,
+        nowMs,
+      });
+
+      const primary = topJobs[0];
+      const notifRecord: any = {
+        id: notifId,
+        userId: uid,
+        vacancyId: primary.id,
+        sourceType: primary.sourceType,
+        alertKind: 'apply_reminder',
+        dedupeKey: `${uid}::inactive_top3::${nextCycle}`,
+        title:
+          topJobs.length === 1
+            ? `Reminder to Apply: ${primary.title}`
+            : `Top ${topJobs.length} Recommended Jobs — Reminder to Apply`,
+        employer:
+          topJobs.length === 1
+            ? primary.organization
+            : topJobs.map((j) => j.organization).slice(0, 3).join(' · '),
+        location: primary.location,
+        category: top3.map((r) => r.category).filter(Boolean).slice(0, 2).join(' · ') || 'Top Matches',
+        deadline: primary.deadline || 'Open',
+        matchScore: primary.matchScore,
+        matchReasonSummary: pushPayload.body,
+        matchReasons: topJobs.map((j, idx) => `${idx + 1}. ${j.title} — ${j.organization} (${j.matchScore}% match)`),
+        missingMandatoryQualifications: [],
+        topJobs,
+        applicationUrl: primary.applyUrl || pushPayload.url,
+        jobUrl: pushPayload.url,
+        read: false,
+        reminderCount: nextCycle,
+        lastRemindedAt: nowIso,
+        channels: {
+          website: 'delivered',
+          push: 'skipped',
+          email: 'skipped',
+        },
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      remindersCreated += 1;
+
+      if (options.dryRun) {
+        details.push({
+          uid,
+          email: profile.email || '',
+          topJobsCount: topJobs.length,
+          pushStatus: 'dry_run',
+          notificationId: notifId,
+          pushTitle: pushPayload.title,
+          pushBody: pushPayload.body,
+        });
+        continue;
+      }
+
+      const existingList = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+      const cleanedList = existingList.filter((n: any) => !String(n?.dedupeKey || '').includes('::inactive_top3::'));
+      allNotifs[uid] = [notifRecord, ...cleanedList].slice(0, 150);
+      notifsChanged = true;
+
+      // Save allNotifications before sendWebPushToUser so queue/logs see consistent records
+      saveAllNotifications(allNotifs);
+
+      const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d: any) => d.active && d.subscription?.endpoint));
+      if (
+        prefs.manuallyDisabled !== true &&
+        (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) &&
+        hasPushDevices
+      ) {
+        pushAttempted += 1;
+        const pushRes = await sendWebPushToUser(uid, pushPayload);
+        if (pushRes.deliveredCount > 0) {
+          notifRecord.channels.push = 'sent';
+          pushSucceeded += 1;
+        } else if (pushRes.failedCount > 0) {
+          notifRecord.channels.push = 'queued';
+          pushFailed += 1;
+          enqueueDeliveryRetry({
+            userId: uid,
+            notificationId: notifId,
+            channel: 'push',
+            payload: pushPayload,
+            reason: pushRes.errors[0] || 'Push delivery failed',
+          });
+        }
+        // Re-read fresh prefs in case sendWebPushToUser updated delivery timestamps
+        const refreshedPrefs = loadAllNotificationPrefs()[uid] || prefs;
+        allPrefs[uid] = {
+          ...refreshedPrefs,
+          lastInactiveReminderSentAt: nowIso,
+          inactiveReminderCount: nextCycle,
+          updatedAt: nowIso,
+        };
+      } else {
+        allPrefs[uid] = {
+          ...prefs,
+          lastInactiveReminderSentAt: nowIso,
+          inactiveReminderCount: nextCycle,
+          updatedAt: nowIso,
+        };
+      }
+      prefsChanged = true;
+
+      details.push({
+        uid,
+        email: profile.email || '',
+        topJobsCount: topJobs.length,
+        pushStatus: notifRecord.channels.push,
+        notificationId: notifId,
+        pushTitle: pushPayload.title,
+        pushBody: pushPayload.body,
+      });
+    }
+
+    if (!options.dryRun) {
+      if (notifsChanged) saveAllNotifications(allNotifs);
+      if (prefsChanged) saveAllNotificationPrefs(allPrefs);
+      const store = loadSchedulerStore();
+      store.lastInactiveCheckAt = nowIso;
+      saveSchedulerStore(store);
+    }
+
+    return {
+      checkedAt: nowIso,
+      usersEvaluated,
+      inactiveUsersFound,
+      remindersCreated,
+      pushAttempted,
+      pushSucceeded,
+      pushFailed,
+      details,
+    };
   }
 
   async function executeAutomatedSchedulerSweep(options: {
@@ -1247,7 +1641,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         }
       }
 
-      // Step 2: Evaluate all active, non-suspended registered profiles
+      // Step 2: 3-Day Inactive Users Top-3 Recommended Jobs Push Check
+      const inactiveCheckRes = await runInactiveUsersThreeDayCheck({
+        dryRun: options.dryRun,
+      });
+      notificationsCreated += inactiveCheckRes.remindersCreated;
+      pushAttempted += inactiveCheckRes.pushAttempted;
+      pushSucceeded += inactiveCheckRes.pushSucceeded;
+      pushFailed += inactiveCheckRes.pushFailed;
+
+      // Step 3: Evaluate all active, non-suspended registered profiles for recommendation updates & new job alerts
       const profiles = Object.values(loadUserProfiles() || {}).filter(
         (p: any) => p?.uid && p.accountStatus !== 'suspended'
       );
@@ -1463,12 +1866,15 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       environment: envReport,
       scheduler: {
         status: schedulerStatus,
-        cronPath: '/api/vacancies/sync',
-        cronSchedule: 'Event-Driven (Instant on Job Publish)',
+        cronPath: '/api/cron/notifications',
+        cronSchedule: 'Every 3 Days (Inactive Users Top-3 Push) + Instant on Publish',
         lastRunStartedAt: store.lastRunStartedAt,
         lastSuccessfulRunAt: store.lastSuccessfulRunAt,
+        lastInactiveCheckAt: store.lastInactiveCheckAt,
         lastRunStatus: store.lastRunStatus,
-        nextScheduledRunAt: 'Instant on Job Publish',
+        nextScheduledRunAt: store.lastInactiveCheckAt
+          ? new Date(new Date(store.lastInactiveCheckAt).getTime() + THREE_DAYS_MS).toISOString()
+          : 'Every 3 Days (Automatic)',
       },
       totals: {
         totalNotificationsSent,
@@ -1535,9 +1941,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     });
   }
 
-  // Persistent Node runtime only: periodic sweep + retry processor.
+  // Persistent Node runtime only: periodic sweep, retry processor & dedicated 3-day inactive user check.
   // On Vercel serverless deployments, Vercel Cron (/api/cron/notifications) triggers sweeps cleanly.
   if (!isVercel) {
+    const startupTimer = setTimeout(() => {
+      void executeAutomatedSchedulerSweep({ trigger: 'background_interval' });
+    }, 10 * 1000);
+    if (typeof startupTimer?.unref === 'function') startupTimer.unref();
+
     const retryTimer = setInterval(() => {
       void processRetryQueueCycle();
     }, 2 * 60 * 1000);
@@ -1547,6 +1958,12 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       void executeAutomatedSchedulerSweep({ trigger: 'background_interval' });
     }, 15 * 60 * 1000);
     if (typeof schedulerTimer?.unref === 'function') schedulerTimer.unref();
+
+    // Explicit 3-day recurring schedule for inactive user Top-3 reminder sweep
+    const threeDayInactiveTimer = setInterval(() => {
+      void runInactiveUsersThreeDayCheck();
+    }, THREE_DAYS_MS);
+    if (typeof threeDayInactiveTimer?.unref === 'function') threeDayInactiveTimer.unref();
   }
 
   // =========================================================================
@@ -1569,6 +1986,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     const hasDevices = Boolean(prefs.deviceSubscriptions?.some((d: any) => d.active && d.subscription?.endpoint));
     if (!hasDevices) return 0;
 
+    const appliedIds = getAppliedVacancyIdsForUser(uid);
     const allNotifs = loadAllNotifications();
     const userNotifs: any[] = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
     const pendingPush = userNotifs
@@ -1577,6 +1995,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           !n.read &&
           n.sourceType !== 'system' &&
           n.channels?.push !== 'sent' &&
+          !appliedIds.has(String(n.vacancyId)) &&
           !isDeadlineExpired(n.deadline || n.expiresAt)
       )
       .slice(0, 3);
@@ -1586,20 +2005,44 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     let pushedCount = 0;
     let mutated = false;
     for (const notif of pendingPush) {
-      const pushRes = await sendWebPushToUser(uid, {
-        title: `HOPELANDJOBS — ${notif.title}`,
-        body: `${notif.employer} (${notif.location}) · ${notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`}. Tap to apply.`,
-        url:
-          notif.sourceType === 'domestic_job'
-            ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&notificationId=${encodeURIComponent(notif.id)}`
-            : notif.jobUrl || '/',
-        jobId: notif.vacancyId,
-        notificationId: notif.id,
-        tag: `vacancy-${notif.vacancyId}`,
-        jobTitle: notif.title,
-        employer: notif.employer,
-        category: notif.category,
-      });
+      let pushRes;
+      if (Array.isArray(notif.topJobs) && notif.topJobs.length > 0) {
+        const topPayload = buildTop3MobilePushPayload({
+          topJobs: notif.topJobs,
+          notifId: notif.id,
+          cycleNumber: notif.reminderCount || 1,
+        });
+        pushRes = await sendWebPushToUser(uid, topPayload);
+      } else {
+        const isReminder = notif.alertKind === 'apply_reminder';
+        const cleanTitle = String(notif.title || '').replace(/^Reminder to Apply:\s*/i, '');
+        pushRes = await sendWebPushToUser(uid, {
+          title: isReminder ? `Hopeland Jobs · Reminder: Apply for ${cleanTitle}` : `Hopeland Jobs · ${notif.title}`,
+          body: isReminder
+            ? `${notif.employer} (${notif.location}) · Recommended for your profile${
+                notif.deadline && notif.deadline !== 'Open' ? ` · Deadline: ${notif.deadline}` : ''
+              }. Tap to view and apply now!`
+            : `${notif.employer} (${notif.location}) · ${
+                notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`
+              }. Tap to apply.`,
+          url:
+            notif.sourceType === 'domestic_job'
+              ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&apply=1&notificationId=${encodeURIComponent(notif.id)}`
+              : notif.jobUrl || '/',
+          jobId: notif.vacancyId,
+          notificationId: notif.id,
+          tag: isReminder
+            ? `vacancy-${notif.vacancyId}-rem-${notif.reminderCount || 1}`
+            : `vacancy-${notif.vacancyId}`,
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-badge-96x96.png',
+          actionType: 'open_job',
+          timestamp: Date.now(),
+          jobTitle: cleanTitle || notif.title,
+          employer: notif.employer,
+          category: notif.category,
+        });
+      }
       if (pushRes.deliveredCount > 0) {
         notif.channels = { ...(notif.channels || { website: 'delivered', email: 'skipped' }), push: 'sent' };
         notif.updatedAt = new Date().toISOString();
@@ -2140,6 +2583,26 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   // =========================================================================
   // ROUTES: VACANCIES CATALOG SYNC (TRIGGERS BACKGROUND MATCHING + ALERTS)
   // =========================================================================
+
+  app.get('/api/vacancies/:id', (req: Request, res: Response): void => {
+    const rawId = decodeURIComponent(String(req.params.id || '')).trim();
+    if (!rawId) {
+      res.status(400).json({ error: 'Vacancy ID is required' });
+      return;
+    }
+    const list = loadVacanciesCatalog();
+    const found = list.find(
+      (v: any) =>
+        v &&
+        v.status === 'published' &&
+        (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
+    );
+    if (!found) {
+      res.status(404).json({ error: 'Vacancy not found' });
+      return;
+    }
+    res.json({ success: true, vacancy: found });
+  });
 
   app.post('/api/vacancies/sync', async (req: Request, res: Response): Promise<void> => {
     const {
@@ -2749,6 +3212,27 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     });
   });
 
+  app.post('/api/admin/notifications/check-inactive', async (req: Request, res: Response): Promise<void> => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: 'Owner authorization required' });
+      return;
+    }
+    const dryRun = req.body?.dryRun === true;
+    const force = req.body?.force === true;
+    const targetUid = req.body?.targetUid ? String(req.body.targetUid) : undefined;
+    const result = await runInactiveUsersThreeDayCheck({ dryRun, force, targetUid });
+    if (!dryRun) {
+      appendAuditLog({
+        action: 'inactive_users_3day_top3_check',
+        actorEmail: getRequesterEmail(req) || 'owner',
+        targetType: 'user_notifications',
+        summary: `3-day inactive user check: ${result.inactiveUsersFound} inactive users found, ${result.remindersCreated} Top-3 reminders created, ${result.pushSucceeded} mobile push deliveries accepted.`,
+        severity: 'info',
+      });
+    }
+    res.json({ success: true, ...result });
+  });
+
   app.post('/api/admin/scheduler/verify-smtp', async (req: Request, res: Response): Promise<void> => {
     if (!isPersistentOwnerRequest(req)) {
       res.status(403).json({ error: 'Owner authorization required' });
@@ -3029,7 +3513,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
 
     const payload = {
-      title: String(customTitle || 'HOPELANDJOBS — Test Notification Active!'),
+      title: String(customTitle || 'Hopeland Jobs · Test Notification Active'),
       body: String(
         customBody ||
           'Direct real-time push notifications are configured and working on your device. Tap to open HopelandJobs.'
@@ -3366,6 +3850,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   });
 
   return {
+    runInactiveUsersThreeDayCheck,
     onUserProfileSaved: async (savedProfile: any, _isNewRegistration: boolean) => {
       if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
       const allPrefs = loadAllNotificationPrefs();

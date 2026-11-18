@@ -30,6 +30,7 @@ import {
   UserNotificationItem,
 } from '../types/jobSeeker';
 import { NotificationCenterPopover } from './NotificationCenterPopover';
+import { AppBrandLogo } from './AppBrandLogo';
 
 interface Props {
   siteSettings: SiteSettings;
@@ -163,9 +164,12 @@ export const Navbar: React.FC<Props> = ({
             }}
             className="flex items-center gap-2.5 cursor-pointer group shrink-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] rounded-lg"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#16A34A] flex items-center justify-center text-white shadow-xs group-hover:bg-[#15803D] transition-colors">
-              <Briefcase className="w-5 h-5" />
-            </div>
+            <AppBrandLogo
+              logoUrl={siteSettings.appLogoUrl}
+              size="md"
+              variant="green"
+              className="group-hover:brightness-95 transition-all"
+            />
             <span className="font-extrabold text-xl sm:text-[22px] tracking-tight text-[#0B132B] whitespace-nowrap shrink-0">
               Hopeland<span className="text-[#16A34A]">Jobs</span>
             </span>

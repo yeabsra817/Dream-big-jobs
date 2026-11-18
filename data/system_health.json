@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-17T13:45:30.026Z",
+  "checkedAt": "2026-11-18T09:27:32.413Z",
   "overallStatus": "HEALTHY",
-  "serverUptimeSeconds": 240,
+  "serverUptimeSeconds": 2,
   "storage": {
     "persistentDbWritable": true,
     "filesPresent": {
@@ -13,7 +13,7 @@
       "analytics_events": true
     },
     "backupCount": 3,
-    "latestBackupAt": "2026-11-17T13:18:09.592Z"
+    "latestBackupAt": "2026-11-18T09:00:54.873Z"
   },
   "telegramBot": {
     "configured": true,
@@ -23,8 +23,8 @@
     "channelId": "-1004499169829",
     "status": "CONNECTED",
     "statusCode": "connected",
-    "lastCheckedAt": "2026-11-17T13:45:29.953Z",
-    "lastSuccessfulTestAt": "2026-11-17T13:45:29.953Z",
+    "lastCheckedAt": "2026-11-18T09:27:32.354Z",
+    "lastSuccessfulTestAt": "2026-11-18T09:27:32.354Z",
     "lastError": null,
     "consecutiveFailures": 0,
     "reconnectAttempts": 0,
@@ -35,7 +35,7 @@
     "gaMeasurementId": "G-KH6X73105S",
     "gaTrackingEnabled": true,
     "alwaysOnEnforced": true,
-    "totalEventsRecorded": 8
+    "totalEventsRecorded": 7
   },
   "counts": {
     "vacancies": 0,

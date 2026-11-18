@@ -12,10 +12,13 @@ import {
   FileText,
   Globe,
   X,
+  Image as ImageIcon,
+  RotateCcw,
 } from 'lucide-react';
 import { SiteSettings, Vacancy, DuplicateReportItem, OFFICIAL_CATEGORIES } from '../../types/job';
 import { generateFullSystemBackupSnapshot } from '../../lib/firebase';
 import { DEFAULT_GA_MEASUREMENT_ID } from '../../lib/analyticsTracker';
+import { AppBrandLogo } from '../AppBrandLogo';
 
 interface Props {
   settings: SiteSettings;
@@ -43,6 +46,8 @@ export const SiteSettingsPanel: React.FC<Props> = ({
   );
   const [customDomain, setCustomDomain] = useState(settings.customDomain || 'hopelandjobs.tech');
   const [aboutText, setAboutText] = useState(settings.aboutText || '');
+  const [appLogoUrl, setAppLogoUrl] = useState(settings.appLogoUrl || '');
+  const [isSavingLogo, setIsSavingLogo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -53,8 +58,117 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     dateLabel: string;
   } | null>(null);
 
+  React.useEffect(() => {
+    setAppLogoUrl(settings.appLogoUrl || '');
+  }, [settings.appLogoUrl]);
+
   const showFeedback = (type: 'success' | 'error', text: string) => {
     setFeedback({ type, text });
+  };
+
+  const compressLogoFileToDataUri = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      if (file.type === 'image/svg+xml') {
+        if (file.size > 90 * 1024) {
+          reject(new Error('SVG logo must be under 90 KB.'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read SVG logo file.'));
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 256;
+          const scale = Math.min(1, maxDim / Math.max(img.width || maxDim, img.height || maxDim));
+          const width = Math.max(32, Math.round((img.width || maxDim) * scale));
+          const height = Math.max(32, Math.round((img.height || maxDim) * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Canvas context unavailable for resizing logo.'));
+            return;
+          }
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          URL.revokeObjectURL(objectUrl);
+
+          let dataUri = canvas.toDataURL('image/png');
+          if (dataUri.length > 140000) {
+            dataUri = canvas.toDataURL('image/webp', 0.85);
+          }
+          if (dataUri.length > 180000) {
+            dataUri = canvas.toDataURL('image/jpeg', 0.82);
+          }
+          if (dataUri.length > 260000) {
+            reject(new Error('Compressed logo exceeds 260 KB. Please choose a simpler square icon.'));
+            return;
+          }
+          resolve(dataUri);
+        } catch (err: any) {
+          URL.revokeObjectURL(objectUrl);
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Unsupported or corrupted image file. Use PNG, JPG, WebP, or SVG.'));
+      };
+      img.src = objectUrl;
+    });
+
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFeedback(null);
+    try {
+      const dataUri = await compressLogoFileToDataUri(file);
+      setAppLogoUrl(dataUri);
+      showFeedback('success', 'Logo image loaded! Click "Save App Logo" below to publish it across the website and mobile app icon.');
+    } catch (err: any) {
+      showFeedback('error', err?.message || 'Could not process selected logo image.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveLogo = async (overrideLogo?: string) => {
+    setIsSavingLogo(true);
+    setFeedback(null);
+    try {
+      const cleanLogo = (overrideLogo !== undefined ? overrideLogo : appLogoUrl).trim();
+      if (cleanLogo && !cleanLogo.startsWith('data:image/') && !/^https?:\/\//i.test(cleanLogo)) {
+        showFeedback('error', 'Logo URL must start with https:// or be an uploaded image.');
+        setIsSavingLogo(false);
+        return;
+      }
+      const nowIso = new Date().toISOString();
+      await onSaveSettings({
+        ...settings,
+        appLogoUrl: cleanLogo,
+        appLogoUpdatedAt: nowIso,
+        updatedAt: nowIso,
+      });
+      setAppLogoUrl(cleanLogo);
+      showFeedback(
+        'success',
+        cleanLogo
+          ? 'Custom App Logo saved! All website headers, popups, browser tabs, and mobile manifest icons now use your new logo.'
+          : 'App Logo reset to default HopelandJobs emblem.'
+      );
+    } catch (err: any) {
+      showFeedback('error', 'Error saving app logo: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingLogo(false);
+    }
   };
 
   const handleSave = async () => {
@@ -62,6 +176,7 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     setFeedback(null);
     try {
       const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
+      const nowIso = new Date().toISOString();
       await onSaveSettings({
         ...settings,
         contactEmail: contactEmail.trim(),
@@ -69,9 +184,14 @@ export const SiteSettingsPanel: React.FC<Props> = ({
         contactAddress: contactAddress.trim(),
         customDomain: cleanDomain,
         aboutText: aboutText.trim(),
+        appLogoUrl: appLogoUrl.trim(),
+        appLogoUpdatedAt:
+          appLogoUrl.trim() !== (settings.appLogoUrl || '').trim()
+            ? nowIso
+            : settings.appLogoUpdatedAt || nowIso,
         gaMeasurementId: settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
         gaTrackingEnabled: settings.gaTrackingEnabled !== false,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       });
       showFeedback(
         'success',
@@ -311,7 +431,7 @@ export const SiteSettingsPanel: React.FC<Props> = ({
               />
             </div>
             <p className="text-[11px] text-slate-600 mt-2 leading-relaxed">
-              💡 When you change your domain here (e.g. to <strong>hopelandjobs.tech</strong>), all Telegram vacancy broadcasts will automatically post links using this domain (e.g. <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">👉Read Detail:- https://{customDomain || 'hopelandjobs.tech'}/?jobId=...</code> and <code className="bg-white px-1.5 py-0.5 rounded border text-slate-800">=&gt;See Detail:- https://{customDomain || 'hopelandjobs.tech'}</code>).
+              💡 When you change your domain here (e.g. to <strong>hopelandjobs.tech</strong>), all Telegram Apply Now buttons and notification deep links will automatically point to this domain.
             </p>
           </div>
         </div>
@@ -335,6 +455,109 @@ export const SiteSettingsPanel: React.FC<Props> = ({
         >
           {isSaving ? 'Saving...' : 'Save Website Information'}
         </button>
+      </div>
+
+      {/* App Logo & Mobile Icon Branding */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+        <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-[#16A34A]" />
+            <div>
+              <h2 className="text-xl font-bold text-[#0B132B]">
+                App Logo &amp; Mobile Icon Branding
+              </h2>
+              <p className="text-xs text-slate-500">
+                Change the logo across the website header, install popups, browser tabs, and mobile Home Screen icon whenever data loads.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          {/* Live Preview */}
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+              Live Brand Preview
+            </span>
+
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 flex items-center gap-2.5 shadow-2xs">
+              <AppBrandLogo logoUrl={appLogoUrl} size="md" variant="green" />
+              <span className="font-extrabold text-lg tracking-tight text-[#0B132B]">
+                Hopeland<span className="text-[#16A34A]">Jobs</span>
+              </span>
+            </div>
+
+            <div className="bg-[#0B132B] p-4 rounded-xl flex items-center gap-3">
+              <AppBrandLogo logoUrl={appLogoUrl} size="xl" variant="amber" />
+              <div>
+                <p className="text-xs font-extrabold text-white">Phone Home Screen</p>
+                <p className="text-[11px] text-slate-300">PWA &amp; Notification Icon</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload & URL Controls */}
+          <div className="md:col-span-2 space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs cursor-pointer transition-colors shadow-xs">
+                <Upload className="w-4 h-4" />
+                <span>Upload Logo Image (PNG / JPG / SVG)</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={handleLogoFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              {appLogoUrl && (
+                <button
+                  type="button"
+                  onClick={() => handleSaveLogo('')}
+                  disabled={isSavingLogo}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset to Default</span>
+                </button>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">
+                Or Paste Direct Logo Image URL (HTTPS)
+              </label>
+              <input
+                type="text"
+                value={appLogoUrl.startsWith('data:image/') ? '' : appLogoUrl}
+                onChange={(e) => setAppLogoUrl(e.target.value)}
+                placeholder={
+                  appLogoUrl.startsWith('data:image/')
+                    ? 'Custom uploaded image stored (paste an https:// URL to replace)'
+                    : 'https://example.com/hopeland-logo.png'
+                }
+                className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-[#16A34A] outline-none font-mono"
+              />
+              {appLogoUrl.startsWith('data:image/') && (
+                <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                  Uploaded logo ready ({Math.round(appLogoUrl.length / 1024)} KB compressed). Click Save App Logo to apply live.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSaveLogo()}
+                disabled={isSavingLogo}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B132B] hover:bg-amber-500 hover:text-slate-950 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSavingLogo ? 'Publishing Logo...' : 'Save App Logo'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Backup and Restore Data */}

@@ -134,6 +134,483 @@ export function isDeadlineApproaching(deadline?: string, withinHours = 72): bool
   return diffMs > 0 && diffMs <= withinHours * 60 * 60 * 1000;
 }
 
+export interface ExperienceMatchAssessment {
+  isMatch: boolean;
+  matchType: 'direct' | 'related' | 'none';
+  score: number;
+  badgeLabel: string;
+  matchedUserDomains: string[];
+  matchedJobDomains: string[];
+  meetsYearsRequirement: boolean;
+  yearsWarning?: string;
+}
+
+export interface ProfessionFamilyDef {
+  id: string;
+  label: string;
+  patterns: RegExp[];
+  excludePattern?: RegExp;
+  relatedIds: string[];
+}
+
+export const PROFESSION_FAMILIES: ProfessionFamilyDef[] = [
+  {
+    id: 'banking',
+    label: 'Banking',
+    patterns: [
+      /\bbank(?:ing|er|s)?\b/i,
+      /\bteller\b/i,
+      /\bcredit analyst\b/i,
+      /\bloan officer\b/i,
+      /\bbranch manager\b/i,
+      /\btrade finance\b/i,
+      /\bmicrofinance\b/i,
+      /\bmfi\b/i,
+      /\bsacco\b/i,
+      /\btreasury\b/i,
+      /\bcore banking\b/i,
+      /\bkyc\b/i,
+      /\baml\b/i,
+      /\brelationship manager\b/i,
+    ],
+    excludePattern: /\b(blood bank|food bank|river bank|data bank|question bank)\b/i,
+    relatedIds: ['finance', 'insurance', 'economics', 'sales_marketing', 'legal_compliance', 'customer_service'],
+  },
+  {
+    id: 'finance',
+    label: 'Finance & Accounting',
+    patterns: [
+      /\bfinance\b/i,
+      /\bfinancial\b/i,
+      /\baccount(?:ant|ing|ancy|s)\b/i,
+      /\baudit(?:or|ing)?\b/i,
+      /\btax(?:ation)?\b/i,
+      /\bcpa\b/i,
+      /\bacca\b/i,
+      /\bifrs\b/i,
+      /\bbookkeep(?:er|ing)\b/i,
+      /\bpayroll\b/i,
+      /\bbudget(?:ing)?\b/i,
+      /\bfinancial controller\b/i,
+      /\btreasurer\b/i,
+      /\bcost(?:ing)? analyst\b/i,
+    ],
+    relatedIds: ['banking', 'insurance', 'economics', 'logistics_supply', 'legal_compliance'],
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance & Risk',
+    patterns: [
+      /\binsurance\b/i,
+      /\bunderwrit(?:er|ing)\b/i,
+      /\bclaims? (?:officer|adjuster|analyst|manager)\b/i,
+      /\bactuar(?:y|ial)\b/i,
+      /\breinsurance\b/i,
+      /\brisk management\b/i,
+      /\brisk analyst\b/i,
+    ],
+    relatedIds: ['banking', 'finance', 'economics', 'legal_compliance'],
+  },
+  {
+    id: 'economics',
+    label: 'Economics & Investment',
+    patterns: [
+      /\beconom(?:ics|ist)\b/i,
+      /\binvestment\b/i,
+      /\bcapital market\b/i,
+      /\bportfolio\b/i,
+      /\bwealth management\b/i,
+      /\bfinancial modeling\b/i,
+      /\bvaluation\b/i,
+    ],
+    relatedIds: ['finance', 'banking', 'insurance', 'data_analytics'],
+  },
+  {
+    id: 'it_software',
+    label: 'IT & Software',
+    patterns: [
+      /\bsoftware\b/i,
+      /\bdeveloper\b/i,
+      /\bprogrammer\b/i,
+      /\bfull[- ]?stack\b/i,
+      /\bfront[- ]?end\b/i,
+      /\bback[- ]?end\b/i,
+      /\bdevops\b/i,
+      /\bcloud engineer\b/i,
+      /\bcyber ?security\b/i,
+      /\bsysadmin\b/i,
+      /\bsystems? admin(?:istrator)?\b/i,
+      /\bict\b/i,
+      /\bit support\b/i,
+      /\bit officer\b/i,
+      /\binformation technology\b/i,
+      /\bcomputer science\b/i,
+      /\bdatabase admin\b/i,
+      /\bui\/?ux\b/i,
+      /\bqa engineer\b/i,
+      /\bweb designer\b/i,
+    ],
+    relatedIds: ['data_analytics', 'telecom', 'engineering_electromech', 'project_management'],
+  },
+  {
+    id: 'data_analytics',
+    label: 'Data & Analytics',
+    patterns: [
+      /\bdata scien(?:ce|tist)\b/i,
+      /\bdata analyst\b/i,
+      /\bbusiness intelligence\b/i,
+      /\bmachine learning\b/i,
+      /\bstatistic(?:s|ian)\b/i,
+      /\banalytics\b/i,
+      /\bpower ?bi\b/i,
+      /\btableau\b/i,
+      /\bmonitoring (?:&|and) evaluation\b/i,
+      /\bm&e\b/i,
+    ],
+    relatedIds: ['it_software', 'economics', 'finance', 'ngo_humanitarian', 'education_training'],
+  },
+  {
+    id: 'telecom',
+    label: 'Telecom & Networks',
+    patterns: [
+      /\btelecom(?:munication|s)?\b/i,
+      /\bsafaricom\b/i,
+      /\bethio telecom\b/i,
+      /\brf engineer\b/i,
+      /\bfiber optic\b/i,
+      /\bnetwork engineer(?:ing)?\b/i,
+      /\bnetwork admin\b/i,
+    ],
+    relatedIds: ['it_software', 'engineering_electromech', 'sales_marketing'],
+  },
+  {
+    id: 'ngo_humanitarian',
+    label: 'NGO & Humanitarian',
+    patterns: [
+      /\bngo\b/i,
+      /\bingo\b/i,
+      /\bhumanitarian\b/i,
+      /\bunicef\b/i,
+      /\bundp\b/i,
+      /\bwfp\b/i,
+      /\bunhcr\b/i,
+      /\bunited nations\b/i,
+      /\brelief\b/i,
+      /\blivelihood(?:s)?\b/i,
+      /\bcommunity development\b/i,
+      /\bsocial work(?:er)?\b/i,
+      /\bgrant(?:s)? coordinator\b/i,
+      /\bprogram(?:me)? officer\b/i,
+      /\bprotection officer\b/i,
+      /\bchild protection\b/i,
+      /\bcivil society\b/i,
+    ],
+    relatedIds: ['wash', 'healthcare_public', 'project_management', 'logistics_supply', 'agriculture_env', 'education_training', 'data_analytics'],
+  },
+  {
+    id: 'wash',
+    label: 'WASH & Water Engineering',
+    patterns: [
+      /\bwash\b/i,
+      /\bwater supply\b/i,
+      /\bsanitation\b/i,
+      /\bhygiene\b/i,
+      /\bhydrogeolog(?:y|ist)\b/i,
+      /\bwater engineer(?:ing)?\b/i,
+      /\bhydraulic\b/i,
+    ],
+    relatedIds: ['ngo_humanitarian', 'engineering_civil', 'healthcare_public'],
+  },
+  {
+    id: 'healthcare_clinical',
+    label: 'Healthcare & Medical',
+    patterns: [
+      /\bnurs(?:e|ing)\b/i,
+      /\bdoctor\b/i,
+      /\bphysician\b/i,
+      /\bmedical\b/i,
+      /\bclinical\b/i,
+      /\bpharmac(?:y|ist)\b/i,
+      /\blab(?:oratory)? technologist\b/i,
+      /\bmidwif(?:e|ery)\b/i,
+      /\bhospital\b/i,
+      /\bdent(?:al|ist)\b/i,
+      /\bcaregiver\b/i,
+      /\belderly care\b/i,
+      /\bhealthcare\b/i,
+      /\bhealth care\b/i,
+      /\bsurgeon\b/i,
+      /\bphysiotherap(?:y|ist)\b/i,
+    ],
+    relatedIds: ['healthcare_public', 'ngo_humanitarian'],
+  },
+  {
+    id: 'healthcare_public',
+    label: 'Public Health & Nutrition',
+    patterns: [
+      /\bpublic health\b/i,
+      /\bmph\b/i,
+      /\bnutrition(?:ist)?\b/i,
+      /\bepidemiolog(?:y|ist)\b/i,
+      /\benvironmental health\b/i,
+      /\bhealth coordinator\b/i,
+      /\bhealth officer\b/i,
+    ],
+    relatedIds: ['healthcare_clinical', 'ngo_humanitarian', 'wash'],
+  },
+  {
+    id: 'engineering_civil',
+    label: 'Civil & Construction',
+    patterns: [
+      /\bcivil engineer(?:ing)?\b/i,
+      /\bconstruction\b/i,
+      /\barchitect(?:ure|ural)?\b/i,
+      /\bstructural engineer\b/i,
+      /\bquantity survey(?:or|ing)\b/i,
+      /\bsite engineer\b/i,
+      /\broad engineer\b/i,
+      /\burban plan(?:ner|ning)\b/i,
+      /\bautocad\b/i,
+    ],
+    relatedIds: ['wash', 'engineering_electromech', 'project_management', 'skilled_trades'],
+  },
+  {
+    id: 'engineering_electromech',
+    label: 'Electrical & Mechanical Engineering',
+    patterns: [
+      /\belectrical engineer(?:ing)?\b/i,
+      /\bmechanical engineer(?:ing)?\b/i,
+      /\belectromechanical\b/i,
+      /\bindustrial engineer(?:ing)?\b/i,
+      /\bmaintenance engineer\b/i,
+      /\bplant engineer\b/i,
+      /\bhvac\b/i,
+      /\bmechatronics\b/i,
+      /\bpower engineer\b/i,
+    ],
+    relatedIds: ['engineering_civil', 'manufacturing_ops', 'skilled_trades', 'telecom', 'it_software'],
+  },
+  {
+    id: 'manufacturing_ops',
+    label: 'Manufacturing & Production',
+    patterns: [
+      /\bmanufactur(?:ing|er)\b/i,
+      /\bfactory\b/i,
+      /\bproduction (?:manager|supervisor|engineer|operator)\b/i,
+      /\bquality control\b/i,
+      /\bquality assurance\b/i,
+      /\bplant manager\b/i,
+      /\btextile\b/i,
+      /\bbrewery\b/i,
+      /\bfood processing\b/i,
+    ],
+    relatedIds: ['engineering_electromech', 'logistics_supply', 'agriculture_env'],
+  },
+  {
+    id: 'hospitality_tourism',
+    label: 'Hospitality & Culinary',
+    patterns: [
+      /\bhotel\b/i,
+      /\bhospitality\b/i,
+      /\btourism\b/i,
+      /\bchef\b/i,
+      /\bcook\b/i,
+      /\bculinary\b/i,
+      /\brestaurant\b/i,
+      /\bhousekeeping\b/i,
+      /\bfood (?:&|and) beverage\b/i,
+      /\bfront desk\b/i,
+      /\breceptionist\b/i,
+      /\bresort\b/i,
+      /\bcatering\b/i,
+      /\bwaiter\b/i,
+      /\bwaitress\b/i,
+    ],
+    relatedIds: ['aviation_travel', 'customer_service'],
+  },
+  {
+    id: 'aviation_travel',
+    label: 'Airlines & Aviation',
+    patterns: [
+      /\bairline\b/i,
+      /\baviation\b/i,
+      /\bcabin crew\b/i,
+      /\bflight attendant\b/i,
+      /\bairport\b/i,
+      /\bpilot\b/i,
+      /\baircraft\b/i,
+      /\bticketing\b/i,
+      /\btravel agent\b/i,
+      /\bground staff\b/i,
+    ],
+    relatedIds: ['hospitality_tourism', 'customer_service', 'logistics_supply'],
+  },
+  {
+    id: 'hr_admin',
+    label: 'HR & Administration',
+    patterns: [
+      /\bhuman resource(?:s)?\b/i,
+      /\bhr\b/i,
+      /\brecruit(?:er|ment)\b/i,
+      /\btalent acquisition\b/i,
+      /\boffice manager\b/i,
+      /\bexecutive assistant\b/i,
+      /\badmin(?:istration|istrative)? (?:officer|assistant|manager)\b/i,
+      /\bsecretary\b/i,
+      /\bpeople operations\b/i,
+    ],
+    relatedIds: ['legal_compliance', 'education_training', 'customer_service', 'project_management'],
+  },
+  {
+    id: 'logistics_supply',
+    label: 'Logistics & Procurement',
+    patterns: [
+      /\blogistics\b/i,
+      /\bsupply chain\b/i,
+      /\bprocurement\b/i,
+      /\bpurchasing\b/i,
+      /\bwarehouse\b/i,
+      /\binventory\b/i,
+      /\bstorekeeper\b/i,
+      /\bfreight\b/i,
+      /\bimport\/?export\b/i,
+      /\bcustoms\b/i,
+      /\bfleet\b/i,
+      /\bdispatch(?:er)?\b/i,
+    ],
+    relatedIds: ['finance', 'ngo_humanitarian', 'manufacturing_ops', 'skilled_trades', 'aviation_travel'],
+  },
+  {
+    id: 'sales_marketing',
+    label: 'Sales & Marketing',
+    patterns: [
+      /\bsales\b/i,
+      /\bmarketing\b/i,
+      /\bbusiness development\b/i,
+      /\baccount manager\b/i,
+      /\baccount executive\b/i,
+      /\bretail\b/i,
+      /\bbrand manager\b/i,
+      /\bpublic relations\b/i,
+      /\bdigital marketing\b/i,
+      /\bmerchandising\b/i,
+    ],
+    relatedIds: ['banking', 'customer_service', 'telecom'],
+  },
+  {
+    id: 'customer_service',
+    label: 'Customer Service',
+    patterns: [
+      /\bcustomer service\b/i,
+      /\bcustomer support\b/i,
+      /\bcall center\b/i,
+      /\bclient relations\b/i,
+      /\bhelpdesk\b/i,
+      /\bfront office\b/i,
+    ],
+    relatedIds: ['banking', 'hospitality_tourism', 'aviation_travel', 'sales_marketing', 'hr_admin'],
+  },
+  {
+    id: 'education_training',
+    label: 'Education & Training',
+    patterns: [
+      /\bteacher\b/i,
+      /\bteaching\b/i,
+      /\blecturer\b/i,
+      /\bprofessor\b/i,
+      /\binstructor\b/i,
+      /\btutor\b/i,
+      /\bcurriculum\b/i,
+      /\bacademic\b/i,
+      /\btrainer\b/i,
+      /\beducation officer\b/i,
+    ],
+    relatedIds: ['hr_admin', 'ngo_humanitarian', 'data_analytics'],
+  },
+  {
+    id: 'legal_compliance',
+    label: 'Legal & Compliance',
+    patterns: [
+      /\blegal\b/i,
+      /\blawyer\b/i,
+      /\battorney\b/i,
+      /\bcompliance\b/i,
+      /\bcontract(?:s)? (?:specialist|manager|officer)\b/i,
+      /\bparalegal\b/i,
+      /\bregulatory\b/i,
+      /\bpolicy advisor\b/i,
+      /\bgovernance\b/i,
+    ],
+    relatedIds: ['banking', 'finance', 'insurance', 'hr_admin'],
+  },
+  {
+    id: 'project_management',
+    label: 'Project Management',
+    patterns: [
+      /\bproject manager\b/i,
+      /\bproject management\b/i,
+      /\bprogram manager\b/i,
+      /\bpmp\b/i,
+      /\bscrum master\b/i,
+      /\bproject coordinator\b/i,
+      /\boperations manager\b/i,
+    ],
+    relatedIds: ['ngo_humanitarian', 'engineering_civil', 'it_software', 'hr_admin'],
+  },
+  {
+    id: 'agriculture_env',
+    label: 'Agriculture & Environment',
+    patterns: [
+      /\bagricultur(?:e|al)\b/i,
+      /\bagronom(?:y|ist)\b/i,
+      /\bveterinar(?:y|ian)\b/i,
+      /\bforestry\b/i,
+      /\bfood security\b/i,
+      /\benvironmental\b/i,
+      /\bclimate\b/i,
+      /\bhorticulture\b/i,
+      /\blivestock\b/i,
+      /\bagribusiness\b/i,
+    ],
+    relatedIds: ['ngo_humanitarian', 'manufacturing_ops'],
+  },
+  {
+    id: 'skilled_trades',
+    label: 'Skilled Trades & Driving',
+    patterns: [
+      /\bdriver\b/i,
+      /\bdriving\b/i,
+      /\bmechanic\b/i,
+      /\belectrician\b/i,
+      /\bplumber\b/i,
+      /\bwelder\b/i,
+      /\bcarpenter\b/i,
+      /\bmason\b/i,
+      /\bheavy equipment\b/i,
+      /\bforklift\b/i,
+      /\bsecurity guard\b/i,
+      /\btechnician\b/i,
+      /\bcleaner\b/i,
+      /\bjanitor\b/i,
+    ],
+    relatedIds: ['engineering_electromech', 'engineering_civil', 'logistics_supply'],
+  },
+];
+
+const PROFESSION_FAMILY_MAP = new Map(PROFESSION_FAMILIES.map((f) => [f.id, f]));
+
+export function extractProfessionFamilies(text: string): ProfessionFamilyDef[] {
+  if (!text || !text.trim()) return [];
+  const matched: ProfessionFamilyDef[] = [];
+  for (const fam of PROFESSION_FAMILIES) {
+    const cleaned = fam.excludePattern ? text.replace(fam.excludePattern, ' ') : text;
+    if (fam.patterns.some((rx) => rx.test(cleaned))) {
+      matched.push(fam);
+    }
+  }
+  return matched;
+}
+
 // Broad sector keyword mapping across all Ethiopian & international sectors
 const SECTOR_ALIAS_GROUPS: Array<{ label: string; keywords: string[] }> = [
   { label: 'banking', keywords: ['bank', 'banking', 'commercial bank', 'branch manager', 'credit', 'teller', 'treasury', 'loan officer', 'customer service officer'] },
@@ -165,6 +642,205 @@ function extractSectorTags(text: string): string[] {
     }
   }
   return found;
+}
+
+export function hasProfileExperienceSignals(profile: JobSeekerProfile | null | undefined): boolean {
+  if (!profile) return false;
+  return Boolean(
+    (Array.isArray(profile.experience) && profile.experience.length > 0) ||
+      (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
+      (Array.isArray(profile.previousPositions) && profile.previousPositions.some((p) => p.trim().length >= 2)) ||
+      (Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0) ||
+      (Array.isArray(profile.skills) && profile.skills.length > 0) ||
+      (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2) ||
+      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      (Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0) ||
+      (Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || '').trim().length >= 2))
+  );
+}
+
+function getProfileExperienceText(profile: JobSeekerProfile): {
+  primaryExperienceText: string;
+  secondaryProfileText: string;
+  allText: string;
+} {
+  const expEntriesText = (profile.experience || [])
+    .map((e) => `${e.jobTitle || ''} ${e.companyName || ''} ${e.responsibilities || ''}`)
+    .join(' ');
+  const prevPosText = (profile.previousPositions || []).join(' ');
+  const primaryExperienceText = [
+    expEntriesText,
+    profile.currentPosition || '',
+    prevPosText,
+    ...(profile.areasOfExpertise || []),
+    ...(profile.skills || []),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const secondaryProfileText = [
+    profile.desiredJobTitle || '',
+    profile.preferredIndustry || '',
+    ...(profile.preferredSectors || []),
+    ...(profile.professionalInterests || []),
+    ...(profile.education || []).map((e) => `${e.fieldOfStudy || ''} ${e.qualification || ''}`),
+    ...(profile.certifications || []).map((c) => `${c.name || ''}`),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return {
+    primaryExperienceText,
+    secondaryProfileText,
+    allText: `${primaryExperienceText} ${secondaryProfileText}`.trim(),
+  };
+}
+
+function assessExperienceAgainstJobText(
+  profile: JobSeekerProfile | null | undefined,
+  jobCoreText: string,
+  jobBroadText: string,
+  requiredExperienceText: string | undefined
+): ExperienceMatchAssessment {
+  const empty: ExperienceMatchAssessment = {
+    isMatch: false,
+    matchType: 'none',
+    score: 0,
+    badgeLabel: '',
+    matchedUserDomains: [],
+    matchedJobDomains: [],
+    meetsYearsRequirement: true,
+  };
+  if (!profile || !hasProfileExperienceSignals(profile)) return empty;
+
+  const userExpYears = getProfileExplicitExperienceYears(profile);
+  const reqYears = parseMinRequiredYears(requiredExperienceText);
+  const meetsYearsRequirement = reqYears === null || userExpYears >= reqYears;
+  const yearsGap = reqYears !== null ? reqYears - userExpYears : 0;
+  const yearsWarning = !meetsYearsRequirement
+    ? `Requires ${reqYears}+ yrs (profile has ${userExpYears} yrs)`
+    : undefined;
+
+  const { primaryExperienceText, allText } = getProfileExperienceText(profile);
+  const primaryFamilies = extractProfessionFamilies(primaryExperienceText);
+  const userFamilies =
+    primaryFamilies.length > 0 ? primaryFamilies : extractProfessionFamilies(allText);
+
+  const jobCoreFamilies = extractProfessionFamilies(jobCoreText);
+  const jobFamilies =
+    jobCoreFamilies.length > 0 ? jobCoreFamilies : extractProfessionFamilies(jobBroadText);
+
+  const tokens = tokenizeProfileKeywords(profile);
+  const jobLower = `${jobCoreText} ${jobBroadText}`.toLowerCase();
+
+  const matchedTitleTokens = tokens.titleTokens.filter((t) => jobLower.includes(t));
+  const matchedSkillTokens = Array.from(
+    new Set([
+      ...tokens.skillTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
+      ...tokens.expertiseTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
+      ...tokens.expertiseWordTokens.filter((w) => jobLower.includes(w)),
+    ])
+  );
+
+  // 1. Direct Profession Family Match
+  const directFamilies = userFamilies.filter((uf) => jobFamilies.some((jf) => jf.id === uf.id));
+
+  // 2. Related Profession Family Match (e.g. Banking experience -> Finance job)
+  let bestRelatedPair: { user: ProfessionFamilyDef; job: ProfessionFamilyDef } | null = null;
+  if (directFamilies.length === 0) {
+    for (const uf of userFamilies) {
+      for (const jf of jobFamilies) {
+        if (uf.relatedIds.includes(jf.id) || jf.relatedIds.includes(uf.id)) {
+          bestRelatedPair = { user: uf, job: jf };
+          break;
+        }
+      }
+      if (bestRelatedPair) break;
+    }
+  }
+
+  let matchType: 'direct' | 'related' | 'none' = 'none';
+  let score = 0;
+  let badgeLabel = '';
+
+  if (directFamilies.length > 0 || matchedTitleTokens.length > 0 || matchedSkillTokens.length >= 2) {
+    matchType = 'direct';
+    const primaryLabel =
+      directFamilies[0]?.label ||
+      profile.currentPosition ||
+      profile.areasOfExpertise?.[0] ||
+      'Your Experience';
+    score =
+      72 +
+      Math.min(18, directFamilies.length * 10) +
+      Math.min(15, matchedTitleTokens.length * 6) +
+      Math.min(12, matchedSkillTokens.length * 4);
+    badgeLabel = `Matches ${primaryLabel} Experience`;
+  } else if (bestRelatedPair) {
+    matchType = 'related';
+    score =
+      58 +
+      Math.min(10, matchedSkillTokens.length * 4) +
+      Math.min(8, matchedTitleTokens.length * 4);
+    badgeLabel = `Related Field: ${bestRelatedPair.user.label} → ${bestRelatedPair.job.label}`;
+  } else if (matchedSkillTokens.length === 1) {
+    matchType = 'related';
+    score = 46;
+    badgeLabel = `Related Skill: ${matchedSkillTokens[0]}`;
+  }
+
+  if (matchType === 'none') return empty;
+
+  // Years adjustment: keep fully qualified jobs ranked highest
+  if (meetsYearsRequirement) {
+    score += 12;
+  } else if (yearsGap <= 2) {
+    score -= 6;
+  } else if (yearsGap <= 5) {
+    score -= 18;
+  } else {
+    // Large seniority gap: still demote cleanly; avoid false match when >6yr over profile
+    score -= 32;
+  }
+
+  return {
+    isMatch: true,
+    matchType,
+    score: Math.max(10, Math.min(100, score)),
+    badgeLabel,
+    matchedUserDomains: userFamilies.map((f) => f.label),
+    matchedJobDomains: jobFamilies.map((f) => f.label),
+    meetsYearsRequirement,
+    yearsWarning,
+  };
+}
+
+export function assessVacancyExperienceMatch(
+  profile: JobSeekerProfile | null | undefined,
+  v: Vacancy
+): ExperienceMatchAssessment {
+  const skillsArr = Array.isArray(v.requiredSkills)
+    ? v.requiredSkills
+    : v.requiredSkills
+      ? [String(v.requiredSkills)]
+      : [];
+  const respArr = Array.isArray(v.responsibilities)
+    ? v.responsibilities
+    : v.responsibilities
+      ? [String(v.responsibilities)]
+      : [];
+  const coreText = `${v.title || ''} ${v.category || ''} ${v.requiredFieldOfStudy || ''} ${skillsArr.join(' ')}`;
+  const broadText = `${coreText} ${v.organization || ''} ${v.description || ''} ${respArr.join(' ')}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears);
+}
+
+export function assessInternationalJobExperienceMatch(
+  profile: JobSeekerProfile | null | undefined,
+  ij: InternationalJob
+): ExperienceMatchAssessment {
+  const coreText = `${ij.jobTitle || ''} ${ij.category || ''} ${ij.requiredEducation || ''}`;
+  const broadText = `${coreText} ${ij.employerOrProgramme || ''} ${ij.visaSponsorshipInfo || ''} ${ij.officialApplicationInstructions || ''}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience);
 }
 
 function tokenizeProfileKeywords(profile: JobSeekerProfile) {
@@ -444,12 +1120,23 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(`Preferred location: ${v.location}`);
     }
 
-    // Direct role, expertise, skill, study, or certification fit (never sector-only noise)
+    // Experience & Related-Profession Match (e.g. Banking -> Banking & Finance/Accounting)
+    const expAssessment = assessVacancyExperienceMatch(profile, v);
+    if (expAssessment.isMatch && expAssessment.matchType === 'direct') {
+      score += 24;
+      reasons.push(expAssessment.badgeLabel);
+    } else if (expAssessment.isMatch && expAssessment.matchType === 'related') {
+      score += 22;
+      reasons.push(expAssessment.badgeLabel);
+    }
+
+    // Direct role, expertise, skill, study, certification, or experience-family fit
     const hasDirectDomainFit =
       matchedTitleWords.length > 0 ||
       matchedSkills.length > 0 ||
       matchedStudy.length > 0 ||
-      matchedCerts.length > 0;
+      matchedCerts.length > 0 ||
+      expAssessment.isMatch;
 
     // Exclude unrelated jobs from recommendations when score is weak or there is no genuine domain/sector connection
     const hasRelevantMatch =
@@ -480,7 +1167,7 @@ export function computeStaffOpportunityRecommendations(
       eligibilityStatus: isFullyQualified ? 'Eligible' : 'Partially Qualified',
       isFullyQualified,
       strictlyQualified,
-      matchReasons: reasons.slice(0, 5),
+      matchReasons: Array.from(new Set(reasons)).slice(0, 5),
       missingMandatoryQualifications: missingMandatory,
       requiredExperienceText: v.experienceYears || 'Not specified',
       requiredEducationText: v.educationQualification || 'Not specified',
@@ -535,6 +1222,22 @@ export function computeStaffOpportunityRecommendations(
       score += Math.min(30, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
       reasons.push(`Skill/expertise alignment: ${matchedSkills.slice(0, 3).join(', ')}`);
     }
+    const expAssessment = assessInternationalJobExperienceMatch(profile, ij);
+    if (expAssessment.isMatch && expAssessment.matchType === 'direct') {
+      score += 30;
+      reasons.push(expAssessment.badgeLabel);
+    } else if (expAssessment.isMatch && expAssessment.matchType === 'related') {
+      score += 26;
+      reasons.push(expAssessment.badgeLabel);
+    }
+    if (reqYears !== null && userExpYears >= reqYears) {
+      score += 10;
+      if (reqYears > 0) reasons.push(`Meets ${reqYears}+ yrs experience requirement`);
+    }
+    if (reqEduRank > 0 && userEduRank >= reqEduRank && userEduLabel) {
+      score += 10;
+      reasons.push(`Education eligible (${userEduLabel})`);
+    }
     const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
     if (matchedInterests.length > 0) {
       score += 12;
@@ -545,7 +1248,10 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(`Open to Ethiopian applicants (${ij.country})`);
     }
 
-    if (score >= 28 && reasons.length >= 1 && (matchedTitle.length > 0 || matchedSkills.length > 0)) {
+    const hasDirectDomainFit =
+      matchedTitle.length > 0 || matchedSkills.length > 0 || expAssessment.isMatch;
+
+    if (score >= 28 && reasons.length >= 1 && hasDirectDomainFit) {
       if (reqYears !== null && reqYears - userExpYears > 5) continue;
       const isFullyQualified = missingMandatory.length === 0;
       const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
@@ -561,8 +1267,8 @@ export function computeStaffOpportunityRecommendations(
         matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? 'Eligible' : 'Partially Qualified',
         isFullyQualified,
-        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedTitle.length > 0 || matchedSkills.length > 0),
-        matchReasons: reasons,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && hasDirectDomainFit,
+        matchReasons: Array.from(new Set(reasons)),
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: ij.requiredExperience || 'Official requirements apply',
         requiredEducationText: ij.requiredEducation || 'Official requirements apply',

@@ -548,13 +548,37 @@ function isMeaningfulClientField(val?: string | null): boolean {
  * Normalizes user-configured domain or URL into a clean base URL (default: hopelandjobs.tech)
  */
 export function normalizeWebsiteDomain(domainOrUrl?: string): string {
-  if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
-  const clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const raw = (domainOrUrl || '').trim();
+  if (!raw || raw.toLowerCase() === 'healmorin.com' || raw.toLowerCase() === 'hopelandjobs.tech') {
+    return 'https://www.hopelandjobs.tech';
+  }
+  const clean = raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!clean || clean.toLowerCase() === 'hopelandjobs.tech') {
+    return 'https://www.hopelandjobs.tech';
+  }
   return `https://${clean}`;
 }
 
-export function buildTelegramAmharicPromoHtml(baseUrl: string): string {
-  const safeUrl = escapeHtml(baseUrl);
+export function buildTelegramVacancyUrl(
+  baseUrl: string,
+  vacancy: any,
+  includeApplyAction = true
+): string {
+  const safeId = encodeURIComponent(String(vacancy?.id || '').trim() || 'latest');
+  const applyParam = includeApplyAction ? 'apply=1&' : '';
+  return `${baseUrl}/jobs/${safeId}?${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+}
+
+function stripUrlsAndEmailsClient(text: string): string {
+  return String(text || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\bwww\.[^\s]+/gi, '')
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+export function buildTelegramAmharicPromoHtml(_baseUrl?: string): string {
   return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
 
 በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
@@ -566,11 +590,10 @@ export function buildTelegramAmharicPromoHtml(baseUrl: string): string {
 
 🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
 
-🌐 ዛሬውኑ ይመዝገቡ፦
-<a href="${safeUrl}">${safeUrl}</a>`;
+👇 <b>ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
 }
 
-export function buildTelegramAmharicPromoPlain(baseUrl: string): string {
+export function buildTelegramAmharicPromoPlain(_baseUrl?: string): string {
   return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
 
 በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
@@ -582,134 +605,216 @@ export function buildTelegramAmharicPromoPlain(baseUrl: string): string {
 
 🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
 
-🌐 ዛሬውኑ ይመዝገቡ፦
-${baseUrl}`;
+👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!`;
+}
+
+function formatCategoryHashtagClient(category?: string): string {
+  const c = String(category || '').trim().toLowerCase();
+  if (!c) return '#Vacancy';
+  if (c.includes('health')) return '#HealthCare';
+  if (c.includes('banking')) return '#BankingAndFinance';
+  if (c.includes('microfinance')) return '#Microfinance';
+  if (c.includes('ngo')) return '#NGO';
+  if (c.includes('embassy')) return '#EmbassyAndDiplomatic';
+  if (c.includes('it and technology') || c.includes('technology')) return '#ITAndTechnology';
+  if (c.includes('accounting')) return '#AccountingAndFinance';
+  if (c.includes('engineering')) return '#EngineeringAndConstruction';
+  if (c.includes('education')) return '#Education';
+  if (c.includes('hospitality') || c.includes('hotel')) return '#HotelAndHospitality';
+  if (c.includes('tourism')) return '#TourismAndTravel';
+  if (c.includes('government')) return '#Government';
+  if (c.includes('insurance')) return '#Insurance';
+  if (c.includes('internship') || c.includes('trainee')) return '#GraduateTrainee';
+  if (c.includes('remote')) return '#RemoteJobs';
+  if (c.includes('private')) return '#PrivateCompanies';
+  const words = String(category || '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  return words.length > 0 ? `#${words.join('')}` : '#Vacancy';
+}
+
+function deriveCareerLevelClient(vacancy: any): string {
+  if (isMeaningfulClientField(vacancy?.jobGrade)) {
+    return truncateTextClient(vacancy.jobGrade, 60);
+  }
+  const expText = String(vacancy?.experienceYears || '').trim();
+  const titleText = String(vacancy?.title || '').toLowerCase();
+  const combined = `${expText.toLowerCase()} ${titleText}`;
+
+  const numMatch = expText.match(/(\d+)/);
+  const minYears = numMatch ? Number(numMatch[1]) : null;
+
+  if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
+    return 'Entry Level (0-1 year)';
+  }
+  if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || (minYears !== null && minYears >= 5)) {
+    return expText ? `Senior (${truncateTextClient(expText, 30)})` : 'Senior (5-8 years)';
+  }
+  if (minYears !== null && minYears >= 3) {
+    return expText ? `Mid Level (${truncateTextClient(expText, 30)})` : 'Mid Level (3-5 years)';
+  }
+  if (minYears !== null && minYears >= 1) {
+    return expText ? `Junior (${truncateTextClient(expText, 30)})` : 'Junior (1-3 years)';
+  }
+  return 'Mid Level';
+}
+
+function formatDeadlineDisplayClient(deadline?: string): string {
+  const s = String(deadline || '').trim();
+  if (!s || !isMeaningfulClientField(s)) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }
+  return truncateTextClient(s, 60);
+}
+
+export function buildRequirementsBulletLinesClient(vacancy: any): string[] {
+  const bullets: string[] = [];
+  const pushClean = (line: string) => {
+    const cleaned = stripUrlsAndEmailsClient(line).replace(/^[•\-\*]\s*/, '').trim();
+    if (!cleaned || cleaned.length < 3) return;
+    if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
+      bullets.push(truncateTextClient(cleaned, 210));
+    }
+  };
+
+  if (isMeaningfulClientField(vacancy?.educationQualification)) {
+    const edu = stripUrlsAndEmailsClient(vacancy.educationQualification);
+    const field = isMeaningfulClientField(vacancy?.requiredFieldOfStudy)
+      ? ` in ${stripUrlsAndEmailsClient(vacancy.requiredFieldOfStudy)}`
+      : '';
+    pushClean(`${edu}${field}`);
+  } else if (isMeaningfulClientField(vacancy?.requiredFieldOfStudy)) {
+    pushClean(`Field of Study: ${stripUrlsAndEmailsClient(vacancy.requiredFieldOfStudy)}`);
+  }
+
+  if (isMeaningfulClientField(vacancy?.experienceYears)) {
+    pushClean(`Minimum ${stripUrlsAndEmailsClient(vacancy.experienceYears)} relevant experience`);
+  }
+
+  if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    const skillsList = vacancy.requiredSkills
+      .map((s: any) => stripUrlsAndEmailsClient(String(s || '')))
+      .filter(Boolean);
+    if (skillsList.length > 0) {
+      pushClean(`Required Competencies & Skills: ${skillsList.slice(0, 8).join(', ')}`);
+    }
+  }
+
+  if (isMeaningfulClientField(vacancy?.specialRequirements)) {
+    pushClean(vacancy.specialRequirements);
+  }
+
+  if (isMeaningfulClientField(vacancy?.description)) {
+    const descLines = String(vacancy.description)
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
+    for (const line of descLines.slice(0, 2)) {
+      pushClean(line);
+    }
+  }
+
+  if (bullets.length === 0) {
+    pushClean(
+      `${truncateTextClient(vacancy?.title || 'Position', 80)} — ${truncateTextClient(vacancy?.category || 'Relevant qualification', 80)}`
+    );
+  }
+
+  return bullets.slice(0, 6);
 }
 
 export function buildTelegramJobHtml(
   vacancy: any,
-  customDomainOrUrl = 'hopelandjobs.tech',
+  _customDomainOrUrl = 'www.hopelandjobs.tech',
   _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
-  const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-
   const orgName = escapeHtml(truncateTextClient(vacancy.organization || 'Employer', 140));
   const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateTextClient(vacancy.organizationAmharic, 90))})` : '';
   const positionTitle = escapeHtml(truncateTextClient(vacancy.title || 'Various Positions', 180));
+  const categoryHashtag = escapeHtml(formatCategoryHashtagClient(vacancy.category));
+  const careerLevel = escapeHtml(deriveCareerLevelClient(vacancy));
+  const deadlineDisplay = escapeHtml(formatDeadlineDisplayClient(vacancy.applicationDeadline));
 
-  const eduParts: string[] = [];
-  if (isMeaningfulClientField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateTextClient(vacancy.requiredFieldOfStudy, 160));
-  if (isMeaningfulClientField(vacancy.educationQualification)) eduParts.push(truncateTextClient(vacancy.educationQualification, 180));
-  if (Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(truncateTextClient(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
-  }
-  if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
-  }
-  if (isMeaningfulClientField(vacancy.experienceYears)) {
-    eduParts.push(`${truncateTextClient(vacancy.experienceYears, 60)} experience`);
-  }
-  const educationFieldText = escapeHtml(truncateTextClient(eduParts.join(', '), 340));
-
-  const detailLines: string[] = [];
+  const infoLines: string[] = [];
+  infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
   if (isMeaningfulClientField(vacancy.location)) {
-    detailLines.push(`📍 <b>Location:</b> ${escapeHtml(truncateTextClient(vacancy.location, 100))}`);
+    infoLines.push(`<b>Location:</b> ${escapeHtml(truncateTextClient(vacancy.location, 100))}`);
   }
-  if (isMeaningfulClientField(vacancy.employmentType)) {
-    detailLines.push(`💼 <b>Employment Type:</b> ${escapeHtml(truncateTextClient(vacancy.employmentType, 60))}`);
+  if (deadlineDisplay) {
+    infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
   }
-  if (isMeaningfulClientField(vacancy.salary)) {
-    detailLines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateTextClient(vacancy.salary, 90))}`);
-  }
-  if (isMeaningfulClientField(vacancy.applicationDeadline)) {
-    detailLines.push(`⏳ <b>Deadline:</b> ${escapeHtml(truncateTextClient(vacancy.applicationDeadline, 60))}`);
-  }
+  infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
+  infoLines.push(
+    `<b>Number of people required:</b> ${
+      isMeaningfulClientField(vacancy.vacanciesCount)
+        ? escapeHtml(truncateTextClient(vacancy.vacanciesCount, 40))
+        : '1'
+    }`
+  );
 
-  let applyLine = '';
-  const appUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
-  const appEmail = String(vacancy.applicationEmail || '').trim();
-  const appInst = String(vacancy.applicationInstructions || vacancy.officialApplicationInstructions || '').trim();
-  if (/^https?:\/\/\S+/i.test(appUrl)) {
-    applyLine = `🔗 <b>Apply Online:</b> <a href="${escapeHtml(appUrl)}">${escapeHtml(truncateTextClient(appUrl, 120))}</a>`;
-  } else if (appEmail.includes('@')) {
-    applyLine = `✉️ <b>Apply via Email:</b> ${escapeHtml(appEmail)}`;
-  } else if (isMeaningfulClientField(appInst)) {
-    applyLine = `📝 <b>How to Apply:</b> ${escapeHtml(truncateTextClient(appInst, 180))}`;
-  }
-
+  const reqBulletsHtml = buildRequirementsBulletLinesClient(vacancy)
+    .map((b) => `• ${escapeHtml(b)}`)
+    .join('\n');
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
+  const coreText = `${washPrefix}<b>${positionTitle}</b>
+<i>at ${orgName}${orgAmharic}</i>
 
-🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
+${infoLines.join('\n\n')}
 
-${detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : ''}✅ <b>Education &amp; Experience:</b> ${educationFieldText}
-${applyLine ? `${applyLine}\n` : ''}
-📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
-👉<b>Read Detail:-</b> <a href="${escapeHtml(vacancyLink)}">${escapeHtml(vacancyLink)}</a>
+<b>Requirements:</b>
+${reqBulletsHtml}`;
 
-🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
-=&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
-
-  return `${coreText}\n\n${buildTelegramAmharicPromoHtml(baseUrl)}`;
+  return `${coreText}\n\n${buildTelegramAmharicPromoHtml()}`;
 }
 
 export function buildTelegramJobPlainText(
   vacancy: any,
-  customDomainOrUrl = 'hopelandjobs.tech',
+  _customDomainOrUrl = 'www.hopelandjobs.tech',
   _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
-  const baseUrl = normalizeWebsiteDomain(customDomainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id)}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-
   const orgName = truncateTextClient(vacancy.organization || 'Employer', 140);
   const orgAmharic = vacancy.organizationAmharic ? ` (${truncateTextClient(vacancy.organizationAmharic, 90)})` : '';
   const positionTitle = truncateTextClient(vacancy.title || 'Various Positions', 180);
+  const categoryHashtag = formatCategoryHashtagClient(vacancy.category);
+  const careerLevel = deriveCareerLevelClient(vacancy);
+  const deadlineDisplay = formatDeadlineDisplayClient(vacancy.applicationDeadline);
 
-  const eduParts: string[] = [];
-  if (isMeaningfulClientField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateTextClient(vacancy.requiredFieldOfStudy, 160));
-  if (isMeaningfulClientField(vacancy.educationQualification)) eduParts.push(truncateTextClient(vacancy.educationQualification, 180));
-  if (Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(truncateTextClient(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
+  const infoLines: string[] = [];
+  infoLines.push(`Categories: ${categoryHashtag}`);
+  if (isMeaningfulClientField(vacancy.location)) {
+    infoLines.push(`Location: ${truncateTextClient(vacancy.location, 100)}`);
   }
-  if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Accounting & Finance / Banking / Business / Information Technology / Engineering and related fields');
+  if (deadlineDisplay) {
+    infoLines.push(`Deadline: ${deadlineDisplay}`);
   }
-  if (isMeaningfulClientField(vacancy.experienceYears)) {
-    eduParts.push(`${truncateTextClient(vacancy.experienceYears, 60)} experience`);
-  }
-  const educationFieldText = truncateTextClient(eduParts.join(', '), 340);
+  infoLines.push(`Career Level: ${careerLevel}`);
+  infoLines.push(
+    `Number of people required: ${
+      isMeaningfulClientField(vacancy.vacanciesCount) ? truncateTextClient(vacancy.vacanciesCount, 40) : '1'
+    }`
+  );
 
-  const detailLines: string[] = [];
-  if (isMeaningfulClientField(vacancy.location)) detailLines.push(`📍 Location: ${truncateTextClient(vacancy.location, 100)}`);
-  if (isMeaningfulClientField(vacancy.employmentType)) detailLines.push(`💼 Employment Type: ${truncateTextClient(vacancy.employmentType, 60)}`);
-  if (isMeaningfulClientField(vacancy.salary)) detailLines.push(`💰 Salary: ${truncateTextClient(vacancy.salary, 90)}`);
-  if (isMeaningfulClientField(vacancy.applicationDeadline)) detailLines.push(`⏳ Deadline: ${truncateTextClient(vacancy.applicationDeadline, 60)}`);
-
-  let applyLine = '';
-  const appUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
-  const appEmail = String(vacancy.applicationEmail || '').trim();
-  const appInst = String(vacancy.applicationInstructions || vacancy.officialApplicationInstructions || '').trim();
-  if (/^https?:\/\/\S+/i.test(appUrl)) applyLine = `🔗 Apply Online: ${truncateTextClient(appUrl, 120)}`;
-  else if (appEmail.includes('@')) applyLine = `✉️ Apply via Email: ${appEmail}`;
-  else if (isMeaningfulClientField(appInst)) applyLine = `📝 How to Apply: ${truncateTextClient(appInst, 180)}`;
-
+  const reqBulletsPlain = buildRequirementsBulletLinesClient(vacancy)
+    .map((b) => `• ${b}`)
+    .join('\n');
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  const coreText = `${washPrefix}Vacancy at ${orgName}
+  const coreText = `${washPrefix}${positionTitle}
+at ${orgName}${orgAmharic}
 
-🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
+${infoLines.join('\n\n')}
 
-${detailLines.length > 0 ? `${detailLines.join('\n')}\n\n` : ''}✅ Education & Experience: ${educationFieldText}
-${applyLine ? `${applyLine}\n` : ''}
-📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
-👉Read Detail:- ${vacancyLink}
+Requirements:
+${reqBulletsPlain}`;
 
-🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
-=>See Detail:- ${baseUrl}`;
-
-  return `${coreText}\n\n${buildTelegramAmharicPromoPlain(baseUrl)}`;
+  return `${coreText}\n\n${buildTelegramAmharicPromoPlain()}`;
 }
 
 /**

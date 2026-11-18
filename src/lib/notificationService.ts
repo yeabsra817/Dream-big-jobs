@@ -27,6 +27,7 @@ import {
 } from '../types/jobSeeker';
 import { Vacancy } from '../types/job';
 import { RecommendedOpportunity } from '../utils/recommendationCore';
+import { buildTop3MobilePushPayload, THREE_DAYS_MS } from '../utils/inactiveReminderFormat';
 
 const DEVICE_ID_STORAGE_KEY = 'hopelandjobs_device_id';
 
@@ -72,6 +73,26 @@ export function getDeviceMetadata(): { deviceId: string; deviceLabel: string; pl
     deviceLabel: `${browserName} on ${osName}`,
     platform: isAndroid ? 'android' : isIos ? 'ios' : 'desktop',
   };
+}
+
+export function isRunningInEmbeddedIframe(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+export function buildStandalonePushActivationUrl(): string {
+  if (typeof window === 'undefined') return '/?enablePush=1';
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('enablePush', '1');
+    return url.toString();
+  } catch {
+    return '/?enablePush=1';
+  }
 }
 
 export function getBrowserNotificationPermission(): NotificationPermissionState {
@@ -1275,8 +1296,33 @@ export async function requestAndEnableNotifications(
     };
   }
 
-  // Never repeatedly call Notification.requestPermission() if browser permission is already denied
+  const inIframe = isRunningInEmbeddedIframe();
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'hopelandjobs.tech';
   let permResult: NotificationPermission = Notification.permission;
+
+  // On Android/Desktop Chrome inside an embedded preview iframe (e.g. aistudio.google.com),
+  // Chrome automatically forces Notification.permission === 'denied' even if Site Settings is "Ask first".
+  // Do NOT overwrite the user's persisted profile status to denied/revoked when blocked only by the iframe container.
+  if (permResult === 'denied' && inIframe) {
+    return {
+      success: false,
+      permissionStatus: 'denied',
+      subscriptionActive: false,
+      preferences: null,
+      message: `Chrome blocks notification popups inside embedded preview frames even when Notifications are set to "Ask first". Tap "Open App in Chrome Tab" to enable real phone bar alerts for ${currentHost}.`,
+    };
+  }
+
+  // If browser reports 'denied' on top-level, double-check via Permissions API in case user just toggled Site Settings
+  if (permResult === 'denied' && typeof navigator !== 'undefined' && navigator.permissions?.query) {
+    try {
+      const pStatus = await navigator.permissions.query({ name: 'notifications' as PermissionName });
+      if (pStatus?.state === 'granted' || pStatus?.state === 'prompt') {
+        permResult = await Notification.requestPermission();
+      }
+    } catch {}
+  }
+
   if (permResult === 'denied') {
     const saved = uid
       ? await saveUserNotificationPreferences(
@@ -1299,8 +1345,7 @@ export async function requestAndEnableNotifications(
       permissionStatus: 'denied',
       subscriptionActive: false,
       preferences: saved,
-      message:
-        'Notifications are blocked in your browser settings. Follow the instructions above to allow notifications for this site, then check again.',
+      message: `Notifications are blocked for ${currentHost} in your browser settings. Open browser Site settings -> Notifications -> Allow for ${currentHost}, then tap Check Again.`,
     };
   }
 
@@ -1313,6 +1358,15 @@ export async function requestAndEnableNotifications(
   }
 
   if (permResult === 'denied') {
+    if (inIframe) {
+      return {
+        success: false,
+        permissionStatus: 'denied',
+        subscriptionActive: false,
+        preferences: null,
+        message: `Chrome blocked the notification prompt inside this preview frame. Tap "Open App in Chrome Tab" to enable real phone notification bar alerts.`,
+      };
+    }
     const saved = uid
       ? await saveUserNotificationPreferences(
           uid,
@@ -1334,8 +1388,7 @@ export async function requestAndEnableNotifications(
       permissionStatus: 'denied',
       subscriptionActive: false,
       preferences: saved,
-      message:
-        'Notifications were blocked by the browser. Please allow Notifications in your browser Site Settings to enable job alerts.',
+      message: `Notifications were blocked by the browser. Please allow Notifications in Chrome Site Settings for ${currentHost}.`,
     };
   }
 
@@ -1564,16 +1617,23 @@ export async function dispatchLocalServiceWorkerPushFallback(
     shownMap = {};
   }
 
+  const getShowKey = (n: UserNotificationItem): string => {
+    const cycleMarker = n.lastRemindedAt || n.updatedAt || n.createdAt || '';
+    return `${n.id}::${n.reminderCount || 0}::${cycleMarker.slice(0, 16)}`;
+  };
+
   const pendingForBar = (notifications || [])
-    .filter(
-      (n) =>
-        n &&
-        !n.read &&
-        n.sourceType !== 'system' &&
-        n.channels?.push !== 'sent' &&
-        !shownMap[n.vacancyId] &&
-        !shownMap[n.id]
-    )
+    .filter((n) => {
+      if (!n || n.read || n.sourceType === 'system') return false;
+      if (n.channels?.push === 'sent') return false;
+      const showKey = getShowKey(n);
+      if (shownMap[showKey]) return false;
+      const legacyTs = shownMap[n.id] || shownMap[n.vacancyId];
+      if (legacyTs && n.alertKind !== 'apply_reminder' && Date.now() - legacyTs < THREE_DAYS_MS) {
+        return false;
+      }
+      return true;
+    })
     .slice(0, 3);
 
   if (pendingForBar.length === 0) return 0;
@@ -1584,30 +1644,73 @@ export async function dispatchLocalServiceWorkerPushFallback(
 
     let displayed = 0;
     for (const item of pendingForBar) {
-      await reg.showNotification(`HOPELANDJOBS — ${item.title}`, {
-        body: `${item.employer} (${item.location}) · ${
-          item.matchReasonSummary || `Matches your profile in ${item.category}`
-        }. Tap to view & apply.`,
-        icon: '/favicon.svg',
-        badge: '/favicon.svg',
-        tag: `vacancy-${item.vacancyId}`,
-        data: {
-          url:
-            item.sourceType === 'domestic_job'
-              ? `/?jobId=${encodeURIComponent(item.vacancyId)}&notificationId=${encodeURIComponent(item.id)}`
-              : item.jobUrl || '/',
-          jobId: item.vacancyId,
-          vacancyId: item.vacancyId,
-          notificationId: item.id,
-        },
-      });
-      shownMap[item.vacancyId] = Date.now();
+      if (Array.isArray(item.topJobs) && item.topJobs.length > 0) {
+        const topPayload = buildTop3MobilePushPayload({
+          topJobs: item.topJobs,
+          notifId: item.id,
+          cycleNumber: item.reminderCount || 1,
+        });
+        await reg.showNotification(topPayload.title, {
+          body: topPayload.body,
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-badge-96x96.png',
+          tag: topPayload.tag,
+          renotify: true,
+          timestamp: topPayload.timestamp,
+          vibrate: [200, 80, 200],
+          data: {
+            url: topPayload.url,
+            jobId: item.vacancyId,
+            vacancyId: item.vacancyId,
+            notificationId: item.id,
+            actionType: 'open_recommendations',
+            topJobs: item.topJobs,
+          },
+        } as NotificationOptions & { vibrate?: number[]; renotify?: boolean; timestamp?: number });
+      } else {
+        const isReminder = item.alertKind === 'apply_reminder';
+        const cleanTitle = String(item.title || '').replace(/^Reminder to Apply:\s*/i, '');
+        const notifTitle = isReminder
+          ? `Hopeland Jobs · Reminder: Apply for ${cleanTitle}`
+          : `Hopeland Jobs · ${item.title}`;
+        const notifBody = isReminder
+          ? `${item.employer} (${item.location}) · Recommended for your profile${
+              item.deadline && item.deadline !== 'Open' ? ` · Deadline: ${item.deadline}` : ''
+            }. Tap to view and apply now!`
+          : `${item.employer} (${item.location}) · ${
+              item.matchReasonSummary || `Matches your profile in ${item.category}`
+            }. Tap to view & apply.`;
+
+        await reg.showNotification(notifTitle, {
+          body: notifBody,
+          icon: '/pwa-192x192.png',
+          badge: '/pwa-badge-96x96.png',
+          tag: isReminder
+            ? `vacancy-${item.vacancyId}-rem-${item.reminderCount || 1}`
+            : `vacancy-${item.vacancyId}`,
+          renotify: true,
+          timestamp: Date.now(),
+          vibrate: [200, 80, 200],
+          data: {
+            url:
+              item.sourceType === 'domestic_job'
+                ? `/?jobId=${encodeURIComponent(item.vacancyId)}&apply=1&notificationId=${encodeURIComponent(item.id)}`
+                : item.jobUrl || '/',
+            jobId: item.vacancyId,
+            vacancyId: item.vacancyId,
+            notificationId: item.id,
+            actionType: 'open_job',
+          },
+        } as NotificationOptions & { vibrate?: number[]; renotify?: boolean; timestamp?: number });
+      }
+      shownMap[getShowKey(item)] = Date.now();
       shownMap[item.id] = Date.now();
       displayed += 1;
     }
 
     try {
-      localStorage.setItem(storageKey, JSON.stringify(shownMap));
+      const prunedEntries = Object.entries(shownMap).slice(-120);
+      localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(prunedEntries)));
     } catch {}
     return displayed;
   } catch {
@@ -2222,6 +2325,40 @@ export async function sendAdminBroadcastNotification(
     },
     credentials: 'include',
     body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function triggerAdminInactiveUsersCheck(
+  options: { dryRun?: boolean; force?: boolean; targetUid?: string } = {},
+  adminEmailOverride?: string
+): Promise<{
+  success: boolean;
+  checkedAt?: string;
+  usersEvaluated?: number;
+  inactiveUsersFound?: number;
+  remindersCreated?: number;
+  pushAttempted?: number;
+  pushSucceeded?: number;
+  pushFailed?: number;
+  details?: Array<{
+    uid: string;
+    email: string;
+    topJobsCount: number;
+    pushStatus: string;
+    notificationId?: string;
+    pushTitle?: string;
+    pushBody?: string;
+  }>;
+}> {
+  const res = await fetch('/api/admin/notifications/check-inactive', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getOwnerAuthHeaders(adminEmailOverride),
+    },
+    credentials: 'include',
+    body: JSON.stringify(options),
   });
   return res.json();
 }

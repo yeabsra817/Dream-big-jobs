@@ -442,6 +442,36 @@ export async function fetchPublishedVacancies(): Promise<Vacancy[]> {
   }
 }
 
+export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return null;
+  const cached = getCachedPublishedVacancies();
+  const cachedMatch = cached.find(
+    (v) => v.id === cleanId || v.id.toLowerCase() === cleanId.toLowerCase()
+  );
+  if (cachedMatch) return cachedMatch;
+
+  try {
+    const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4500, null as any);
+    if (snap && snap.exists()) {
+      const data = snap.data() as Vacancy;
+      if (data?.status === 'published') {
+        return { ...data, id: snap.id };
+      }
+    }
+  } catch {}
+
+  try {
+    const res = await fetch(`/api/vacancies/${encodeURIComponent(cleanId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.vacancy?.id) return data.vacancy as Vacancy;
+    }
+  } catch {}
+
+  return null;
+}
+
 export function saveVacancyToLocalCache(vacancy: Vacancy) {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
@@ -647,6 +677,8 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     contactPhone: '+251 91 123 4567',
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
     customDomain: 'hopelandjobs.tech',
+    appLogoUrl: '',
+    appLogoUpdatedAt: '',
     aboutText:
       'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     updatedAt: new Date().toISOString(),
@@ -701,6 +733,13 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     ...safeCached,
     ...safeSrvSettings,
     ...safeFsSettings,
+    appLogoUrl:
+      safeFsSettings.appLogoUrl ?? safeSrvSettings.appLogoUrl ?? safeCached.appLogoUrl ?? '',
+    appLogoUpdatedAt:
+      safeFsSettings.appLogoUpdatedAt ??
+      safeSrvSettings.appLogoUpdatedAt ??
+      safeCached.appLogoUpdatedAt ??
+      '',
     telegramBotTokenConfigured: Boolean(
       safeSrvSettings.telegramBotTokenConfigured ?? safeFsSettings.telegramBotTokenConfigured ?? safeCached.telegramBotTokenConfigured
     ),

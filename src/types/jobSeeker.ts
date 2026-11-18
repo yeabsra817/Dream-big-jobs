@@ -140,6 +140,8 @@ export interface NotificationPreferencesRecord {
   permissionVerifiedAt?: string;
   lastSuccessfulDeliveryAt?: string;
   lastDigestSentAt?: string;
+  lastInactiveReminderSentAt?: string;
+  inactiveReminderCount?: number;
   promptDismissCount?: number;
   channels: {
     websiteBell: boolean;
@@ -213,6 +215,7 @@ export interface AdminSchedulerStatusResponse {
     cronSchedule: string;
     lastRunStartedAt: string | null;
     lastSuccessfulRunAt: string | null;
+    lastInactiveCheckAt?: string | null;
     lastRunStatus: 'success' | 'partial' | 'failed' | null;
     nextScheduledRunAt: string;
   };
@@ -265,10 +268,23 @@ export interface AdminSchedulerStatusResponse {
 
 export type UserAlertKind =
   | 'new_match'
+  | 'apply_reminder'
   | 'deadline_reminder'
   | 'job_updated'
   | 'sector_opportunity'
   | 'system_test';
+
+export interface NotificationTopJobSummary {
+  id: string;
+  sourceType: 'domestic_job' | 'international_job' | 'scholarship';
+  title: string;
+  organization: string;
+  location: string;
+  deadline?: string;
+  matchScore: number;
+  applyUrl?: string;
+  jobUrl?: string;
+}
 
 export interface UserNotificationItem {
   id: string;
@@ -287,10 +303,13 @@ export interface UserNotificationItem {
   matchReasonSummary: string;
   matchReasons: string[];
   missingMandatoryQualifications: string[];
+  topJobs?: NotificationTopJobSummary[];
   applicationUrl?: string;
   jobUrl: string;
   read: boolean;
   readAt?: string;
+  reminderCount?: number;
+  lastRemindedAt?: string;
   channels: {
     website: 'delivered';
     push: 'sent' | 'failed' | 'skipped' | 'queued';

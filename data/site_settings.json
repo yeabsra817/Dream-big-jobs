@@ -12,8 +12,38 @@
   "gaMeasurementId": "G-KH6X73105S",
   "gaTrackingEnabled": true,
   "aboutText": "HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.",
-  "updatedAt": "2026-11-17T13:45:29.954Z",
+  "updatedAt": "2026-11-18T18:01:58.794Z",
   "telegramChannelId": "-1004499169829",
-  "botLastVerifiedAt": "2026-11-17T13:45:29.953Z",
-  "botLastVerificationStatus": "connected"
+  "botLastVerifiedAt": "2026-11-18T18:01:49.312Z",
+  "botLastVerificationStatus": "connected",
+  "telegramDistributionMode": "all_jobs",
+  "telegramIncludeInternationalImmigration": false,
+  "telegramIncludeScholarships": false,
+  "researchEnabledRegions": [
+    "Europe",
+    "Middle East",
+    "Far East & Asia",
+    "Americas & Oceania",
+    "Africa & Other"
+  ],
+  "researchEnabledCountries": [],
+  "researchJobCategories": [
+    "Banking & Finance",
+    "NGO & International Organizations",
+    "Government Approved Foreign Recruitment",
+    "IT & Software Engineering",
+    "Healthcare & Medical",
+    "Engineering & Skilled Trades",
+    "Hospitality & Logistics",
+    "Education & Academic",
+    "Agriculture & Manufacturing"
+  ],
+  "researchFrequency": "manual",
+  "lastResearchRunAt": "",
+  "nextResearchRunAt": "",
+  "telegramBotTokenConfigured": true,
+  "maskedBotToken": "922825••••••••gwi4",
+  "botInstructions": "",
+  "appLogoUrl": "",
+  "appLogoUpdatedAt": "2026-11-18T18:01:58.794Z"
 }

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Share,
   PlusSquare,
+  ExternalLink,
 } from 'lucide-react';
 import {
   NotificationPermissionState,
@@ -15,14 +16,18 @@ import {
 } from '../types/jobSeeker';
 import {
   isIosSafariNeedsInstall,
+  isRunningInEmbeddedIframe,
+  buildStandalonePushActivationUrl,
   requestAndEnableNotifications,
   getBrowserNotificationPermission,
 } from '../lib/notificationService';
+import { AppBrandLogo } from './AppBrandLogo';
 
 interface Props {
   isOpen: boolean;
   uid?: string | null;
   userEmail?: string | null;
+  appLogoUrl?: string | null;
   reason:
     | 'first_time'
     | 'not_enabled_yet'
@@ -39,6 +44,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
   isOpen,
   uid,
   userEmail,
+  appLogoUrl,
   reason,
   onClose,
   onEnabled,
@@ -58,20 +64,17 @@ export const NotificationPermissionModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
+  const isInIframe = isRunningInEmbeddedIframe();
   const isIosInstallNeeded = reason === 'ios_install_required' || isIosSafariNeedsInstall();
-  const isBlocked = !isIosInstallNeeded && (reason === 'blocked_in_browser' || currentPerm === 'denied');
-  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const isBlockedOrDenied = !isIosInstallNeeded && (reason === 'blocked_in_browser' || currentPerm === 'denied');
+  const isIframeBlocked = isInIframe && isBlockedOrDenied;
+  const isBrowserBlocked = !isInIframe && isBlockedOrDenied;
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'hopelandjobs.tech';
+  const standaloneUrl = buildStandalonePushActivationUrl();
 
   const handleEnableClick = async () => {
     const livePerm = getBrowserNotificationPermission();
     setCurrentPerm(livePerm);
-    if (livePerm === 'denied') {
-      setFeedback({
-        type: 'error',
-        text: 'Notifications are currently blocked by your browser. Follow the steps above to allow them in browser settings.',
-      });
-      return;
-    }
 
     setIsLoading(true);
     setFeedback(null);
@@ -86,20 +89,19 @@ export const NotificationPermissionModal: React.FC<Props> = ({
         onEnabled(result.preferences, result.message);
       } else {
         setFeedback({
-          type: result.permissionStatus === 'denied' ? 'error' : 'info',
+          type: result.permissionStatus === 'denied' && !isInIframe ? 'error' : 'info',
           text:
             isInIframe && result.permissionStatus !== 'granted'
-              ? 'Your browser is inside an embedded preview frame which blocks notification prompts. Tap "Open App in Chrome Tab" below to activate phone bar alerts.'
+              ? `Chrome blocks notification popups inside this embedded preview frame (even when Notifications are set to "Ask first"). Tap "Open App in Chrome Tab" below to activate phone bar alerts for ${currentHost}.`
               : result.message,
         });
       }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        text:
-          isInIframe
-            ? 'Embedded preview blocked the permission dialog. Tap "Open App in Chrome Tab" below to allow notifications.'
-            : err?.message || 'Unable to activate notifications right now.',
+        text: isInIframe
+          ? 'Embedded preview blocked the permission dialog. Tap "Open App in Chrome Tab" below to allow notifications.'
+          : err?.message || 'Unable to activate notifications right now.',
       });
     } finally {
       setIsLoading(false);
@@ -107,49 +109,116 @@ export const NotificationPermissionModal: React.FC<Props> = ({
   };
 
   const handleCheckAgain = async () => {
-    const fresh = getBrowserNotificationPermission();
-    setCurrentPerm(fresh);
-    if (isIosSafariNeedsInstall()) {
-      setFeedback({
-        type: 'info',
-        text: 'Please tap Share -> Add to Home Screen in Safari, then open the installed HopelandJobs app from your Home Screen.',
-      });
-      return;
-    }
-    if (fresh === 'denied') {
+    setIsLoading(true);
+    setFeedback(null);
+    try {
+      let fresh = getBrowserNotificationPermission();
+      setCurrentPerm(fresh);
+
+      if (isIosSafariNeedsInstall()) {
+        setFeedback({
+          type: 'info',
+          text: 'Please tap Share -> Add to Home Screen in Safari, then open the installed HopelandJobs app from your Home Screen.',
+        });
+        return;
+      }
+
+      // Re-query Permissions API in case Android Chrome updated permission after returning from Site Settings
+      if (fresh === 'denied' && typeof navigator !== 'undefined' && navigator.permissions?.query) {
+        try {
+          const permQuery = await navigator.permissions.query({ name: 'notifications' as PermissionName });
+          if (permQuery?.state === 'granted') {
+            fresh = 'granted';
+          } else if (permQuery?.state === 'prompt') {
+            fresh = 'default';
+          }
+          setCurrentPerm(fresh);
+        } catch {}
+      }
+
+      if (fresh === 'granted' || fresh === 'default') {
+        setIsLoading(false);
+        await handleEnableClick();
+        return;
+      }
+
+      // Inside embedded iframe on Chrome, requestPermission is blocked by iframe policy regardless of Chrome settings
+      if (isInIframe) {
+        setFeedback({
+          type: 'info',
+          text: `Chrome Site Settings is fine, but Android Chrome blocks notification prompts inside this preview frame. Tap "Open App in Chrome Tab" below to allow phone bar notifications on ${currentHost}.`,
+        });
+        return;
+      }
+
+      // Top-level browser where Chrome still reports denied: attempt one safe user-gesture check in case browser unlocked
+      if (typeof Notification !== 'undefined' && typeof Notification.requestPermission === 'function') {
+        try {
+          const reqRes = await Notification.requestPermission();
+          if (reqRes === 'granted') {
+            setCurrentPerm('granted');
+            setIsLoading(false);
+            await handleEnableClick();
+            return;
+          }
+        } catch {}
+      }
+
       setFeedback({
         type: 'error',
-        text: 'Notifications are still blocked in your browser settings. Please change Notifications to Allow for hopelandjobs.tech, then tap Check Again.',
+        text: `Notifications are still blocked in Chrome for ${currentHost}. Tap the tune/lock icon in Chrome's address bar -> Permissions -> Notifications -> Allow, then return and tap Check Again.`,
       });
-      return;
-    }
-    if (fresh === 'granted' || fresh === 'default') {
-      await handleEnableClick();
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="notif-permission-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isLoading) onClose(true);
+      }}
     >
-      <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden font-['Plus_Jakarta_Sans',sans-serif]">
+      <div
+        className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col font-['Plus_Jakarta_Sans',sans-serif]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="bg-[#0B132B] text-white px-6 py-5 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0">
-              {isBlocked ? <ShieldAlert className="w-6 h-6" /> : <Bell className="w-6 h-6" />}
-            </div>
-            <div>
-              <h2 id="notif-permission-title" className="text-base font-extrabold text-white">
-                {isBlocked ? 'Notifications Blocked in Browser' : 'Never Miss a Job Opportunity!'}
+        <div className="bg-[#0B132B] text-white px-5 py-4 sm:px-6 sm:py-5 flex items-start justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            {isIframeBlocked || isBrowserBlocked ? (
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0">
+                {isIframeBlocked ? (
+                  <ExternalLink className="w-5 h-5 sm:w-6 sm:h-6" />
+                ) : (
+                  <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
+                )}
+              </div>
+            ) : appLogoUrl ? (
+              <AppBrandLogo logoUrl={appLogoUrl} size="lg" variant="amber" />
+            ) : (
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <h2 id="notif-permission-title" className="text-sm sm:text-base font-extrabold text-white leading-snug">
+                {isIframeBlocked
+                  ? 'Open Chrome Tab for Phone Alerts'
+                  : isBrowserBlocked
+                  ? 'Notifications Blocked in Browser'
+                  : 'Never Miss a Job Opportunity!'}
               </h2>
               <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                {isBlocked
-                  ? 'Allow browser notifications in your device or site settings to receive instant Hopeland Jobs alerts.'
-                  : 'Hopeland Jobs — Instant Phone Bar & Desktop Alerts'}
+                {isIframeBlocked
+                  ? 'Preview frame pauses Chrome permission popups — one tap opens the full site tab.'
+                  : isBrowserBlocked
+                  ? `Allow browser notifications for ${currentHost} to receive instant Hopeland Jobs alerts.`
+                  : 'Hopeland Jobs — Instant Phone Bar & 3-Day Apply Reminders'}
               </p>
             </div>
           </div>
@@ -158,38 +227,53 @@ export const NotificationPermissionModal: React.FC<Props> = ({
             type="button"
             onClick={() => onClose(true)}
             aria-label="Not Now"
-            className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-5">
-          {isBlocked ? (
+        {/* Scrollable Body */}
+        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto">
+          {isIframeBlocked ? (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-2.5 text-xs text-amber-950">
+              <p className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                <Smartphone className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>Why &ldquo;Check Again&rdquo; Didn&rsquo;t Pop Up Here:</span>
+              </p>
+              <p className="text-amber-900 leading-relaxed">
+                Your Chrome Site Settings for Notifications is fine (<strong>Ask first / Allow</strong>), but Chrome does{' '}
+                <strong>not</strong> allow notification prompts inside embedded preview windows.
+              </p>
+              <p className="text-amber-900 leading-relaxed font-semibold">
+                Tap <strong>Open App in Chrome Tab</strong> below — Chrome will immediately ask for notification permission and deliver real job alerts + every-3-days Apply reminders directly to your phone bar.
+              </p>
+            </div>
+          ) : isBrowserBlocked ? (
             <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-2.5 text-xs text-rose-950">
-              <p className="font-bold">How to enable notifications in your browser settings:</p>
+              <p className="font-bold">How to enable notifications for {currentHost}:</p>
               <ol className="list-decimal pl-4 space-y-1.5 text-rose-900 leading-relaxed">
                 <li>
-                  <strong>Desktop Chrome / Edge (Windows &amp; Mac):</strong> Click the tune/lock icon to the left of the address bar, open{' '}
-                  <strong>Site settings</strong> (or Permissions), and set <strong>Notifications</strong> to{' '}
-                  <strong>Allow</strong>.
+                  <strong>Android Chrome:</strong> Tap the tune/lock icon to the left of the address bar →{' '}
+                  <strong>Permissions</strong> → <strong>Notifications</strong> → select <strong>Allow</strong>.
+                  (If Notifications is already Allow/Ask on All Sites, check <strong>Settings → Site settings → Notifications → {currentHost}</strong>.)
                 </li>
                 <li>
-                  <strong>Android Chrome:</strong> Tap the tune/lock icon next to the URL (or menu <strong>⋮ → Settings → Site settings → Notifications</strong>), select this site, and toggle <strong>Allow notifications</strong>.
+                  <strong>Desktop Chrome / Edge:</strong> Click the tune/lock icon left of the URL →{' '}
+                  <strong>Site settings</strong> → set <strong>Notifications</strong> to <strong>Allow</strong>.
                 </li>
                 <li>
                   <strong>iPhone / iPad App (iOS 16.4+):</strong> Open iPhone <strong>Settings → Notifications → HopelandJobs</strong> and toggle <strong>Allow Notifications</strong>.
                 </li>
                 <li>
-                  Return here and click <strong>Check Again</strong> below to finish activating your subscription.
+                  Tap <strong>Check Again</strong> below to finish activating phone bar delivery.
                 </li>
               </ol>
             </div>
           ) : isIosInstallNeeded ? (
             <div className="space-y-4">
               <p className="text-sm text-slate-700 leading-relaxed font-medium">
-                Enable instant job alerts and get notified whenever new vacancies matching your qualifications, education, experience, and preferred industry are published.
+                Enable instant job alerts and get reminded every 3 days to apply for open jobs matching your qualifications and expertise.
               </p>
               <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-3 text-xs text-amber-950">
                 <div className="flex items-center gap-2 font-extrabold text-slate-900">
@@ -236,7 +320,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
                 </div>
                 <div className="flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Strictly qualified matches only — maximum 3 relevant jobs per day, never unrelated openings.</span>
+                  <span>Strictly qualified matches only (max 3/day) — plus automatic Apply reminders every 3 days until you apply or the job closes.</span>
                 </div>
               </div>
             </div>
@@ -244,7 +328,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
 
           {feedback && (
             <div
-              className={`p-3 rounded-xl text-xs font-medium border ${
+              className={`p-3 rounded-xl text-xs font-medium border leading-relaxed ${
                 feedback.type === 'error'
                   ? 'bg-rose-50 border-rose-200 text-rose-900'
                   : 'bg-amber-50 border-amber-200 text-amber-950'
@@ -254,21 +338,21 @@ export const NotificationPermissionModal: React.FC<Props> = ({
             </div>
           )}
 
-          {isInIframe && !isBlocked && !isIosInstallNeeded && (
+          {isInIframe && !isIosInstallNeeded && (
             <a
-              href={typeof window !== 'undefined' ? window.location.href : '/'}
+              href={standaloneUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full min-h-[40px] px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+              className="w-full min-h-[44px] px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 transition-colors shadow-xs"
             >
-              <Smartphone className="w-4 h-4 text-emerald-700" />
-              <span>Open App in Chrome Tab (for Phone Bar Prompt)</span>
+              <ExternalLink className="w-4 h-4 shrink-0" />
+              <span>Open App in Chrome Tab (Enable Phone Bar)</span>
             </a>
           )}
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-            {isBlocked ? (
+            {isBlockedOrDenied ? (
               <button
                 type="button"
                 onClick={handleCheckAgain}
@@ -282,6 +366,7 @@ export const NotificationPermissionModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleCheckAgain}
+                disabled={isLoading}
                 className="flex-1 min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs tracking-wide inline-flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer"
               >
                 <PlusSquare className="w-4 h-4" />
@@ -313,3 +398,4 @@ export const NotificationPermissionModal: React.FC<Props> = ({
     </div>
   );
 };
+

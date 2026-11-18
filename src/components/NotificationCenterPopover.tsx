@@ -250,15 +250,28 @@ export const NotificationCenterPopover: React.FC<Props> = ({
                       {notif.title}
                     </div>
 
-                    <div className="text-[11px] text-slate-600 truncate">
-                      {notif.employer} · {notif.location}
-                      {notif.salary ? ` · ${notif.salary}` : ''}
-                    </div>
+                    {Array.isArray(notif.topJobs) && notif.topJobs.length > 0 ? (
+                      <ol className="space-y-1 pt-0.5 text-[11px] text-slate-700">
+                        {notif.topJobs.slice(0, 3).map((tj, idx) => (
+                          <li key={tj.id} className="truncate font-medium">
+                            <span className="font-extrabold text-[#0B132B]">{idx + 1}.</span> {tj.title} —{' '}
+                            <span className="text-slate-500">{tj.organization}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <>
+                        <div className="text-[11px] text-slate-600 truncate">
+                          {notif.employer} · {notif.location}
+                          {notif.salary ? ` · ${notif.salary}` : ''}
+                        </div>
 
-                    {notif.matchReasonSummary && (
-                      <div className="text-[11px] text-emerald-800 line-clamp-1 font-medium">
-                        {notif.matchReasonSummary}
-                      </div>
+                        {notif.matchReasonSummary && (
+                          <div className="text-[11px] text-emerald-800 line-clamp-1 font-medium">
+                            {notif.matchReasonSummary}
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {notif.missingMandatoryQualifications && notif.missingMandatoryQualifications.length > 0 && (
@@ -273,7 +286,11 @@ export const NotificationCenterPopover: React.FC<Props> = ({
                     <div className="text-[10px] text-slate-400 flex items-center gap-2 pt-0.5">
                       <span>Deadline: {notif.deadline || 'Open'}</span>
                       <span className="inline-flex items-center gap-0.5 text-slate-700 font-bold">
-                        <span>Open Vacancy</span>
+                        <span>
+                          {Array.isArray(notif.topJobs) && notif.topJobs.length > 1
+                            ? `View Top ${notif.topJobs.length} & Apply`
+                            : 'Open Vacancy'}
+                        </span>
                         <ExternalLink className="w-2.5 h-2.5" />
                       </span>
                     </div>

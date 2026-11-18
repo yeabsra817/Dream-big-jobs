@@ -9,6 +9,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { OFFICIAL_CATEGORIES, SiteSettings } from '../types/job';
+import { AppBrandLogo } from './AppBrandLogo';
 
 interface Props {
   siteSettings: SiteSettings;
@@ -35,9 +36,7 @@ export const Footer: React.FC<Props> = ({
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#16A34A] text-white flex items-center justify-center">
-                <Briefcase className="w-5 h-5" />
-              </div>
+              <AppBrandLogo logoUrl={siteSettings.appLogoUrl} size="md" variant="green" />
               <span className="font-extrabold text-2xl tracking-tight text-white">
                 Hopeland<span className="text-[#4ADE80]">Jobs</span>
               </span>

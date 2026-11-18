@@ -14,7 +14,7 @@ export function detectIsIosDevice(): boolean {
 export function detectIsStandalone(): boolean {
   if (typeof window === 'undefined') return false;
   return (
-    (window.navigator as any).standalone === true ||
+    (window.navigator as any)?.standalone === true ||
     Boolean(window.matchMedia?.('(display-mode: standalone)')?.matches)
   );
 }

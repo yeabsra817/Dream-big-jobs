@@ -207,6 +207,8 @@ export interface SiteSettings {
   contactAddress: string;
   aboutText: string;
   customDomain?: string; // e.g. "hopelandjobs.tech" (used for Telegram post links & site branding)
+  appLogoUrl?: string; // Developer-configured custom app logo URL or compressed PNG data URI
+  appLogoUpdatedAt?: string; // ISO timestamp for cache-busting PWA manifest & icons
   updatedAt: string;
   // Smart Alerts & Thresholds
   alertTrafficDropThreshold?: number; // e.g. 50% drop

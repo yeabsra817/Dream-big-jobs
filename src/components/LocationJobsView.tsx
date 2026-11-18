@@ -1,26 +1,29 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Search,
-  Filter,
   MapPin,
-  Calendar,
   Briefcase,
   Building,
   Clock,
   Sparkles,
   Send,
-  ExternalLink,
   Coins,
   GraduationCap,
   Heart,
-  Share2,
-  CheckCircle2,
   Flame,
   ChevronRight,
+  UserCheck,
+  Globe,
 } from 'lucide-react';
 import { Vacancy, OFFICIAL_CATEGORIES, ETHIOPIAN_LOCATIONS } from '../types/job';
+import { JobSeekerProfile } from '../types/jobSeeker';
 import { getDaysLeft, isExpired } from '../utils/helpers';
+import {
+  assessVacancyExperienceMatch,
+  ExperienceMatchAssessment,
+  hasProfileExperienceSignals,
+} from '../utils/recommendationEngine';
 
 interface Props {
   initialLocation: string;
@@ -30,6 +33,9 @@ interface Props {
   savedJobIds: Set<string>;
   onToggleSaveJob: (jobId: string) => void;
   telegramUrl: string;
+  userProfile?: JobSeekerProfile | null;
+  onOpenAuth?: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const LocationJobsView: React.FC<Props> = ({
@@ -40,13 +46,32 @@ export const LocationJobsView: React.FC<Props> = ({
   savedJobIds,
   onToggleSaveJob,
   telegramUrl,
+  userProfile = null,
+  onOpenAuth,
+  onOpenProfile,
 }) => {
+  const hasExpSignals = useMemo(() => hasProfileExperienceSignals(userProfile), [userProfile]);
+  const [viewMode, setViewMode] = useState<'experience' | 'all'>(() =>
+    hasExpSignals ? 'experience' : 'all'
+  );
+  const userToggledModeRef = useRef(false);
+
+  useEffect(() => {
+    if (hasExpSignals && !userToggledModeRef.current) {
+      setViewMode('experience');
+    } else if (!hasExpSignals) {
+      setViewMode('all');
+    }
+  }, [hasExpSignals]);
+
   const [selectedCity, setSelectedCity] = useState<string>(initialLocation || 'All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedExperience, setSelectedExperience] = useState<'All' | 'fresh' | 'mid' | 'senior'>('All');
   const [closingSoonOnly, setClosingSoonOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'latest' | 'deadline'>('latest');
+  const [sortBy, setSortBy] = useState<'recommended' | 'latest' | 'deadline'>(() =>
+    hasExpSignals ? 'recommended' : 'latest'
+  );
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Filter only active published vacancies
@@ -69,10 +94,26 @@ export const LocationJobsView: React.FC<Props> = ({
     return map;
   }, [publishedVacancies]);
 
-  // Filter vacancies by selected city and search criteria
-  const filteredVacancies = useMemo(() => {
-    return publishedVacancies
-      .filter((v) => {
+  const assessedVacancies = useMemo(() => {
+    return publishedVacancies.map((vacancy) => ({
+      vacancy,
+      match: assessVacancyExperienceMatch(userProfile, vacancy),
+    }));
+  }, [publishedVacancies, userProfile]);
+
+  const experienceMatchedCount = useMemo(
+    () => assessedVacancies.filter((item) => item.match.isMatch).length,
+    [assessedVacancies]
+  );
+
+  // Filter vacancies by selected city, experience mode, and search criteria
+  const filteredVacancyItems = useMemo(() => {
+    return assessedVacancies
+      .filter(({ vacancy: v, match }) => {
+        if (viewMode === 'experience' && hasExpSignals && !match.isMatch) {
+          return false;
+        }
+
         // City location match
         if (selectedCity !== 'All') {
           const keyword = selectedCity.split(' ')[0].toLowerCase();
@@ -133,17 +174,31 @@ export const LocationJobsView: React.FC<Props> = ({
         return true;
       })
       .sort((a, b) => {
+        if (sortBy === 'recommended' && hasExpSignals) {
+          if (a.match.isMatch !== b.match.isMatch) return a.match.isMatch ? -1 : 1;
+          if (a.match.isMatch && b.match.isMatch) {
+            if (a.match.meetsYearsRequirement !== b.match.meetsYearsRequirement) {
+              return a.match.meetsYearsRequirement ? -1 : 1;
+            }
+            if (a.match.matchType !== b.match.matchType) {
+              return a.match.matchType === 'direct' ? -1 : 1;
+            }
+            if (a.match.score !== b.match.score) return b.match.score - a.match.score;
+          }
+        }
         if (sortBy === 'deadline') {
-          const tA = Date.parse(a.applicationDeadline) || Infinity;
-          const tB = Date.parse(b.applicationDeadline) || Infinity;
+          const tA = Date.parse(a.vacancy.applicationDeadline) || Infinity;
+          const tB = Date.parse(b.vacancy.applicationDeadline) || Infinity;
           return tA - tB;
         }
-        const dateA = new Date(a.publishedAt || a.createdAt).getTime();
-        const dateB = new Date(b.publishedAt || b.createdAt).getTime();
+        const dateA = new Date(a.vacancy.publishedAt || a.vacancy.createdAt).getTime();
+        const dateB = new Date(b.vacancy.publishedAt || b.vacancy.createdAt).getTime();
         return dateB - dateA;
       });
   }, [
-    publishedVacancies,
+    assessedVacancies,
+    viewMode,
+    hasExpSignals,
     selectedCity,
     searchQuery,
     selectedCategory,
@@ -199,10 +254,10 @@ export const LocationJobsView: React.FC<Props> = ({
             {/* Total count badge */}
             <div className="bg-slate-900/95 rounded-2xl p-4 border border-slate-700/80 text-center shrink-0 min-w-[130px]">
               <div className="text-3xl font-black text-amber-400">
-                {filteredVacancies.length}
+                {filteredVacancyItems.length}
               </div>
               <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mt-0.5">
-                {filteredVacancies.length === 1 ? 'Vacancy' : 'Vacancies'} Listed
+                {filteredVacancyItems.length === 1 ? 'Vacancy' : 'Vacancies'} Listed
               </div>
             </div>
           </div>
@@ -264,6 +319,78 @@ export const LocationJobsView: React.FC<Props> = ({
       {/* Filter and Search Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6">
         <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-slate-200 space-y-3">
+          {hasExpSignals ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('experience');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'experience'
+                      ? 'bg-[#0B132B] text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${viewMode === 'experience' ? 'text-amber-400' : 'text-emerald-600'}`} />
+                  <span>Based on Your Experience ({experienceMatchedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'all'
+                      ? 'bg-[#16A34A] text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>See All Local Jobs ({publishedVacancies.length})</span>
+                </button>
+              </div>
+              <p className="text-[11px] font-medium text-slate-500">
+                Includes your direct experience &amp; related career professions first (e.g. Banking ↔ Finance).
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100 bg-emerald-50/60 -mx-1 px-3 py-2 rounded-xl border border-emerald-200/70">
+              <div className="flex items-start gap-2 text-xs text-slate-700">
+                <UserCheck className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                <span>
+                  <strong className="text-[#0B132B]">Experience-First Local Jobs:</strong>{' '}
+                  {userProfile
+                    ? 'Add your experience & expertise to see local jobs matching your profession and related fields first.'
+                    : 'Sign in and fill your experience to prioritize local jobs suited to your profession & related fields.'}
+                </span>
+              </div>
+              {userProfile ? (
+                onOpenProfile && (
+                  <button
+                    type="button"
+                    onClick={onOpenProfile}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer transition-colors"
+                  >
+                    Add Experience
+                  </button>
+                )
+              ) : (
+                onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer transition-colors"
+                  >
+                    Sign In / Set Experience
+                  </button>
+                )
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
             {/* Search Input */}
             <div className="md:col-span-4 relative">
@@ -311,9 +438,10 @@ export const LocationJobsView: React.FC<Props> = ({
             <div className="md:col-span-2">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'latest' | 'deadline')}
+                onChange={(e) => setSortBy(e.target.value as 'recommended' | 'latest' | 'deadline')}
                 className="w-full py-2.5 px-3 rounded-xl border border-slate-200 focus:border-amber-500 outline-none text-xs text-slate-700 bg-white font-medium"
               >
+                {hasExpSignals && <option value="recommended">Sort: Experience Fit</option>}
                 <option value="latest">Sort: Newest</option>
                 <option value="deadline">Sort: Deadline</option>
               </select>
@@ -349,7 +477,7 @@ export const LocationJobsView: React.FC<Props> = ({
             </div>
 
             <div className="text-slate-500 text-[11px] font-semibold">
-              Showing {filteredVacancies.length} of {publishedVacancies.length} vacancies
+              Showing {filteredVacancyItems.length} of {publishedVacancies.length} vacancies
             </div>
           </div>
         </div>
@@ -357,19 +485,34 @@ export const LocationJobsView: React.FC<Props> = ({
 
       {/* Main Vacancies List */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        {filteredVacancies.length === 0 ? (
+        {filteredVacancyItems.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center max-w-lg mx-auto border border-slate-200 shadow-sm space-y-4">
             <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
               <MapPin className="w-8 h-8" />
             </div>
             <h3 className="text-lg font-bold text-[#0B132B]">
-              No Vacancies Found in {selectedCity}
+              {viewMode === 'experience' && hasExpSignals && publishedVacancies.length > 0
+                ? 'No Experience-Matched Local Jobs Under Current Filters'
+                : `No Vacancies Found in ${selectedCity}`}
             </h3>
             <p className="text-xs text-slate-500 leading-relaxed">
-              We did not find active vacancies matching your selected location or filters. New vacancies are
-              uploaded and broadcast to Telegram daily.
+              {viewMode === 'experience' && hasExpSignals && publishedVacancies.length > 0
+                ? 'Switch to All Local Jobs to browse every open Ethiopian vacancy across all sectors, or clear your city/category filters.'
+                : 'We did not find active vacancies matching your selected location or filters. New vacancies are uploaded and broadcast to Telegram daily.'}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              {viewMode === 'experience' && hasExpSignals && publishedVacancies.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  See All Ethiopian Jobs ({publishedVacancies.length})
+                </button>
+              )}
               <button
                 onClick={() => {
                   setSelectedCity('All');
@@ -380,7 +523,7 @@ export const LocationJobsView: React.FC<Props> = ({
                 }}
                 className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
               >
-                Show All Ethiopian Jobs ({publishedVacancies.length})
+                Reset Filters
               </button>
               <a
                 href={telegramUrl || 'https://t.me/DreamBigJobsEthiopia'}
@@ -395,7 +538,7 @@ export const LocationJobsView: React.FC<Props> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredVacancies.map((vacancy) => {
+            {filteredVacancyItems.map(({ vacancy, match }) => {
               const daysInfo = getDaysLeft(vacancy.applicationDeadline);
               const isUrgent = daysInfo.daysLeft <= 3 && daysInfo.daysLeft >= 0;
               const isSaved = savedJobIds.has(vacancy.id);
@@ -408,7 +551,7 @@ export const LocationJobsView: React.FC<Props> = ({
                 >
                   {/* Top Bar: Sector & Save Button */}
                   <div>
-                    <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
                       <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 line-clamp-1">
                         {vacancy.category}
                       </span>
@@ -441,6 +584,21 @@ export const LocationJobsView: React.FC<Props> = ({
                         </a>
                       </div>
                     </div>
+
+                    {match.isMatch && (
+                      <div className="mb-2.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold ${
+                            match.matchType === 'direct'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              : 'bg-sky-50 text-sky-800 border border-sky-200'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <span>{match.badgeLabel}</span>
+                        </span>
+                      </div>
+                    )}
 
                     {/* Job Title & Employer */}
                     <h3 className="font-extrabold text-base text-[#0B132B] group-hover:text-amber-600 transition-colors leading-snug line-clamp-2">

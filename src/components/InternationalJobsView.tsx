@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Briefcase,
   Building2,
   Calendar,
   CheckCircle2,
@@ -10,19 +11,29 @@ import {
   MapPin,
   Search,
   ShieldCheck,
+  Sparkles,
+  UserCheck,
   X,
 } from 'lucide-react';
 import {
   INTERNATIONAL_JOB_CATEGORIES,
   InternationalJob,
-  InternationalRegion,
   OFFICIAL_NOT_STATED,
   RESEARCH_REGIONS,
 } from '../types/international';
+import { JobSeekerProfile } from '../types/jobSeeker';
+import {
+  assessInternationalJobExperienceMatch,
+  ExperienceMatchAssessment,
+  hasProfileExperienceSignals,
+} from '../utils/recommendationEngine';
 
 interface Props {
   jobs: InternationalJob[];
   onBack: () => void;
+  userProfile?: JobSeekerProfile | null;
+  onOpenAuth?: () => void;
+  onOpenProfile?: () => void;
 }
 
 const FEE_POLICY_LABELS: Record<InternationalJob['visaFeePolicy'], string> = {
@@ -33,7 +44,27 @@ const FEE_POLICY_LABELS: Record<InternationalJob['visaFeePolicy'], string> = {
   not_stated: 'Fee Responsibility Not Stated Officially',
 };
 
-export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
+export const InternationalJobsView: React.FC<Props> = ({
+  jobs,
+  onBack,
+  userProfile = null,
+  onOpenAuth,
+  onOpenProfile,
+}) => {
+  const hasExpSignals = useMemo(() => hasProfileExperienceSignals(userProfile), [userProfile]);
+  const [viewMode, setViewMode] = useState<'experience' | 'all'>(() =>
+    hasExpSignals ? 'experience' : 'all'
+  );
+  const userToggledModeRef = useRef(false);
+
+  useEffect(() => {
+    if (hasExpSignals && !userToggledModeRef.current) {
+      setViewMode('experience');
+    } else if (!hasExpSignals) {
+      setViewMode('all');
+    }
+  }, [hasExpSignals]);
+
   const [regionFilter, setRegionFilter] = useState<string>('All');
   const [countryFilter, setCountryFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -62,9 +93,41 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
     return Array.from(set).sort();
   }, [verifiedOpenJobs, regionFilter]);
 
-  const filteredJobs = useMemo(() => {
+  const assessedJobs = useMemo(() => {
+    const items: Array<{ job: InternationalJob; match: ExperienceMatchAssessment }> =
+      verifiedOpenJobs.map((job) => ({
+        job,
+        match: assessInternationalJobExperienceMatch(userProfile, job),
+      }));
+
+    if (hasExpSignals) {
+      items.sort((a, b) => {
+        if (a.match.isMatch !== b.match.isMatch) return a.match.isMatch ? -1 : 1;
+        if (a.match.isMatch && b.match.isMatch) {
+          if (a.match.meetsYearsRequirement !== b.match.meetsYearsRequirement) {
+            return a.match.meetsYearsRequirement ? -1 : 1;
+          }
+          if (a.match.matchType !== b.match.matchType) {
+            return a.match.matchType === 'direct' ? -1 : 1;
+          }
+          if (a.match.score !== b.match.score) return b.match.score - a.match.score;
+        }
+        if (a.job.visaSponsored !== b.job.visaSponsored) return a.job.visaSponsored ? -1 : 1;
+        return 0;
+      });
+    }
+    return items;
+  }, [verifiedOpenJobs, userProfile, hasExpSignals]);
+
+  const experienceMatchedCount = useMemo(
+    () => assessedJobs.filter((item) => item.match.isMatch).length,
+    [assessedJobs]
+  );
+
+  const filteredJobItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return verifiedOpenJobs.filter((j) => {
+    return assessedJobs.filter(({ job: j, match }) => {
+      if (viewMode === 'experience' && hasExpSignals && !match.isMatch) return false;
       if (regionFilter !== 'All' && j.region !== regionFilter) return false;
       if (countryFilter !== 'All' && j.country !== countryFilter) return false;
       if (categoryFilter !== 'All' && j.category !== categoryFilter) return false;
@@ -85,7 +148,9 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
       return true;
     });
   }, [
-    verifiedOpenJobs,
+    assessedJobs,
+    viewMode,
+    hasExpSignals,
     regionFilter,
     countryFilter,
     categoryFilter,
@@ -153,9 +218,81 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
         </div>
       </section>
 
-      {/* Filter Bar */}
+      {/* Filter Bar & Experience-First Switcher */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-5">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
+          {hasExpSignals ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('experience');
+                  }}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'experience'
+                      ? 'bg-[#0B132B] text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${viewMode === 'experience' ? 'text-amber-400' : 'text-emerald-600'}`} />
+                  <span>Based on Your Experience ({experienceMatchedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    viewMode === 'all'
+                      ? 'bg-[#16A34A] text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>See All Jobs ({verifiedOpenJobs.length})</span>
+                </button>
+              </div>
+              <p className="text-[11px] font-medium text-slate-500">
+                Includes your direct profession &amp; related career fields first (e.g. Banking ↔ Finance).
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 bg-emerald-50/60 -mx-1 px-3 py-2.5 rounded-xl border border-emerald-200/70">
+              <div className="flex items-start gap-2 text-xs text-slate-700">
+                <UserCheck className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                <span>
+                  <strong className="text-[#0B132B]">Personalize Visa-Sponsored Jobs:</strong>{' '}
+                  {userProfile
+                    ? 'Add your work experience or expertise to see matching & related-field jobs first.'
+                    : 'Sign in and fill your experience to prioritize visa-sponsored jobs suited to your profession & related fields first.'}
+                </span>
+              </div>
+              {userProfile ? (
+                onOpenProfile && (
+                  <button
+                    type="button"
+                    onClick={onOpenProfile}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer transition-colors"
+                  >
+                    Add Experience
+                  </button>
+                )
+              ) : (
+                onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer transition-colors"
+                  >
+                    Sign In / Set Experience
+                  </button>
+                )
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -274,21 +411,40 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
 
       {/* Listings */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        {filteredJobs.length === 0 ? (
+        {filteredJobItems.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
             <Globe className="w-10 h-10 text-slate-300 mx-auto" />
             <h3 className="text-base font-extrabold text-slate-900">
-              No Verified International Vacancies Found Yet
+              {viewMode === 'experience' && hasExpSignals && verifiedOpenJobs.length > 0
+                ? 'No Visa-Sponsored Jobs Matched Your Experience & Current Filters'
+                : 'No Verified International Vacancies Found Yet'}
             </h3>
             <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
               {verifiedOpenJobs.length === 0
                 ? 'Hopeland strictly publishes international opportunities only after source authority verification and live link checks pass. Administrators can run the International Workforce Discovery Engine or add verified official postings from the Admin Control Panel.'
-                : 'No verified opportunities match your current filter combination. Try widening your country, region, or fee policy filters.'}
+                : viewMode === 'experience' && hasExpSignals
+                  ? 'You can view all verified international and visa-sponsored listings across every sector, or widen your filters.'
+                  : 'No verified opportunities match your current filter combination. Try widening your country, region, or fee policy filters.'}
             </p>
+            {viewMode === 'experience' && hasExpSignals && verifiedOpenJobs.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    userToggledModeRef.current = true;
+                    setViewMode('all');
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>See All {verifiedOpenJobs.length} Visa &amp; International Jobs</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredJobs.map((job) => (
+            {filteredJobItems.map(({ job, match }) => (
               <article
                 key={job.id}
                 className="bg-white rounded-2xl border border-slate-200 hover:border-amber-400 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between gap-4"
@@ -303,6 +459,26 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
                       <span>Verified</span>
                     </span>
                   </div>
+
+                  {match.isMatch && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                          match.matchType === 'direct'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-sky-50 text-sky-800 border border-sky-200'
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3 shrink-0" />
+                        <span>{match.badgeLabel}</span>
+                      </span>
+                      {job.visaSponsored && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                          Visa Sponsored
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <h2
@@ -321,6 +497,13 @@ export const InternationalJobsView: React.FC<Props> = ({ jobs, onBack }) => {
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                       <span className="truncate">{job.location}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                      <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">
+                        <strong className="text-slate-900">Experience:</strong>{' '}
+                        {job.requiredExperience || OFFICIAL_NOT_STATED}
+                      </span>
                     </div>
                     <div className="text-[11px] text-slate-700">
                       <strong className="text-slate-900">Ethiopian Applicants:</strong>{' '}

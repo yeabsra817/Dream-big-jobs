@@ -33,6 +33,8 @@ import {
   Check,
   AlertTriangle,
   Smartphone,
+  LogOut,
+  Lock,
 } from 'lucide-react';
 import {
   JobSeekerProfile,
@@ -58,7 +60,11 @@ import {
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
 import { askAiCareerCoach, CareerCoachAiResponse } from '../lib/aiService';
-import { sendTestPushNotification } from '../lib/notificationService';
+import {
+  sendTestPushNotification,
+  isRunningInEmbeddedIframe,
+  buildStandalonePushActivationUrl,
+} from '../lib/notificationService';
 
 const RECOMMENDED_SECTOR_OPTIONS = [
   'Commercial Banking & Finance',
@@ -134,6 +140,8 @@ interface Props {
   onDisableDevicePush?: () => Promise<void>;
   onMarkNotificationRead?: (id: string, read: boolean) => Promise<void>;
   onMarkAllNotificationsRead?: () => Promise<void>;
+  mandatoryLock?: boolean;
+  onSignOut?: () => void;
 }
 
 export const JobSeekerDashboard: React.FC<Props> = ({
@@ -157,6 +165,8 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   onDisableDevicePush = async () => {},
   onMarkNotificationRead = async () => {},
   onMarkAllNotificationsRead = async () => {},
+  mandatoryLock = false,
+  onSignOut,
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'overview'
@@ -488,12 +498,33 @@ export const JobSeekerDashboard: React.FC<Props> = ({
       <div className="bg-[#FBFBFA] rounded-3xl w-full max-w-5xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
         {/* Dashboard Top Header */}
         <div className="bg-[#0B132B] text-white p-6 sm:p-8 relative shrink-0">
-          <button
-            onClick={onClose}
-            className="absolute top-5 right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {mandatoryLock ? (
+            <div className="absolute top-4 right-4 sm:top-5 sm:right-5 flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[11px] font-bold">
+                <Lock className="w-3 h-3" />
+                <span>Profile Required</span>
+              </span>
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-600/80 text-slate-200 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close profile dashboard"
+              className="absolute top-5 right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
@@ -609,6 +640,67 @@ export const JobSeekerDashboard: React.FC<Props> = ({
             );
           })}
         </div>
+
+        {/* Obligatory Profile Completion Banner for Phone Bar Notifications */}
+        {(mandatoryLock || !completionEval.isProfileComplete) && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-3 shrink-0 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-start gap-2.5">
+                <Bell className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950 leading-snug">
+                  <strong className="font-extrabold">
+                    {mandatoryLock
+                      ? 'Complete Your Mandatory Profile to Unlock Browsing & Phone Bar Job Alerts:'
+                      : 'Complete All 6 Mandatory Sections for Phone Bar Job Alerts:'}
+                  </strong>{' '}
+                  <span className="text-amber-900">
+                    Tap any missing item below to fill it, then click <strong>Save Profile Changes</strong>.
+                  </span>
+                </div>
+              </div>
+              <span className="text-[11px] font-black text-amber-900 bg-amber-200/70 px-2.5 py-0.5 rounded-full self-start sm:self-center shrink-0">
+                {completionPct}% Complete
+              </span>
+            </div>
+
+            {completionEval.missingSections.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pl-6">
+                {completionEval.missingSections.map((sec) => {
+                  const targetTab:
+                    | 'personal'
+                    | 'professional'
+                    | 'education'
+                    | 'experience' = sec.includes('Personal')
+                    ? 'personal'
+                    : sec.includes('Education')
+                    ? 'education'
+                    : sec.includes('Work Experience') &&
+                      !formProfile.noExperience &&
+                      (!formProfile.experience || formProfile.experience.length === 0) &&
+                      !formProfile.currentPosition?.trim()
+                    ? 'experience'
+                    : 'professional';
+
+                  return (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => setActiveTab(targetTab)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                        activeTab === targetTab
+                          ? 'bg-[#0B132B] text-white border-[#0B132B]'
+                          : 'bg-white text-amber-950 border-amber-300 hover:bg-amber-100'
+                      }`}
+                    >
+                      <span>{sec}</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Scrollable Tab Content Area */}
         <div className="overflow-y-auto p-6 sm:p-8 flex-1 space-y-6">
@@ -1224,11 +1316,23 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                       <span>Notification Channels &amp; Device Status</span>
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Instant Web Push notifications directly to your Android or desktop notification panel (max 3 matching jobs/day, 1 per vacancy, no email alerts).
+                      Instant Web Push notifications directly to your Android or desktop notification bar, plus a 3-day inactivity check sending your Top 3 recommended jobs to remind you to apply.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {isRunningInEmbeddedIframe() && browserNotificationPermission === 'denied' && (
+                      <a
+                        href={buildStandalonePushActivationUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Open Chrome Tab to Enable Phone Bar</span>
+                      </a>
+                    )}
+
                     {(notificationPrefs?.manuallyDisabled === true ||
                       !hasActiveDevicePush ||
                       browserNotificationPermission !== 'granted') && (
@@ -1310,6 +1414,8 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                         ? 'Granted & Active (Auto-On)'
                         : browserNotificationPermission === 'granted'
                         ? 'Granted (Syncing Device)'
+                        : isRunningInEmbeddedIframe() && browserNotificationPermission === 'denied'
+                        ? 'Preview Frame (Open Chrome Tab)'
                         : browserNotificationPermission === 'denied'
                         ? 'Blocked in Browser Settings'
                         : browserNotificationPermission === 'unsupported'
@@ -1572,12 +1678,26 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                             </span>
                           </div>
                           <h4 className="font-extrabold text-sm text-slate-900">{notif.title}</h4>
-                          <p className="text-xs text-slate-600">
-                            {notif.employer} · {notif.location}
-                            {notif.salary ? ` · ${notif.salary}` : ''} · Deadline: {notif.deadline || 'Open'}
-                          </p>
-                          {notif.matchReasonSummary && (
-                            <p className="text-xs text-emerald-800 font-medium">{notif.matchReasonSummary}</p>
+                          {Array.isArray(notif.topJobs) && notif.topJobs.length > 0 ? (
+                            <ol className="space-y-1 text-xs text-slate-700 pt-1">
+                              {notif.topJobs.slice(0, 3).map((tj, idx) => (
+                                <li key={tj.id} className="font-medium">
+                                  <span className="font-extrabold text-[#0B132B]">{idx + 1}.</span> {tj.title} —{' '}
+                                  <span className="text-slate-600">{tj.organization}</span>
+                                  <span className="text-slate-400"> ({tj.matchScore}% match)</span>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : (
+                            <>
+                              <p className="text-xs text-slate-600">
+                                {notif.employer} · {notif.location}
+                                {notif.salary ? ` · ${notif.salary}` : ''} · Deadline: {notif.deadline || 'Open'}
+                              </p>
+                              {notif.matchReasonSummary && (
+                                <p className="text-xs text-emerald-800 font-medium">{notif.matchReasonSummary}</p>
+                              )}
+                            </>
                           )}
                           {notif.missingMandatoryQualifications?.length > 0 && (
                             <p className="text-xs text-amber-800 font-medium">
@@ -1597,6 +1717,20 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                           </button>
 
                           {(() => {
+                            if (Array.isArray(notif.topJobs) && notif.topJobs.length > 1) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!notif.read) onMarkNotificationRead(notif.id, true);
+                                    setActiveTab('recommendations');
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white text-xs font-extrabold cursor-pointer"
+                                >
+                                  View Top {notif.topJobs.length} Jobs
+                                </button>
+                              );
+                            }
                             const matchedVac = vacancies.find((v) => v.id === notif.vacancyId);
                             if (matchedVac) {
                               return (

@@ -53,6 +53,7 @@ import {
 } from './types/international';
 import {
   fetchPublishedVacancies,
+  fetchVacancyById,
   fetchAllVacanciesAdmin,
   saveVacancy,
   saveBatchVacancies,
@@ -123,6 +124,9 @@ import {
 import {
   computeStaffOpportunityRecommendations,
   hasCompletedMandatoryPreferences,
+  hasProfileExperienceSignals,
+  assessVacancyExperienceMatch,
+  ExperienceMatchAssessment,
 } from './utils/recommendationEngine';
 import {
   registerServiceWorkerSafe,
@@ -132,6 +136,8 @@ import {
   checkCurrentDevicePushHealth,
   checkVisitorNotificationStatus,
   recordNotificationPromptDismissal,
+  clearNotificationPromptDismissal,
+  isRunningInEmbeddedIframe,
   syncBrowserPushWithUserAccount,
   requestAndEnableNotifications,
   disableDeviceNotifications,
@@ -145,9 +151,11 @@ import {
   recalculateUserRecommendationsServer,
   isAmharicSignupPromoDismissed,
   recordAmharicSignupPromoDismissed,
+  isIosSafariNeedsInstall,
 } from './lib/notificationService';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AmharicSignupPromoModal } from './components/AmharicSignupPromoModal';
+import { PWAInstallPromptModal } from './components/PWAInstallPromptModal';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import {
   fetchCustomerVisitCount,
@@ -199,6 +207,8 @@ export default function App() {
         contactPhone: '+251 91 123 4567',
         contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
         customDomain: 'hopelandjobs.tech',
+        appLogoUrl: '',
+        appLogoUpdatedAt: '',
         gaMeasurementId: 'G-KH6X73105S',
         gaTrackingEnabled: true,
         aboutText:
@@ -218,6 +228,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryMeta | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(null);
+  const [isTelegramApplyArrival, setIsTelegramApplyArrival] = useState(false);
   const [isAdminView, setIsAdminView] = useState(false);
   const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
   const [activeExpansionView, setActiveExpansionView] = useState<
@@ -241,11 +252,14 @@ export default function App() {
   // Job Seeker Dashboard & Application Modal States
   const [isJobSeekerDashboardOpen, setIsJobSeekerDashboardOpen] = useState(false);
   const [jobSeekerInitialTab, setJobSeekerInitialTab] = useState<
-    'overview' | 'recommendations' | 'notifications' | 'professional'
+    'overview' | 'recommendations' | 'notifications' | 'personal' | 'professional' | 'education' | 'experience'
   >('overview');
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [applyTargetVacancy, setApplyTargetVacancy] = useState<Vacancy | null>(null);
   const [userApplications, setUserApplications] = useState<UserJobApplication[]>([]);
+  const [homepageLocalMode, setHomepageLocalMode] = useState<'experience' | 'all'>('experience');
+  const [showAllHomepageLocal, setShowAllHomepageLocal] = useState(false);
+  const [searchExperienceOnly, setSearchExperienceOnly] = useState(false);
 
   // Notifications, Push & Reconnect Sync State
   const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>([]);
@@ -266,13 +280,17 @@ export default function App() {
     | 'unsupported'
   >('first_time');
   const alreadyPromptedThisLoginRef = React.useRef(false);
+  const enablePushRequestedRef = React.useRef(false);
   const visitorPromptCheckedRef = React.useRef(false);
   const visitorPromptTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOpenTopRecsRef = React.useRef(false);
+  const pendingNotifReadIdRef = React.useRef<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
   const [isSyncingReconnect, setIsSyncingReconnect] = useState(false);
   const [isIosInstallGuideOpen, setIsIosInstallGuideOpen] = useState(false);
+  const [isInstallPopupOpen, setIsInstallPopupOpen] = useState(false);
   const {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
@@ -376,13 +394,18 @@ export default function App() {
           return;
         }
 
-        if (evaluatePrompt && !alreadyPromptedThisLoginRef.current && status.shouldShowPopup) {
+        if (
+          evaluatePrompt &&
+          (!alreadyPromptedThisLoginRef.current || enablePushRequestedRef.current) &&
+          status.shouldShowPopup
+        ) {
           if (
             status.reason !== 'already_active' &&
             status.reason !== 'dismissed_cooldown' &&
             status.reason !== 'unsupported'
           ) {
             alreadyPromptedThisLoginRef.current = true;
+            enablePushRequestedRef.current = false;
             setNotificationModalReason(status.reason);
             setIsNotificationModalOpen(true);
           }
@@ -445,23 +468,58 @@ export default function App() {
         // Check URL parameter or path for direct job link (from Telegram / WhatsApp / Social shares)
         if (typeof window !== 'undefined') {
           const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('enablePush') === '1' && !isRunningInEmbeddedIframe()) {
+            enablePushRequestedRef.current = true;
+            clearNotificationPromptDismissal();
+            urlParams.delete('enablePush');
+            const cleanQuery = urlParams.toString();
+            const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+            window.history.replaceState({}, '', cleanUrl);
+          }
+          if (urlParams.get('view') === 'top-recommendations') {
+            pendingOpenTopRecsRef.current = true;
+            const notifIdFromUrl = urlParams.get('notificationId');
+            if (notifIdFromUrl) pendingNotifReadIdRef.current = notifIdFromUrl;
+          }
           const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
           const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
-          const targetId = jobId || pathMatch?.[1];
+          const targetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
+          const arrivedFromTelegram = urlParams.get('utm_source') === 'telegram';
+          const applyAction =
+            urlParams.get('apply') === '1' ||
+            urlParams.get('action') === 'apply' ||
+            arrivedFromTelegram;
 
           if (targetId) {
-            const found = loadedVacancies.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase());
+            let found = loadedVacancies.find(
+              (v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()
+            );
+            if (!found) {
+              const fetchedOne = await fetchVacancyById(targetId).catch(() => null);
+              if (fetchedOne) found = fetchedOne;
+            }
             if (found) {
               setSelectedVacancy(found);
+              setIsTelegramApplyArrival(applyAction);
               document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
               trackAnalyticsEvent('vacancy_view', {
                 jobId: found.id,
                 jobTitle: found.title,
                 organization: found.organization,
                 category: found.category,
-                path: `/?jobId=${found.id}`,
+                path: `/jobs/${encodeURIComponent(found.id)}`,
                 gaMeasurementId: loadedSettings.gaMeasurementId,
               });
+              if (arrivedFromTelegram) {
+                trackAnalyticsEvent('click_telegram_link', {
+                  jobId: found.id,
+                  jobTitle: found.title,
+                  organization: found.organization,
+                  category: found.category,
+                  path: `/jobs/${encodeURIComponent(found.id)}`,
+                  gaMeasurementId: loadedSettings.gaMeasurementId,
+                });
+              }
             }
           }
         }
@@ -619,6 +677,26 @@ export default function App() {
 
           // Hydrate notifications, verify current device push status & apply strict Req 10F rule
           await hydrateUserNotificationsAndPrompt(user.uid, user.email, true);
+
+          if (pendingOpenTopRecsRef.current) {
+            pendingOpenTopRecsRef.current = false;
+            const notifIdToRead = pendingNotifReadIdRef.current;
+            pendingNotifReadIdRef.current = null;
+            if (notifIdToRead) {
+              markUserNotificationReadServer(user.uid, { notificationId: notifIdToRead, read: true }, user.email)
+                .then((res) => {
+                  setUserNotifications(res.notifications);
+                  setUnreadNotificationsCount(res.unreadCount);
+                })
+                .catch(() => {});
+            }
+            setIsNotificationModalOpen(false);
+            setJobSeekerInitialTab('recommendations');
+            setIsJobSeekerDashboardOpen(true);
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', '/');
+            }
+          }
         } catch (e) {
           console.warn('Profile sync notice:', e);
         }
@@ -642,36 +720,70 @@ export default function App() {
           setAdminEmail(null);
         }
 
-        // Check unregistered visitors: display the non-intrusive Amharic signup & notification promo popup cleanly
+        // Check unregistered visitors: display promo popup only on general browsing, not covering direct job links
         if (!visitorPromptCheckedRef.current) {
           visitorPromptCheckedRef.current = true;
-          if (visitorPromptTimerRef.current) clearTimeout(visitorPromptTimerRef.current);
-          visitorPromptTimerRef.current = setTimeout(async () => {
-            if (auth.currentUser) return;
-            try {
-              const status = await checkVisitorNotificationStatus(null, null);
-              setBrowserPerm(status.browserPermission);
-              setHasActiveDevicePush(status.hasValidSubscription);
+          const searchParamsNow =
+            typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+          const isTopRecsLanding = searchParamsNow?.get('view') === 'top-recommendations';
+          if (isTopRecsLanding || pendingOpenTopRecsRef.current) {
+            setUserAuthModalMode('signin');
+            setIsUserAuthModalOpen(true);
+            return;
+          }
+          const isDirectJobLanding =
+            typeof window !== 'undefined' &&
+            (/\/jobs\/[^/?]+/.test(window.location.pathname) ||
+              Boolean(searchParamsNow?.has('jobId')) ||
+              Boolean(searchParamsNow?.has('job_id')) ||
+              Boolean(searchParamsNow?.has('id')));
+          if (!isDirectJobLanding) {
+            if (visitorPromptTimerRef.current) clearTimeout(visitorPromptTimerRef.current);
+            visitorPromptTimerRef.current = setTimeout(async () => {
+              if (auth.currentUser) return;
+              try {
+                if (enablePushRequestedRef.current) {
+                  clearNotificationPromptDismissal();
+                }
+                const status = await checkVisitorNotificationStatus(null, null);
+                setBrowserPerm(status.browserPermission);
+                setHasActiveDevicePush(status.hasValidSubscription);
 
-              if (!isAmharicSignupPromoDismissed()) {
-                alreadyPromptedThisLoginRef.current = true;
-                setIsNotificationModalOpen(false);
-                setIsAmharicPromoOpen(true);
-                return;
-              }
+                if (enablePushRequestedRef.current) {
+                  enablePushRequestedRef.current = false;
+                  if (!status.hasValidSubscription && status.reason !== 'unsupported') {
+                    alreadyPromptedThisLoginRef.current = true;
+                    setIsAmharicPromoOpen(false);
+                    setNotificationModalReason(
+                      status.reason === 'already_active' || status.reason === 'dismissed_cooldown'
+                        ? 'first_time'
+                        : status.reason
+                    );
+                    setIsNotificationModalOpen(true);
+                  }
+                  return;
+                }
 
-              if (
-                status.shouldShowPopup &&
-                status.reason !== 'already_active' &&
-                status.reason !== 'dismissed_cooldown' &&
-                status.reason !== 'unsupported'
-              ) {
-                alreadyPromptedThisLoginRef.current = true;
-                setNotificationModalReason(status.reason);
-                setIsNotificationModalOpen(true);
-              }
-            } catch {}
-          }, 1100);
+                if (!isAmharicSignupPromoDismissed()) {
+                  alreadyPromptedThisLoginRef.current = true;
+                  setIsNotificationModalOpen(false);
+                  setIsAmharicPromoOpen(true);
+                  return;
+                }
+
+                if (
+                  status.shouldShowPopup &&
+                  status.reason !== 'already_active' &&
+                  status.reason !== 'dismissed_cooldown' &&
+                  status.reason !== 'unsupported'
+                ) {
+                  alreadyPromptedThisLoginRef.current = true;
+                  setNotificationModalReason(status.reason);
+                  setIsNotificationModalOpen(true);
+                }
+              } catch {}
+            }, 900);
+          }
         }
       }
     });
@@ -752,6 +864,31 @@ export default function App() {
     const handleSwMessage = async (event: MessageEvent) => {
       if (event.data?.type === 'HOPELAND_RECONNECT_SYNC_TRIGGER') {
         triggerReconnectSync();
+      } else if (event.data?.type === 'HOPELAND_OPEN_RECOMMENDATIONS_FROM_NOTIFICATION') {
+        const notificationId = event.data.notificationId;
+        setIsAdminView(false);
+        setActiveExpansionView(null);
+        setSelectedCategory(null);
+        setSelectedLocation(null);
+        setIsAllCategoriesView(false);
+        setSelectedVacancy(null);
+        if (notificationId && userProfile?.uid) {
+          markUserNotificationReadServer(userProfile.uid, { notificationId, read: true }, userProfile.email)
+            .then((res) => {
+              setUserNotifications(res.notifications);
+              setUnreadNotificationsCount(res.unreadCount);
+            })
+            .catch(() => {});
+        }
+        if (userProfile?.uid) {
+          setJobSeekerInitialTab('recommendations');
+          setIsJobSeekerDashboardOpen(true);
+        } else {
+          pendingOpenTopRecsRef.current = true;
+          if (notificationId) pendingNotifReadIdRef.current = notificationId;
+          setUserAuthModalMode('signin');
+          setIsUserAuthModalOpen(true);
+        }
       } else if (event.data?.type === 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION') {
         const resolvedJobId = event.data.vacancyId || event.data.jobId;
         const notificationId = event.data.notificationId;
@@ -785,6 +922,7 @@ export default function App() {
           }
           if (found) {
             setSelectedVacancy(found);
+            setIsTelegramApplyArrival(Boolean(event.data?.url && String(event.data.url).includes('apply=1')));
             document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
           }
           if (typeof window !== 'undefined') {
@@ -830,7 +968,11 @@ export default function App() {
         document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
       }
       const viewParam = urlParams.get('view');
-      if (
+      if (viewParam === 'top-recommendations') {
+        setActiveExpansionView(null);
+        setJobSeekerInitialTab('recommendations');
+        setIsJobSeekerDashboardOpen(true);
+      } else if (
         viewParam === 'international-jobs' ||
         viewParam === 'immigration' ||
         viewParam === 'scholarships'
@@ -1000,18 +1142,78 @@ export default function App() {
     });
   }, [publishedVacancies, heroSearch, heroLocation, heroSector, heroEmploymentType]);
 
-  // Combined displayed search results (AI-ranked when AI Smart Search is active, otherwise standard filter)
+  const hasExpSignals = useMemo(() => hasProfileExperienceSignals(userProfile), [userProfile]);
+
+  const vacancyExperienceMap = useMemo(() => {
+    const map = new Map<string, ExperienceMatchAssessment>();
+    if (!hasExpSignals) return map;
+    publishedVacancies.forEach((v) => {
+      map.set(v.id, assessVacancyExperienceMatch(userProfile, v));
+    });
+    return map;
+  }, [publishedVacancies, userProfile, hasExpSignals]);
+
+  const localExperienceMatchedVacancies = useMemo(() => {
+    if (!hasExpSignals) return [];
+    return publishedVacancies
+      .filter((v) => vacancyExperienceMap.get(v.id)?.isMatch)
+      .sort((a, b) => {
+        const ma = vacancyExperienceMap.get(a.id)!;
+        const mb = vacancyExperienceMap.get(b.id)!;
+        if (ma.meetsYearsRequirement !== mb.meetsYearsRequirement) {
+          return ma.meetsYearsRequirement ? -1 : 1;
+        }
+        if (ma.matchType !== mb.matchType) {
+          return ma.matchType === 'direct' ? -1 : 1;
+        }
+        return mb.score - ma.score;
+      });
+  }, [publishedVacancies, vacancyExperienceMap, hasExpSignals]);
+
+  // Combined displayed search results (AI-ranked when AI Smart Search is active, otherwise experience-prioritized filter)
   const displayedHomepageVacancies = useMemo(() => {
+    let base: Vacancy[];
     if (aiSearchResult && aiSearchResult.matchedVacancyIds && aiSearchResult.matchedVacancyIds.length > 0) {
       const idRank = new Map<string, number>();
       aiSearchResult.matchedVacancyIds.forEach((id, idx) => idRank.set(id, idx));
       const matched = publishedVacancies
         .filter((v) => idRank.has(v.id))
         .sort((a, b) => (idRank.get(a.id) ?? 999) - (idRank.get(b.id) ?? 999));
-      if (matched.length > 0) return matched;
+      base = matched.length > 0 ? matched : filteredHomepageVacancies;
+    } else if (hasExpSignals) {
+      base = [...filteredHomepageVacancies].sort((a, b) => {
+        const ma = vacancyExperienceMap.get(a.id);
+        const mb = vacancyExperienceMap.get(b.id);
+        const aMatch = ma?.isMatch ? 1 : 0;
+        const bMatch = mb?.isMatch ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
+        if (ma?.isMatch && mb?.isMatch) {
+          if (ma.meetsYearsRequirement !== mb.meetsYearsRequirement) {
+            return ma.meetsYearsRequirement ? -1 : 1;
+          }
+          if (ma.matchType !== mb.matchType) {
+            return ma.matchType === 'direct' ? -1 : 1;
+          }
+          return mb.score - ma.score;
+        }
+        return 0;
+      });
+    } else {
+      base = filteredHomepageVacancies;
     }
-    return filteredHomepageVacancies;
-  }, [aiSearchResult, publishedVacancies, filteredHomepageVacancies]);
+
+    if (searchExperienceOnly && hasExpSignals) {
+      return base.filter((v) => vacancyExperienceMap.get(v.id)?.isMatch);
+    }
+    return base;
+  }, [
+    aiSearchResult,
+    publishedVacancies,
+    filteredHomepageVacancies,
+    hasExpSignals,
+    vacancyExperienceMap,
+    searchExperienceOnly,
+  ]);
 
   const handleHeroSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -1131,7 +1333,7 @@ export default function App() {
       publishedVacancies,
       [],
       [],
-      6
+      30
     );
   }, [publishedVacancies, userProfile]);
 
@@ -1158,8 +1360,9 @@ export default function App() {
   // Permanent URL and Direct Vacancy Selection
   const handleSelectVacancy = (v: Vacancy) => {
     setSelectedVacancy(v);
+    setIsTelegramApplyArrival(false);
     if (typeof window !== 'undefined') {
-      const newUrl = `${window.location.origin}/?jobId=${v.id}`;
+      const newUrl = `${window.location.origin}/jobs/${encodeURIComponent(v.id)}`;
       window.history.pushState({ jobId: v.id }, `${v.title} | HOPELAND JOBS`, newUrl);
       document.title = `${v.title} at ${v.organization} | HOPELAND JOBS`;
     }
@@ -1167,8 +1370,9 @@ export default function App() {
 
   const handleCloseVacancy = () => {
     setSelectedVacancy(null);
+    setIsTelegramApplyArrival(false);
     if (typeof window !== 'undefined') {
-      window.history.pushState({}, 'HOPELAND JOBS', window.location.pathname);
+      window.history.pushState({}, 'HOPELAND JOBS', '/');
       document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
     }
   };
@@ -1535,6 +1739,149 @@ export default function App() {
     }
   };
 
+  // Mandatory profile completeness gate for non-admin signed-in users
+  const isMandatoryProfileIncomplete = Boolean(
+    currentUser &&
+      userProfile &&
+      !isOwnerAuthorized &&
+      !evaluateMandatoryProfileCompletion(userProfile).isProfileComplete
+  );
+
+  const handleSignOutUser = React.useCallback(async () => {
+    try {
+      await signOut(auth);
+    } catch {}
+    try {
+      localStorage.removeItem('hopelandjobs_current_user');
+    } catch {}
+    alreadyPromptedThisLoginRef.current = false;
+    setCurrentUser(null);
+    setUserProfile(null);
+    setUserApplications([]);
+    setUserNotifications([]);
+    setUnreadNotificationsCount(0);
+    setNotificationPrefs(null);
+    setHasActiveDevicePush(false);
+    setIsJobSeekerDashboardOpen(false);
+    setAnalyticsUserId(null);
+  }, []);
+
+  // Dynamically sync developer's App Logo to favicon, Apple Touch Icon, and Web Manifest
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const versionTag = encodeURIComponent(
+      siteSettings.appLogoUpdatedAt || siteSettings.updatedAt || 'default'
+    );
+    const dynamicFavicon = siteSettings.appLogoUrl
+      ? `/favicon-32x32.png?v=${versionTag}`
+      : '/favicon-32x32.png';
+    const dynamicAppleIcon = siteSettings.appLogoUrl
+      ? `/apple-touch-icon.png?v=${versionTag}`
+      : '/apple-touch-icon.png';
+    const dynamicManifest = `/manifest.webmanifest?v=${versionTag}`;
+
+    const faviconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (faviconLink) faviconLink.href = dynamicFavicon;
+
+    const appleLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    if (appleLink) appleLink.href = dynamicAppleIcon;
+
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (manifestLink) manifestLink.href = dynamicManifest;
+  }, [siteSettings.appLogoUrl, siteSettings.appLogoUpdatedAt, siteSettings.updatedAt]);
+
+  // Invite visitors & users every 15 seconds to download/install the website until installed
+  useEffect(() => {
+    if (isStandaloneApp || isAdminView || isInstallPopupOpen || isMandatoryProfileIncomplete) {
+      return;
+    }
+    const isBlockedByActiveDialog =
+      isUserAuthModalOpen ||
+      isAdminAuthModalOpen ||
+      isNotificationModalOpen ||
+      isAmharicPromoOpen ||
+      isJobSeekerDashboardOpen ||
+      isApplicationModalOpen ||
+      isIosInstallGuideOpen;
+
+    if (isBlockedByActiveDialog) return;
+
+    const timer = setTimeout(() => {
+      setIsInstallPopupOpen(true);
+    }, 15000);
+
+    return () => clearTimeout(timer);
+  }, [
+    isStandaloneApp,
+    isAdminView,
+    isInstallPopupOpen,
+    isMandatoryProfileIncomplete,
+    isUserAuthModalOpen,
+    isAdminAuthModalOpen,
+    isNotificationModalOpen,
+    isAmharicPromoOpen,
+    isJobSeekerDashboardOpen,
+    isApplicationModalOpen,
+    isIosInstallGuideOpen,
+  ]);
+
+  // Obligate signed-in seekers to fill their mandatory profile before browsing
+  useEffect(() => {
+    if (
+      !isMandatoryProfileIncomplete ||
+      !userProfile ||
+      isAdminView ||
+      isUserAuthModalOpen ||
+      isNotificationModalOpen
+    ) {
+      return;
+    }
+
+    setIsAmharicPromoOpen(false);
+    setIsInstallPopupOpen(false);
+
+    const hasPersonal = Boolean(
+      userProfile.fullName &&
+        userProfile.fullName.trim().length >= 2 &&
+        userProfile.phone &&
+        userProfile.phone.trim().length >= 6 &&
+        userProfile.locationCity &&
+        userProfile.locationCity.trim().length >= 2
+    );
+    const hasEducation = Boolean(
+      Array.isArray(userProfile.education) && userProfile.education.length > 0
+    );
+    const hasExpHistory = Boolean(
+      userProfile.noExperience === true ||
+        (Array.isArray(userProfile.experience) && userProfile.experience.length > 0) ||
+        (userProfile.currentPosition && userProfile.currentPosition.trim().length >= 2)
+    );
+
+    const nextTab: 'personal' | 'education' | 'experience' | 'professional' = !hasPersonal
+      ? 'personal'
+      : !hasEducation
+      ? 'education'
+      : !hasExpHistory
+      ? 'experience'
+      : 'professional';
+
+    setJobSeekerInitialTab((prev) =>
+      prev === 'personal' ||
+      prev === 'education' ||
+      prev === 'experience' ||
+      prev === 'professional'
+        ? prev
+        : nextTab
+    );
+    setIsJobSeekerDashboardOpen(true);
+  }, [
+    isMandatoryProfileIncomplete,
+    userProfile,
+    isAdminView,
+    isUserAuthModalOpen,
+    isNotificationModalOpen,
+  ]);
+
   // If in Admin Dashboard view
   if (isAdminView && isOwnerAuthorized) {
     return (
@@ -1636,24 +1983,7 @@ export default function App() {
           setJobSeekerInitialTab('overview');
           setIsJobSeekerDashboardOpen(true);
         }}
-        onSignOutUser={async () => {
-          try {
-            await signOut(auth);
-          } catch {}
-          try {
-            localStorage.removeItem('hopelandjobs_current_user');
-          } catch {}
-          alreadyPromptedThisLoginRef.current = false;
-          setCurrentUser(null);
-          setUserProfile(null);
-          setUserApplications([]);
-          setUserNotifications([]);
-          setUnreadNotificationsCount(0);
-          setNotificationPrefs(null);
-          setHasActiveDevicePush(false);
-          setIsJobSeekerDashboardOpen(false);
-          setAnalyticsUserId(null);
-        }}
+        onSignOutUser={handleSignOutUser}
         language={language}
         onToggleLanguage={() => setLanguage(language === 'en' ? 'am' : 'en')}
         notifications={userNotifications}
@@ -1681,6 +2011,11 @@ export default function App() {
                 setUnreadNotificationsCount(res.unreadCount);
               })
               .catch(() => {});
+          }
+          if (Array.isArray(notif.topJobs) && notif.topJobs.length > 1) {
+            setJobSeekerInitialTab('recommendations');
+            setIsJobSeekerDashboardOpen(true);
+            return;
           }
           const matchedVac = vacancies.find((v) => v.id === notif.vacancyId);
           if (matchedVac) {
@@ -1715,6 +2050,15 @@ export default function App() {
             <InternationalJobsView
               jobs={internationalJobs}
               onBack={() => handleOpenExpansionView(null)}
+              userProfile={userProfile}
+              onOpenAuth={() => {
+                setUserAuthModalMode('signin');
+                setIsUserAuthModalOpen(true);
+              }}
+              onOpenProfile={() => {
+                setJobSeekerInitialTab('professional');
+                setIsJobSeekerDashboardOpen(true);
+              }}
             />
           </Suspense>
         ) : activeExpansionView === 'immigration' ? (
@@ -1759,6 +2103,15 @@ export default function App() {
               savedJobIds={savedJobIds}
               onToggleSaveJob={handleToggleSaveJob}
               telegramUrl={siteSettings.telegramChannelUrl}
+              userProfile={userProfile}
+              onOpenAuth={() => {
+                setUserAuthModalMode('signin');
+                setIsUserAuthModalOpen(true);
+              }}
+              onOpenProfile={() => {
+                setJobSeekerInitialTab('professional');
+                setIsJobSeekerDashboardOpen(true);
+              }}
             />
           </Suspense>
         ) : selectedCategory ? (
@@ -1776,6 +2129,7 @@ export default function App() {
               onToggleSaveJob={handleToggleSaveJob}
               onSelectLocation={handleSelectLocation}
               telegramUrl={siteSettings.telegramChannelUrl}
+              userProfile={userProfile}
             />
           </Suspense>
         ) : (
@@ -1951,6 +2305,22 @@ export default function App() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                      {hasExpSignals && searchTab === 'jobs' && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchExperienceOnly((prev) => !prev)}
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                            searchExperienceOnly
+                              ? 'bg-[#0B132B] text-white'
+                              : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>
+                            {searchExperienceOnly ? 'Showing Experience Matches' : 'Experience Matches Only'}
+                          </span>
+                        </button>
+                      )}
                       {searchTab === 'jobs' && heroSearch.trim().length > 0 && (
                         <button
                           type="button"
@@ -2076,6 +2446,7 @@ export default function App() {
                       {displayedHomepageVacancies.map((vac) => {
                         const days = getDaysLeft(vac.applicationDeadline);
                         const isSaved = savedJobIds.has(vac.id);
+                        const expMatch = vacancyExperienceMap.get(vac.id);
                         return (
                           <div
                             key={vac.id}
@@ -2095,6 +2466,19 @@ export default function App() {
                                   <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
                                 </button>
                               </div>
+
+                              {expMatch?.isMatch && (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold ${
+                                    expMatch.matchType === 'direct'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                      : 'bg-sky-50 text-sky-800 border border-sky-200'
+                                  }`}
+                                >
+                                  <Sparkles className="w-3 h-3 shrink-0" />
+                                  <span>{expMatch.badgeLabel}</span>
+                                </span>
+                              )}
 
                               <h3
                                 onClick={() => handleSelectVacancy(vac)}
@@ -2206,130 +2590,274 @@ export default function App() {
               </div>
             </section>
 
-            {/* PERSONALIZED RECOMMENDATIONS (Rendered only when Candidate is signed in) */}
+            {/* LOCAL JOBS FOR YOUR EXPERIENCE + SEE ALL TOGGLE (Rendered when signed in) */}
             {userProfile && (
               <section className="bg-white py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-100">
                 <div className="max-w-7xl mx-auto">
                   <div className="rounded-3xl p-6 sm:p-8 border border-emerald-200 bg-emerald-50/40 space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div>
                         <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A] mb-1">
                           <Sparkles className="w-4 h-4" />
-                          <span>Personalized Career Matches</span>
+                          <span>Experience-First Local Career Matches</span>
                         </div>
                         <h2 className="text-2xl font-bold text-[#0B132B]">
-                          Recommended For You
+                          {homepageLocalMode === 'experience' && hasExpSignals
+                            ? 'Local Jobs Based on Your Experience'
+                            : 'All Local Jobs Across Ethiopia'}
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                          Tailored for <strong>{userProfile.fullName || 'You'}</strong> based on{' '}
-                          <strong className="text-[#15803D]">"{userProfile.desiredJobTitle || userProfile.preferredIndustry}"</strong>{' '}
-                          and <strong>{userProfile.yearsOfExperience}</strong> of experience.
+                          {hasExpSignals ? (
+                            <>
+                              Prioritizing opportunities matching{' '}
+                              <strong className="text-[#15803D]">
+                                {userProfile.currentPosition || userProfile.desiredJobTitle || userProfile.preferredIndustry || 'your profession'}
+                              </strong>{' '}
+                              and closely related career fields first (e.g. Banking ↔ Finance).
+                            </>
+                          ) : (
+                            'Add your work experience & expertise to filter local jobs tailored to your profession and related fields first.'
+                          )}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsJobSeekerDashboardOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-emerald-200 hover:border-[#16A34A] text-[#0B132B] font-semibold text-xs shadow-xs transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
-                      >
-                        <span>Update Preferences</span>
-                        <ChevronRight className="w-3.5 h-3.5 text-[#16A34A]" />
-                      </button>
-                    </div>
 
-                    {recommendedVacancies.length === 0 ? (
-                      <div className="bg-white rounded-2xl p-8 text-center border border-emerald-100 space-y-2">
-                        <Briefcase className="w-8 h-8 text-[#16A34A] mx-auto" />
-                        <p className="text-xs font-bold text-[#0B132B]">
-                          Complete your preferred job title and sector to view personalized matches
-                        </p>
+                      <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+                        {hasExpSignals && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setHomepageLocalMode('experience')}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                                homepageLocalMode === 'experience'
+                                  ? 'bg-[#0B132B] text-white shadow-xs'
+                                  : 'bg-white border border-emerald-200 text-slate-700 hover:border-[#16A34A]'
+                              }`}
+                            >
+                              <Sparkles className={`w-3.5 h-3.5 ${homepageLocalMode === 'experience' ? 'text-amber-400' : 'text-[#16A34A]'}`} />
+                              <span>Your Experience ({localExperienceMatchedVacancies.length})</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHomepageLocalMode('all')}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                                homepageLocalMode === 'all'
+                                  ? 'bg-[#16A34A] text-white shadow-xs'
+                                  : 'bg-white border border-emerald-200 text-slate-700 hover:border-[#16A34A]'
+                              }`}
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              <span>See All Local Jobs ({publishedVacancies.length})</span>
+                            </button>
+                          </>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
                             setJobSeekerInitialTab('professional');
                             setIsJobSeekerDashboardOpen(true);
                           }}
-                          className="mt-2 px-4 py-2 bg-[#16A34A] hover:bg-[#15803D] text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-emerald-200 hover:border-[#16A34A] text-[#0B132B] font-semibold text-xs shadow-xs transition-colors cursor-pointer"
                         >
-                          Refine Job Title &amp; Sectors
+                          <span>Update Experience</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-[#16A34A]" />
                         </button>
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {recommendedVacancies.map((rec) => {
-                          const vac = rec.vacancy;
-                          if (!vac) return null;
-                          const days = getDaysLeft(vac.applicationDeadline);
-                          const isSaved = savedJobIds.has(vac.id);
-                          return (
-                            <div
-                              key={vac.id}
-                              className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-[#16A34A] shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-                            >
-                              <div className="space-y-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                                      <span className="font-bold font-mono tabular-nums text-[#16A34A]">
-                                        {rec.matchScore}% Match ({rec.eligibilityStatus})
-                                      </span>
-                                      <span aria-hidden="true" className="text-slate-300">·</span>
-                                      <span className="text-slate-600 font-medium">{vac.category}</span>
-                                    </div>
-                                    <h3
-                                      onClick={() => handleSelectVacancy(vac)}
-                                      className="text-base font-bold text-[#0B132B] hover:text-[#16A34A] transition-colors cursor-pointer line-clamp-1 pt-0.5"
-                                    >
-                                      {vac.title}
-                                    </h3>
-                                    <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
-                                      <Building className="w-3.5 h-3.5 text-slate-400" />
-                                      <span>{vac.organization}</span>
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSaveJob(vac.id)}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
-                                    title={isSaved ? 'Remove' : 'Save'}
-                                  >
-                                    <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
-                                  </button>
-                                </div>
+                    </div>
 
-                                <div className="text-xs text-[#15803D] font-medium line-clamp-1">
-                                  Why it matches: {rec.matchReasons.slice(0, 2).join(' · ')}
-                                </div>
+                    {(() => {
+                      const orderedAllLocal = [...publishedVacancies].sort((a, b) => {
+                        const ma = vacancyExperienceMap.get(a.id);
+                        const mb = vacancyExperienceMap.get(b.id);
+                        const aMatch = ma?.isMatch ? 1 : 0;
+                        const bMatch = mb?.isMatch ? 1 : 0;
+                        if (aMatch !== bMatch) return bMatch - aMatch;
+                        if (ma?.isMatch && mb?.isMatch) return mb.score - ma.score;
+                        return 0;
+                      });
 
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                                  <span className="flex items-center gap-1 truncate">
-                                    <MapPin className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
-                                    <span className="truncate">{vac.location}</span>
-                                  </span>
-                                  <span aria-hidden="true" className="text-slate-300">·</span>
-                                  <span className="flex items-center gap-1 truncate tabular-nums">
-                                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                    <span className="truncate">{days.text}</span>
-                                  </span>
-                                </div>
-                              </div>
+                      const activeList =
+                        homepageLocalMode === 'experience' && hasExpSignals
+                          ? localExperienceMatchedVacancies
+                          : orderedAllLocal;
 
-                              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
-                                <span className="text-xs font-semibold text-[#15803D] truncate max-w-[160px]">
-                                  {vac.salary || 'Salary negotiable'}
-                                </span>
+                      const recById = new Map(recommendedVacancies.map((r) => [r.id, r]));
+
+                      if (!hasExpSignals) {
+                        return (
+                          <div className="bg-white rounded-2xl p-8 text-center border border-emerald-100 space-y-2">
+                            <Briefcase className="w-8 h-8 text-[#16A34A] mx-auto" />
+                            <p className="text-xs font-bold text-[#0B132B]">
+                              Add your work experience, job title, and expertise to see matched &amp; related-field local jobs first
+                            </p>
+                            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setJobSeekerInitialTab('professional');
+                                  setIsJobSeekerDashboardOpen(true);
+                                }}
+                                className="px-4 py-2 bg-[#16A34A] hover:bg-[#15803D] text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                              >
+                                Add Experience &amp; Expertise
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectLocation('All')}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#0B132B] rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                              >
+                                Browse All {publishedVacancies.length} Local Jobs
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (activeList.length === 0) {
+                        return (
+                          <div className="bg-white rounded-2xl p-8 text-center border border-emerald-100 space-y-3">
+                            <Briefcase className="w-8 h-8 text-[#16A34A] mx-auto" />
+                            <p className="text-xs font-bold text-[#0B132B]">
+                              No local vacancies currently match your experience fields
+                            </p>
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              {publishedVacancies.length > 0 && (
                                 <button
                                   type="button"
-                                  onClick={() => handleSelectVacancy(vac)}
-                                  className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-[#16A34A] hover:bg-[#15803D] text-white transition-colors cursor-pointer"
+                                  onClick={() => setHomepageLocalMode('all')}
+                                  className="px-4 py-2 bg-[#16A34A] hover:bg-[#15803D] text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
                                 >
-                                  View Details
+                                  See All {publishedVacancies.length} Local Jobs
                                 </button>
-                              </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setJobSeekerInitialTab('professional');
+                                  setIsJobSeekerDashboardOpen(true);
+                                }}
+                                className="px-4 py-2 bg-white border border-slate-200 hover:border-[#16A34A] text-[#0B132B] rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                              >
+                                Refine Job Title &amp; Sectors
+                              </button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          </div>
+                        );
+                      }
+
+                      const visibleList = showAllHomepageLocal ? activeList : activeList.slice(0, 6);
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {visibleList.map((vac) => {
+                              const days = getDaysLeft(vac.applicationDeadline);
+                              const isSaved = savedJobIds.has(vac.id);
+                              const expMatch = vacancyExperienceMap.get(vac.id);
+                              const rec = recById.get(vac.id);
+                              return (
+                                <div
+                                  key={vac.id}
+                                  className="bg-white rounded-2xl p-5 border border-slate-200 hover:border-[#16A34A] shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                                >
+                                  <div className="space-y-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                                          {expMatch?.isMatch && (
+                                            <span
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                                expMatch.matchType === 'direct'
+                                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                                  : 'bg-sky-50 text-sky-800 border border-sky-200'
+                                              }`}
+                                            >
+                                              <Sparkles className="w-3 h-3" />
+                                              <span>{expMatch.badgeLabel}</span>
+                                            </span>
+                                          )}
+                                          {rec && (
+                                            <span className="font-bold font-mono tabular-nums text-[#16A34A]">
+                                              {rec.matchScore}% Match
+                                            </span>
+                                          )}
+                                          <span className="text-slate-600 font-medium">{vac.category}</span>
+                                        </div>
+                                        <h3
+                                          onClick={() => handleSelectVacancy(vac)}
+                                          className="text-base font-bold text-[#0B132B] hover:text-[#16A34A] transition-colors cursor-pointer line-clamp-1 pt-0.5"
+                                        >
+                                          {vac.title}
+                                        </h3>
+                                        <p className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                          <Building className="w-3.5 h-3.5 text-slate-400" />
+                                          <span>{vac.organization}</span>
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSaveJob(vac.id)}
+                                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors shrink-0 cursor-pointer"
+                                        title={isSaved ? 'Remove' : 'Save'}
+                                      >
+                                        <Heart className={`w-4 h-4 ${isSaved ? 'text-rose-500 fill-current' : ''}`} />
+                                      </button>
+                                    </div>
+
+                                    {rec && rec.matchReasons.length > 0 && (
+                                      <div className="text-xs text-[#15803D] font-medium line-clamp-1">
+                                        Why it matches: {rec.matchReasons.slice(0, 2).join(' · ')}
+                                      </div>
+                                    )}
+
+                                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                      <span className="flex items-center gap-1 truncate">
+                                        <MapPin className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
+                                        <span className="truncate">{vac.location}</span>
+                                      </span>
+                                      <span aria-hidden="true" className="text-slate-300">·</span>
+                                      <span className="flex items-center gap-1 truncate tabular-nums">
+                                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                        <span className="truncate">{days.text}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-4 text-xs">
+                                    <span className="text-xs font-semibold text-[#15803D] truncate max-w-[160px]">
+                                      {vac.salary || 'Salary negotiable'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSelectVacancy(vac)}
+                                      className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-[#16A34A] hover:bg-[#15803D] text-white transition-colors cursor-pointer"
+                                    >
+                                      View Details
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {activeList.length > 6 && (
+                            <div className="text-center pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowAllHomepageLocal((prev) => !prev)}
+                                className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white border border-emerald-200 hover:border-[#16A34A] text-xs font-bold text-[#0B132B] cursor-pointer shadow-xs transition-colors"
+                              >
+                                <span>
+                                  {showAllHomepageLocal
+                                    ? 'Show Fewer'
+                                    : `Show All ${activeList.length} ${homepageLocalMode === 'experience' ? 'Experience Matches' : 'Local Jobs'}`}
+                                </span>
+                                <ChevronRight className="w-3.5 h-3.5 text-[#16A34A]" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </section>
@@ -2615,6 +3143,7 @@ export default function App() {
           <UserAuthModal
             key={`user-auth-${userAuthModalMode}-${isUserAuthModalOpen}`}
             isOpen={isUserAuthModalOpen}
+            appLogoUrl={siteSettings.appLogoUrl}
             initialMode={userAuthModalMode}
             onClose={() => setIsUserAuthModalOpen(false)}
             onSuccess={async (user, profile) => {
@@ -2666,6 +3195,7 @@ export default function App() {
       {isAmharicPromoOpen && !currentUser && (
         <AmharicSignupPromoModal
           isOpen={isAmharicPromoOpen}
+          appLogoUrl={siteSettings.appLogoUrl}
           hasActiveDevicePush={hasActiveDevicePush}
           onClose={(dismissed) => {
             setIsAmharicPromoOpen(false);
@@ -2692,6 +3222,7 @@ export default function App() {
           isOpen={isNotificationModalOpen}
           uid={userProfile?.uid || null}
           userEmail={userProfile?.email || null}
+          appLogoUrl={siteSettings.appLogoUrl}
           reason={notificationModalReason}
           initialEmailAlerts={false}
           onClose={(dismissed) => {
@@ -2749,19 +3280,27 @@ export default function App() {
             notificationPrefs={notificationPrefs}
             browserNotificationPermission={browserPerm}
             hasActiveDevicePush={hasActiveDevicePush}
+            mandatoryLock={isMandatoryProfileIncomplete}
+            onSignOut={handleSignOutUser}
             onClose={() => {
-              setIsJobSeekerDashboardOpen(false);
-              setJobSeekerInitialTab('overview');
+              if (!isMandatoryProfileIncomplete) {
+                setIsJobSeekerDashboardOpen(false);
+                setJobSeekerInitialTab('overview');
+              }
             }}
             onUpdateProfile={async (updated) => {
               await saveJobSeekerProfile(updated);
               setUserProfile(updated);
 
               let latestPrefs = notificationPrefs;
-              // Because Save Changes is a real user click gesture, automatically enable phone bar push
-              // once mandatory experience, years of experience, and job expertise are complete (unless user disabled it)
-              if (hasCompletedMandatoryPreferences(updated) && latestPrefs?.manuallyDisabled !== true) {
-                if (!hasActiveDevicePush && getBrowserNotificationPermission() !== 'denied') {
+              let pushActiveNow = hasActiveDevicePush;
+              const isNowMandatoryComplete =
+                evaluateMandatoryProfileCompletion(updated).isProfileComplete;
+              const hasPrefFields = hasCompletedMandatoryPreferences(updated);
+
+              // Automatically enable phone bar push once mandatory fields are complete (unless user manually disabled it)
+              if ((isNowMandatoryComplete || hasPrefFields) && latestPrefs?.manuallyDisabled !== true) {
+                if (!pushActiveNow && getBrowserNotificationPermission() !== 'denied') {
                   const pushInit = await requestAndEnableNotifications(updated.uid, {
                     emailAlerts: false,
                     websiteBell: true,
@@ -2775,6 +3314,7 @@ export default function App() {
                     setBrowserPerm(pushInit.permissionStatus);
                   }
                   if (pushInit?.subscriptionActive) {
+                    pushActiveNow = true;
                     setHasActiveDevicePush(true);
                   }
                 }
@@ -2791,6 +3331,24 @@ export default function App() {
                   fresh.notifications,
                   latestPrefs
                 ).catch(() => 0);
+              }
+
+              // If mandatory profile just completed and phone bar alerts still need permission/activation, prompt right away
+              if (
+                isNowMandatoryComplete &&
+                !pushActiveNow &&
+                latestPrefs?.manuallyDisabled !== true
+              ) {
+                const livePerm = getBrowserNotificationPermission();
+                setNotificationModalReason(
+                  isIosSafariNeedsInstall()
+                    ? 'ios_install_required'
+                    : livePerm === 'denied'
+                    ? 'blocked_in_browser'
+                    : 'not_enabled_yet'
+                );
+                setIsJobSeekerDashboardOpen(false);
+                setIsNotificationModalOpen(true);
               }
             }}
             onUpdateNotificationPrefs={async (patch) => {
@@ -2826,6 +3384,10 @@ export default function App() {
               setHasActiveDevicePush(
                 res.preferences?.manuallyDisabled !== true && health.hasActiveSubscriptionOnThisDevice
               );
+              if (!res.subscriptionActive && (res.permissionStatus === 'denied' || health.browserPermission === 'denied')) {
+                setNotificationModalReason('blocked_in_browser');
+                setIsNotificationModalOpen(true);
+              }
               const fresh = await fetchUserNotificationsServer(userProfile.uid, userProfile.email);
               setUserNotifications(fresh.notifications);
               setUnreadNotificationsCount(fresh.unreadCount);
@@ -2918,6 +3480,13 @@ export default function App() {
           <VacancyDetailModal
             vacancy={selectedVacancy}
             userProfile={userProfile}
+            autoFocusApply={isTelegramApplyArrival}
+            isSaved={savedJobIds.has(selectedVacancy.id)}
+            onToggleSave={handleToggleSaveJob}
+            onApplyOnWebsite={(vac) => {
+              handleCloseVacancy();
+              handleStartApply(vac);
+            }}
             onClose={handleCloseVacancy}
             telegramUrl={siteSettings.telegramChannelUrl}
           />
@@ -3007,6 +3576,15 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Repeating Every-15-Seconds Website Download / App Install Invitation */}
+      <PWAInstallPromptModal
+        isOpen={isInstallPopupOpen && !isStandaloneApp}
+        appLogoUrl={siteSettings.appLogoUrl}
+        canInstallNative={canInstallNativeApp}
+        isIOS={canShowIosInstallGuide}
+        onInstallNative={triggerNativeAppInstall}
+        onDismiss={() => setIsInstallPopupOpen(false)}
+      />
     </div>
   );
 }

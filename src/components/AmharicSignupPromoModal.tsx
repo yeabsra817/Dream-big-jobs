@@ -9,17 +9,22 @@ import {
   Sparkles,
   Share,
   PlusSquare,
+  ExternalLink,
 } from 'lucide-react';
 import jobAlertPromoImg from '../assets/images/job_alert_promo_1794910907405.jpg';
 import {
   getBrowserNotificationPermission,
   isIosSafariNeedsInstall,
+  isRunningInEmbeddedIframe,
+  buildStandalonePushActivationUrl,
   requestAndEnableNotifications,
 } from '../lib/notificationService';
 import { NotificationPermissionState } from '../types/jobSeeker';
+import { AppBrandLogo } from './AppBrandLogo';
 
 interface Props {
   isOpen: boolean;
+  appLogoUrl?: string | null;
   hasActiveDevicePush?: boolean;
   onClose: (dismissed: boolean) => void;
   onSignUpClick: () => void;
@@ -47,6 +52,7 @@ const BENEFITS = [
 
 export const AmharicSignupPromoModal: React.FC<Props> = ({
   isOpen,
+  appLogoUrl,
   hasActiveDevicePush = false,
   onClose,
   onSignUpClick,
@@ -73,8 +79,10 @@ export const AmharicSignupPromoModal: React.FC<Props> = ({
 
   if (!isOpen) return null;
 
+  const isInIframe = isRunningInEmbeddedIframe();
   const isIosNeedsInstall = isIosSafariNeedsInstall();
   const isBlocked = !isIosNeedsInstall && permState === 'denied';
+  const standaloneUrl = buildStandalonePushActivationUrl();
 
   const handleEnableNotificationsClick = async () => {
     const livePerm = getBrowserNotificationPermission();
@@ -84,6 +92,14 @@ export const AmharicSignupPromoModal: React.FC<Props> = ({
       setNotifFeedback({
         type: 'info',
         text: 'በ iPhone / iPad Safari ላይ Share -> Add to Home Screen በመጫን መተግበሪያውን ካስገቡ በኋላ ማሳወቂያውን ያብሩ።',
+      });
+      return;
+    }
+
+    if (livePerm === 'denied' && isInIframe) {
+      setNotifFeedback({
+        type: 'info',
+        text: 'Chrome በዚህ ቅድመ እይታ መስኮት (preview frame) ውስጥ የማሳወቂያ ጥያቄን ይገድባል። ከታች "Open in Chrome Tab" የሚለውን ይጫኑ።',
       });
       return;
     }
@@ -153,9 +169,7 @@ export const AmharicSignupPromoModal: React.FC<Props> = ({
           </button>
 
           <div className="flex items-center gap-2 mb-2 pr-10">
-            <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center text-slate-950 shrink-0">
-              <Sparkles className="w-4 h-4 fill-current" />
-            </div>
+            <AppBrandLogo logoUrl={appLogoUrl} size="xs" variant="amber" />
             <span className="text-xs font-extrabold tracking-wider text-amber-400 uppercase">
               HOPELAND JOBS · ETHIOPIA
             </span>
@@ -235,6 +249,16 @@ export const AmharicSignupPromoModal: React.FC<Props> = ({
                       <PlusSquare className="w-3 h-3 inline mx-0.5" /> <strong>Add to Home Screen</strong>, then open the app to enable alerts.
                     </span>
                   </div>
+                ) : isInIframe && isBlocked ? (
+                  <a
+                    href={standaloneUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full min-h-[40px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs inline-flex items-center justify-center gap-2 transition-colors shadow-xs whitespace-nowrap"
+                  >
+                    <ExternalLink className="w-4 h-4 shrink-0" />
+                    <span>Open in Chrome Tab</span>
+                  </a>
                 ) : (
                   <button
                     type="button"

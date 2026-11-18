@@ -104,28 +104,28 @@
       {
         "companyName": "Tsedey bank s.c",
         "startDate": "March 2025",
-        "responsibilities": "",
         "jobTitle": "Branch manager",
-        "endDate": "Present",
         "isCurrent": false,
+        "responsibilities": "",
+        "endDate": "Present",
         "id": "exp_1794827530267"
       }
     ],
     "preferredIndustry": "Banking and Financial Institutions",
     "email": "yeabsra45@gmail.com",
-    "profileCompletionPercentage": 80,
+    "profileCompletionPercentage": 85,
     "previousPositions": [],
     "gender": "Male",
     "jobPreferences": {
-      "remote": false,
-      "contract": false,
-      "freshGraduate": true,
       "internship": false,
       "fullTime": true,
-      "partTime": false
+      "remote": false,
+      "contract": false,
+      "partTime": false,
+      "freshGraduate": true
     },
     "locationCity": "Addis Ababa",
-    "updatedAt": "2026-11-17T13:19:51.493Z",
+    "updatedAt": "2026-11-18T10:07:43.712Z",
     "locationRegion": "Addis Ababa",
     "preferredWorkLocation": "Addis Ababa",
     "phone": "+251924396566",
@@ -134,8 +134,8 @@
     "staffDepartmentOrSector": "Banking",
     "employmentStatus": "unemployed",
     "certifications": [],
-    "lastLoginAt": "2026-11-17T13:17:45.997Z",
-    "lastActiveAt": "2026-11-17T13:19:51.493Z",
+    "lastLoginAt": "2026-11-18T09:53:50.038Z",
+    "lastActiveAt": "2026-11-18T10:07:43.712Z",
     "noExperience": false,
     "profileStatus": "incomplete",
     "preferredSectors": [

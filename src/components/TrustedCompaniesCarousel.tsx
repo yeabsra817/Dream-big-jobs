@@ -42,13 +42,13 @@ export const TrustedCompaniesCarousel: React.FC<Props> = ({ onSelectCompany }) =
 
   return (
     <section
-      aria-label="Trusted By Ethiopian Companies"
+      aria-label="Companies"
       className="bg-white py-9 sm:py-11 border-t border-slate-100"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-6 sm:mb-7">
           <h2 className="text-base sm:text-lg font-bold tracking-tight text-[#0B132B]">
-            Trusted By
+            Companies
           </h2>
         </div>
       </div>

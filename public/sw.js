@@ -1,11 +1,11 @@
 /* HOPELAND JOBS Service Worker — Real Web Push, Notification Deep-Linking, and Reconnect Sync */
 
-const CACHE_NAME = 'hopelandjobs-shell-v2';
+const CACHE_NAME = 'hopelandjobs-shell-v4';
 const APP_SHELL_URLS = [
-  '/',
   '/manifest.webmanifest',
   '/pwa-192x192.png',
   '/pwa-512x512.png',
+  '/pwa-badge-96x96.png',
   '/apple-touch-icon.png',
 ];
 
@@ -38,36 +38,77 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Never cache API calls, dev scripts, or third-party endpoints
+  // Never intercept API calls, dev/Vite scripts, or third-party endpoints
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@') ||
     url.pathname.startsWith('/src/') ||
-    url.pathname.startsWith('/node_modules/')
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/__aistudio') ||
+    url.pathname === '/_aistudio-iframe.js' ||
+    url.pathname === '/warmup.html'
   ) {
     return;
   }
 
-  // Network-first for HTML navigation so fresh deploys are always picked up immediately
+  // Network-first for HTML navigation; never cache non-OK, warmup, or Vite dev HTML
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', clone)).catch(() => {});
+        .then(async (response) => {
+          if (response && response.ok && response.status === 200) {
+            try {
+              const previewClone = response.clone();
+              const htmlText = await previewClone.text();
+              const isDevOrWarmup =
+                htmlText.includes('/@vite/client') ||
+                htmlText.includes('<title>Starting Server...</title>') ||
+                htmlText.includes('/warmup.html');
+              if (!isDevOrWarmup) {
+                const cacheClone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => cache.put('/', cacheClone)).catch(() => {});
+              }
+            } catch {}
+          }
           return response;
         })
-        .catch(() => caches.match('/') || caches.match(request))
+        .catch(async () => {
+          const fallback = (await caches.match(request)) || (await caches.match('/'));
+          return fallback || Response.error();
+        })
     );
     return;
   }
 
-  // Stale-while-revalidate for static assets & icons
+  // Network-first for manifest & root PWA icons so custom developer logo updates sync immediately
   if (
-    url.pathname.endsWith('.png') ||
-    url.pathname.endsWith('.webmanifest') ||
-    url.pathname.startsWith('/assets/')
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname === '/pwa-192x192.png' ||
+    url.pathname === '/pwa-512x512.png' ||
+    url.pathname === '/pwa-maskable-512x512.png' ||
+    url.pathname === '/apple-touch-icon.png' ||
+    url.pathname === '/favicon-32x32.png'
+  ) {
+    event.respondWith(
+      fetch(request, { cache: 'no-cache' })
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(async () => (await caches.match(request)) || Response.error())
+    );
+    return;
+  }
+
+  // Stale-while-revalidate only for built static assets & hashed assets
+  if (
+    !url.search &&
+    (url.pathname.endsWith('.png') ||
+      url.pathname.startsWith('/assets/'))
   ) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -79,24 +120,27 @@ self.addEventListener('fetch', (event) => {
             }
             return res;
           })
-          .catch(() => cached);
+          .catch(() => cached || Response.error());
         return cached || fetched;
       })
     );
   }
 });
 
-// Real Web Push Handler
+// Real Web Push Handler (Mobile Status Bar & Desktop Notification Panel)
 self.addEventListener('push', (event) => {
   let payload = {
-    title: 'HOPELAND JOBS — New Job Recommendation for You!',
-    body: 'A new job matching your profile and qualifications has been published. Open Hopeland Jobs to view the details and apply.',
+    title: 'Hopeland Jobs · New Job Recommendation for You',
+    body: 'A new job matching your profile and qualifications is open. Tap to view the details and apply.',
     url: '/',
     jobId: '',
     notificationId: '',
     tag: 'hopelandjobs-alert',
-    badge: '/pwa-192x192.png',
+    badge: '/pwa-badge-96x96.png',
     icon: '/pwa-192x192.png',
+    actionType: 'open_job',
+    topJobs: null,
+    timestamp: Date.now(),
   };
 
   try {
@@ -112,26 +156,40 @@ self.addEventListener('push', (event) => {
   }
 
   const jobId = payload.jobId || payload.vacancyId || '';
-  const defaultUrl = jobId
-    ? `/?jobId=${encodeURIComponent(jobId)}${payload.notificationId ? `&notificationId=${encodeURIComponent(payload.notificationId)}` : ''}`
+  const hasTopJobs = Array.isArray(payload.topJobs) && payload.topJobs.length > 0;
+  const isRecommendationsDigest = payload.actionType === 'open_recommendations' || hasTopJobs;
+  const defaultUrl = isRecommendationsDigest
+    ? `/?view=top-recommendations${payload.notificationId ? `&notificationId=${encodeURIComponent(payload.notificationId)}` : ''}`
+    : jobId
+    ? `/?jobId=${encodeURIComponent(jobId)}&apply=1${payload.notificationId ? `&notificationId=${encodeURIComponent(payload.notificationId)}` : ''}`
     : '/';
+
+  const primaryActionTitle =
+    isRecommendationsDigest && Array.isArray(payload.topJobs) && payload.topJobs.length > 1
+      ? `View Top ${payload.topJobs.length} & Apply`
+      : 'View & Apply';
 
   const options = {
     body: payload.body,
     icon: payload.icon || '/pwa-192x192.png',
-    badge: payload.badge || '/pwa-192x192.png',
-    tag: payload.tag || (jobId ? `vacancy-${jobId}` : 'hopelandjobs-alert'),
+    badge: payload.badge || '/pwa-badge-96x96.png',
+    tag: payload.tag || (isRecommendationsDigest ? 'hopeland-inactive-top3' : jobId ? `vacancy-${jobId}` : 'hopelandjobs-alert'),
     renotify: true,
     requireInteraction: false,
+    silent: false,
+    timestamp: Number(payload.timestamp) || Date.now(),
+    vibrate: [200, 80, 200],
     data: {
       url: payload.url || defaultUrl,
       jobId,
       vacancyId: jobId,
       notificationId: payload.notificationId || '',
+      actionType: isRecommendationsDigest ? 'open_recommendations' : 'open_job',
+      topJobs: hasTopJobs ? payload.topJobs : [],
     },
     actions: [
-      { action: 'open_job', title: 'View Vacancy' },
-      { action: 'dismiss', title: 'Dismiss' },
+      { action: isRecommendationsDigest ? 'open_recommendations' : 'open_job', title: primaryActionTitle },
+      { action: 'dismiss', title: 'Later' },
     ],
   };
 
@@ -147,6 +205,10 @@ self.addEventListener('notificationclick', (event) => {
   const targetUrl = data.url || '/';
   const resolvedJobId = data.vacancyId || data.jobId || '';
   const resolvedNotifId = data.notificationId || '';
+  const isRecommendationsTap =
+    data.actionType === 'open_recommendations' ||
+    event.action === 'open_recommendations' ||
+    String(targetUrl).includes('view=top-recommendations');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsList) => {
@@ -160,13 +222,22 @@ self.addEventListener('notificationclick', (event) => {
           try {
             const clientUrl = new URL(client.url);
             if (clientUrl.origin === self.location.origin && 'focus' in client) {
-              client.postMessage({
-                type: 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION',
-                url: targetUrl,
-                jobId: resolvedJobId,
-                vacancyId: resolvedJobId,
-                notificationId: resolvedNotifId,
-              });
+              if (isRecommendationsTap) {
+                client.postMessage({
+                  type: 'HOPELAND_OPEN_RECOMMENDATIONS_FROM_NOTIFICATION',
+                  url: targetUrl,
+                  notificationId: resolvedNotifId,
+                  topJobs: Array.isArray(data.topJobs) ? data.topJobs : [],
+                });
+              } else {
+                client.postMessage({
+                  type: 'HOPELAND_OPEN_JOB_FROM_NOTIFICATION',
+                  url: targetUrl,
+                  jobId: resolvedJobId,
+                  vacancyId: resolvedJobId,
+                  notificationId: resolvedNotifId,
+                });
+              }
               return client.focus();
             }
           } catch {}

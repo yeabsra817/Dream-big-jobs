@@ -96,6 +96,461 @@ function isDeadlineExpired(deadline) {
   if (Number.isNaN(parsed.getTime())) return false;
   return parsed.getTime() < Date.now() - 24 * 60 * 60 * 1e3;
 }
+var PROFESSION_FAMILIES = [
+  {
+    id: "banking",
+    label: "Banking",
+    patterns: [
+      /\bbank(?:ing|er|s)?\b/i,
+      /\bteller\b/i,
+      /\bcredit analyst\b/i,
+      /\bloan officer\b/i,
+      /\bbranch manager\b/i,
+      /\btrade finance\b/i,
+      /\bmicrofinance\b/i,
+      /\bmfi\b/i,
+      /\bsacco\b/i,
+      /\btreasury\b/i,
+      /\bcore banking\b/i,
+      /\bkyc\b/i,
+      /\baml\b/i,
+      /\brelationship manager\b/i
+    ],
+    excludePattern: /\b(blood bank|food bank|river bank|data bank|question bank)\b/i,
+    relatedIds: ["finance", "insurance", "economics", "sales_marketing", "legal_compliance", "customer_service"]
+  },
+  {
+    id: "finance",
+    label: "Finance & Accounting",
+    patterns: [
+      /\bfinance\b/i,
+      /\bfinancial\b/i,
+      /\baccount(?:ant|ing|ancy|s)\b/i,
+      /\baudit(?:or|ing)?\b/i,
+      /\btax(?:ation)?\b/i,
+      /\bcpa\b/i,
+      /\bacca\b/i,
+      /\bifrs\b/i,
+      /\bbookkeep(?:er|ing)\b/i,
+      /\bpayroll\b/i,
+      /\bbudget(?:ing)?\b/i,
+      /\bfinancial controller\b/i,
+      /\btreasurer\b/i,
+      /\bcost(?:ing)? analyst\b/i
+    ],
+    relatedIds: ["banking", "insurance", "economics", "logistics_supply", "legal_compliance"]
+  },
+  {
+    id: "insurance",
+    label: "Insurance & Risk",
+    patterns: [
+      /\binsurance\b/i,
+      /\bunderwrit(?:er|ing)\b/i,
+      /\bclaims? (?:officer|adjuster|analyst|manager)\b/i,
+      /\bactuar(?:y|ial)\b/i,
+      /\breinsurance\b/i,
+      /\brisk management\b/i,
+      /\brisk analyst\b/i
+    ],
+    relatedIds: ["banking", "finance", "economics", "legal_compliance"]
+  },
+  {
+    id: "economics",
+    label: "Economics & Investment",
+    patterns: [
+      /\beconom(?:ics|ist)\b/i,
+      /\binvestment\b/i,
+      /\bcapital market\b/i,
+      /\bportfolio\b/i,
+      /\bwealth management\b/i,
+      /\bfinancial modeling\b/i,
+      /\bvaluation\b/i
+    ],
+    relatedIds: ["finance", "banking", "insurance", "data_analytics"]
+  },
+  {
+    id: "it_software",
+    label: "IT & Software",
+    patterns: [
+      /\bsoftware\b/i,
+      /\bdeveloper\b/i,
+      /\bprogrammer\b/i,
+      /\bfull[- ]?stack\b/i,
+      /\bfront[- ]?end\b/i,
+      /\bback[- ]?end\b/i,
+      /\bdevops\b/i,
+      /\bcloud engineer\b/i,
+      /\bcyber ?security\b/i,
+      /\bsysadmin\b/i,
+      /\bsystems? admin(?:istrator)?\b/i,
+      /\bict\b/i,
+      /\bit support\b/i,
+      /\bit officer\b/i,
+      /\binformation technology\b/i,
+      /\bcomputer science\b/i,
+      /\bdatabase admin\b/i,
+      /\bui\/?ux\b/i,
+      /\bqa engineer\b/i,
+      /\bweb designer\b/i
+    ],
+    relatedIds: ["data_analytics", "telecom", "engineering_electromech", "project_management"]
+  },
+  {
+    id: "data_analytics",
+    label: "Data & Analytics",
+    patterns: [
+      /\bdata scien(?:ce|tist)\b/i,
+      /\bdata analyst\b/i,
+      /\bbusiness intelligence\b/i,
+      /\bmachine learning\b/i,
+      /\bstatistic(?:s|ian)\b/i,
+      /\banalytics\b/i,
+      /\bpower ?bi\b/i,
+      /\btableau\b/i,
+      /\bmonitoring (?:&|and) evaluation\b/i,
+      /\bm&e\b/i
+    ],
+    relatedIds: ["it_software", "economics", "finance", "ngo_humanitarian", "education_training"]
+  },
+  {
+    id: "telecom",
+    label: "Telecom & Networks",
+    patterns: [
+      /\btelecom(?:munication|s)?\b/i,
+      /\bsafaricom\b/i,
+      /\bethio telecom\b/i,
+      /\brf engineer\b/i,
+      /\bfiber optic\b/i,
+      /\bnetwork engineer(?:ing)?\b/i,
+      /\bnetwork admin\b/i
+    ],
+    relatedIds: ["it_software", "engineering_electromech", "sales_marketing"]
+  },
+  {
+    id: "ngo_humanitarian",
+    label: "NGO & Humanitarian",
+    patterns: [
+      /\bngo\b/i,
+      /\bingo\b/i,
+      /\bhumanitarian\b/i,
+      /\bunicef\b/i,
+      /\bundp\b/i,
+      /\bwfp\b/i,
+      /\bunhcr\b/i,
+      /\bunited nations\b/i,
+      /\brelief\b/i,
+      /\blivelihood(?:s)?\b/i,
+      /\bcommunity development\b/i,
+      /\bsocial work(?:er)?\b/i,
+      /\bgrant(?:s)? coordinator\b/i,
+      /\bprogram(?:me)? officer\b/i,
+      /\bprotection officer\b/i,
+      /\bchild protection\b/i,
+      /\bcivil society\b/i
+    ],
+    relatedIds: ["wash", "healthcare_public", "project_management", "logistics_supply", "agriculture_env", "education_training", "data_analytics"]
+  },
+  {
+    id: "wash",
+    label: "WASH & Water Engineering",
+    patterns: [
+      /\bwash\b/i,
+      /\bwater supply\b/i,
+      /\bsanitation\b/i,
+      /\bhygiene\b/i,
+      /\bhydrogeolog(?:y|ist)\b/i,
+      /\bwater engineer(?:ing)?\b/i,
+      /\bhydraulic\b/i
+    ],
+    relatedIds: ["ngo_humanitarian", "engineering_civil", "healthcare_public"]
+  },
+  {
+    id: "healthcare_clinical",
+    label: "Healthcare & Medical",
+    patterns: [
+      /\bnurs(?:e|ing)\b/i,
+      /\bdoctor\b/i,
+      /\bphysician\b/i,
+      /\bmedical\b/i,
+      /\bclinical\b/i,
+      /\bpharmac(?:y|ist)\b/i,
+      /\blab(?:oratory)? technologist\b/i,
+      /\bmidwif(?:e|ery)\b/i,
+      /\bhospital\b/i,
+      /\bdent(?:al|ist)\b/i,
+      /\bcaregiver\b/i,
+      /\belderly care\b/i,
+      /\bhealthcare\b/i,
+      /\bhealth care\b/i,
+      /\bsurgeon\b/i,
+      /\bphysiotherap(?:y|ist)\b/i
+    ],
+    relatedIds: ["healthcare_public", "ngo_humanitarian"]
+  },
+  {
+    id: "healthcare_public",
+    label: "Public Health & Nutrition",
+    patterns: [
+      /\bpublic health\b/i,
+      /\bmph\b/i,
+      /\bnutrition(?:ist)?\b/i,
+      /\bepidemiolog(?:y|ist)\b/i,
+      /\benvironmental health\b/i,
+      /\bhealth coordinator\b/i,
+      /\bhealth officer\b/i
+    ],
+    relatedIds: ["healthcare_clinical", "ngo_humanitarian", "wash"]
+  },
+  {
+    id: "engineering_civil",
+    label: "Civil & Construction",
+    patterns: [
+      /\bcivil engineer(?:ing)?\b/i,
+      /\bconstruction\b/i,
+      /\barchitect(?:ure|ural)?\b/i,
+      /\bstructural engineer\b/i,
+      /\bquantity survey(?:or|ing)\b/i,
+      /\bsite engineer\b/i,
+      /\broad engineer\b/i,
+      /\burban plan(?:ner|ning)\b/i,
+      /\bautocad\b/i
+    ],
+    relatedIds: ["wash", "engineering_electromech", "project_management", "skilled_trades"]
+  },
+  {
+    id: "engineering_electromech",
+    label: "Electrical & Mechanical Engineering",
+    patterns: [
+      /\belectrical engineer(?:ing)?\b/i,
+      /\bmechanical engineer(?:ing)?\b/i,
+      /\belectromechanical\b/i,
+      /\bindustrial engineer(?:ing)?\b/i,
+      /\bmaintenance engineer\b/i,
+      /\bplant engineer\b/i,
+      /\bhvac\b/i,
+      /\bmechatronics\b/i,
+      /\bpower engineer\b/i
+    ],
+    relatedIds: ["engineering_civil", "manufacturing_ops", "skilled_trades", "telecom", "it_software"]
+  },
+  {
+    id: "manufacturing_ops",
+    label: "Manufacturing & Production",
+    patterns: [
+      /\bmanufactur(?:ing|er)\b/i,
+      /\bfactory\b/i,
+      /\bproduction (?:manager|supervisor|engineer|operator)\b/i,
+      /\bquality control\b/i,
+      /\bquality assurance\b/i,
+      /\bplant manager\b/i,
+      /\btextile\b/i,
+      /\bbrewery\b/i,
+      /\bfood processing\b/i
+    ],
+    relatedIds: ["engineering_electromech", "logistics_supply", "agriculture_env"]
+  },
+  {
+    id: "hospitality_tourism",
+    label: "Hospitality & Culinary",
+    patterns: [
+      /\bhotel\b/i,
+      /\bhospitality\b/i,
+      /\btourism\b/i,
+      /\bchef\b/i,
+      /\bcook\b/i,
+      /\bculinary\b/i,
+      /\brestaurant\b/i,
+      /\bhousekeeping\b/i,
+      /\bfood (?:&|and) beverage\b/i,
+      /\bfront desk\b/i,
+      /\breceptionist\b/i,
+      /\bresort\b/i,
+      /\bcatering\b/i,
+      /\bwaiter\b/i,
+      /\bwaitress\b/i
+    ],
+    relatedIds: ["aviation_travel", "customer_service"]
+  },
+  {
+    id: "aviation_travel",
+    label: "Airlines & Aviation",
+    patterns: [
+      /\bairline\b/i,
+      /\baviation\b/i,
+      /\bcabin crew\b/i,
+      /\bflight attendant\b/i,
+      /\bairport\b/i,
+      /\bpilot\b/i,
+      /\baircraft\b/i,
+      /\bticketing\b/i,
+      /\btravel agent\b/i,
+      /\bground staff\b/i
+    ],
+    relatedIds: ["hospitality_tourism", "customer_service", "logistics_supply"]
+  },
+  {
+    id: "hr_admin",
+    label: "HR & Administration",
+    patterns: [
+      /\bhuman resource(?:s)?\b/i,
+      /\bhr\b/i,
+      /\brecruit(?:er|ment)\b/i,
+      /\btalent acquisition\b/i,
+      /\boffice manager\b/i,
+      /\bexecutive assistant\b/i,
+      /\badmin(?:istration|istrative)? (?:officer|assistant|manager)\b/i,
+      /\bsecretary\b/i,
+      /\bpeople operations\b/i
+    ],
+    relatedIds: ["legal_compliance", "education_training", "customer_service", "project_management"]
+  },
+  {
+    id: "logistics_supply",
+    label: "Logistics & Procurement",
+    patterns: [
+      /\blogistics\b/i,
+      /\bsupply chain\b/i,
+      /\bprocurement\b/i,
+      /\bpurchasing\b/i,
+      /\bwarehouse\b/i,
+      /\binventory\b/i,
+      /\bstorekeeper\b/i,
+      /\bfreight\b/i,
+      /\bimport\/?export\b/i,
+      /\bcustoms\b/i,
+      /\bfleet\b/i,
+      /\bdispatch(?:er)?\b/i
+    ],
+    relatedIds: ["finance", "ngo_humanitarian", "manufacturing_ops", "skilled_trades", "aviation_travel"]
+  },
+  {
+    id: "sales_marketing",
+    label: "Sales & Marketing",
+    patterns: [
+      /\bsales\b/i,
+      /\bmarketing\b/i,
+      /\bbusiness development\b/i,
+      /\baccount manager\b/i,
+      /\baccount executive\b/i,
+      /\bretail\b/i,
+      /\bbrand manager\b/i,
+      /\bpublic relations\b/i,
+      /\bdigital marketing\b/i,
+      /\bmerchandising\b/i
+    ],
+    relatedIds: ["banking", "customer_service", "telecom"]
+  },
+  {
+    id: "customer_service",
+    label: "Customer Service",
+    patterns: [
+      /\bcustomer service\b/i,
+      /\bcustomer support\b/i,
+      /\bcall center\b/i,
+      /\bclient relations\b/i,
+      /\bhelpdesk\b/i,
+      /\bfront office\b/i
+    ],
+    relatedIds: ["banking", "hospitality_tourism", "aviation_travel", "sales_marketing", "hr_admin"]
+  },
+  {
+    id: "education_training",
+    label: "Education & Training",
+    patterns: [
+      /\bteacher\b/i,
+      /\bteaching\b/i,
+      /\blecturer\b/i,
+      /\bprofessor\b/i,
+      /\binstructor\b/i,
+      /\btutor\b/i,
+      /\bcurriculum\b/i,
+      /\bacademic\b/i,
+      /\btrainer\b/i,
+      /\beducation officer\b/i
+    ],
+    relatedIds: ["hr_admin", "ngo_humanitarian", "data_analytics"]
+  },
+  {
+    id: "legal_compliance",
+    label: "Legal & Compliance",
+    patterns: [
+      /\blegal\b/i,
+      /\blawyer\b/i,
+      /\battorney\b/i,
+      /\bcompliance\b/i,
+      /\bcontract(?:s)? (?:specialist|manager|officer)\b/i,
+      /\bparalegal\b/i,
+      /\bregulatory\b/i,
+      /\bpolicy advisor\b/i,
+      /\bgovernance\b/i
+    ],
+    relatedIds: ["banking", "finance", "insurance", "hr_admin"]
+  },
+  {
+    id: "project_management",
+    label: "Project Management",
+    patterns: [
+      /\bproject manager\b/i,
+      /\bproject management\b/i,
+      /\bprogram manager\b/i,
+      /\bpmp\b/i,
+      /\bscrum master\b/i,
+      /\bproject coordinator\b/i,
+      /\boperations manager\b/i
+    ],
+    relatedIds: ["ngo_humanitarian", "engineering_civil", "it_software", "hr_admin"]
+  },
+  {
+    id: "agriculture_env",
+    label: "Agriculture & Environment",
+    patterns: [
+      /\bagricultur(?:e|al)\b/i,
+      /\bagronom(?:y|ist)\b/i,
+      /\bveterinar(?:y|ian)\b/i,
+      /\bforestry\b/i,
+      /\bfood security\b/i,
+      /\benvironmental\b/i,
+      /\bclimate\b/i,
+      /\bhorticulture\b/i,
+      /\blivestock\b/i,
+      /\bagribusiness\b/i
+    ],
+    relatedIds: ["ngo_humanitarian", "manufacturing_ops"]
+  },
+  {
+    id: "skilled_trades",
+    label: "Skilled Trades & Driving",
+    patterns: [
+      /\bdriver\b/i,
+      /\bdriving\b/i,
+      /\bmechanic\b/i,
+      /\belectrician\b/i,
+      /\bplumber\b/i,
+      /\bwelder\b/i,
+      /\bcarpenter\b/i,
+      /\bmason\b/i,
+      /\bheavy equipment\b/i,
+      /\bforklift\b/i,
+      /\bsecurity guard\b/i,
+      /\btechnician\b/i,
+      /\bcleaner\b/i,
+      /\bjanitor\b/i
+    ],
+    relatedIds: ["engineering_electromech", "engineering_civil", "logistics_supply"]
+  }
+];
+var PROFESSION_FAMILY_MAP = new Map(PROFESSION_FAMILIES.map((f) => [f.id, f]));
+function extractProfessionFamilies(text) {
+  if (!text || !text.trim()) return [];
+  const matched = [];
+  for (const fam of PROFESSION_FAMILIES) {
+    const cleaned = fam.excludePattern ? text.replace(fam.excludePattern, " ") : text;
+    if (fam.patterns.some((rx) => rx.test(cleaned))) {
+      matched.push(fam);
+    }
+  }
+  return matched;
+}
 var SECTOR_ALIAS_GROUPS = [
   { label: "banking", keywords: ["bank", "banking", "commercial bank", "branch manager", "credit", "teller", "treasury", "loan officer", "customer service officer"] },
   { label: "microfinance", keywords: ["microfinance", "mfi", "sacco", "micro-credit", "micro finance"] },
@@ -125,6 +580,130 @@ function extractSectorTags(text) {
     }
   }
   return found;
+}
+function hasProfileExperienceSignals(profile) {
+  if (!profile) return false;
+  return Boolean(
+    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || Array.isArray(profile.previousPositions) && profile.previousPositions.some((p) => p.trim().length >= 2) || Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0 || Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || "").trim().length >= 2)
+  );
+}
+function getProfileExperienceText(profile) {
+  const expEntriesText = (profile.experience || []).map((e) => `${e.jobTitle || ""} ${e.companyName || ""} ${e.responsibilities || ""}`).join(" ");
+  const prevPosText = (profile.previousPositions || []).join(" ");
+  const primaryExperienceText = [
+    expEntriesText,
+    profile.currentPosition || "",
+    prevPosText,
+    ...profile.areasOfExpertise || [],
+    ...profile.skills || []
+  ].filter(Boolean).join(" ");
+  const secondaryProfileText = [
+    profile.desiredJobTitle || "",
+    profile.preferredIndustry || "",
+    ...profile.preferredSectors || [],
+    ...profile.professionalInterests || [],
+    ...(profile.education || []).map((e) => `${e.fieldOfStudy || ""} ${e.qualification || ""}`),
+    ...(profile.certifications || []).map((c) => `${c.name || ""}`)
+  ].filter(Boolean).join(" ");
+  return {
+    primaryExperienceText,
+    secondaryProfileText,
+    allText: `${primaryExperienceText} ${secondaryProfileText}`.trim()
+  };
+}
+function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requiredExperienceText) {
+  const empty = {
+    isMatch: false,
+    matchType: "none",
+    score: 0,
+    badgeLabel: "",
+    matchedUserDomains: [],
+    matchedJobDomains: [],
+    meetsYearsRequirement: true
+  };
+  if (!profile || !hasProfileExperienceSignals(profile)) return empty;
+  const userExpYears = getProfileExplicitExperienceYears(profile);
+  const reqYears = parseMinRequiredYears(requiredExperienceText);
+  const meetsYearsRequirement = reqYears === null || userExpYears >= reqYears;
+  const yearsGap = reqYears !== null ? reqYears - userExpYears : 0;
+  const yearsWarning = !meetsYearsRequirement ? `Requires ${reqYears}+ yrs (profile has ${userExpYears} yrs)` : void 0;
+  const { primaryExperienceText, allText } = getProfileExperienceText(profile);
+  const primaryFamilies = extractProfessionFamilies(primaryExperienceText);
+  const userFamilies = primaryFamilies.length > 0 ? primaryFamilies : extractProfessionFamilies(allText);
+  const jobCoreFamilies = extractProfessionFamilies(jobCoreText);
+  const jobFamilies = jobCoreFamilies.length > 0 ? jobCoreFamilies : extractProfessionFamilies(jobBroadText);
+  const tokens = tokenizeProfileKeywords(profile);
+  const jobLower = `${jobCoreText} ${jobBroadText}`.toLowerCase();
+  const matchedTitleTokens = tokens.titleTokens.filter((t) => jobLower.includes(t));
+  const matchedSkillTokens = Array.from(
+    /* @__PURE__ */ new Set([
+      ...tokens.skillTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
+      ...tokens.expertiseTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
+      ...tokens.expertiseWordTokens.filter((w) => jobLower.includes(w))
+    ])
+  );
+  const directFamilies = userFamilies.filter((uf) => jobFamilies.some((jf) => jf.id === uf.id));
+  let bestRelatedPair = null;
+  if (directFamilies.length === 0) {
+    for (const uf of userFamilies) {
+      for (const jf of jobFamilies) {
+        if (uf.relatedIds.includes(jf.id) || jf.relatedIds.includes(uf.id)) {
+          bestRelatedPair = { user: uf, job: jf };
+          break;
+        }
+      }
+      if (bestRelatedPair) break;
+    }
+  }
+  let matchType = "none";
+  let score = 0;
+  let badgeLabel = "";
+  if (directFamilies.length > 0 || matchedTitleTokens.length > 0 || matchedSkillTokens.length >= 2) {
+    matchType = "direct";
+    const primaryLabel = directFamilies[0]?.label || profile.currentPosition || profile.areasOfExpertise?.[0] || "Your Experience";
+    score = 72 + Math.min(18, directFamilies.length * 10) + Math.min(15, matchedTitleTokens.length * 6) + Math.min(12, matchedSkillTokens.length * 4);
+    badgeLabel = `Matches ${primaryLabel} Experience`;
+  } else if (bestRelatedPair) {
+    matchType = "related";
+    score = 58 + Math.min(10, matchedSkillTokens.length * 4) + Math.min(8, matchedTitleTokens.length * 4);
+    badgeLabel = `Related Field: ${bestRelatedPair.user.label} \u2192 ${bestRelatedPair.job.label}`;
+  } else if (matchedSkillTokens.length === 1) {
+    matchType = "related";
+    score = 46;
+    badgeLabel = `Related Skill: ${matchedSkillTokens[0]}`;
+  }
+  if (matchType === "none") return empty;
+  if (meetsYearsRequirement) {
+    score += 12;
+  } else if (yearsGap <= 2) {
+    score -= 6;
+  } else if (yearsGap <= 5) {
+    score -= 18;
+  } else {
+    score -= 32;
+  }
+  return {
+    isMatch: true,
+    matchType,
+    score: Math.max(10, Math.min(100, score)),
+    badgeLabel,
+    matchedUserDomains: userFamilies.map((f) => f.label),
+    matchedJobDomains: jobFamilies.map((f) => f.label),
+    meetsYearsRequirement,
+    yearsWarning
+  };
+}
+function assessVacancyExperienceMatch(profile, v) {
+  const skillsArr = Array.isArray(v.requiredSkills) ? v.requiredSkills : v.requiredSkills ? [String(v.requiredSkills)] : [];
+  const respArr = Array.isArray(v.responsibilities) ? v.responsibilities : v.responsibilities ? [String(v.responsibilities)] : [];
+  const coreText = `${v.title || ""} ${v.category || ""} ${v.requiredFieldOfStudy || ""} ${skillsArr.join(" ")}`;
+  const broadText = `${coreText} ${v.organization || ""} ${v.description || ""} ${respArr.join(" ")}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears);
+}
+function assessInternationalJobExperienceMatch(profile, ij) {
+  const coreText = `${ij.jobTitle || ""} ${ij.category || ""} ${ij.requiredEducation || ""}`;
+  const broadText = `${coreText} ${ij.employerOrProgramme || ""} ${ij.visaSponsorshipInfo || ""} ${ij.officialApplicationInstructions || ""}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience);
 }
 function tokenizeProfileKeywords(profile) {
   const stopWords = /* @__PURE__ */ new Set([
@@ -331,7 +910,15 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += 8;
       reasons.push(`Preferred location: ${v.location}`);
     }
-    const hasDirectDomainFit = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || matchedCerts.length > 0;
+    const expAssessment = assessVacancyExperienceMatch(profile, v);
+    if (expAssessment.isMatch && expAssessment.matchType === "direct") {
+      score += 24;
+      reasons.push(expAssessment.badgeLabel);
+    } else if (expAssessment.isMatch && expAssessment.matchType === "related") {
+      score += 22;
+      reasons.push(expAssessment.badgeLabel);
+    }
+    const hasDirectDomainFit = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || matchedCerts.length > 0 || expAssessment.isMatch;
     const hasRelevantMatch = hasDirectDomainFit || Boolean(matchedSectorTag || directSectorMatch);
     if (!hasRelevantMatch || score < 24 || reasons.length === 0) continue;
     if (reqYears !== null && reqYears - userExpYears > 5) continue;
@@ -352,7 +939,7 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
       isFullyQualified,
       strictlyQualified,
-      matchReasons: reasons.slice(0, 5),
+      matchReasons: Array.from(new Set(reasons)).slice(0, 5),
       missingMandatoryQualifications: missingMandatory,
       requiredExperienceText: v.experienceYears || "Not specified",
       requiredEducationText: v.educationQualification || "Not specified",
@@ -392,6 +979,22 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += Math.min(30, matchedSkillPhrases.length * 12 + matchedExpertiseWords.length * 8);
       reasons.push(`Skill/expertise alignment: ${matchedSkills.slice(0, 3).join(", ")}`);
     }
+    const expAssessment = assessInternationalJobExperienceMatch(profile, ij);
+    if (expAssessment.isMatch && expAssessment.matchType === "direct") {
+      score += 30;
+      reasons.push(expAssessment.badgeLabel);
+    } else if (expAssessment.isMatch && expAssessment.matchType === "related") {
+      score += 26;
+      reasons.push(expAssessment.badgeLabel);
+    }
+    if (reqYears !== null && userExpYears >= reqYears) {
+      score += 10;
+      if (reqYears > 0) reasons.push(`Meets ${reqYears}+ yrs experience requirement`);
+    }
+    if (reqEduRank > 0 && userEduRank >= reqEduRank && userEduLabel) {
+      score += 10;
+      reasons.push(`Education eligible (${userEduLabel})`);
+    }
     const matchedInterests = tokens.interestTokens.filter((i) => combinedText.includes(i));
     if (matchedInterests.length > 0) {
       score += 12;
@@ -401,7 +1004,8 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += 8;
       reasons.push(`Open to Ethiopian applicants (${ij.country})`);
     }
-    if (score >= 28 && reasons.length >= 1 && (matchedTitle.length > 0 || matchedSkills.length > 0)) {
+    const hasDirectDomainFit = matchedTitle.length > 0 || matchedSkills.length > 0 || expAssessment.isMatch;
+    if (score >= 28 && reasons.length >= 1 && hasDirectDomainFit) {
       if (reqYears !== null && reqYears - userExpYears > 5) continue;
       const isFullyQualified = missingMandatory.length === 0;
       const adjustedScore = isFullyQualified ? Math.min(99, score) : Math.max(30, score - 12);
@@ -417,8 +1021,8 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
         matchScore: adjustedScore,
         eligibilityStatus: isFullyQualified ? "Eligible" : "Partially Qualified",
         isFullyQualified,
-        strictlyQualified: isFullyQualified && adjustedScore >= 36 && (matchedTitle.length > 0 || matchedSkills.length > 0),
-        matchReasons: reasons,
+        strictlyQualified: isFullyQualified && adjustedScore >= 36 && hasDirectDomainFit,
+        matchReasons: Array.from(new Set(reasons)),
         missingMandatoryQualifications: missingMandatory,
         requiredExperienceText: ij.requiredExperience || "Official requirements apply",
         requiredEducationText: ij.requiredEducation || "Official requirements apply",
@@ -600,6 +1204,83 @@ var DEFAULT_JOB_SEEKER_PROFILE = {
   createdAt: (/* @__PURE__ */ new Date()).toISOString(),
   updatedAt: (/* @__PURE__ */ new Date()).toISOString()
 };
+
+// src/utils/inactiveReminderFormat.ts
+var THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1e3;
+function getUserLastActivityMs(profile) {
+  if (!profile) return 0;
+  const candidates = [
+    profile.lastActiveAt,
+    profile.lastLoginAt,
+    profile.updatedAt,
+    profile.createdAt
+  ];
+  let latest = 0;
+  for (const iso of candidates) {
+    if (!iso) continue;
+    const ms = new Date(iso).getTime();
+    if (!Number.isNaN(ms) && ms > latest) {
+      latest = ms;
+    }
+  }
+  return latest;
+}
+function isUserInactiveForThreeDayCheck(profile, nowMs = Date.now()) {
+  if (!profile?.uid) return false;
+  if (profile.accountStatus === "suspended") return false;
+  if (profile.accountStatus === "inactive") return true;
+  const lastActMs = getUserLastActivityMs(profile);
+  if (!lastActMs) return false;
+  return nowMs - lastActMs >= THREE_DAYS_MS;
+}
+function isInactiveReminderDueForUser(prefs, nowMs = Date.now(), force = false) {
+  if (force) return true;
+  if (!prefs?.lastInactiveReminderSentAt) return true;
+  const lastMs = new Date(prefs.lastInactiveReminderSentAt).getTime();
+  if (Number.isNaN(lastMs)) return true;
+  return nowMs - lastMs >= THREE_DAYS_MS;
+}
+function truncateLabel(value, maxLen) {
+  const clean = String(value || "").replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLen) return clean;
+  return `${clean.slice(0, Math.max(1, maxLen - 1)).trimEnd()}\u2026`;
+}
+function buildTop3MobilePushPayload(params) {
+  const { topJobs, notifId, cycleNumber = 1, nowMs = Date.now() } = params;
+  const capped = topJobs.slice(0, 3);
+  const count = capped.length;
+  const title = count === 1 ? "Hopeland Jobs \xB7 Top Job Matched for You" : `Hopeland Jobs \xB7 Top ${count} Jobs Match Your Profile`;
+  const lines = capped.map((job, idx) => {
+    const t = truncateLabel(job.title, 44);
+    const org = truncateLabel(job.organization, 26);
+    const deadlineBit = job.deadline && !/^(open|rolling|ongoing|not stated|asap|until filled)$/i.test(job.deadline.trim()) ? ` \xB7 Due ${truncateLabel(job.deadline, 16)}` : "";
+    return `${idx + 1}. ${t} \u2014 ${org}${deadlineBit}`;
+  });
+  const body = [
+    count === 1 ? "Apply reminder \u2014 your top matching job is open:" : `Apply reminder \u2014 your top ${count} matching jobs are open:`,
+    ...lines,
+    "Tap to open & apply now."
+  ].join("\n");
+  const url = `/?view=top-recommendations&notificationId=${encodeURIComponent(notifId)}&jobs=${encodeURIComponent(
+    capped.map((j) => j.id).join(",")
+  )}`;
+  return {
+    title,
+    body,
+    url,
+    jobId: capped[0]?.id || "",
+    notificationId: notifId,
+    tag: `hopeland-inactive-top3-${cycleNumber}`,
+    icon: "/pwa-192x192.png",
+    badge: "/pwa-badge-96x96.png",
+    actionType: "open_recommendations",
+    topJobs: capped,
+    jobTitle: capped.map((j) => j.title).join(" | ").slice(0, 140),
+    employer: capped[0]?.organization || "Hopeland Jobs",
+    category: "3-Day Top Recommended Jobs",
+    timestamp: nowMs
+  };
+}
 
 // serverUserEngine.ts
 function registerUserNotificationAndAnalyticsRoutes(ctx) {
@@ -808,6 +1489,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     const fallback = {
       lastRunStartedAt: null,
       lastSuccessfulRunAt: null,
+      lastInactiveCheckAt: null,
       lastRunStatus: null,
       recentErrors: [],
       runs: []
@@ -817,6 +1499,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     return {
       lastRunStartedAt: data.lastRunStartedAt || null,
       lastSuccessfulRunAt: data.lastSuccessfulRunAt || null,
+      lastInactiveCheckAt: data.lastInactiveCheckAt || null,
       lastRunStatus: data.lastRunStatus || null,
       recentErrors: Array.isArray(data.recentErrors) ? data.recentErrors : [],
       runs: Array.isArray(data.runs) ? data.runs : []
@@ -1222,7 +1905,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
         const profile = profiles[qItem.userId];
         if (!profile || profile.accountStatus === "suspended") {
           qItem.status = "failed";
-          qItem.lastError = "User account inactive or suspended";
+          qItem.lastError = "User account suspended";
           qItem.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
           changed = true;
           continue;
@@ -1313,8 +1996,18 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       backgroundQueueActive = false;
     }
   }
+  function getAppliedVacancyIdsForUser(uid) {
+    const appliedSet = /* @__PURE__ */ new Set();
+    const apps = loadJobApplications() || [];
+    for (const appItem of apps) {
+      if (appItem?.userId === uid && appItem?.vacancyId) {
+        appliedSet.add(String(appItem.vacancyId));
+      }
+    }
+    return appliedSet;
+  }
   function isFrequencyWindowReady(prefs, alertKind) {
-    if (alertKind === "deadline_reminder") return true;
+    if (alertKind === "deadline_reminder" || alertKind === "apply_reminder") return true;
     const freq = prefs?.frequency || "instant";
     if (freq === "instant") return true;
     const lastDigestMs = prefs?.lastDigestSentAt ? new Date(prefs.lastDigestSentAt).getTime() : 0;
@@ -1332,7 +2025,7 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     if (!options.isTestNotification) {
       if (!hasCompletedMandatoryPreferences(profile)) return null;
       if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) return null;
-      if (alertKind === "new_match" && prefs.alertTypes?.newMatches === false) return null;
+      if ((alertKind === "new_match" || alertKind === "apply_reminder") && prefs.alertTypes?.newMatches === false) return null;
       if (alertKind === "deadline_reminder" && prefs.alertTypes?.deadlineReminders === false) return null;
       if (alertKind === "job_updated" && prefs.alertTypes?.jobChanges === false) return null;
       if (alertKind === "sector_opportunity" && prefs.alertTypes?.sectorUpdates === false) return null;
@@ -1340,14 +2033,43 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     if (!options.ignoreFrequencyWindow && !isFrequencyWindowReady(prefs, alertKind)) {
       return null;
     }
-    if (!options.isTestNotification && isDeadlineExpired(rec.deadline)) return null;
-    const dateStamp = alertKind === "job_updated" ? `::${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}` : "";
-    const dedupeKey = options.isTestNotification ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}` : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
+    if (!options.isTestNotification) {
+      if (isDeadlineExpired(rec.deadline)) return null;
+      const appliedIds = getAppliedVacancyIdsForUser(uid);
+      if (appliedIds.has(rec.id)) return null;
+    }
     const allNotifs = loadAllNotifications();
     const existingList = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
-    if (!options.isTestNotification && existingList.some((n) => n.dedupeKey === dedupeKey || n.vacancyId === rec.id && n.sourceType !== "system")) {
+    const existingForVacancy = existingList.filter((n) => n.vacancyId === rec.id && n.sourceType !== "system").sort((a, b) => {
+      const ta = new Date(a.lastRemindedAt || a.updatedAt || a.createdAt || 0).getTime();
+      const tb = new Date(b.lastRemindedAt || b.updatedAt || b.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    const latestExisting = existingForVacancy[0] || null;
+    let reminderCount = 0;
+    const dateStamp = alertKind === "job_updated" ? `::${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}` : "";
+    if (!options.isTestNotification && latestExisting) {
+      if (alertKind === "apply_reminder") {
+        const lastSentMs = new Date(
+          latestExisting.lastRemindedAt || latestExisting.updatedAt || latestExisting.createdAt || 0
+        ).getTime();
+        if (Number.isNaN(lastSentMs) || Date.now() - lastSentMs < THREE_DAYS_MS) {
+          return null;
+        }
+        reminderCount = (Number(latestExisting.reminderCount) || 0) + 1;
+      } else if (alertKind === "job_updated") {
+        const updateKey = `${uid}::${rec.id}::job_updated${dateStamp}`;
+        if (existingList.some((n) => n.dedupeKey === updateKey)) {
+          return null;
+        }
+        reminderCount = Number(latestExisting.reminderCount) || 0;
+      } else {
+        return null;
+      }
+    } else if (alertKind === "apply_reminder" && !options.isTestNotification) {
       return null;
     }
+    const dedupeKey = options.isTestNotification ? `test::${uid}::${Date.now()}_${Math.random().toString(36).slice(2, 6)}` : alertKind === "apply_reminder" ? `${uid}::${rec.id}::apply_reminder::${reminderCount}` : `${uid}::${rec.id}::${alertKind}${dateStamp}`;
     if (!options.bypassRateLimit) {
       const policy = loadNotificationPolicy();
       const effectiveCap = Math.min(3, Math.max(1, policy.dailyCapPerUser || 3));
@@ -1355,8 +2077,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       const twentyFourHoursAgoMs = Date.now() - 24 * 60 * 60 * 1e3;
       const todayCount = existingList.filter((n) => {
         if (n.sourceType === "system" || n.alertKind === "system_test") return false;
-        const ts = new Date(n.createdAt).getTime();
-        return getAddisDateKey(n.createdAt) === todayKey || !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
+        const activityIso = n.lastRemindedAt || n.createdAt;
+        const ts = new Date(activityIso).getTime();
+        return getAddisDateKey(activityIso) === todayKey || !Number.isNaN(ts) && ts >= twentyFourHoursAgoMs;
       }).length;
       if (todayCount >= effectiveCap) {
         return null;
@@ -1365,6 +2088,8 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     const jobUrl = rec.sourceType === "domestic_job" ? buildJobUrl(rec.id) : rec.applyUrl || buildJobUrl(rec.id);
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
     const notifId = `unotif_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const notifTitle = options.isTestNotification ? `[Test Alert] ${rec.title}` : alertKind === "apply_reminder" ? `Reminder to Apply: ${rec.title}` : rec.title;
+    const reminderSummary = alertKind === "apply_reminder" ? `3-Day Apply Reminder (#${reminderCount}): You still qualify for this open position in ${rec.category}${rec.deadline && rec.deadline !== "Open" ? ` (Deadline: ${rec.deadline})` : ""}. Open to apply now.` : options.customNote || rec.matchReasons[0] || `Matched your profile in ${rec.category}`;
     const notifRecord = {
       id: notifId,
       userId: uid,
@@ -1372,19 +2097,21 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       sourceType: rec.sourceType,
       alertKind,
       dedupeKey,
-      title: options.isTestNotification ? `[Test Alert] ${rec.title}` : rec.title,
+      title: notifTitle,
       employer: rec.organization,
       location: rec.location,
       category: rec.category,
       salary: rec.salary || void 0,
       deadline: rec.deadline || "Open",
       matchScore: rec.matchScore,
-      matchReasonSummary: options.customNote || rec.matchReasons[0] || `Matched your profile in ${rec.category}`,
-      matchReasons: options.customNote ? [options.customNote, ...rec.matchReasons] : rec.matchReasons,
+      matchReasonSummary: reminderSummary,
+      matchReasons: alertKind === "apply_reminder" ? [reminderSummary, ...rec.matchReasons] : options.customNote ? [options.customNote, ...rec.matchReasons] : rec.matchReasons,
       missingMandatoryQualifications: rec.missingMandatoryQualifications || [],
       applicationUrl: rec.applyUrl || jobUrl,
       jobUrl,
       read: false,
+      reminderCount,
+      lastRemindedAt: nowIso,
       channels: {
         website: "delivered",
         push: "skipped",
@@ -1397,20 +2124,26 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     if (options.dryRun) {
       return notifRecord;
     }
-    allNotifs[uid] = [notifRecord, ...existingList].slice(0, 150);
+    const remainingForUser = alertKind === "apply_reminder" || alertKind === "job_updated" ? existingList.filter((n) => !(n.vacancyId === rec.id && n.sourceType !== "system")) : existingList;
+    allNotifs[uid] = [notifRecord, ...remainingForUser].slice(0, 150);
     saveAllNotifications(allNotifs);
     const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
     if (prefs.manuallyDisabled !== true && (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) && hasPushDevices) {
-      const pushTitle = options.isTestNotification ? `HOPELANDJOBS \u2014 Test Job Notification!` : alertKind === "deadline_reminder" ? `HOPELANDJOBS \u2014 Closing Soon: ${rec.title}` : alertKind === "job_updated" ? `HOPELANDJOBS \u2014 Updated Job Matching Your Profile!` : `HOPELANDJOBS \u2014 New Job Matching Your Profile!`;
-      const pushBody = `${rec.title} \u2014 ${rec.organization} (${rec.location})
+      const pushTitle = options.isTestNotification ? `Hopeland Jobs \xB7 Test Job Notification` : alertKind === "apply_reminder" ? `Hopeland Jobs \xB7 Reminder: Apply for ${rec.title}` : alertKind === "deadline_reminder" ? `Hopeland Jobs \xB7 Closing Soon: ${rec.title}` : alertKind === "job_updated" ? `Hopeland Jobs \xB7 Updated Job Matching Your Profile` : `Hopeland Jobs \xB7 New Job Matching Your Profile`;
+      const pushBody = alertKind === "apply_reminder" ? `${rec.organization} (${rec.location}) \xB7 Recommended for your profile${rec.deadline && rec.deadline !== "Open" ? ` \xB7 Deadline: ${rec.deadline}` : ""}. Tap to view and apply now!` : `${rec.title} \u2014 ${rec.organization} (${rec.location})
 ${options.customNote ? options.customNote : `Matches your qualifications in ${rec.category}${rec.deadline ? ` \xB7 Deadline: ${rec.deadline}` : ""}.`} Tap to view the job and apply.`;
+      const pushTag = alertKind === "apply_reminder" ? `vacancy-${rec.id}-rem-${reminderCount}` : `vacancy-${rec.id}`;
       const pushPayload = {
         title: pushTitle,
         body: pushBody,
-        url: rec.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(rec.id)}&notificationId=${encodeURIComponent(notifId)}` : jobUrl,
+        url: rec.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(rec.id)}&apply=1&notificationId=${encodeURIComponent(notifId)}` : jobUrl,
         jobId: rec.id,
         notificationId: notifId,
-        tag: `vacancy-${rec.id}`,
+        tag: pushTag,
+        icon: "/pwa-192x192.png",
+        badge: "/pwa-badge-96x96.png",
+        actionType: "open_job",
+        timestamp: Date.now(),
         jobTitle: rec.title,
         employer: rec.organization,
         category: rec.category,
@@ -1497,13 +2230,51 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
           ...Array.isArray(options.changedVacancyIds) ? options.changedVacancyIds : []
         ].filter(Boolean)
       );
-      const qualified = compactRecs.filter((r) => isStrictJobFitForUser(r));
-      const changedMatches = changedSet.size > 0 ? qualified.filter((r) => changedSet.has(r.id)) : [];
-      const topGeneralMatches = qualified.filter((r) => !changedSet.has(r.id));
-      const prioritized = [...changedMatches, ...topGeneralMatches].slice(0, 3);
+      const appliedIds = getAppliedVacancyIdsForUser(profile.uid);
+      const userExistingNotifs = Array.isArray(loadAllNotifications()[profile.uid]) ? loadAllNotifications()[profile.uid] : [];
+      const latestByVacancy = /* @__PURE__ */ new Map();
+      for (const n of userExistingNotifs) {
+        if (!n?.vacancyId || n.sourceType === "system") continue;
+        const prev = latestByVacancy.get(n.vacancyId);
+        const prevTs = prev ? new Date(prev.lastRemindedAt || prev.updatedAt || prev.createdAt || 0).getTime() : -1;
+        const currTs = new Date(n.lastRemindedAt || n.updatedAt || n.createdAt || 0).getTime();
+        if (!prev || currTs > prevTs) {
+          latestByVacancy.set(n.vacancyId, n);
+        }
+      }
+      const qualifiedOpen = compactRecs.filter(
+        (r) => isStrictJobFitForUser(r) && !appliedIds.has(r.id) && !isDeadlineExpired(r.deadline)
+      );
+      const nowMs = Date.now();
+      const changedMatches = changedSet.size > 0 ? qualifiedOpen.filter((r) => changedSet.has(r.id)) : [];
+      const neverNotifiedMatches = qualifiedOpen.filter(
+        (r) => !changedSet.has(r.id) && !latestByVacancy.has(r.id)
+      );
+      const isRoutineWithoutVacancyChange = changedSet.size === 0;
+      const userIsThreeDaysInactive = isUserInactiveForThreeDayCheck(profile);
+      const dueReminderMatches = isRoutineWithoutVacancyChange && userIsThreeDaysInactive ? [] : qualifiedOpen.filter((r) => {
+        if (changedSet.has(r.id)) return false;
+        const prev = latestByVacancy.get(r.id);
+        if (!prev) return false;
+        const lastMs = new Date(prev.lastRemindedAt || prev.updatedAt || prev.createdAt || 0).getTime();
+        return !Number.isNaN(lastMs) && nowMs - lastMs >= THREE_DAYS_MS;
+      }).sort((a, b) => {
+        const prevA = latestByVacancy.get(a.id);
+        const prevB = latestByVacancy.get(b.id);
+        const msA = new Date(prevA?.lastRemindedAt || prevA?.updatedAt || prevA?.createdAt || 0).getTime();
+        const msB = new Date(prevB?.lastRemindedAt || prevB?.updatedAt || prevB?.createdAt || 0).getTime();
+        return msA - msB;
+      });
+      const prioritized = [...changedMatches, ...neverNotifiedMatches, ...dueReminderMatches];
       for (const r of prioritized) {
         if (newNotifications.length >= 3) break;
-        const alertKind = changedSet.has(r.id) && options.changeType === "updated" ? "job_updated" : "new_match";
+        const existingForR = latestByVacancy.get(r.id);
+        let alertKind = "new_match";
+        if (changedSet.has(r.id) && options.changeType === "updated" && existingForR) {
+          alertKind = "job_updated";
+        } else if (existingForR) {
+          alertKind = "apply_reminder";
+        }
         const sent = await dispatchNotificationForUser(profile, r, alertKind, {
           dryRun: options.dryRun
         });
@@ -1519,6 +2290,173 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       }
     }
     return { recommendations: recs, newNotifications };
+  }
+  async function runInactiveUsersThreeDayCheck(options = {}) {
+    const nowMs = options.nowMs ?? Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const profiles = Object.values(loadUserProfiles() || {}).filter(
+      (p) => p?.uid && p.accountStatus !== "suspended" && (!options.targetUid || p.uid === options.targetUid)
+    );
+    const activeVacancies = loadVacanciesCatalog().filter(isVerifiedActiveVacancy);
+    const intl = loadPersistedInternationalData();
+    const intlJobs = Array.isArray(intl.internationalJobs) ? intl.internationalJobs : [];
+    const scholarships = Array.isArray(intl.experienceScholarships) ? intl.experienceScholarships : [];
+    const allPrefs = loadAllNotificationPrefs();
+    const allNotifs = loadAllNotifications();
+    let usersEvaluated = 0;
+    let inactiveUsersFound = 0;
+    let remindersCreated = 0;
+    let pushAttempted = 0;
+    let pushSucceeded = 0;
+    let pushFailed = 0;
+    const details = [];
+    let prefsChanged = false;
+    let notifsChanged = false;
+    for (const profile of profiles) {
+      usersEvaluated += 1;
+      const uid = profile.uid;
+      const prefs = allPrefs[uid] || buildDefaultPreferences(uid);
+      if (!isUserInactiveForThreeDayCheck(profile, nowMs)) continue;
+      inactiveUsersFound += 1;
+      if (!isInactiveReminderDueForUser(prefs, nowMs, Boolean(options.force))) continue;
+      if (prefs.manuallyDisabled === true && prefs.channels?.websiteBell === false) continue;
+      if (prefs.alertTypes?.newMatches === false) continue;
+      if (!hasCompletedMandatoryPreferences(profile)) continue;
+      const appliedIds = getAppliedVacancyIdsForUser(uid);
+      const recs = computeStaffOpportunityRecommendations(profile, activeVacancies, intlJobs, scholarships, 40);
+      const top3 = recs.filter(
+        (r) => isStrictJobFitForUser(r) && !appliedIds.has(r.id) && !isDeadlineExpired(r.deadline)
+      ).slice(0, 3);
+      if (top3.length === 0) continue;
+      const topJobs = top3.map((r) => ({
+        id: r.id,
+        sourceType: r.sourceType,
+        title: r.title,
+        organization: r.organization,
+        location: r.location,
+        deadline: r.deadline || "Open",
+        matchScore: r.matchScore,
+        applyUrl: r.applyUrl,
+        jobUrl: r.sourceType === "domestic_job" ? buildJobUrl(r.id) : r.applyUrl || buildJobUrl(r.id)
+      }));
+      const nextCycle = (Number(prefs.inactiveReminderCount) || 0) + 1;
+      const notifId = `unotif_inact3_${nowMs}_${Math.random().toString(36).slice(2, 7)}`;
+      const pushPayload = buildTop3MobilePushPayload({
+        topJobs,
+        notifId,
+        cycleNumber: nextCycle,
+        nowMs
+      });
+      const primary = topJobs[0];
+      const notifRecord = {
+        id: notifId,
+        userId: uid,
+        vacancyId: primary.id,
+        sourceType: primary.sourceType,
+        alertKind: "apply_reminder",
+        dedupeKey: `${uid}::inactive_top3::${nextCycle}`,
+        title: topJobs.length === 1 ? `Reminder to Apply: ${primary.title}` : `Top ${topJobs.length} Recommended Jobs \u2014 Reminder to Apply`,
+        employer: topJobs.length === 1 ? primary.organization : topJobs.map((j) => j.organization).slice(0, 3).join(" \xB7 "),
+        location: primary.location,
+        category: top3.map((r) => r.category).filter(Boolean).slice(0, 2).join(" \xB7 ") || "Top Matches",
+        deadline: primary.deadline || "Open",
+        matchScore: primary.matchScore,
+        matchReasonSummary: pushPayload.body,
+        matchReasons: topJobs.map((j, idx) => `${idx + 1}. ${j.title} \u2014 ${j.organization} (${j.matchScore}% match)`),
+        missingMandatoryQualifications: [],
+        topJobs,
+        applicationUrl: primary.applyUrl || pushPayload.url,
+        jobUrl: pushPayload.url,
+        read: false,
+        reminderCount: nextCycle,
+        lastRemindedAt: nowIso,
+        channels: {
+          website: "delivered",
+          push: "skipped",
+          email: "skipped"
+        },
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+      remindersCreated += 1;
+      if (options.dryRun) {
+        details.push({
+          uid,
+          email: profile.email || "",
+          topJobsCount: topJobs.length,
+          pushStatus: "dry_run",
+          notificationId: notifId,
+          pushTitle: pushPayload.title,
+          pushBody: pushPayload.body
+        });
+        continue;
+      }
+      const existingList = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
+      const cleanedList = existingList.filter((n) => !String(n?.dedupeKey || "").includes("::inactive_top3::"));
+      allNotifs[uid] = [notifRecord, ...cleanedList].slice(0, 150);
+      notifsChanged = true;
+      saveAllNotifications(allNotifs);
+      const hasPushDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
+      if (prefs.manuallyDisabled !== true && (prefs.channels?.browserPush || prefs.channels?.mobilePush || hasPushDevices) && hasPushDevices) {
+        pushAttempted += 1;
+        const pushRes = await sendWebPushToUser(uid, pushPayload);
+        if (pushRes.deliveredCount > 0) {
+          notifRecord.channels.push = "sent";
+          pushSucceeded += 1;
+        } else if (pushRes.failedCount > 0) {
+          notifRecord.channels.push = "queued";
+          pushFailed += 1;
+          enqueueDeliveryRetry({
+            userId: uid,
+            notificationId: notifId,
+            channel: "push",
+            payload: pushPayload,
+            reason: pushRes.errors[0] || "Push delivery failed"
+          });
+        }
+        const refreshedPrefs = loadAllNotificationPrefs()[uid] || prefs;
+        allPrefs[uid] = {
+          ...refreshedPrefs,
+          lastInactiveReminderSentAt: nowIso,
+          inactiveReminderCount: nextCycle,
+          updatedAt: nowIso
+        };
+      } else {
+        allPrefs[uid] = {
+          ...prefs,
+          lastInactiveReminderSentAt: nowIso,
+          inactiveReminderCount: nextCycle,
+          updatedAt: nowIso
+        };
+      }
+      prefsChanged = true;
+      details.push({
+        uid,
+        email: profile.email || "",
+        topJobsCount: topJobs.length,
+        pushStatus: notifRecord.channels.push,
+        notificationId: notifId,
+        pushTitle: pushPayload.title,
+        pushBody: pushPayload.body
+      });
+    }
+    if (!options.dryRun) {
+      if (notifsChanged) saveAllNotifications(allNotifs);
+      if (prefsChanged) saveAllNotificationPrefs(allPrefs);
+      const store = loadSchedulerStore();
+      store.lastInactiveCheckAt = nowIso;
+      saveSchedulerStore(store);
+    }
+    return {
+      checkedAt: nowIso,
+      usersEvaluated,
+      inactiveUsersFound,
+      remindersCreated,
+      pushAttempted,
+      pushSucceeded,
+      pushFailed,
+      details
+    };
   }
   async function executeAutomatedSchedulerSweep(options) {
     if (schedulerRunActive) {
@@ -1550,6 +2488,13 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
           errors.push(...retryStats.errors.slice(0, 5));
         }
       }
+      const inactiveCheckRes = await runInactiveUsersThreeDayCheck({
+        dryRun: options.dryRun
+      });
+      notificationsCreated += inactiveCheckRes.remindersCreated;
+      pushAttempted += inactiveCheckRes.pushAttempted;
+      pushSucceeded += inactiveCheckRes.pushSucceeded;
+      pushFailed += inactiveCheckRes.pushFailed;
       const profiles = Object.values(loadUserProfiles() || {}).filter(
         (p) => p?.uid && p.accountStatus !== "suspended"
       );
@@ -1744,12 +2689,13 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       environment: envReport,
       scheduler: {
         status: schedulerStatus,
-        cronPath: "/api/vacancies/sync",
-        cronSchedule: "Event-Driven (Instant on Job Publish)",
+        cronPath: "/api/cron/notifications",
+        cronSchedule: "Every 3 Days (Inactive Users Top-3 Push) + Instant on Publish",
         lastRunStartedAt: store.lastRunStartedAt,
         lastSuccessfulRunAt: store.lastSuccessfulRunAt,
+        lastInactiveCheckAt: store.lastInactiveCheckAt,
         lastRunStatus: store.lastRunStatus,
-        nextScheduledRunAt: "Instant on Job Publish"
+        nextScheduledRunAt: store.lastInactiveCheckAt ? new Date(new Date(store.lastInactiveCheckAt).getTime() + THREE_DAYS_MS).toISOString() : "Every 3 Days (Automatic)"
       },
       totals: {
         totalNotificationsSent,
@@ -1810,6 +2756,10 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     });
   }
   if (!isVercel) {
+    const startupTimer = setTimeout(() => {
+      void executeAutomatedSchedulerSweep({ trigger: "background_interval" });
+    }, 10 * 1e3);
+    if (typeof startupTimer?.unref === "function") startupTimer.unref();
     const retryTimer = setInterval(() => {
       void processRetryQueueCycle();
     }, 2 * 60 * 1e3);
@@ -1818,6 +2768,10 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       void executeAutomatedSchedulerSweep({ trigger: "background_interval" });
     }, 15 * 60 * 1e3);
     if (typeof schedulerTimer?.unref === "function") schedulerTimer.unref();
+    const threeDayInactiveTimer = setInterval(() => {
+      void runInactiveUsersThreeDayCheck();
+    }, THREE_DAYS_MS);
+    if (typeof threeDayInactiveTimer?.unref === "function") threeDayInactiveTimer.unref();
   }
   app.get("/api/push/vapid-public-key", async (_req, res) => {
     const wp = await ensureWebPush();
@@ -1833,26 +2787,43 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     if (!prefs || prefs.manuallyDisabled === true) return 0;
     const hasDevices = Boolean(prefs.deviceSubscriptions?.some((d) => d.active && d.subscription?.endpoint));
     if (!hasDevices) return 0;
+    const appliedIds = getAppliedVacancyIdsForUser(uid);
     const allNotifs = loadAllNotifications();
     const userNotifs = Array.isArray(allNotifs[uid]) ? allNotifs[uid] : [];
     const pendingPush = userNotifs.filter(
-      (n) => !n.read && n.sourceType !== "system" && n.channels?.push !== "sent" && !isDeadlineExpired(n.deadline || n.expiresAt)
+      (n) => !n.read && n.sourceType !== "system" && n.channels?.push !== "sent" && !appliedIds.has(String(n.vacancyId)) && !isDeadlineExpired(n.deadline || n.expiresAt)
     ).slice(0, 3);
     if (pendingPush.length === 0) return 0;
     let pushedCount = 0;
     let mutated = false;
     for (const notif of pendingPush) {
-      const pushRes = await sendWebPushToUser(uid, {
-        title: `HOPELANDJOBS \u2014 ${notif.title}`,
-        body: `${notif.employer} (${notif.location}) \xB7 ${notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`}. Tap to apply.`,
-        url: notif.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&notificationId=${encodeURIComponent(notif.id)}` : notif.jobUrl || "/",
-        jobId: notif.vacancyId,
-        notificationId: notif.id,
-        tag: `vacancy-${notif.vacancyId}`,
-        jobTitle: notif.title,
-        employer: notif.employer,
-        category: notif.category
-      });
+      let pushRes;
+      if (Array.isArray(notif.topJobs) && notif.topJobs.length > 0) {
+        const topPayload = buildTop3MobilePushPayload({
+          topJobs: notif.topJobs,
+          notifId: notif.id,
+          cycleNumber: notif.reminderCount || 1
+        });
+        pushRes = await sendWebPushToUser(uid, topPayload);
+      } else {
+        const isReminder = notif.alertKind === "apply_reminder";
+        const cleanTitle = String(notif.title || "").replace(/^Reminder to Apply:\s*/i, "");
+        pushRes = await sendWebPushToUser(uid, {
+          title: isReminder ? `Hopeland Jobs \xB7 Reminder: Apply for ${cleanTitle}` : `Hopeland Jobs \xB7 ${notif.title}`,
+          body: isReminder ? `${notif.employer} (${notif.location}) \xB7 Recommended for your profile${notif.deadline && notif.deadline !== "Open" ? ` \xB7 Deadline: ${notif.deadline}` : ""}. Tap to view and apply now!` : `${notif.employer} (${notif.location}) \xB7 ${notif.matchReasonSummary || `Matches your qualifications in ${notif.category}`}. Tap to apply.`,
+          url: notif.sourceType === "domestic_job" ? `/?jobId=${encodeURIComponent(notif.vacancyId)}&apply=1&notificationId=${encodeURIComponent(notif.id)}` : notif.jobUrl || "/",
+          jobId: notif.vacancyId,
+          notificationId: notif.id,
+          tag: isReminder ? `vacancy-${notif.vacancyId}-rem-${notif.reminderCount || 1}` : `vacancy-${notif.vacancyId}`,
+          icon: "/pwa-192x192.png",
+          badge: "/pwa-badge-96x96.png",
+          actionType: "open_job",
+          timestamp: Date.now(),
+          jobTitle: cleanTitle || notif.title,
+          employer: notif.employer,
+          category: notif.category
+        });
+      }
       if (pushRes.deliveredCount > 0) {
         notif.channels = { ...notif.channels || { website: "delivered", email: "skipped" }, push: "sent" };
         notif.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -2303,6 +3274,22 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       newDeliveriesCount: newNotifications.length,
       syncedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
+  });
+  app.get("/api/vacancies/:id", (req, res) => {
+    const rawId = decodeURIComponent(String(req.params.id || "")).trim();
+    if (!rawId) {
+      res.status(400).json({ error: "Vacancy ID is required" });
+      return;
+    }
+    const list = loadVacanciesCatalog();
+    const found = list.find(
+      (v) => v && v.status === "published" && (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
+    );
+    if (!found) {
+      res.status(404).json({ error: "Vacancy not found" });
+      return;
+    }
+    res.json({ success: true, vacancy: found });
   });
   app.post("/api/vacancies/sync", async (req, res) => {
     const {
@@ -2829,6 +3816,26 @@ ${rows.join("\n")}`;
       schedulerStatus: buildAdminSchedulerStatus()
     });
   });
+  app.post("/api/admin/notifications/check-inactive", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ error: "Owner authorization required" });
+      return;
+    }
+    const dryRun = req.body?.dryRun === true;
+    const force = req.body?.force === true;
+    const targetUid = req.body?.targetUid ? String(req.body.targetUid) : void 0;
+    const result = await runInactiveUsersThreeDayCheck({ dryRun, force, targetUid });
+    if (!dryRun) {
+      appendAuditLog({
+        action: "inactive_users_3day_top3_check",
+        actorEmail: getRequesterEmail(req) || "owner",
+        targetType: "user_notifications",
+        summary: `3-day inactive user check: ${result.inactiveUsersFound} inactive users found, ${result.remindersCreated} Top-3 reminders created, ${result.pushSucceeded} mobile push deliveries accepted.`,
+        severity: "info"
+      });
+    }
+    res.json({ success: true, ...result });
+  });
   app.post("/api/admin/scheduler/verify-smtp", async (req, res) => {
     if (!isPersistentOwnerRequest(req)) {
       res.status(403).json({ error: "Owner authorization required" });
@@ -3073,7 +4080,7 @@ ${rows.join("\n")}`;
       return;
     }
     const payload = {
-      title: String(customTitle || "HOPELANDJOBS \u2014 Test Notification Active!"),
+      title: String(customTitle || "Hopeland Jobs \xB7 Test Notification Active"),
       body: String(
         customBody || "Direct real-time push notifications are configured and working on your device. Tap to open HopelandJobs."
       ),
@@ -3365,6 +4372,7 @@ ${rows.join("\n")}`;
     });
   });
   return {
+    runInactiveUsersThreeDayCheck,
     onUserProfileSaved: async (savedProfile, _isNewRegistration) => {
       if (!savedProfile?.uid) return { recommendationsCount: 0, newNotificationsCount: 0 };
       const allPrefs = loadAllNotificationPrefs();
@@ -4718,6 +5726,8 @@ ${text}`;
     const botHealth = loadBotHealthState();
     return {
       ...safe,
+      appLogoUrl: typeof safe.appLogoUrl === "string" ? safe.appLogoUrl : "",
+      appLogoUpdatedAt: typeof safe.appLogoUpdatedAt === "string" ? safe.appLogoUpdatedAt : "",
       gaMeasurementId: safe.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
       gaTrackingEnabled: safe.gaTrackingEnabled ?? true,
       telegramBotTokenConfigured: Boolean(token),
@@ -4800,6 +5810,131 @@ ${text}`;
     }
     return "";
   }
+  let cachedRemoteAppLogo = null;
+  async function resolveCustomAppLogoAsset(appLogoUrl) {
+    const raw = String(appLogoUrl || "").trim();
+    if (!raw) return null;
+    const dataUriMatch = raw.match(/^data:(image\/(?:png|jpeg|jpg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/i);
+    if (dataUriMatch) {
+      try {
+        const mimeType = dataUriMatch[1].toLowerCase() === "image/jpg" ? "image/jpeg" : dataUriMatch[1].toLowerCase();
+        const buffer = Buffer.from(dataUriMatch[2], "base64");
+        if (buffer.length > 0 && buffer.length <= 2 * 1024 * 1024) {
+          return { mimeType, buffer };
+        }
+      } catch {
+      }
+      return null;
+    }
+    if (/^https?:\/\//i.test(raw)) {
+      if (cachedRemoteAppLogo && cachedRemoteAppLogo.url === raw && Date.now() - cachedRemoteAppLogo.fetchedAt < 5 * 60 * 1e3) {
+        return { mimeType: cachedRemoteAppLogo.mimeType, buffer: cachedRemoteAppLogo.buffer };
+      }
+      try {
+        const imgRes = await fetch(raw, { signal: AbortSignal.timeout(4500) });
+        if (imgRes.ok) {
+          const contentType = String(imgRes.headers.get("content-type") || "image/png").split(";")[0].trim();
+          if (contentType.startsWith("image/")) {
+            const arrBuf = await imgRes.arrayBuffer();
+            const buffer = Buffer.from(arrBuf);
+            if (buffer.length > 0 && buffer.length <= 2 * 1024 * 1024) {
+              cachedRemoteAppLogo = { url: raw, mimeType: contentType, buffer, fetchedAt: Date.now() };
+              return { mimeType: contentType, buffer };
+            }
+          }
+        }
+      } catch {
+      }
+    }
+    return null;
+  }
+  function sendPublicFallbackIcon(res, filename) {
+    const candidates = [
+      path2.join(process.cwd(), "public", filename),
+      path2.join(process.cwd(), "dist", filename)
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
+        res.sendFile(p);
+        return;
+      }
+    }
+    res.status(404).end();
+  }
+  app.get("/api/app-logo", async (_req, res) => {
+    const persisted = loadPersistedSettings() || {};
+    const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
+    if (customAsset) {
+      res.setHeader("Content-Type", customAsset.mimeType);
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      res.send(customAsset.buffer);
+      return;
+    }
+    sendPublicFallbackIcon(res, "pwa-512x512.png");
+  });
+  for (const iconFile of [
+    "pwa-192x192.png",
+    "pwa-512x512.png",
+    "pwa-maskable-512x512.png",
+    "apple-touch-icon.png",
+    "favicon-32x32.png"
+  ]) {
+    app.get(`/${iconFile}`, async (_req, res) => {
+      const persisted = loadPersistedSettings() || {};
+      const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
+      if (customAsset) {
+        res.setHeader("Content-Type", customAsset.mimeType);
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
+        res.send(customAsset.buffer);
+        return;
+      }
+      sendPublicFallbackIcon(res, iconFile);
+    });
+  }
+  app.get("/manifest.webmanifest", (_req, res) => {
+    const persisted = loadPersistedSettings() || {};
+    const versionRaw = persisted.appLogoUpdatedAt || persisted.updatedAt || "default";
+    const versionTag = encodeURIComponent(
+      crypto.createHash("md5").update(`${persisted.appLogoUrl || "default"}:${versionRaw}`).digest("hex").slice(0, 10)
+    );
+    const querySuffix = persisted.appLogoUrl ? `?v=${versionTag}` : "";
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, must-revalidate");
+    res.json({
+      id: "/",
+      name: "HOPELAND JOBS \u2014 Ethiopia & International Career Portal",
+      short_name: "HopelandJobs",
+      description: "Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts.",
+      start_url: "/",
+      scope: "/",
+      display: "standalone",
+      orientation: "portrait-primary",
+      background_color: "#FBFBFA",
+      theme_color: "#0B132B",
+      categories: ["business", "productivity", "employment"],
+      icons: [
+        {
+          src: `/pwa-192x192.png${querySuffix}`,
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: `/pwa-512x512.png${querySuffix}`,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: `/pwa-maskable-512x512.png${querySuffix}`,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable"
+        }
+      ]
+    });
+  });
   app.get("/api/settings", (req, res) => {
     const persisted = loadPersistedSettings() || {};
     const currentToken = getTelegramToken();
@@ -4844,6 +5979,8 @@ ${text}`;
       contactAddress: persisted.contactAddress || "Bole Subcity, Addis Ababa, Ethiopia",
       aboutText: persisted.aboutText && !persisted.aboutText.startsWith("DREAM BIG JOBS") ? persisted.aboutText : "HOPELAND JOBS is Ethiopia\u2019s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.",
       customDomain: effectiveDomain,
+      appLogoUrl: typeof persisted.appLogoUrl === "string" ? persisted.appLogoUrl : "",
+      appLogoUpdatedAt: typeof persisted.appLogoUpdatedAt === "string" ? persisted.appLogoUpdatedAt : "",
       updatedAt: persisted.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     });
   });
@@ -4853,6 +5990,14 @@ ${text}`;
       const current = loadPersistedSettings() || {};
       const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
       const merged = { ...current, ...incomingWithoutRaw };
+      if (Object.prototype.hasOwnProperty.call(incoming, "appLogoUrl")) {
+        const nextLogo = typeof incoming.appLogoUrl === "string" ? incoming.appLogoUrl.trim() : "";
+        merged.appLogoUrl = nextLogo;
+        if (nextLogo !== (current.appLogoUrl || "")) {
+          merged.appLogoUpdatedAt = incoming.appLogoUpdatedAt || (/* @__PURE__ */ new Date()).toISOString();
+        }
+        cachedRemoteAppLogo = null;
+      }
       if (typeof incoming.telegramChannelName === "string" && incoming.telegramChannelName.trim()) {
         const normalized = normalizeTelegramChatIdServer(incoming.telegramChannelName);
         if (!normalized.isInviteLink) {
@@ -6085,9 +7230,20 @@ ${text}`;
     return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
   }
   function normalizeWebsiteDomain(domainOrUrl) {
-    if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === "healmorin.com") return "https://hopelandjobs.tech";
-    let clean = domainOrUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const raw = (domainOrUrl || "").trim();
+    if (!raw || raw.toLowerCase() === "healmorin.com" || raw.toLowerCase() === "hopelandjobs.tech") {
+      return "https://www.hopelandjobs.tech";
+    }
+    const clean = raw.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    if (!clean || clean.toLowerCase() === "hopelandjobs.tech") {
+      return "https://www.hopelandjobs.tech";
+    }
     return `https://${clean}`;
+  }
+  function buildTelegramVacancyUrl(baseUrl, vacancy, includeApplyAction = true) {
+    const safeId = encodeURIComponent(String(vacancy?.id || "").trim() || "latest");
+    const applyParam = includeApplyAction ? "apply=1&" : "";
+    return `${baseUrl}/jobs/${safeId}?${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
   }
   function resolveVacancyImageUrl(vacancy) {
     const candidates = [vacancy?.imageUrl, vacancy?.organizationLogo, vacancy?.bannerUrl, vacancy?.posterUrl];
@@ -6142,8 +7298,10 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
       plainText: nextPlain
     };
   }
-  function buildTelegramAmharicPromoHtml(baseUrl) {
-    const safeUrl = escapeHtml(baseUrl);
+  function stripUrlsAndEmailsForTelegram(text) {
+    return String(text || "").replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.[^\s]+/gi, "").replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "").replace(/\s{2,}/g, " ").trim();
+  }
+  function buildTelegramAmharicPromoHtml(_baseUrl) {
     return `\u{1F4E2} <b>\u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!</b>
 
 \u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
@@ -6155,10 +7313,9 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
 
 \u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
 
-\u{1F310} \u12DB\u122C\u12CD\u1291 \u12ED\u1218\u12DD\u1308\u1261\u1366
-<a href="${safeUrl}">${safeUrl}</a>`;
+\u{1F447} <b>\u12DD\u122D\u12DD\u122D \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12A5\u1293 \u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!</b>`;
   }
-  function buildTelegramAmharicPromoPlain(baseUrl) {
+  function buildTelegramAmharicPromoPlain(_baseUrl) {
     return `\u{1F4E2} \u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!
 
 \u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
@@ -6170,119 +7327,184 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
 
 \u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
 
-\u{1F310} \u12DB\u122C\u12CD\u1291 \u12ED\u1218\u12DD\u1308\u1261\u1366
-${baseUrl}`;
+\u{1F447} \u12DD\u122D\u12DD\u122D \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12A5\u1293 \u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!`;
   }
-  function buildTelegramJobHtml(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia", compactForCaption = false) {
-    const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-    const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || "")}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  function formatCategoryHashtagServer(category) {
+    const c = String(category || "").trim().toLowerCase();
+    if (!c) return "#Vacancy";
+    if (c.includes("health")) return "#HealthCare";
+    if (c.includes("banking")) return "#BankingAndFinance";
+    if (c.includes("microfinance")) return "#Microfinance";
+    if (c.includes("ngo")) return "#NGO";
+    if (c.includes("embassy")) return "#EmbassyAndDiplomatic";
+    if (c.includes("it and technology") || c.includes("technology")) return "#ITAndTechnology";
+    if (c.includes("accounting")) return "#AccountingAndFinance";
+    if (c.includes("engineering")) return "#EngineeringAndConstruction";
+    if (c.includes("education")) return "#Education";
+    if (c.includes("hospitality") || c.includes("hotel")) return "#HotelAndHospitality";
+    if (c.includes("tourism")) return "#TourismAndTravel";
+    if (c.includes("government")) return "#Government";
+    if (c.includes("insurance")) return "#Insurance";
+    if (c.includes("internship") || c.includes("trainee")) return "#GraduateTrainee";
+    if (c.includes("remote")) return "#RemoteJobs";
+    if (c.includes("private")) return "#PrivateCompanies";
+    const words = String(category || "").replace(/[^a-zA-Z0-9\s]/g, " ").split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+    return words.length > 0 ? `#${words.join("")}` : "#Vacancy";
+  }
+  function deriveCareerLevelServer(vacancy) {
+    if (isMeaningfulField(vacancy?.jobGrade)) {
+      return truncateText(vacancy.jobGrade, 60);
+    }
+    const expText = String(vacancy?.experienceYears || "").trim();
+    const titleText = String(vacancy?.title || "").toLowerCase();
+    const combined = `${expText.toLowerCase()} ${titleText}`;
+    const numMatch = expText.match(/(\d+)/);
+    const minYears = numMatch ? Number(numMatch[1]) : null;
+    if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
+      return "Entry Level (0-1 year)";
+    }
+    if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || minYears !== null && minYears >= 5) {
+      return expText ? `Senior (${truncateText(expText, 30)})` : "Senior (5-8 years)";
+    }
+    if (minYears !== null && minYears >= 3) {
+      return expText ? `Mid Level (${truncateText(expText, 30)})` : "Mid Level (3-5 years)";
+    }
+    if (minYears !== null && minYears >= 1) {
+      return expText ? `Junior (${truncateText(expText, 30)})` : "Junior (1-3 years)";
+    }
+    return "Mid Level";
+  }
+  function formatDeadlineDisplayServer(deadline) {
+    const s = String(deadline || "").trim();
+    if (!s || !isMeaningfulField(s)) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const d = new Date(s);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      }
+    }
+    return truncateText(s, 60);
+  }
+  function buildRequirementsBulletLinesServer(vacancy, compactForCaption = false) {
+    const bullets = [];
+    const pushClean = (line) => {
+      const cleaned = stripUrlsAndEmailsForTelegram(line).replace(/^[•\-\*]\s*/, "").trim();
+      if (!cleaned || cleaned.length < 3) return;
+      if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
+        bullets.push(truncateText(cleaned, compactForCaption ? 120 : 210));
+      }
+    };
+    if (isMeaningfulField(vacancy?.educationQualification)) {
+      const edu = stripUrlsAndEmailsForTelegram(vacancy.educationQualification);
+      const field = isMeaningfulField(vacancy?.requiredFieldOfStudy) ? ` in ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}` : "";
+      pushClean(`${edu}${field}`);
+    } else if (isMeaningfulField(vacancy?.requiredFieldOfStudy)) {
+      pushClean(`Field of Study: ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`);
+    }
+    if (isMeaningfulField(vacancy?.experienceYears)) {
+      pushClean(`Minimum ${stripUrlsAndEmailsForTelegram(vacancy.experienceYears)} relevant experience`);
+    }
+    if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
+      const skillsList = vacancy.requiredSkills.map((s) => stripUrlsAndEmailsForTelegram(String(s || ""))).filter(Boolean);
+      if (skillsList.length > 0) {
+        pushClean(`Required Competencies & Skills: ${skillsList.slice(0, compactForCaption ? 4 : 8).join(", ")}`);
+      }
+    }
+    if (isMeaningfulField(vacancy?.specialRequirements)) {
+      pushClean(vacancy.specialRequirements);
+    }
+    if (!compactForCaption && isMeaningfulField(vacancy?.description)) {
+      const descLines = String(vacancy.description).split(/\n+/).map((l) => l.trim()).filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
+      for (const line of descLines.slice(0, 2)) {
+        pushClean(line);
+      }
+    }
+    if (bullets.length === 0) {
+      pushClean(
+        `${truncateText(vacancy?.title || "Position", 80)} \u2014 ${truncateText(vacancy?.category || "Relevant qualification", 80)}`
+      );
+    }
+    return bullets.slice(0, compactForCaption ? 3 : 6);
+  }
+  function buildTelegramJobHtml(vacancy, _domainOrUrl = "www.hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia", compactForCaption = false) {
     const orgName = escapeHtml(truncateText(vacancy.organization || "Employer", 140));
     const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateText(vacancy.organizationAmharic, 80))})` : "";
     const positionTitle = escapeHtml(truncateText(vacancy.title || "Various Positions", 180));
-    const eduParts = [];
-    if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
-    if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
-    if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0 && !compactForCaption) {
-      eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(" / "), 140));
-    }
-    if (eduParts.length === 0) {
-      eduParts.push(vacancy.category || "Related academic & professional fields");
-    }
-    if (isMeaningfulField(vacancy.experienceYears)) {
-      eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
-    }
-    const educationFieldText = escapeHtml(truncateText(eduParts.join(", "), compactForCaption ? 220 : 480));
-    const metaLines = [];
+    const categoryHashtag = escapeHtml(formatCategoryHashtagServer(vacancy.category));
+    const careerLevel = escapeHtml(deriveCareerLevelServer(vacancy));
+    const deadlineDisplay = escapeHtml(formatDeadlineDisplayServer(vacancy.applicationDeadline));
+    const infoLines = [];
+    infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
     if (isMeaningfulField(vacancy.location)) {
-      metaLines.push(`\u{1F4CD} <b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
+      infoLines.push(`<b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
     }
-    if (isMeaningfulField(vacancy.employmentType)) {
-      metaLines.push(`\u{1F4BC} <b>Employment Type:</b> ${escapeHtml(vacancy.employmentType)}`);
+    if (deadlineDisplay) {
+      infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
     }
-    if (isMeaningfulField(vacancy.salary)) {
-      metaLines.push(`\u{1F4B0} <b>Salary:</b> ${escapeHtml(truncateText(vacancy.salary, 100))}`);
-    }
-    if (isMeaningfulField(vacancy.applicationDeadline)) {
-      metaLines.push(`\u23F3 <b>Deadline:</b> ${escapeHtml(truncateText(vacancy.applicationDeadline, 80))}`);
-    }
-    const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || "").trim();
-    const applyEmail = String(vacancy.applicationEmail || "").trim();
-    if (/^https?:\/\/\S+/i.test(directApplyUrl)) {
-      const safeHref = escapeHtml(directApplyUrl);
-      metaLines.push(`\u{1F4DD} <b>Apply Direct:</b> <a href="${safeHref}">${safeHref}</a>`);
-    } else if (applyEmail.includes("@")) {
-      metaLines.push(`\u{1F4E7} <b>Apply Email:</b> ${escapeHtml(applyEmail)}`);
-    } else if (!compactForCaption && isMeaningfulField(vacancy.applicationInstructions)) {
-      metaLines.push(`\u{1F4DD} <b>How to Apply:</b> ${escapeHtml(truncateText(vacancy.applicationInstructions, 180))}`);
-    }
-    const detailsBlock = metaLines.length > 0 ? `
-${metaLines.join("\n")}` : "";
+    infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
+    infoLines.push(
+      `<b>Number of people required:</b> ${isMeaningfulField(vacancy.vacanciesCount) ? escapeHtml(truncateText(vacancy.vacanciesCount, 40)) : "1"}`
+    );
+    const bulletLines = buildRequirementsBulletLinesServer(vacancy, compactForCaption);
+    const reqBulletsHtml = bulletLines.map((b) => `\u2022 ${escapeHtml(b)}`).join("\n");
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 <b>WASH JOB</b>\n\n" : "";
-    const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
+    const coreText = `${washPrefix}<b>${positionTitle}</b>
+<i>at ${orgName}${orgAmharic}</i>
 
-\u{1F530} <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
+${infoLines.join("\n\n")}
 
-\u2705 <b>Education field:</b> ${educationFieldText}${detailsBlock}
-
-\u{1F4CC} <b>\u1235\u1208 \u1235\u122B\u12CD \u1219\u1209 \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12ED\u1205\u1295\u1295 \u120A\u1295\u12AD \u12ED\u1320\u1240\u1219</b>
-\u{1F449}<b>Read Detail:-</b> <a href="${escapeHtml(vacancyLink)}">${escapeHtml(vacancyLink)}</a>
-
-\u{1F530} <b>\u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}</b>
-=&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
-    const promoHtml = buildTelegramAmharicPromoHtml(baseUrl);
+<b>Requirements:</b>
+${reqBulletsHtml}`;
+    const promoHtml = buildTelegramAmharicPromoHtml();
     const fullText = `${coreText}
 
 ${promoHtml}`;
-    if (fullText.length <= 4e3) return fullText;
+    const maxAllowed = compactForCaption ? 1e3 : 4e3;
+    if (fullText.length <= maxAllowed) return fullText;
+    if (compactForCaption) {
+      const compactPromo = `\u{1F4E2} <b>\u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!</b>
+\u{1F447} <b>\u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!</b>`;
+      const budget = Math.max(250, maxAllowed - compactPromo.length - 4);
+      const trimmedCore = coreText.length > budget ? `${coreText.slice(0, budget)}\u2026` : coreText;
+      return `${trimmedCore}
+
+${compactPromo}`;
+    }
     const maxCore = Math.max(400, 3980 - promoHtml.length);
     return `${coreText.slice(0, maxCore)}\u2026
 
 ${promoHtml}`;
   }
-  function buildTelegramJobPlainText(vacancy, domainOrUrl = "hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
-    const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-    const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || "")}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  function buildTelegramJobPlainText(vacancy, _domainOrUrl = "www.hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
     const orgName = truncateText(vacancy.organization || "Employer", 140);
     const orgAmharic = vacancy.organizationAmharic ? ` (${truncateText(vacancy.organizationAmharic, 80)})` : "";
     const positionTitle = truncateText(vacancy.title || "Various Positions", 180);
-    const eduParts = [];
-    if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
-    if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
-    if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-      eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(" / "), 140));
+    const categoryHashtag = formatCategoryHashtagServer(vacancy.category);
+    const careerLevel = deriveCareerLevelServer(vacancy);
+    const deadlineDisplay = formatDeadlineDisplayServer(vacancy.applicationDeadline);
+    const infoLines = [];
+    infoLines.push(`Categories: ${categoryHashtag}`);
+    if (isMeaningfulField(vacancy.location)) {
+      infoLines.push(`Location: ${truncateText(vacancy.location, 100)}`);
     }
-    if (eduParts.length === 0) {
-      eduParts.push(vacancy.category || "Related academic & professional fields");
+    if (deadlineDisplay) {
+      infoLines.push(`Deadline: ${deadlineDisplay}`);
     }
-    if (isMeaningfulField(vacancy.experienceYears)) {
-      eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
-    }
-    const educationFieldText = truncateText(eduParts.join(", "), 480);
-    const metaLines = [];
-    if (isMeaningfulField(vacancy.location)) metaLines.push(`\u{1F4CD} Location: ${truncateText(vacancy.location, 100)}`);
-    if (isMeaningfulField(vacancy.employmentType)) metaLines.push(`\u{1F4BC} Employment Type: ${vacancy.employmentType}`);
-    if (isMeaningfulField(vacancy.salary)) metaLines.push(`\u{1F4B0} Salary: ${truncateText(vacancy.salary, 100)}`);
-    if (isMeaningfulField(vacancy.applicationDeadline)) metaLines.push(`\u23F3 Deadline: ${truncateText(vacancy.applicationDeadline, 80)}`);
-    const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || "").trim();
-    const applyEmail = String(vacancy.applicationEmail || "").trim();
-    if (/^https?:\/\/\S+/i.test(directApplyUrl)) metaLines.push(`\u{1F4DD} Apply Direct: ${directApplyUrl}`);
-    else if (applyEmail.includes("@")) metaLines.push(`\u{1F4E7} Apply Email: ${applyEmail}`);
-    else if (isMeaningfulField(vacancy.applicationInstructions)) metaLines.push(`\u{1F4DD} How to Apply: ${truncateText(vacancy.applicationInstructions, 180)}`);
-    const detailsBlock = metaLines.length > 0 ? `
-${metaLines.join("\n")}` : "";
+    infoLines.push(`Career Level: ${careerLevel}`);
+    infoLines.push(
+      `Number of people required: ${isMeaningfulField(vacancy.vacanciesCount) ? truncateText(vacancy.vacanciesCount, 40) : "1"}`
+    );
+    const bulletLines = buildRequirementsBulletLinesServer(vacancy, false);
+    const reqBulletsPlain = bulletLines.map((b) => `\u2022 ${b}`).join("\n");
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 WASH JOB\n\n" : "";
-    const coreText = `${washPrefix}Vacancy at ${orgName}
+    const coreText = `${washPrefix}${positionTitle}
+at ${orgName}${orgAmharic}
 
-\u{1F530} ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
+${infoLines.join("\n\n")}
 
-\u2705 Education field: ${educationFieldText}${detailsBlock}
-
-\u{1F4CC} \u1235\u1208 \u1235\u122B\u12CD \u1219\u1209 \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12ED\u1205\u1295\u1295 \u120A\u1295\u12AD \u12ED\u1320\u1240\u1219
-\u{1F449}Read Detail:- ${vacancyLink}
-
-\u{1F530} \u12A8\u1270\u1208\u12EB\u12E9 \u12F5\u122D\u1305\u1275 \u12E8\u1225\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D \u1260\u12DA\u1205 \u120A\u1295\u12AD \u12CC\u1265\u1233\u12ED\u1271 \u120B\u12ED \u12ED\u1218\u120D\u12A8\u1271 \u{1F447}\u{1F447}
-=>See Detail:- ${baseUrl}`;
-    const promoPlain = buildTelegramAmharicPromoPlain(baseUrl);
+Requirements:
+${reqBulletsPlain}`;
+    const promoPlain = buildTelegramAmharicPromoPlain();
     const fullText = `${coreText}
 
 ${promoPlain}`;
@@ -6357,6 +7579,18 @@ ${promoPlain}`;
       });
       return await res.json();
     };
+    const resolvedBaseUrl = normalizeWebsiteDomain(domainOrUrl);
+    const vacancyApplyLink = buildTelegramVacancyUrl(resolvedBaseUrl, vacancy, true);
+    const replyMarkup = /^https:\/\/[^/\s]+/i.test(vacancyApplyLink) && !/localhost|127\.0\.0\.1/i.test(vacancyApplyLink) ? {
+      inline_keyboard: [
+        [
+          {
+            text: "Apply Now",
+            url: vacancyApplyLink
+          }
+        ]
+      ]
+    } : void 0;
     const trySendOnce = async (targetChatId) => {
       if (photoUrl && captionWash?.valid && captionWash.html.length <= 1024) {
         try {
@@ -6364,7 +7598,8 @@ ${promoPlain}`;
             chat_id: targetChatId,
             photo: photoUrl,
             caption: captionWash.html,
-            parse_mode: "HTML"
+            parse_mode: "HTML",
+            ...replyMarkup ? { reply_markup: replyMarkup } : {}
           });
           if (photoRes?.ok) {
             return { ok: true, messageId: photoRes.result?.message_id, usedPhoto: true };
@@ -6382,7 +7617,8 @@ ${promoPlain}`;
         chat_id: targetChatId,
         text: htmlMsg,
         parse_mode: "HTML",
-        disable_web_page_preview: false
+        disable_web_page_preview: false,
+        ...replyMarkup ? { reply_markup: replyMarkup } : {}
       });
       if (data?.ok) {
         return { ok: true, messageId: data.result?.message_id };
@@ -6396,7 +7632,8 @@ ${promoPlain}`;
           const fallbackData = await callTelegramSend("sendMessage", {
             chat_id: targetChatId,
             text: plainMsg,
-            disable_web_page_preview: false
+            disable_web_page_preview: false,
+            ...replyMarkup ? { reply_markup: replyMarkup } : {}
           });
           if (fallbackData?.ok) {
             return { ok: true, messageId: fallbackData.result?.message_id, usedPlain: true };

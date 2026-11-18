@@ -17,25 +17,53 @@ const EXCLUDE_ADMIN_KEY = 'dbj_exclude_admin_traffic';
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
 
+function safeLocalGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(key: string, val: string): void {
+  try {
+    window.localStorage.setItem(key, val);
+  } catch {}
+}
+
+function safeSessionGet(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionSet(key: string, val: string): void {
+  try {
+    window.sessionStorage.setItem(key, val);
+  } catch {}
+}
+
 // Get or create anonymous persistent unique visitor ID
 export function getOrCreateVisitorId(): { visitorId: string; isReturning: boolean } {
   if (typeof window === 'undefined') {
     return { visitorId: 'server', isReturning: false };
   }
 
-  let vid = localStorage.getItem(VISITOR_ID_KEY);
-  const hasVisited = localStorage.getItem(RETURNING_VISITOR_KEY) === 'true';
+  let vid = safeLocalGet(VISITOR_ID_KEY);
+  const hasVisited = safeLocalGet(RETURNING_VISITOR_KEY) === 'true';
 
   if (!vid) {
     vid = `vid_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem(VISITOR_ID_KEY, vid);
-    localStorage.setItem(RETURNING_VISITOR_KEY, 'false');
+    safeLocalSet(VISITOR_ID_KEY, vid);
+    safeLocalSet(RETURNING_VISITOR_KEY, 'false');
     return { visitorId: vid, isReturning: false };
   }
 
   // Mark as returning visitor if it wasn't already
   if (!hasVisited) {
-    localStorage.setItem(RETURNING_VISITOR_KEY, 'true');
+    safeLocalSet(RETURNING_VISITOR_KEY, 'true');
   }
 
   return { visitorId: vid, isReturning: true };
@@ -46,20 +74,20 @@ export function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return 'sid_server';
 
   const now = Date.now();
-  const storedSid = sessionStorage.getItem(SESSION_ID_KEY);
-  const storedTs = sessionStorage.getItem(SESSION_TIMESTAMP_KEY);
+  const storedSid = safeSessionGet(SESSION_ID_KEY);
+  const storedTs = safeSessionGet(SESSION_TIMESTAMP_KEY);
 
   if (storedSid && storedTs) {
     const lastActive = parseInt(storedTs, 10);
     if (now - lastActive < SESSION_TIMEOUT_MS) {
-      sessionStorage.setItem(SESSION_TIMESTAMP_KEY, String(now));
+      safeSessionSet(SESSION_TIMESTAMP_KEY, String(now));
       return storedSid;
     }
   }
 
   const newSid = `sid_${now}_${Math.random().toString(36).substring(2, 8)}`;
-  sessionStorage.setItem(SESSION_ID_KEY, newSid);
-  sessionStorage.setItem(SESSION_TIMESTAMP_KEY, String(now));
+  safeSessionSet(SESSION_ID_KEY, newSid);
+  safeSessionSet(SESSION_TIMESTAMP_KEY, String(now));
   return newSid;
 }
 
@@ -143,7 +171,7 @@ export function isInternalAdminVisit(isAdminLoggedIn: boolean = false): boolean 
   if (typeof window === 'undefined') return false;
 
   // Check explicit admin exclusion setting in localStorage
-  const setting = localStorage.getItem(EXCLUDE_ADMIN_KEY);
+  const setting = safeLocalGet(EXCLUDE_ADMIN_KEY);
   if (setting === 'false') {
     return false; // Admin explicitly wants to record their visits
   }
@@ -161,13 +189,13 @@ export function isInternalAdminVisit(isAdminLoggedIn: boolean = false): boolean 
 
 export function setInternalTrafficExclusion(exclude: boolean) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(EXCLUDE_ADMIN_KEY, exclude ? 'true' : 'false');
+    safeLocalSet(EXCLUDE_ADMIN_KEY, exclude ? 'true' : 'false');
   }
 }
 
 export function getInternalTrafficExclusion(): boolean {
   if (typeof window === 'undefined') return false;
-  const val = localStorage.getItem(EXCLUDE_ADMIN_KEY);
+  const val = safeLocalGet(EXCLUDE_ADMIN_KEY);
   // Default to false so public traffic is never accidentally suppressed
   return val === 'true';
 }

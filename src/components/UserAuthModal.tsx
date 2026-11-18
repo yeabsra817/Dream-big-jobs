@@ -22,6 +22,7 @@ import {
 } from '../lib/firebase';
 import { DEFAULT_JOB_SEEKER_PROFILE, JobSeekerProfile } from '../types/jobSeeker';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
+import { AppBrandLogo } from './AppBrandLogo';
 
 interface Props {
   isOpen: boolean;
@@ -29,6 +30,7 @@ interface Props {
   initialMode?: 'signin' | 'signup' | 'forgot';
   onSuccess?: (user: any, profile?: JobSeekerProfile) => void;
   message?: string;
+  appLogoUrl?: string | null;
 }
 
 export const UserAuthModal: React.FC<Props> = ({
@@ -37,6 +39,7 @@ export const UserAuthModal: React.FC<Props> = ({
   initialMode = 'signin',
   onSuccess,
   message,
+  appLogoUrl,
 }) => {
   const [mode, setMode] = useState<'signin' | 'signup'>(
     initialMode === 'signup' ? 'signup' : 'signin'
@@ -230,9 +233,7 @@ export const UserAuthModal: React.FC<Props> = ({
           </button>
 
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center text-slate-950 font-black">
-              <Sparkles className="w-4 h-4 fill-current text-slate-950" />
-            </div>
+            <AppBrandLogo logoUrl={appLogoUrl} size="sm" variant="amber" />
             <span className="font-extrabold text-sm tracking-wide text-white">
               HOPELAND <span className="text-amber-400">JOBS</span>
             </span>

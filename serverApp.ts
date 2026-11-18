@@ -1553,6 +1553,8 @@ function sanitizeSettingsForClient(settings: any, activeToken?: string): any {
   const botHealth = loadBotHealthState();
   return {
     ...safe,
+    appLogoUrl: typeof safe.appLogoUrl === 'string' ? safe.appLogoUrl : '',
+    appLogoUpdatedAt: typeof safe.appLogoUpdatedAt === 'string' ? safe.appLogoUpdatedAt : '',
     gaMeasurementId: safe.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
     gaTrackingEnabled: safe.gaTrackingEnabled ?? true,
     telegramBotTokenConfigured: Boolean(token),
@@ -1662,6 +1664,145 @@ function getTelegramToken(): string {
   return '';
 }
 
+let cachedRemoteAppLogo: { url: string; mimeType: string; buffer: Buffer; fetchedAt: number } | null = null;
+
+async function resolveCustomAppLogoAsset(appLogoUrl?: string): Promise<{ mimeType: string; buffer: Buffer } | null> {
+  const raw = String(appLogoUrl || '').trim();
+  if (!raw) return null;
+
+  const dataUriMatch = raw.match(/^data:(image\/(?:png|jpeg|jpg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/i);
+  if (dataUriMatch) {
+    try {
+      const mimeType = dataUriMatch[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : dataUriMatch[1].toLowerCase();
+      const buffer = Buffer.from(dataUriMatch[2], 'base64');
+      if (buffer.length > 0 && buffer.length <= 2 * 1024 * 1024) {
+        return { mimeType, buffer };
+      }
+    } catch {}
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    if (
+      cachedRemoteAppLogo &&
+      cachedRemoteAppLogo.url === raw &&
+      Date.now() - cachedRemoteAppLogo.fetchedAt < 5 * 60 * 1000
+    ) {
+      return { mimeType: cachedRemoteAppLogo.mimeType, buffer: cachedRemoteAppLogo.buffer };
+    }
+    try {
+      const imgRes = await fetch(raw, { signal: AbortSignal.timeout(4500) });
+      if (imgRes.ok) {
+        const contentType = String(imgRes.headers.get('content-type') || 'image/png').split(';')[0].trim();
+        if (contentType.startsWith('image/')) {
+          const arrBuf = await imgRes.arrayBuffer();
+          const buffer = Buffer.from(arrBuf);
+          if (buffer.length > 0 && buffer.length <= 2 * 1024 * 1024) {
+            cachedRemoteAppLogo = { url: raw, mimeType: contentType, buffer, fetchedAt: Date.now() };
+            return { mimeType: contentType, buffer };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+function sendPublicFallbackIcon(res: Response, filename: string): void {
+  const candidates = [
+    path.join(process.cwd(), 'public', filename),
+    path.join(process.cwd(), 'dist', filename),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.sendFile(p);
+      return;
+    }
+  }
+  res.status(404).end();
+}
+
+// Dynamic PWA App Logo & Manifest Routes (auto-reflects developer logo updates across tabs, home screens & notifications)
+app.get('/api/app-logo', async (_req: Request, res: Response): Promise<void> => {
+  const persisted = loadPersistedSettings() || {};
+  const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
+  if (customAsset) {
+    res.setHeader('Content-Type', customAsset.mimeType);
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    res.send(customAsset.buffer);
+    return;
+  }
+  sendPublicFallbackIcon(res, 'pwa-512x512.png');
+});
+
+for (const iconFile of [
+  'pwa-192x192.png',
+  'pwa-512x512.png',
+  'pwa-maskable-512x512.png',
+  'apple-touch-icon.png',
+  'favicon-32x32.png',
+]) {
+  app.get(`/${iconFile}`, async (_req: Request, res: Response): Promise<void> => {
+    const persisted = loadPersistedSettings() || {};
+    const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
+    if (customAsset) {
+      res.setHeader('Content-Type', customAsset.mimeType);
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.send(customAsset.buffer);
+      return;
+    }
+    sendPublicFallbackIcon(res, iconFile);
+  });
+}
+
+app.get('/manifest.webmanifest', (_req: Request, res: Response): void => {
+  const persisted = loadPersistedSettings() || {};
+  const versionRaw = persisted.appLogoUpdatedAt || persisted.updatedAt || 'default';
+  const versionTag = encodeURIComponent(
+    crypto.createHash('md5').update(`${persisted.appLogoUrl || 'default'}:${versionRaw}`).digest('hex').slice(0, 10)
+  );
+  const querySuffix = persisted.appLogoUrl ? `?v=${versionTag}` : '';
+
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.json({
+    id: '/',
+    name: 'HOPELAND JOBS — Ethiopia & International Career Portal',
+    short_name: 'HopelandJobs',
+    description:
+      'Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts.',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    orientation: 'portrait-primary',
+    background_color: '#FBFBFA',
+    theme_color: '#0B132B',
+    categories: ['business', 'productivity', 'employment'],
+    icons: [
+      {
+        src: `/pwa-192x192.png${querySuffix}`,
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: `/pwa-512x512.png${querySuffix}`,
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: `/pwa-maskable-512x512.png${querySuffix}`,
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+    ],
+  });
+});
+
 // Universal Site Settings Endpoint (serves safe settings across sessions; never exposes raw TELEGRAM_BOT_TOKEN)
 app.get('/api/settings', (req: Request, res: Response): void => {
   const persisted = loadPersistedSettings() || {};
@@ -1720,6 +1861,8 @@ app.get('/api/settings', (req: Request, res: Response): void => {
         ? persisted.aboutText
         : 'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     customDomain: effectiveDomain,
+    appLogoUrl: typeof persisted.appLogoUrl === 'string' ? persisted.appLogoUrl : '',
+    appLogoUpdatedAt: typeof persisted.appLogoUpdatedAt === 'string' ? persisted.appLogoUpdatedAt : '',
     updatedAt: persisted.updatedAt || new Date().toISOString(),
   });
 });
@@ -1730,6 +1873,15 @@ app.post('/api/settings', (req: Request, res: Response): void => {
     const current = loadPersistedSettings() || {};
     const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
     const merged = { ...current, ...incomingWithoutRaw };
+
+    if (Object.prototype.hasOwnProperty.call(incoming, 'appLogoUrl')) {
+      const nextLogo = typeof incoming.appLogoUrl === 'string' ? incoming.appLogoUrl.trim() : '';
+      merged.appLogoUrl = nextLogo;
+      if (nextLogo !== (current.appLogoUrl || '')) {
+        merged.appLogoUpdatedAt = incoming.appLogoUpdatedAt || new Date().toISOString();
+      }
+      cachedRemoteAppLogo = null;
+    }
 
     if (typeof incoming.telegramChannelName === 'string' && incoming.telegramChannelName.trim()) {
       const normalized = normalizeTelegramChatIdServer(incoming.telegramChannelName);
@@ -3212,9 +3364,21 @@ function isMeaningfulField(val?: string | null): boolean {
 }
 
 function normalizeWebsiteDomain(domainOrUrl?: string): string {
-  if (!domainOrUrl || !domainOrUrl.trim() || domainOrUrl.trim() === 'healmorin.com') return 'https://hopelandjobs.tech';
-  let clean = domainOrUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const raw = (domainOrUrl || '').trim();
+  if (!raw || raw.toLowerCase() === 'healmorin.com' || raw.toLowerCase() === 'hopelandjobs.tech') {
+    return 'https://www.hopelandjobs.tech';
+  }
+  const clean = raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!clean || clean.toLowerCase() === 'hopelandjobs.tech') {
+    return 'https://www.hopelandjobs.tech';
+  }
   return `https://${clean}`;
+}
+
+function buildTelegramVacancyUrl(baseUrl: string, vacancy: any, includeApplyAction = true): string {
+  const safeId = encodeURIComponent(String(vacancy?.id || '').trim() || 'latest');
+  const applyParam = includeApplyAction ? 'apply=1&' : '';
+  return `${baseUrl}/jobs/${safeId}?${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 }
 
 function resolveVacancyImageUrl(vacancy: any): string | null {
@@ -3281,8 +3445,16 @@ function applyAndValidateWashLabelServer(
   };
 }
 
-function buildTelegramAmharicPromoHtml(baseUrl: string): string {
-  const safeUrl = escapeHtml(baseUrl);
+function stripUrlsAndEmailsForTelegram(text: string): string {
+  return String(text || '')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\bwww\.[^\s]+/gi, '')
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function buildTelegramAmharicPromoHtml(_baseUrl?: string): string {
   return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
 
 በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
@@ -3294,11 +3466,10 @@ function buildTelegramAmharicPromoHtml(baseUrl: string): string {
 
 🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
 
-🌐 ዛሬውኑ ይመዝገቡ፦
-<a href="${safeUrl}">${safeUrl}</a>`;
+👇 <b>ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
 }
 
-function buildTelegramAmharicPromoPlain(baseUrl: string): string {
+function buildTelegramAmharicPromoPlain(_baseUrl?: string): string {
   return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
 
 በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
@@ -3310,127 +3481,217 @@ function buildTelegramAmharicPromoPlain(baseUrl: string): string {
 
 🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
 
-🌐 ዛሬውኑ ይመዝገቡ፦
-${baseUrl}`;
+👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!`;
 }
 
-function buildTelegramJobHtml(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia', compactForCaption = false): string {
-  const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || '')}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+function formatCategoryHashtagServer(category?: string): string {
+  const c = String(category || '').trim().toLowerCase();
+  if (!c) return '#Vacancy';
+  if (c.includes('health')) return '#HealthCare';
+  if (c.includes('banking')) return '#BankingAndFinance';
+  if (c.includes('microfinance')) return '#Microfinance';
+  if (c.includes('ngo')) return '#NGO';
+  if (c.includes('embassy')) return '#EmbassyAndDiplomatic';
+  if (c.includes('it and technology') || c.includes('technology')) return '#ITAndTechnology';
+  if (c.includes('accounting')) return '#AccountingAndFinance';
+  if (c.includes('engineering')) return '#EngineeringAndConstruction';
+  if (c.includes('education')) return '#Education';
+  if (c.includes('hospitality') || c.includes('hotel')) return '#HotelAndHospitality';
+  if (c.includes('tourism')) return '#TourismAndTravel';
+  if (c.includes('government')) return '#Government';
+  if (c.includes('insurance')) return '#Insurance';
+  if (c.includes('internship') || c.includes('trainee')) return '#GraduateTrainee';
+  if (c.includes('remote')) return '#RemoteJobs';
+  if (c.includes('private')) return '#PrivateCompanies';
+  const words = String(category || '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
+  return words.length > 0 ? `#${words.join('')}` : '#Vacancy';
+}
 
+function deriveCareerLevelServer(vacancy: any): string {
+  if (isMeaningfulField(vacancy?.jobGrade)) {
+    return truncateText(vacancy.jobGrade, 60);
+  }
+  const expText = String(vacancy?.experienceYears || '').trim();
+  const titleText = String(vacancy?.title || '').toLowerCase();
+  const combined = `${expText.toLowerCase()} ${titleText}`;
+
+  const numMatch = expText.match(/(\d+)/);
+  const minYears = numMatch ? Number(numMatch[1]) : null;
+
+  if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
+    return 'Entry Level (0-1 year)';
+  }
+  if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || (minYears !== null && minYears >= 5)) {
+    return expText ? `Senior (${truncateText(expText, 30)})` : 'Senior (5-8 years)';
+  }
+  if (minYears !== null && minYears >= 3) {
+    return expText ? `Mid Level (${truncateText(expText, 30)})` : 'Mid Level (3-5 years)';
+  }
+  if (minYears !== null && minYears >= 1) {
+    return expText ? `Junior (${truncateText(expText, 30)})` : 'Junior (1-3 years)';
+  }
+  return 'Mid Level';
+}
+
+function formatDeadlineDisplayServer(deadline?: string): string {
+  const s = String(deadline || '').trim();
+  if (!s || !isMeaningfulField(s)) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }
+  return truncateText(s, 60);
+}
+
+function buildRequirementsBulletLinesServer(vacancy: any, compactForCaption = false): string[] {
+  const bullets: string[] = [];
+  const pushClean = (line: string) => {
+    const cleaned = stripUrlsAndEmailsForTelegram(line).replace(/^[•\-\*]\s*/, '').trim();
+    if (!cleaned || cleaned.length < 3) return;
+    if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
+      bullets.push(truncateText(cleaned, compactForCaption ? 120 : 210));
+    }
+  };
+
+  if (isMeaningfulField(vacancy?.educationQualification)) {
+    const edu = stripUrlsAndEmailsForTelegram(vacancy.educationQualification);
+    const field = isMeaningfulField(vacancy?.requiredFieldOfStudy)
+      ? ` in ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`
+      : '';
+    pushClean(`${edu}${field}`);
+  } else if (isMeaningfulField(vacancy?.requiredFieldOfStudy)) {
+    pushClean(`Field of Study: ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`);
+  }
+
+  if (isMeaningfulField(vacancy?.experienceYears)) {
+    pushClean(`Minimum ${stripUrlsAndEmailsForTelegram(vacancy.experienceYears)} relevant experience`);
+  }
+
+  if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
+    const skillsList = vacancy.requiredSkills
+      .map((s: any) => stripUrlsAndEmailsForTelegram(String(s || '')))
+      .filter(Boolean);
+    if (skillsList.length > 0) {
+      pushClean(`Required Competencies & Skills: ${skillsList.slice(0, compactForCaption ? 4 : 8).join(', ')}`);
+    }
+  }
+
+  if (isMeaningfulField(vacancy?.specialRequirements)) {
+    pushClean(vacancy.specialRequirements);
+  }
+
+  if (!compactForCaption && isMeaningfulField(vacancy?.description)) {
+    const descLines = String(vacancy.description)
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
+    for (const line of descLines.slice(0, 2)) {
+      pushClean(line);
+    }
+  }
+
+  if (bullets.length === 0) {
+    pushClean(
+      `${truncateText(vacancy?.title || 'Position', 80)} — ${truncateText(vacancy?.category || 'Relevant qualification', 80)}`
+    );
+  }
+
+  return bullets.slice(0, compactForCaption ? 3 : 6);
+}
+
+function buildTelegramJobHtml(vacancy: any, _domainOrUrl = 'www.hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia', compactForCaption = false): string {
   const orgName = escapeHtml(truncateText(vacancy.organization || 'Employer', 140));
   const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateText(vacancy.organizationAmharic, 80))})` : '';
   const positionTitle = escapeHtml(truncateText(vacancy.title || 'Various Positions', 180));
+  const categoryHashtag = escapeHtml(formatCategoryHashtagServer(vacancy.category));
+  const careerLevel = escapeHtml(deriveCareerLevelServer(vacancy));
+  const deadlineDisplay = escapeHtml(formatDeadlineDisplayServer(vacancy.applicationDeadline));
 
-  const eduParts: string[] = [];
-  if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
-  if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
-  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0 && !compactForCaption) {
-    eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
-  }
-  if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Related academic & professional fields');
-  }
-  if (isMeaningfulField(vacancy.experienceYears)) {
-    eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
-  }
-  const educationFieldText = escapeHtml(truncateText(eduParts.join(', '), compactForCaption ? 220 : 480));
-
-  const metaLines: string[] = [];
+  const infoLines: string[] = [];
+  infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
   if (isMeaningfulField(vacancy.location)) {
-    metaLines.push(`📍 <b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
+    infoLines.push(`<b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
   }
-  if (isMeaningfulField(vacancy.employmentType)) {
-    metaLines.push(`💼 <b>Employment Type:</b> ${escapeHtml(vacancy.employmentType)}`);
+  if (deadlineDisplay) {
+    infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
   }
-  if (isMeaningfulField(vacancy.salary)) {
-    metaLines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateText(vacancy.salary, 100))}`);
-  }
-  if (isMeaningfulField(vacancy.applicationDeadline)) {
-    metaLines.push(`⏳ <b>Deadline:</b> ${escapeHtml(truncateText(vacancy.applicationDeadline, 80))}`);
-  }
-  const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
-  const applyEmail = String(vacancy.applicationEmail || '').trim();
-  if (/^https?:\/\/\S+/i.test(directApplyUrl)) {
-    const safeHref = escapeHtml(directApplyUrl);
-    metaLines.push(`📝 <b>Apply Direct:</b> <a href="${safeHref}">${safeHref}</a>`);
-  } else if (applyEmail.includes('@')) {
-    metaLines.push(`📧 <b>Apply Email:</b> ${escapeHtml(applyEmail)}`);
-  } else if (!compactForCaption && isMeaningfulField(vacancy.applicationInstructions)) {
-    metaLines.push(`📝 <b>How to Apply:</b> ${escapeHtml(truncateText(vacancy.applicationInstructions, 180))}`);
-  }
+  infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
+  infoLines.push(
+    `<b>Number of people required:</b> ${
+      isMeaningfulField(vacancy.vacanciesCount)
+        ? escapeHtml(truncateText(vacancy.vacanciesCount, 40))
+        : '1'
+    }`
+  );
 
-  const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
+  const bulletLines = buildRequirementsBulletLinesServer(vacancy, compactForCaption);
+  const reqBulletsHtml = bulletLines.map((b) => `• ${escapeHtml(b)}`).join('\n');
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  const coreText = `${washPrefix}<b>Vacancy at ${orgName}</b>
+  const coreText = `${washPrefix}<b>${positionTitle}</b>
+<i>at ${orgName}${orgAmharic}</i>
 
-🔰 <b>${orgName}${orgAmharic}</b> invites qualified applicants for the <b>${positionTitle}</b> position.
+${infoLines.join('\n\n')}
 
-✅ <b>Education field:</b> ${educationFieldText}${detailsBlock}
+<b>Requirements:</b>
+${reqBulletsHtml}`;
 
-📌 <b>ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</b>
-👉<b>Read Detail:-</b> <a href="${escapeHtml(vacancyLink)}">${escapeHtml(vacancyLink)}</a>
-
-🔰 <b>ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</b>
-=&gt;<b>See Detail:-</b> <a href="${escapeHtml(baseUrl)}">${escapeHtml(baseUrl)}</a>`;
-
-  const promoHtml = buildTelegramAmharicPromoHtml(baseUrl);
+  const promoHtml = buildTelegramAmharicPromoHtml();
   const fullText = `${coreText}\n\n${promoHtml}`;
-  if (fullText.length <= 4000) return fullText;
+  const maxAllowed = compactForCaption ? 1000 : 4000;
+  if (fullText.length <= maxAllowed) return fullText;
+  if (compactForCaption) {
+    const compactPromo = `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>\n👇 <b>ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
+    const budget = Math.max(250, maxAllowed - compactPromo.length - 4);
+    const trimmedCore = coreText.length > budget ? `${coreText.slice(0, budget)}…` : coreText;
+    return `${trimmedCore}\n\n${compactPromo}`;
+  }
   const maxCore = Math.max(400, 3980 - promoHtml.length);
   return `${coreText.slice(0, maxCore)}…\n\n${promoHtml}`;
 }
 
-function buildTelegramJobPlainText(vacancy: any, domainOrUrl = 'hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
-  const baseUrl = normalizeWebsiteDomain(domainOrUrl);
-  const vacancyLink = `${baseUrl}/?jobId=${encodeURIComponent(vacancy.id || '')}&utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
-
+function buildTelegramJobPlainText(vacancy: any, _domainOrUrl = 'www.hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
   const orgName = truncateText(vacancy.organization || 'Employer', 140);
   const orgAmharic = vacancy.organizationAmharic ? ` (${truncateText(vacancy.organizationAmharic, 80)})` : '';
   const positionTitle = truncateText(vacancy.title || 'Various Positions', 180);
+  const categoryHashtag = formatCategoryHashtagServer(vacancy.category);
+  const careerLevel = deriveCareerLevelServer(vacancy);
+  const deadlineDisplay = formatDeadlineDisplayServer(vacancy.applicationDeadline);
 
-  const eduParts: string[] = [];
-  if (isMeaningfulField(vacancy.requiredFieldOfStudy)) eduParts.push(truncateText(vacancy.requiredFieldOfStudy, 160));
-  if (isMeaningfulField(vacancy.educationQualification)) eduParts.push(truncateText(vacancy.educationQualification, 160));
-  if (vacancy.requiredSkills && Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    eduParts.push(truncateText(vacancy.requiredSkills.slice(0, 6).join(' / '), 140));
+  const infoLines: string[] = [];
+  infoLines.push(`Categories: ${categoryHashtag}`);
+  if (isMeaningfulField(vacancy.location)) {
+    infoLines.push(`Location: ${truncateText(vacancy.location, 100)}`);
   }
-  if (eduParts.length === 0) {
-    eduParts.push(vacancy.category || 'Related academic & professional fields');
+  if (deadlineDisplay) {
+    infoLines.push(`Deadline: ${deadlineDisplay}`);
   }
-  if (isMeaningfulField(vacancy.experienceYears)) {
-    eduParts.push(`${truncateText(vacancy.experienceYears, 60)} experience`);
-  }
-  const educationFieldText = truncateText(eduParts.join(', '), 480);
+  infoLines.push(`Career Level: ${careerLevel}`);
+  infoLines.push(
+    `Number of people required: ${
+      isMeaningfulField(vacancy.vacanciesCount) ? truncateText(vacancy.vacanciesCount, 40) : '1'
+    }`
+  );
 
-  const metaLines: string[] = [];
-  if (isMeaningfulField(vacancy.location)) metaLines.push(`📍 Location: ${truncateText(vacancy.location, 100)}`);
-  if (isMeaningfulField(vacancy.employmentType)) metaLines.push(`💼 Employment Type: ${vacancy.employmentType}`);
-  if (isMeaningfulField(vacancy.salary)) metaLines.push(`💰 Salary: ${truncateText(vacancy.salary, 100)}`);
-  if (isMeaningfulField(vacancy.applicationDeadline)) metaLines.push(`⏳ Deadline: ${truncateText(vacancy.applicationDeadline, 80)}`);
-  const directApplyUrl = String(vacancy.applicationUrl || vacancy.directApplicationUrl || '').trim();
-  const applyEmail = String(vacancy.applicationEmail || '').trim();
-  if (/^https?:\/\/\S+/i.test(directApplyUrl)) metaLines.push(`📝 Apply Direct: ${directApplyUrl}`);
-  else if (applyEmail.includes('@')) metaLines.push(`📧 Apply Email: ${applyEmail}`);
-  else if (isMeaningfulField(vacancy.applicationInstructions)) metaLines.push(`📝 How to Apply: ${truncateText(vacancy.applicationInstructions, 180)}`);
-
-  const detailsBlock = metaLines.length > 0 ? `\n${metaLines.join('\n')}` : '';
+  const bulletLines = buildRequirementsBulletLinesServer(vacancy, false);
+  const reqBulletsPlain = bulletLines.map((b) => `• ${b}`).join('\n');
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  const coreText = `${washPrefix}Vacancy at ${orgName}
+  const coreText = `${washPrefix}${positionTitle}
+at ${orgName}${orgAmharic}
 
-🔰 ${orgName}${orgAmharic} invites qualified applicants for the ${positionTitle} position.
+${infoLines.join('\n\n')}
 
-✅ Education field: ${educationFieldText}${detailsBlock}
+Requirements:
+${reqBulletsPlain}`;
 
-📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ
-👉Read Detail:- ${vacancyLink}
-
-🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇
-=>See Detail:- ${baseUrl}`;
-
-  const promoPlain = buildTelegramAmharicPromoPlain(baseUrl);
+  const promoPlain = buildTelegramAmharicPromoPlain();
   const fullText = `${coreText}\n\n${promoPlain}`;
   if (fullText.length <= 4000) return fullText;
   const maxCore = Math.max(400, 3980 - promoPlain.length);
@@ -3533,6 +3794,22 @@ async function sendTelegramVacancyMessage(
     return (await res.json()) as any;
   };
 
+  const resolvedBaseUrl = normalizeWebsiteDomain(domainOrUrl);
+  const vacancyApplyLink = buildTelegramVacancyUrl(resolvedBaseUrl, vacancy, true);
+  const replyMarkup =
+    /^https:\/\/[^/\s]+/i.test(vacancyApplyLink) && !/localhost|127\.0\.0\.1/i.test(vacancyApplyLink)
+      ? {
+          inline_keyboard: [
+            [
+              {
+                text: 'Apply Now',
+                url: vacancyApplyLink,
+              },
+            ],
+          ],
+        }
+      : undefined;
+
   const trySendOnce = async (targetChatId: string): Promise<{ ok: boolean; messageId?: number; description?: string; retryAfterSec?: number; usedPlain?: boolean; usedPhoto?: boolean }> => {
     // Attempt image post first when a valid HTTPS image exists and caption fits Telegram's 1024-char caption limit
     if (photoUrl && captionWash?.valid && captionWash.html.length <= 1024) {
@@ -3542,6 +3819,7 @@ async function sendTelegramVacancyMessage(
           photo: photoUrl,
           caption: captionWash.html,
           parse_mode: 'HTML',
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         });
         if (photoRes?.ok) {
           return { ok: true, messageId: photoRes.result?.message_id, usedPhoto: true };
@@ -3561,6 +3839,7 @@ async function sendTelegramVacancyMessage(
       text: htmlMsg,
       parse_mode: 'HTML',
       disable_web_page_preview: false,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
     if (data?.ok) {
       return { ok: true, messageId: data.result?.message_id };
@@ -3576,6 +3855,7 @@ async function sendTelegramVacancyMessage(
           chat_id: targetChatId,
           text: plainMsg,
           disable_web_page_preview: false,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         });
         if (fallbackData?.ok) {
           return { ok: true, messageId: fallbackData.result?.message_id, usedPlain: true };

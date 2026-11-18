@@ -952,7 +952,7 @@ export const TelegramSettings: React.FC<Props> = ({
               </div>
 
               <p className="text-[11px] text-slate-700 leading-relaxed">
-                ✅ When you change or save the domain here, <strong>all Telegram broadcasts, share links, and applicant redirects</strong> automatically use <strong>https://{customDomain || 'hopelandjobs.tech'}</strong> in both <em>👉Read Detail:-</em> and <em>=&gt;See Detail:-</em>.
+                ✅ When you change or save the domain here, <strong>all Telegram Apply Now buttons and applicant redirects</strong> automatically route to <strong>https://{customDomain || 'hopelandjobs.tech'}</strong> without exposing raw links inside the post text.
               </p>
             </div>
           </div>
@@ -1205,56 +1205,61 @@ export const TelegramSettings: React.FC<Props> = ({
 
           {/* Message Preview and Action */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            {/* Telegram message mockup preview - Exact Harmeejobs format */}
+            {/* Telegram message mockup preview - Clean structured post with Apply Now button */}
             <div className="bg-[#1C2733] text-white p-4 rounded-2xl shadow-inner font-sans space-y-3 text-xs border border-slate-700/60">
               <div className="flex items-center justify-between text-[10px] text-slate-400 pb-2 border-b border-white/10">
                 <span className="flex items-center gap-1 font-bold text-[#229ED9]">
                   <Send className="w-3 h-3" />
-                  <span>Harmeejobs Template Preview</span>
+                  <span>Telegram Post Preview</span>
                 </span>
-                <span className="font-mono text-slate-400">hopelandjobs.tech</span>
+                <span className="font-mono text-slate-400">Apply button links to website</span>
               </div>
-              <div className="space-y-2 leading-relaxed text-[11px]">
+              <div className="space-y-2 leading-relaxed text-[11px] whitespace-pre-wrap">
                 {isWashNgoVacancyClient(activeBroadcastVacancy) && (
                   <p className="inline-block font-black text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded">
                     🟢⭐ WASH JOB
                   </p>
                 )}
-                <p className="font-bold text-base text-white">Vacancy at {activeBroadcastVacancy.organization || 'Ethiopian Employer'}</p>
+                <div>
+                  <p className="font-bold text-sm text-white">{activeBroadcastVacancy.title || 'Various Positions'}</p>
+                  <p className="italic text-slate-300">at {activeBroadcastVacancy.organization || 'Ethiopian Employer'}</p>
+                </div>
                 <p className="text-slate-200">
-                  🔰 <strong>{activeBroadcastVacancy.organization || 'Employer'}</strong> invites qualified applicants for the <strong>{activeBroadcastVacancy.title || 'Various'}</strong> position.
+                  <strong>Categories:</strong> #{String(activeBroadcastVacancy.category || 'Vacancy').replace(/[^a-zA-Z0-9]/g, '')}
                 </p>
                 {activeBroadcastVacancy.location && (
-                  <p className="text-slate-200">📍 <strong>Location:</strong> {activeBroadcastVacancy.location}</p>
-                )}
-                {activeBroadcastVacancy.employmentType && (
-                  <p className="text-slate-200">💼 <strong>Employment Type:</strong> {activeBroadcastVacancy.employmentType}</p>
+                  <p className="text-slate-200"><strong>Location:</strong> {activeBroadcastVacancy.location}</p>
                 )}
                 {activeBroadcastVacancy.applicationDeadline && (
-                  <p className="text-slate-200">⏳ <strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}</p>
+                  <p className="text-slate-200"><strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}</p>
                 )}
                 <p className="text-slate-200">
-                  ✅ <strong>Education &amp; Experience:</strong> {activeBroadcastVacancy.requiredFieldOfStudy || activeBroadcastVacancy.educationQualification || activeBroadcastVacancy.category || 'Accounting & Finance / Banking / Business and related fields'}
-                  {activeBroadcastVacancy.experienceYears ? ` (${activeBroadcastVacancy.experienceYears} experience)` : ''}
+                  <strong>Career Level:</strong> {activeBroadcastVacancy.jobGrade || activeBroadcastVacancy.experienceYears || 'Mid Level'}
                 </p>
-                {(activeBroadcastVacancy.applicationUrl || activeBroadcastVacancy.applicationEmail) && (
-                  <p className="text-[#64B5F6] break-all">
-                    {activeBroadcastVacancy.applicationUrl
-                      ? `🔗 Apply Online: ${activeBroadcastVacancy.applicationUrl}`
-                      : `✉️ Apply via Email: ${activeBroadcastVacancy.applicationEmail}`}
-                  </p>
-                )}
-                <div className="pt-1">
-                  <p className="font-bold text-slate-100">📌 ስለ ስራው ሙሉ መረጃ ለማየት ይህንን ሊንክ ይጠቀሙ</p>
-                  <p className="text-[#64B5F6] break-all">
-                    👉<strong>Read Detail:-</strong> https://{customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech'}/?jobId={activeBroadcastVacancy.id}
-                  </p>
+                <p className="text-slate-200">
+                  <strong>Number of people required:</strong> {activeBroadcastVacancy.vacanciesCount || '1'}
+                </p>
+                <div className="pt-1 space-y-1">
+                  <p className="font-bold text-white">Requirements:</p>
+                  {activeBroadcastVacancy.educationQualification && (
+                    <p className="text-slate-200">
+                      • {activeBroadcastVacancy.educationQualification}
+                      {activeBroadcastVacancy.requiredFieldOfStudy ? ` in ${activeBroadcastVacancy.requiredFieldOfStudy}` : ''}
+                    </p>
+                  )}
+                  {activeBroadcastVacancy.experienceYears && (
+                    <p className="text-slate-200">• Minimum {activeBroadcastVacancy.experienceYears} relevant experience</p>
+                  )}
                 </div>
-                <div className="pt-1">
-                  <p className="font-bold text-slate-100">🔰 ከተለያዩ ድርጅት የሥራ ማስታወቂያዎች በዚህ ሊንክ ዌብሳይቱ ላይ ይመልከቱ 👇👇</p>
-                  <p className="text-[#64B5F6]">
-                    =&gt;<strong>See Detail:-</strong> https://{customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech'}
-                  </p>
+                <div className="pt-2 text-slate-200 space-y-1 border-t border-white/10">
+                  <p className="font-bold text-white">📢 አንድም የስራ እድል እንዳያመልጥዎ!</p>
+                  <p className="text-[11px] text-slate-300">👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</p>
+                </div>
+              </div>
+              <div className="pt-1">
+                <div className="w-full py-2.5 px-4 rounded-xl bg-white/10 border border-white/15 text-center font-bold text-xs text-white flex items-center justify-center gap-1.5">
+                  <span>Apply Now</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-300" />
                 </div>
               </div>
             </div>

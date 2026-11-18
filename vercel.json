@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 8 */3 * *"
+    }
+  ],
   "functions": {
     "api/index.mjs": {
       "includeFiles": "data/*.json"

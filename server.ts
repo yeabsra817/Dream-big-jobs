@@ -18,8 +18,30 @@ function getCliArg(flag: string): string | undefined {
   return undefined;
 }
 
-const port = Number(getCliArg('--port') || process.env.PORT || 3000);
+const cliPort = getCliArg('--port');
+const defaultPort = process.env.DEFAULT_APP_PORT || '3000';
+const envPort =
+  process.env.PORT &&
+  process.env.PORT !== process.env.NGINX_PORT &&
+  process.env.PORT !== process.env.CONTROL_PLANE_PORT
+    ? process.env.PORT
+    : undefined;
+const port = Number(cliPort || (process.env.NODE_ENV === 'production' ? envPort || defaultPort : defaultPort));
 const host = getCliArg('--host') || process.env.HOST || '0.0.0.0';
+
+let isShuttingDown = false;
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('[HOPELAND SERVER] Handled background promise rejection:', reason instanceof Error ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err: any) => {
+  if (err && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
+    console.error('[HOPELAND SERVER] Fatal bind error:', err);
+    process.exit(1);
+  }
+  console.warn('[HOPELAND SERVER] Recovered from uncaught exception:', err?.message || err);
+});
 
 async function setupServer() {
   const app = await getApiApp();
@@ -108,15 +130,34 @@ async function setupServer() {
         },
       })
     );
-    app.get('*', (req: Request, res: Response) => {
+    app.get('*', (_req: Request, res: Response) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
 
-  app.listen(port, host, () => {
+  const httpServer = app.listen(port, host, () => {
     console.log(`HOPELAND JOBS Server running on http://${host}:${port}`);
   });
+
+  httpServer.on('error', (err: any) => {
+    console.error('HOPELAND JOBS HTTP server error:', err);
+    if (err?.code === 'EADDRINUSE' || err?.code === 'EACCES') {
+      process.exit(1);
+    }
+  });
+
+  const gracefulShutdown = () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    httpServer.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 2500).unref();
+  };
+
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
 }
 
 setupServer().catch((err) => {
