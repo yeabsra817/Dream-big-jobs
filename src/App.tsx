@@ -156,6 +156,7 @@ import {
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AmharicSignupPromoModal } from './components/AmharicSignupPromoModal';
 import { PWAInstallPromptModal } from './components/PWAInstallPromptModal';
+import { AppDownloadReminderBanner } from './components/AppDownloadReminderBanner';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import {
   fetchCustomerVisitCount,
@@ -293,6 +294,7 @@ export default function App() {
   const [isSyncingReconnect, setIsSyncingReconnect] = useState(false);
   const [isIosInstallGuideOpen, setIsIosInstallGuideOpen] = useState(false);
   const [isInstallPopupOpen, setIsInstallPopupOpen] = useState(false);
+  const [isMinuteInstallReminderOpen, setIsMinuteInstallReminderOpen] = useState(false);
   const {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
@@ -478,6 +480,13 @@ export default function App() {
             const cleanQuery = urlParams.toString();
             const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
             window.history.replaceState({}, '', cleanUrl);
+          }
+          if (urlParams.get('installApp') === '1' && !isRunningInEmbeddedIframe()) {
+            urlParams.delete('installApp');
+            const cleanQuery = urlParams.toString();
+            const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+            window.history.replaceState({}, '', cleanUrl);
+            setIsMinuteInstallReminderOpen(true);
           }
           if (urlParams.get('view') === 'top-recommendations') {
             pendingOpenTopRecsRef.current = true;
@@ -1795,17 +1804,64 @@ export default function App() {
     siteSettings.updatedAt,
   ]);
 
-  // Optional user-triggered Download Application handler (works for Phone & Computer without nagging popups)
+  // Direct 1-tap download handler: immediately invokes native OS install prompt on Phone & Computer
   const handleDownloadApplicationClick = React.useCallback(async () => {
-    if (canInstallNativeApp) {
-      const outcome = await triggerNativeAppInstall();
-      if (outcome === 'unavailable') {
-        setIsInstallPopupOpen(true);
-      }
+    const outcome = await triggerNativeAppInstall();
+    if (outcome === 'accepted') {
+      setIsMinuteInstallReminderOpen(false);
+      setIsInstallPopupOpen(false);
       return;
     }
+    if (outcome === 'dismissed') {
+      setIsMinuteInstallReminderOpen(false);
+      return;
+    }
+    // Browser doesn't support native beforeinstallprompt (e.g. iOS Safari or preview iframe)
+    setIsMinuteInstallReminderOpen(false);
     setIsInstallPopupOpen(true);
-  }, [canInstallNativeApp, triggerNativeAppInstall]);
+  }, [triggerNativeAppInstall]);
+
+  // Show subtle non-blocking official dim-light Download App reminder every 1 minute (60s) until installed
+  useEffect(() => {
+    if (
+      isStandaloneApp ||
+      isAdminView ||
+      isInstallPopupOpen ||
+      isMinuteInstallReminderOpen ||
+      isMandatoryProfileIncomplete
+    ) {
+      return;
+    }
+    const isBlockedByActiveDialog =
+      isUserAuthModalOpen ||
+      isAdminAuthModalOpen ||
+      isNotificationModalOpen ||
+      isAmharicPromoOpen ||
+      isJobSeekerDashboardOpen ||
+      isApplicationModalOpen ||
+      isIosInstallGuideOpen;
+
+    if (isBlockedByActiveDialog) return;
+
+    const timer = setTimeout(() => {
+      setIsMinuteInstallReminderOpen(true);
+    }, 60_000);
+
+    return () => clearTimeout(timer);
+  }, [
+    isStandaloneApp,
+    isAdminView,
+    isInstallPopupOpen,
+    isMinuteInstallReminderOpen,
+    isMandatoryProfileIncomplete,
+    isUserAuthModalOpen,
+    isAdminAuthModalOpen,
+    isNotificationModalOpen,
+    isAmharicPromoOpen,
+    isJobSeekerDashboardOpen,
+    isApplicationModalOpen,
+    isIosInstallGuideOpen,
+  ]);
 
   // Obligate signed-in seekers to fill their mandatory profile before browsing
   useEffect(() => {
@@ -3557,10 +3613,19 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Optional Phone & Computer Application Download Guide (User-Triggered Only) */}
+      {/* Every-1-Minute Subtle Dim-Light Download Reminder (Direct 1-Tap Install) */}
+      <AppDownloadReminderBanner
+        isOpen={isMinuteInstallReminderOpen && !isStandaloneApp && !isInstallPopupOpen}
+        appLogoUrl={siteSettings.appLogoUrl}
+        isDesktop={isDesktopDevice}
+        onDirectDownload={handleDownloadApplicationClick}
+        onDismiss={() => setIsMinuteInstallReminderOpen(false)}
+      />
+      {/* Fallback Phone & Computer Application Download Guide (When Native Direct Install Is Unavailable) */}
       <PWAInstallPromptModal
         isOpen={isInstallPopupOpen && !isStandaloneApp}
         appLogoUrl={siteSettings.appLogoUrl}
+        customDomain={siteSettings.customDomain}
         canInstallNative={canInstallNativeApp}
         isIOS={canShowIosInstallGuide}
         isDesktop={isDesktopDevice}

@@ -84,15 +84,61 @@ export function isRunningInEmbeddedIframe(): boolean {
   }
 }
 
-export function buildStandalonePushActivationUrl(): string {
-  if (typeof window === 'undefined') return '/?enablePush=1';
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set('enablePush', '1');
-    return url.toString();
-  } catch {
-    return '/?enablePush=1';
+const DEFAULT_PUBLIC_SITE_ORIGIN = 'https://www.hopelandjobs.tech';
+
+export function isPrivatePreviewHost(hostname: string): boolean {
+  const host = (hostname || '').toLowerCase();
+  return (
+    host.includes('ais-dev-') ||
+    host.includes('ais-pre-') ||
+    host.endsWith('.run.app') ||
+    host.endsWith('.usercontent.goog') ||
+    host === 'localhost' ||
+    host === '127.0.0.1'
+  );
+}
+
+export function resolvePublicWebsiteOrigin(customDomain?: string | null): string {
+  const formatDomain = (raw?: string | null): string | null => {
+    const clean = String(raw || '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/.*$/, '');
+    if (!clean || !clean.includes('.') || isPrivatePreviewHost(clean)) return null;
+    if (clean.toLowerCase() === 'hopelandjobs.tech') {
+      return DEFAULT_PUBLIC_SITE_ORIGIN;
+    }
+    return `https://${clean}`;
+  };
+
+  const explicit = formatDomain(customDomain);
+  if (explicit) return explicit;
+
+  if (typeof window !== 'undefined') {
+    if (!isPrivatePreviewHost(window.location.hostname)) {
+      return window.location.origin;
+    }
+    try {
+      const raw = localStorage.getItem('dreambigjobs_settings_cache');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const fromCache = formatDomain(parsed?.customDomain);
+        if (fromCache) return fromCache;
+      }
+    } catch {}
   }
+
+  return DEFAULT_PUBLIC_SITE_ORIGIN;
+}
+
+export function buildStandalonePushActivationUrl(customDomain?: string | null): string {
+  const origin = resolvePublicWebsiteOrigin(customDomain);
+  return `${origin}/?enablePush=1`;
+}
+
+export function buildStandaloneAppInstallUrl(customDomain?: string | null): string {
+  const origin = resolvePublicWebsiteOrigin(customDomain);
+  return `${origin}/?installApp=1`;
 }
 
 export function getBrowserNotificationPermission(): NotificationPermissionState {

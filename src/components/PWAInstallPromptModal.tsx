@@ -12,11 +12,12 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { AppBrandLogo } from './AppBrandLogo';
-import { buildStandalonePushActivationUrl, isRunningInEmbeddedIframe } from '../lib/notificationService';
+import { buildStandaloneAppInstallUrl, isRunningInEmbeddedIframe } from '../lib/notificationService';
 
 interface Props {
   isOpen: boolean;
   appLogoUrl?: string | null;
+  customDomain?: string | null;
   canInstallNative: boolean;
   isIOS: boolean;
   isDesktop?: boolean;
@@ -27,6 +28,7 @@ interface Props {
 export const PWAInstallPromptModal: React.FC<Props> = ({
   isOpen,
   appLogoUrl,
+  customDomain,
   canInstallNative,
   isIOS,
   isDesktop = false,
@@ -39,7 +41,7 @@ export const PWAInstallPromptModal: React.FC<Props> = ({
   if (!isOpen) return null;
 
   const isInIframe = isRunningInEmbeddedIframe();
-  const standaloneUrl = buildStandalonePushActivationUrl();
+  const standaloneUrl = buildStandaloneAppInstallUrl(customDomain);
 
   const handleInstallClick = async () => {
     setInstalling(true);
@@ -73,8 +75,8 @@ export const PWAInstallPromptModal: React.FC<Props> = ({
           <div className="flex items-center gap-3 min-w-0">
             <AppBrandLogo logoUrl={appLogoUrl} size="lg" variant="green" />
             <div className="min-w-0">
-              <h2 id="pwa-install-title" className="text-base font-extrabold text-white truncate">
-                Download HopelandJobs Application
+              <h2 id="pwa-install-title" className="text-[15px] sm:text-base font-extrabold text-white leading-snug">
+                Download HopelandJobs
               </h2>
               <p className="text-xs text-slate-300 mt-0.5">
                 {isDesktop
@@ -186,10 +188,10 @@ export const PWAInstallPromptModal: React.FC<Props> = ({
                 <Download className="w-4 h-4 shrink-0" />
                 <span>
                   {installing
-                    ? 'Installing Application...'
+                    ? 'Downloading App...'
                     : isDesktop
-                    ? 'Install on Computer'
-                    : 'Install Application'}
+                    ? 'Download for Computer'
+                    : 'Download App'}
                 </span>
               </button>
             ) : (
@@ -199,7 +201,7 @@ export const PWAInstallPromptModal: React.FC<Props> = ({
                 className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-extrabold text-xs inline-flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
               >
                 <Download className="w-4 h-4 shrink-0" />
-                <span>{isIOS ? 'Got It' : isDesktop ? 'Got It — Install via Browser' : 'Got It'}</span>
+                <span>{isIOS ? 'Got It' : 'Got It'}</span>
               </button>
             )}
 

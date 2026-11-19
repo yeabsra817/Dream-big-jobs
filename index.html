@@ -17,6 +17,17 @@
     <link rel="manifest" href="/api/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="/api/pwa-icon/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/api/pwa-icon/apple-touch-icon.png" />
+    <script>
+      window.__hopelandDeferredInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__hopelandDeferredInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('hopeland-install-prompt-ready'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__hopelandDeferredInstallPrompt = null;
+      });
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
