@@ -69,6 +69,7 @@ interface Props {
   isStandaloneApp?: boolean;
   onInstallApp?: () => void;
   onOpenIosInstallGuide?: () => void;
+  onOpenDownloadApplication?: () => void;
   isOnline?: boolean;
   isSyncingReconnect?: boolean;
 }
@@ -106,12 +107,24 @@ export const Navbar: React.FC<Props> = ({
   isStandaloneApp = false,
   onInstallApp,
   onOpenIosInstallGuide,
+  onOpenDownloadApplication,
   isOnline = true,
   isSyncingReconnect = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+  const [dismissedInstallStrip, setDismissedInstallStrip] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadAppClick = () => {
+    if (onOpenDownloadApplication) {
+      onOpenDownloadApplication();
+    } else if (canInstallApp && onInstallApp) {
+      onInstallApp();
+    } else if (canShowIosInstallGuide && onOpenIosInstallGuide) {
+      onOpenIosInstallGuide();
+    }
+  };
 
   const isLoggedIn = Boolean(currentUserEmail || userProfile?.email);
   const displayName = userProfile?.fullName || currentUserEmail?.split('@')[0] || 'Account';
@@ -153,6 +166,42 @@ export const Navbar: React.FC<Props> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-[0_2px_12px_rgba(11,19,43,0.06)]">
+      {/* Subtle Official Dim-Light Top Bar — Optional Download Application (Phone & Computer) */}
+      {!isStandaloneApp && !dismissedInstallStrip && (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
+        <div className="bg-[#0B132B] text-slate-300 border-b border-white/[0.07]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-9 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={handleDownloadAppClick}
+                className="group inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.10] hover:border-emerald-400/35 text-[11px] font-semibold tracking-wide text-slate-200/90 hover:text-white transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/60"
+                title="Download HopelandJobs application for Phone or Computer"
+              >
+                <span
+                  aria-hidden="true"
+                  className="w-1.5 h-1.5 rounded-full bg-emerald-400/75 shadow-[0_0_8px_rgba(74,222,128,0.65)] animate-pulse shrink-0"
+                />
+                <Download className="w-3 h-3 text-emerald-300/85 group-hover:text-emerald-300 shrink-0" />
+                <span className="truncate">Download Application</span>
+                <span className="hidden sm:inline text-slate-400 font-normal">
+                  • Phone &amp; Computer
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDismissedInstallStrip(true)}
+              aria-label="Hide download bar"
+              title="Hide for now"
+              className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.06] transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-[72px] gap-4 lg:gap-8">
           {/* Zone 1: HopelandJobs Brand Logo (Left) */}
@@ -429,30 +478,21 @@ export const Navbar: React.FC<Props> = ({
 
                   {/* Secondary utility actions neatly tucked in dropdown */}
                   <div className="mt-1 pt-1 border-t border-slate-100 text-xs">
-                    {!isStandaloneApp && canInstallApp && onInstallApp && (
+                    {!isStandaloneApp && (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
                       <button
                         type="button"
                         onClick={() => {
                           setAccountDropdownOpen(false);
-                          onInstallApp();
+                          handleDownloadAppClick();
                         }}
                         className="w-full px-4 py-2 text-left font-medium text-slate-600 hover:bg-slate-50 hover:text-[#0B132B] flex items-center gap-2.5 cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5 text-[#16A34A]" />
-                        <span>Install App</span>
-                      </button>
-                    )}
-                    {!isStandaloneApp && !canInstallApp && canShowIosInstallGuide && onOpenIosInstallGuide && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountDropdownOpen(false);
-                          onOpenIosInstallGuide();
-                        }}
-                        className="w-full px-4 py-2 text-left font-medium text-slate-600 hover:bg-slate-50 hover:text-[#0B132B] flex items-center gap-2.5 cursor-pointer"
-                      >
-                        <Share className="w-3.5 h-3.5 text-[#16A34A]" />
-                        <span>Add to Home Screen</span>
+                        {canShowIosInstallGuide && !canInstallApp ? (
+                          <Share className="w-3.5 h-3.5 text-[#16A34A]" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5 text-[#16A34A]" />
+                        )}
+                        <span>Download Application</span>
                       </button>
                     )}
                     <button
@@ -684,30 +724,25 @@ export const Navbar: React.FC<Props> = ({
           )}
 
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-            {!isStandaloneApp && canInstallApp && onInstallApp && (
+            {!isStandaloneApp && (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
               <button
                 type="button"
                 onClick={() => {
-                  onInstallApp();
+                  handleDownloadAppClick();
                   setMobileMenuOpen(false);
                 }}
-                className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm py-2.5 rounded-xl cursor-pointer"
+                className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-[#0B132B] hover:bg-slate-800 text-slate-100 font-semibold text-sm py-2.5 rounded-xl border border-slate-700 cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                <span>Install HopelandJobs App</span>
-              </button>
-            )}
-            {!isStandaloneApp && !canInstallApp && canShowIosInstallGuide && onOpenIosInstallGuide && (
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenIosInstallGuide();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm py-2.5 rounded-xl cursor-pointer"
-              >
-                <Share className="w-4 h-4" />
-                <span>Add to Home Screen</span>
+                <span
+                  aria-hidden="true"
+                  className="w-2 h-2 rounded-full bg-emerald-400/80 shadow-[0_0_8px_rgba(74,222,128,0.65)]"
+                />
+                {canShowIosInstallGuide && !canInstallApp ? (
+                  <Share className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Download className="w-4 h-4 text-emerald-400" />
+                )}
+                <span>Download Application</span>
               </button>
             )}
             <a

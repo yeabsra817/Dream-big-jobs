@@ -19,10 +19,22 @@ export function detectIsStandalone(): boolean {
   );
 }
 
+export function detectIsAndroidDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /android/i.test(navigator.userAgent || '');
+}
+
+export function detectIsDesktopDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return !detectIsIosDevice() && !detectIsAndroidDevice();
+}
+
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(() => detectIsStandalone());
   const [isIOS] = useState<boolean>(() => detectIsIosDevice());
+  const [isAndroid] = useState<boolean>(() => detectIsAndroidDevice());
+  const [isDesktop] = useState<boolean>(() => detectIsDesktopDevice());
 
   useEffect(() => {
     const checkStandalone = () => {
@@ -76,6 +88,8 @@ export function usePWAInstall() {
   return {
     isInstalled,
     isIOS,
+    isAndroid,
+    isDesktop,
     isInstallable: Boolean(deferredPrompt) && !isInstalled,
     canShowIosInstallGuide: isIOS && !isInstalled,
     canInstallApp: !isInstalled && (Boolean(deferredPrompt) || isIOS),

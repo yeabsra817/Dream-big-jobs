@@ -678,6 +678,8 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
     customDomain: 'hopelandjobs.tech',
     appLogoUrl: '',
+    appLogo512Url: '',
+    appLogoMaskable512Url: '',
     appLogoUpdatedAt: '',
     aboutText:
       'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
@@ -735,6 +737,16 @@ export async function getSiteSettings(): Promise<SiteSettings> {
     ...safeFsSettings,
     appLogoUrl:
       safeFsSettings.appLogoUrl ?? safeSrvSettings.appLogoUrl ?? safeCached.appLogoUrl ?? '',
+    appLogo512Url:
+      safeFsSettings.appLogo512Url ??
+      safeSrvSettings.appLogo512Url ??
+      safeCached.appLogo512Url ??
+      '',
+    appLogoMaskable512Url:
+      safeFsSettings.appLogoMaskable512Url ??
+      safeSrvSettings.appLogoMaskable512Url ??
+      safeCached.appLogoMaskable512Url ??
+      '',
     appLogoUpdatedAt:
       safeFsSettings.appLogoUpdatedAt ??
       safeSrvSettings.appLogoUpdatedAt ??

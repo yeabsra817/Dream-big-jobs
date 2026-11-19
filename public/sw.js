@@ -1,12 +1,8 @@
 /* HOPELAND JOBS Service Worker — Real Web Push, Notification Deep-Linking, and Reconnect Sync */
 
-const CACHE_NAME = 'hopelandjobs-shell-v4';
+const CACHE_NAME = 'hopelandjobs-shell-v5';
 const APP_SHELL_URLS = [
-  '/manifest.webmanifest',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png',
   '/pwa-badge-96x96.png',
-  '/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,10 +34,20 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Never intercept API calls, dev/Vite scripts, or third-party endpoints
+  const isDynamicBrandAsset =
+    url.pathname === '/api/manifest.webmanifest' ||
+    url.pathname.startsWith('/api/pwa-icon/') ||
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname === '/pwa-192x192.png' ||
+    url.pathname === '/pwa-512x512.png' ||
+    url.pathname === '/pwa-maskable-512x512.png' ||
+    url.pathname === '/apple-touch-icon.png' ||
+    url.pathname === '/favicon-32x32.png';
+
+  // Never intercept API calls (except dynamic brand/manifest fallback), dev/Vite scripts, or third-party endpoints
   if (
     url.origin !== self.location.origin ||
-    url.pathname.startsWith('/api/') ||
+    (url.pathname.startsWith('/api/') && !isDynamicBrandAsset) ||
     url.pathname.startsWith('/@') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules/') ||
@@ -81,17 +87,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for manifest & root PWA icons so custom developer logo updates sync immediately
-  if (
-    url.pathname === '/manifest.webmanifest' ||
-    url.pathname === '/pwa-192x192.png' ||
-    url.pathname === '/pwa-512x512.png' ||
-    url.pathname === '/pwa-maskable-512x512.png' ||
-    url.pathname === '/apple-touch-icon.png' ||
-    url.pathname === '/favicon-32x32.png'
-  ) {
+  // Network-first for manifest & dynamic PWA icons so custom developer logo updates sync immediately
+  if (isDynamicBrandAsset) {
     event.respondWith(
-      fetch(request, { cache: 'no-cache' })
+      fetch(request, { cache: 'no-store' })
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();
@@ -137,7 +136,7 @@ self.addEventListener('push', (event) => {
     notificationId: '',
     tag: 'hopelandjobs-alert',
     badge: '/pwa-badge-96x96.png',
-    icon: '/pwa-192x192.png',
+    icon: '/api/pwa-icon/pwa-192x192.png',
     actionType: 'open_job',
     topJobs: null,
     timestamp: Date.now(),
@@ -171,7 +170,7 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: payload.body,
-    icon: payload.icon || '/pwa-192x192.png',
+    icon: payload.icon || '/api/pwa-icon/pwa-192x192.png',
     badge: payload.badge || '/pwa-badge-96x96.png',
     tag: payload.tag || (isRecommendationsDigest ? 'hopeland-inactive-top3' : jobId ? `vacancy-${jobId}` : 'hopelandjobs-alert'),
     renotify: true,
@@ -249,6 +248,31 @@ self.addEventListener('notificationclick', (event) => {
       return undefined;
     })
   );
+});
+
+// Allow developer logo updates to purge stale cached manifest/icons immediately
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'HOPELAND_PURGE_ICON_CACHE') {
+    event.waitUntil(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const keys = await cache.keys();
+        await Promise.all(
+          keys
+            .filter((req) => {
+              const p = new URL(req.url).pathname;
+              return (
+                p.includes('manifest.webmanifest') ||
+                p.includes('/api/pwa-icon/') ||
+                p.includes('pwa-') ||
+                p.includes('apple-touch-icon') ||
+                p.includes('favicon-32x32')
+              );
+            })
+            .map((req) => cache.delete(req))
+        );
+      })
+    );
+  }
 });
 
 // Background Sync on Internet Restoration

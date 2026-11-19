@@ -1554,6 +1554,9 @@ function sanitizeSettingsForClient(settings: any, activeToken?: string): any {
   return {
     ...safe,
     appLogoUrl: typeof safe.appLogoUrl === 'string' ? safe.appLogoUrl : '',
+    appLogo512Url: typeof safe.appLogo512Url === 'string' ? safe.appLogo512Url : '',
+    appLogoMaskable512Url:
+      typeof safe.appLogoMaskable512Url === 'string' ? safe.appLogoMaskable512Url : '',
     appLogoUpdatedAt: typeof safe.appLogoUpdatedAt === 'string' ? safe.appLogoUpdatedAt : '',
     gaMeasurementId: safe.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
     gaTrackingEnabled: safe.gaTrackingEnabled ?? true,
@@ -1665,6 +1668,100 @@ function getTelegramToken(): string {
 }
 
 let cachedRemoteAppLogo: { url: string; mimeType: string; buffer: Buffer; fetchedAt: number } | null = null;
+let cachedFirestoreBrandLogo: {
+  appLogoUrl: string;
+  appLogo512Url: string;
+  appLogoMaskable512Url: string;
+  appLogoUpdatedAt: string;
+  fetchedAt: number;
+} | null = null;
+
+function readFirebaseClientConfigServer(): { projectId: string; firestoreDatabaseId: string } | null {
+  const candidates = [
+    path.join(process.cwd(), 'firebase-applet-config.json'),
+    path.join(__dirname, 'firebase-applet-config.json'),
+    path.join(__dirname, '..', 'firebase-applet-config.json'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (parsed?.projectId) {
+          return {
+            projectId: String(parsed.projectId),
+            firestoreDatabaseId: String(parsed.firestoreDatabaseId || '(default)'),
+          };
+        }
+      }
+    } catch {}
+  }
+  return {
+    projectId: 'gen-lang-client-0056760370',
+    firestoreDatabaseId: 'ai-studio-dreambigjobs-b797042c-4a25-436e-8ecd-223397ea813f',
+  };
+}
+
+async function getLiveBrandLogoState(): Promise<{
+  appLogoUrl: string;
+  appLogo512Url: string;
+  appLogoMaskable512Url: string;
+  appLogoUpdatedAt: string;
+}> {
+  const persisted = loadPersistedSettings() || {};
+  const diskUpdatedAt = String(persisted.appLogoUpdatedAt || persisted.updatedAt || '');
+  const diskState = {
+    appLogoUrl: typeof persisted.appLogoUrl === 'string' ? persisted.appLogoUrl.trim() : '',
+    appLogo512Url: typeof persisted.appLogo512Url === 'string' ? persisted.appLogo512Url.trim() : '',
+    appLogoMaskable512Url:
+      typeof persisted.appLogoMaskable512Url === 'string'
+        ? persisted.appLogoMaskable512Url.trim()
+        : '',
+    appLogoUpdatedAt: diskUpdatedAt,
+  };
+
+  // Refresh from Cloud Firestore REST API (public read on siteSettings/general) every 20s so serverless cold starts & multi-instance deploys always serve the latest developer logo
+  const now = Date.now();
+  if (!cachedFirestoreBrandLogo || now - cachedFirestoreBrandLogo.fetchedAt > 20 * 1000) {
+    try {
+      const cfg = readFirebaseClientConfigServer();
+      if (cfg?.projectId) {
+        const dbId = encodeURIComponent(cfg.firestoreDatabaseId || '(default)');
+        const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/${dbId}/documents/siteSettings/general`;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
+        if (resp.ok) {
+          const docJson: any = await resp.json();
+          const f = docJson?.fields || {};
+          cachedFirestoreBrandLogo = {
+            appLogoUrl: String(f.appLogoUrl?.stringValue || '').trim(),
+            appLogo512Url: String(f.appLogo512Url?.stringValue || '').trim(),
+            appLogoMaskable512Url: String(f.appLogoMaskable512Url?.stringValue || '').trim(),
+            appLogoUpdatedAt: String(
+              f.appLogoUpdatedAt?.stringValue || f.updatedAt?.stringValue || ''
+            ).trim(),
+            fetchedAt: now,
+          };
+        }
+      }
+    } catch {}
+  }
+
+  if (cachedFirestoreBrandLogo) {
+    const fsTs = cachedFirestoreBrandLogo.appLogoUpdatedAt
+      ? Date.parse(cachedFirestoreBrandLogo.appLogoUpdatedAt) || 0
+      : 0;
+    const diskTs = diskState.appLogoUpdatedAt ? Date.parse(diskState.appLogoUpdatedAt) || 0 : 0;
+    if ((fsTs > diskTs) || (!diskState.appLogoUrl && cachedFirestoreBrandLogo.appLogoUrl)) {
+      return {
+        appLogoUrl: cachedFirestoreBrandLogo.appLogoUrl,
+        appLogo512Url: cachedFirestoreBrandLogo.appLogo512Url,
+        appLogoMaskable512Url: cachedFirestoreBrandLogo.appLogoMaskable512Url,
+        appLogoUpdatedAt: cachedFirestoreBrandLogo.appLogoUpdatedAt,
+      };
+    }
+  }
+
+  return diskState;
+}
 
 async function resolveCustomAppLogoAsset(appLogoUrl?: string): Promise<{ mimeType: string; buffer: Buffer } | null> {
   const raw = String(appLogoUrl || '').trim();
@@ -1724,83 +1821,119 @@ function sendPublicFallbackIcon(res: Response, filename: string): void {
   res.status(404).end();
 }
 
-// Dynamic PWA App Logo & Manifest Routes (auto-reflects developer logo updates across tabs, home screens & notifications)
-app.get('/api/app-logo', async (_req: Request, res: Response): Promise<void> => {
-  const persisted = loadPersistedSettings() || {};
-  const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
+const ALLOWED_DYNAMIC_ICON_FILES = new Set([
+  'pwa-192x192.png',
+  'pwa-512x512.png',
+  'pwa-maskable-512x512.png',
+  'apple-touch-icon.png',
+  'favicon-32x32.png',
+]);
+
+async function handleDynamicIconResponse(res: Response, iconFile: string): Promise<void> {
+  const safeFile = ALLOWED_DYNAMIC_ICON_FILES.has(iconFile) ? iconFile : 'pwa-512x512.png';
+  const brand = await getLiveBrandLogoState();
+  const preferredSource =
+    safeFile === 'pwa-maskable-512x512.png'
+      ? brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl
+      : safeFile === 'pwa-512x512.png'
+      ? brand.appLogo512Url || brand.appLogoUrl
+      : brand.appLogoUrl || brand.appLogo512Url;
+
+  const customAsset = await resolveCustomAppLogoAsset(preferredSource);
   if (customAsset) {
     res.setHeader('Content-Type', customAsset.mimeType);
     res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     res.send(customAsset.buffer);
     return;
   }
-  sendPublicFallbackIcon(res, 'pwa-512x512.png');
-});
-
-for (const iconFile of [
-  'pwa-192x192.png',
-  'pwa-512x512.png',
-  'pwa-maskable-512x512.png',
-  'apple-touch-icon.png',
-  'favicon-32x32.png',
-]) {
-  app.get(`/${iconFile}`, async (_req: Request, res: Response): Promise<void> => {
-    const persisted = loadPersistedSettings() || {};
-    const customAsset = await resolveCustomAppLogoAsset(persisted.appLogoUrl);
-    if (customAsset) {
-      res.setHeader('Content-Type', customAsset.mimeType);
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-      res.send(customAsset.buffer);
-      return;
-    }
-    sendPublicFallbackIcon(res, iconFile);
-  });
+  sendPublicFallbackIcon(res, safeFile);
 }
 
-app.get('/manifest.webmanifest', (_req: Request, res: Response): void => {
-  const persisted = loadPersistedSettings() || {};
-  const versionRaw = persisted.appLogoUpdatedAt || persisted.updatedAt || 'default';
+async function handleDynamicManifestResponse(_req: Request, res: Response): Promise<void> {
+  const brand = await getLiveBrandLogoState();
+  const versionRaw = brand.appLogoUpdatedAt || 'default';
   const versionTag = encodeURIComponent(
-    crypto.createHash('md5').update(`${persisted.appLogoUrl || 'default'}:${versionRaw}`).digest('hex').slice(0, 10)
+    crypto
+      .createHash('md5')
+      .update(`${brand.appLogoUrl || 'default'}:${brand.appLogo512Url || ''}:${versionRaw}`)
+      .digest('hex')
+      .slice(0, 10)
   );
-  const querySuffix = persisted.appLogoUrl ? `?v=${versionTag}` : '';
+  const querySuffix = `?v=${versionTag}`;
+
+  const inferIconMime = (src?: string): string => {
+    const s = String(src || '');
+    if (s.startsWith('data:image/jpeg')) return 'image/jpeg';
+    if (s.startsWith('data:image/webp')) return 'image/webp';
+    if (s.startsWith('data:image/svg+xml')) return 'image/svg+xml';
+    return 'image/png';
+  };
+
+  const type192 = inferIconMime(brand.appLogoUrl);
+  const type512 = inferIconMime(brand.appLogo512Url || brand.appLogoUrl);
+  const typeMaskable = inferIconMime(brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl);
 
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.json({
     id: '/',
     name: 'HOPELAND JOBS — Ethiopia & International Career Portal',
     short_name: 'HopelandJobs',
     description:
-      'Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts.',
+      'Verified Ethiopian and international job vacancies, personalized job matching, and real-time vacancy alerts for Phone & Computer.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    orientation: 'portrait-primary',
+    display_override: ['window-controls-overlay', 'standalone'],
+    orientation: 'any',
     background_color: '#FBFBFA',
     theme_color: '#0B132B',
     categories: ['business', 'productivity', 'employment'],
     icons: [
       {
-        src: `/pwa-192x192.png${querySuffix}`,
+        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
         sizes: '192x192',
-        type: 'image/png',
+        type: type192,
         purpose: 'any',
       },
       {
-        src: `/pwa-512x512.png${querySuffix}`,
+        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
         sizes: '512x512',
-        type: 'image/png',
+        type: type512,
         purpose: 'any',
       },
       {
-        src: `/pwa-maskable-512x512.png${querySuffix}`,
+        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
         sizes: '512x512',
-        type: 'image/png',
+        type: typeMaskable,
         purpose: 'maskable',
       },
     ],
   });
+}
+
+// Dynamic PWA App Logo & Manifest Routes (works on Vercel serverless, Cloud Run, & local dev)
+app.get('/api/app-logo', async (_req: Request, res: Response): Promise<void> => {
+  await handleDynamicIconResponse(res, 'pwa-512x512.png');
+});
+
+app.get('/api/pwa-icon/:iconFile', async (req: Request, res: Response): Promise<void> => {
+  const iconFile = String(req.params.iconFile || 'pwa-512x512.png');
+  await handleDynamicIconResponse(res, iconFile);
+});
+
+app.get('/api/manifest.webmanifest', async (req: Request, res: Response): Promise<void> => {
+  await handleDynamicManifestResponse(req, res);
+});
+
+for (const iconFile of Array.from(ALLOWED_DYNAMIC_ICON_FILES)) {
+  app.get(`/${iconFile}`, async (_req: Request, res: Response): Promise<void> => {
+    await handleDynamicIconResponse(res, iconFile);
+  });
+}
+
+app.get('/manifest.webmanifest', async (req: Request, res: Response): Promise<void> => {
+  await handleDynamicManifestResponse(req, res);
 });
 
 // Universal Site Settings Endpoint (serves safe settings across sessions; never exposes raw TELEGRAM_BOT_TOKEN)
@@ -1862,6 +1995,9 @@ app.get('/api/settings', (req: Request, res: Response): void => {
         : 'HOPELAND JOBS is Ethiopia’s premier, verified job recruitment information portal. We provide genuine, accurate vacancies across banking, embassies, NGOs, hospitality, leading corporate sectors, and international visa opportunities.',
     customDomain: effectiveDomain,
     appLogoUrl: typeof persisted.appLogoUrl === 'string' ? persisted.appLogoUrl : '',
+    appLogo512Url: typeof persisted.appLogo512Url === 'string' ? persisted.appLogo512Url : '',
+    appLogoMaskable512Url:
+      typeof persisted.appLogoMaskable512Url === 'string' ? persisted.appLogoMaskable512Url : '',
     appLogoUpdatedAt: typeof persisted.appLogoUpdatedAt === 'string' ? persisted.appLogoUpdatedAt : '',
     updatedAt: persisted.updatedAt || new Date().toISOString(),
   });
@@ -1874,13 +2010,36 @@ app.post('/api/settings', (req: Request, res: Response): void => {
     const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
     const merged = { ...current, ...incomingWithoutRaw };
 
-    if (Object.prototype.hasOwnProperty.call(incoming, 'appLogoUrl')) {
+    if (
+      Object.prototype.hasOwnProperty.call(incoming, 'appLogoUrl') ||
+      Object.prototype.hasOwnProperty.call(incoming, 'appLogo512Url') ||
+      Object.prototype.hasOwnProperty.call(incoming, 'appLogoMaskable512Url')
+    ) {
       const nextLogo = typeof incoming.appLogoUrl === 'string' ? incoming.appLogoUrl.trim() : '';
+      const nextLogo512 =
+        typeof incoming.appLogo512Url === 'string' ? incoming.appLogo512Url.trim() : '';
+      const nextLogoMaskable =
+        typeof incoming.appLogoMaskable512Url === 'string'
+          ? incoming.appLogoMaskable512Url.trim()
+          : '';
       merged.appLogoUrl = nextLogo;
-      if (nextLogo !== (current.appLogoUrl || '')) {
+      merged.appLogo512Url = nextLogo ? nextLogo512 : '';
+      merged.appLogoMaskable512Url = nextLogo ? nextLogoMaskable : '';
+      if (
+        nextLogo !== (current.appLogoUrl || '') ||
+        merged.appLogo512Url !== (current.appLogo512Url || '') ||
+        merged.appLogoMaskable512Url !== (current.appLogoMaskable512Url || '')
+      ) {
         merged.appLogoUpdatedAt = incoming.appLogoUpdatedAt || new Date().toISOString();
       }
       cachedRemoteAppLogo = null;
+      cachedFirestoreBrandLogo = {
+        appLogoUrl: merged.appLogoUrl,
+        appLogo512Url: merged.appLogo512Url,
+        appLogoMaskable512Url: merged.appLogoMaskable512Url,
+        appLogoUpdatedAt: merged.appLogoUpdatedAt || new Date().toISOString(),
+        fetchedAt: Date.now(),
+      };
     }
 
     if (typeof incoming.telegramChannelName === 'string' && incoming.telegramChannelName.trim()) {

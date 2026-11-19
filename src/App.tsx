@@ -208,6 +208,8 @@ export default function App() {
         contactAddress: 'Bole Subcity, Addis Ababa, Ethiopia',
         customDomain: 'hopelandjobs.tech',
         appLogoUrl: '',
+        appLogo512Url: '',
+        appLogoMaskable512Url: '',
         appLogoUpdatedAt: '',
         gaMeasurementId: 'G-KH6X73105S',
         gaTrackingEnabled: true,
@@ -294,6 +296,7 @@ export default function App() {
   const {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
+    isDesktop: isDesktopDevice,
     canShowIosInstallGuide,
     install: triggerNativeAppInstall,
   } = usePWAInstall();
@@ -1766,19 +1769,15 @@ export default function App() {
     setAnalyticsUserId(null);
   }, []);
 
-  // Dynamically sync developer's App Logo to favicon, Apple Touch Icon, and Web Manifest
+  // Dynamically sync developer's App Logo to favicon, Apple Touch Icon, and Web Manifest via API endpoints
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const versionTag = encodeURIComponent(
       siteSettings.appLogoUpdatedAt || siteSettings.updatedAt || 'default'
     );
-    const dynamicFavicon = siteSettings.appLogoUrl
-      ? `/favicon-32x32.png?v=${versionTag}`
-      : '/favicon-32x32.png';
-    const dynamicAppleIcon = siteSettings.appLogoUrl
-      ? `/apple-touch-icon.png?v=${versionTag}`
-      : '/apple-touch-icon.png';
-    const dynamicManifest = `/manifest.webmanifest?v=${versionTag}`;
+    const dynamicFavicon = `/api/pwa-icon/favicon-32x32.png?v=${versionTag}`;
+    const dynamicAppleIcon = `/api/pwa-icon/apple-touch-icon.png?v=${versionTag}`;
+    const dynamicManifest = `/api/manifest.webmanifest?v=${versionTag}`;
 
     const faviconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (faviconLink) faviconLink.href = dynamicFavicon;
@@ -1788,42 +1787,25 @@ export default function App() {
 
     const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (manifestLink) manifestLink.href = dynamicManifest;
-  }, [siteSettings.appLogoUrl, siteSettings.appLogoUpdatedAt, siteSettings.updatedAt]);
+  }, [
+    siteSettings.appLogoUrl,
+    siteSettings.appLogo512Url,
+    siteSettings.appLogoMaskable512Url,
+    siteSettings.appLogoUpdatedAt,
+    siteSettings.updatedAt,
+  ]);
 
-  // Invite visitors & users every 15 seconds to download/install the website until installed
-  useEffect(() => {
-    if (isStandaloneApp || isAdminView || isInstallPopupOpen || isMandatoryProfileIncomplete) {
+  // Optional user-triggered Download Application handler (works for Phone & Computer without nagging popups)
+  const handleDownloadApplicationClick = React.useCallback(async () => {
+    if (canInstallNativeApp) {
+      const outcome = await triggerNativeAppInstall();
+      if (outcome === 'unavailable') {
+        setIsInstallPopupOpen(true);
+      }
       return;
     }
-    const isBlockedByActiveDialog =
-      isUserAuthModalOpen ||
-      isAdminAuthModalOpen ||
-      isNotificationModalOpen ||
-      isAmharicPromoOpen ||
-      isJobSeekerDashboardOpen ||
-      isApplicationModalOpen ||
-      isIosInstallGuideOpen;
-
-    if (isBlockedByActiveDialog) return;
-
-    const timer = setTimeout(() => {
-      setIsInstallPopupOpen(true);
-    }, 15000);
-
-    return () => clearTimeout(timer);
-  }, [
-    isStandaloneApp,
-    isAdminView,
-    isInstallPopupOpen,
-    isMandatoryProfileIncomplete,
-    isUserAuthModalOpen,
-    isAdminAuthModalOpen,
-    isNotificationModalOpen,
-    isAmharicPromoOpen,
-    isJobSeekerDashboardOpen,
-    isApplicationModalOpen,
-    isIosInstallGuideOpen,
-  ]);
+    setIsInstallPopupOpen(true);
+  }, [canInstallNativeApp, triggerNativeAppInstall]);
 
   // Obligate signed-in seekers to fill their mandatory profile before browsing
   useEffect(() => {
@@ -2035,10 +2017,9 @@ export default function App() {
         canInstallApp={canInstallNativeApp}
         canShowIosInstallGuide={canShowIosInstallGuide}
         isStandaloneApp={isStandaloneApp}
-        onInstallApp={async () => {
-          await triggerNativeAppInstall();
-        }}
-        onOpenIosInstallGuide={() => setIsIosInstallGuideOpen(true)}
+        onInstallApp={handleDownloadApplicationClick}
+        onOpenIosInstallGuide={() => setIsInstallPopupOpen(true)}
+        onOpenDownloadApplication={handleDownloadApplicationClick}
         isOnline={isOnline}
         isSyncingReconnect={isSyncingReconnect}
       />
@@ -3576,12 +3557,13 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Repeating Every-15-Seconds Website Download / App Install Invitation */}
+      {/* Optional Phone & Computer Application Download Guide (User-Triggered Only) */}
       <PWAInstallPromptModal
         isOpen={isInstallPopupOpen && !isStandaloneApp}
         appLogoUrl={siteSettings.appLogoUrl}
         canInstallNative={canInstallNativeApp}
         isIOS={canShowIosInstallGuide}
+        isDesktop={isDesktopDevice}
         onInstallNative={triggerNativeAppInstall}
         onDismiss={() => setIsInstallPopupOpen(false)}
       />

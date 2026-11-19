@@ -68,7 +68,9 @@
         "contactEmail": { "type": "string", "maxLength": 150, "description": "Support and inquiries email" },
         "contactPhone": { "type": "string", "maxLength": 50, "description": "Support telephone number" },
         "aboutText": { "type": "string", "maxLength": 5000, "description": "About DREAM BIG JOBS summary" },
-        "appLogoUrl": { "type": "string", "maxLength": 300000, "description": "Developer-configured custom app logo URL or compressed PNG data URI" },
+        "appLogoUrl": { "type": "string", "maxLength": 300000, "description": "Developer-configured custom 192px app logo URL or compressed PNG data URI" },
+        "appLogo512Url": { "type": "string", "maxLength": 350000, "description": "Developer-configured exact 512x512 PNG data URI for mobile and desktop PWA icons" },
+        "appLogoMaskable512Url": { "type": "string", "maxLength": 350000, "description": "Developer-configured 512x512 maskable safe-zone PNG data URI for Android adaptive icons" },
         "appLogoUpdatedAt": { "type": "string", "maxLength": 100, "description": "ISO timestamp when custom app logo was last updated" },
         "updatedAt": { "type": "string", "maxLength": 100, "description": "Timestamp of update" }
       }

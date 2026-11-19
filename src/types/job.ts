@@ -207,7 +207,9 @@ export interface SiteSettings {
   contactAddress: string;
   aboutText: string;
   customDomain?: string; // e.g. "hopelandjobs.tech" (used for Telegram post links & site branding)
-  appLogoUrl?: string; // Developer-configured custom app logo URL or compressed PNG data URI
+  appLogoUrl?: string; // Developer-configured custom 192px app logo URL or compressed PNG data URI
+  appLogo512Url?: string; // Exact 512x512 PNG data URI for Android WebAPK & Desktop PWA icons
+  appLogoMaskable512Url?: string; // Exact 512x512 maskable safe-zone PNG data URI for Android adaptive icons
   appLogoUpdatedAt?: string; // ISO timestamp for cache-busting PWA manifest & icons
   updatedAt: string;
   // Smart Alerts & Thresholds

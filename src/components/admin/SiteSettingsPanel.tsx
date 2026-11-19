@@ -47,6 +47,10 @@ export const SiteSettingsPanel: React.FC<Props> = ({
   const [customDomain, setCustomDomain] = useState(settings.customDomain || 'hopelandjobs.tech');
   const [aboutText, setAboutText] = useState(settings.aboutText || '');
   const [appLogoUrl, setAppLogoUrl] = useState(settings.appLogoUrl || '');
+  const [appLogo512Url, setAppLogo512Url] = useState(settings.appLogo512Url || '');
+  const [appLogoMaskable512Url, setAppLogoMaskable512Url] = useState(
+    settings.appLogoMaskable512Url || ''
+  );
   const [isSavingLogo, setIsSavingLogo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -60,23 +64,70 @@ export const SiteSettingsPanel: React.FC<Props> = ({
 
   React.useEffect(() => {
     setAppLogoUrl(settings.appLogoUrl || '');
-  }, [settings.appLogoUrl]);
+    setAppLogo512Url(settings.appLogo512Url || '');
+    setAppLogoMaskable512Url(settings.appLogoMaskable512Url || '');
+  }, [settings.appLogoUrl, settings.appLogo512Url, settings.appLogoMaskable512Url]);
 
   const showFeedback = (type: 'success' | 'error', text: string) => {
     setFeedback({ type, text });
   };
 
-  const compressLogoFileToDataUri = (file: File): Promise<string> =>
+  const renderSquareIconCanvas = (
+    img: HTMLImageElement,
+    size: number,
+    paddingRatio: number,
+    backgroundColor?: string
+  ): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Canvas context unavailable for generating app icons.');
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, size, size);
+
+    if (backgroundColor) {
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, size, size);
+    }
+
+    const innerBox = Math.round(size * (1 - paddingRatio * 2));
+    const srcW = Math.max(1, img.naturalWidth || img.width || size);
+    const srcH = Math.max(1, img.naturalHeight || img.height || size);
+    const scale = Math.min(innerBox / srcW, innerBox / srcH);
+    const drawW = Math.max(1, Math.round(srcW * scale));
+    const drawH = Math.max(1, Math.round(srcH * scale));
+    const dx = Math.round((size - drawW) / 2);
+    const dy = Math.round((size - drawH) / 2);
+    ctx.drawImage(img, dx, dy, drawW, drawH);
+
+    // Android WebAPK and Desktop Chrome/Edge require PNG (or JPEG) icons at exact declared sizes.
+    let dataUri = canvas.toDataURL('image/png');
+    const maxAllowedChars = size >= 512 ? 250000 : 180000;
+    if (dataUri.length > maxAllowedChars) {
+      // Keep clean opaque background when falling back to JPEG for photographic uploads
+      if (!backgroundColor) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, dx, dy, drawW, drawH);
+      }
+      dataUri = canvas.toDataURL('image/jpeg', 0.86);
+    }
+    if (dataUri.length > 310000) {
+      dataUri = canvas.toDataURL('image/jpeg', 0.74);
+    }
+    return dataUri;
+  };
+
+  const generateBrandLogoVariants = (
+    file: File
+  ): Promise<{ logo192: string; logo512: string; logoMaskable512: string }> =>
     new Promise((resolve, reject) => {
-      if (file.type === 'image/svg+xml') {
-        if (file.size > 90 * 1024) {
-          reject(new Error('SVG logo must be under 90 KB.'));
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('Failed to read SVG logo file.'));
-        reader.readAsDataURL(file);
+      if (file.size > 8 * 1024 * 1024) {
+        reject(new Error('Logo file is too large (max 8 MB).'));
         return;
       }
 
@@ -84,35 +135,23 @@ export const SiteSettingsPanel: React.FC<Props> = ({
       const img = new Image();
       img.onload = () => {
         try {
-          const maxDim = 256;
-          const scale = Math.min(1, maxDim / Math.max(img.width || maxDim, img.height || maxDim));
-          const width = Math.max(32, Math.round((img.width || maxDim) * scale));
-          const height = Math.max(32, Math.round((img.height || maxDim) * scale));
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            URL.revokeObjectURL(objectUrl);
-            reject(new Error('Canvas context unavailable for resizing logo.'));
-            return;
-          }
-          ctx.clearRect(0, 0, width, height);
-          ctx.drawImage(img, 0, 0, width, height);
+          // Exact 192x192 PNG for phone notifications, tabs, & launcher icon
+          const logo192 = renderSquareIconCanvas(img, 192, 0.04);
+          // Exact 512x512 PNG for Android WebAPK, Desktop Chrome/Edge app icon, & splash screen
+          const logo512 = renderSquareIconCanvas(img, 512, 0.04);
+          // Exact 512x512 maskable icon with 16% safe-zone margin on clean solid backdrop
+          const logoMaskable512 = renderSquareIconCanvas(img, 512, 0.16, '#FFFFFF');
           URL.revokeObjectURL(objectUrl);
 
-          let dataUri = canvas.toDataURL('image/png');
-          if (dataUri.length > 140000) {
-            dataUri = canvas.toDataURL('image/webp', 0.85);
-          }
-          if (dataUri.length > 180000) {
-            dataUri = canvas.toDataURL('image/jpeg', 0.82);
-          }
-          if (dataUri.length > 260000) {
-            reject(new Error('Compressed logo exceeds 260 KB. Please choose a simpler square icon.'));
+          if (
+            logo192.length > 320000 ||
+            logo512.length > 320000 ||
+            logoMaskable512.length > 320000
+          ) {
+            reject(new Error('Compressed icon exceeds safe storage limit. Please use a cleaner square logo.'));
             return;
           }
-          resolve(dataUri);
+          resolve({ logo192, logo512, logoMaskable512 });
         } catch (err: any) {
           URL.revokeObjectURL(objectUrl);
           reject(err);
@@ -130,9 +169,14 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     if (!file) return;
     setFeedback(null);
     try {
-      const dataUri = await compressLogoFileToDataUri(file);
-      setAppLogoUrl(dataUri);
-      showFeedback('success', 'Logo image loaded! Click "Save App Logo" below to publish it across the website and mobile app icon.');
+      const variants = await generateBrandLogoVariants(file);
+      setAppLogoUrl(variants.logo192);
+      setAppLogo512Url(variants.logo512);
+      setAppLogoMaskable512Url(variants.logoMaskable512);
+      showFeedback(
+        'success',
+        'Logo prepared in 192x192, 512x512, and Android Maskable formats! Click "Save App Logo" below to publish it across phones & computers.'
+      );
     } catch (err: any) {
       showFeedback('error', err?.message || 'Could not process selected logo image.');
     } finally {
@@ -140,29 +184,61 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     }
   };
 
+  const purgeServiceWorkerIconCache = () => {
+    try {
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.controller?.postMessage({ type: 'HOPELAND_PURGE_ICON_CACHE' });
+        navigator.serviceWorker.ready
+          .then((reg) => {
+            reg.active?.postMessage({ type: 'HOPELAND_PURGE_ICON_CACHE' });
+            reg.update().catch(() => {});
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  };
+
   const handleSaveLogo = async (overrideLogo?: string) => {
     setIsSavingLogo(true);
     setFeedback(null);
     try {
+      const isReset = overrideLogo === '';
       const cleanLogo = (overrideLogo !== undefined ? overrideLogo : appLogoUrl).trim();
       if (cleanLogo && !cleanLogo.startsWith('data:image/') && !/^https?:\/\//i.test(cleanLogo)) {
         showFeedback('error', 'Logo URL must start with https:// or be an uploaded image.');
         setIsSavingLogo(false);
         return;
       }
+      const next512 = isReset
+        ? ''
+        : cleanLogo.startsWith('data:image/')
+        ? appLogo512Url || cleanLogo
+        : cleanLogo;
+      const nextMaskable512 = isReset
+        ? ''
+        : cleanLogo.startsWith('data:image/')
+        ? appLogoMaskable512Url || next512
+        : cleanLogo;
+
       const nowIso = new Date().toISOString();
       await onSaveSettings({
         ...settings,
         appLogoUrl: cleanLogo,
+        appLogo512Url: next512,
+        appLogoMaskable512Url: nextMaskable512,
         appLogoUpdatedAt: nowIso,
         updatedAt: nowIso,
       });
       setAppLogoUrl(cleanLogo);
+      setAppLogo512Url(next512);
+      setAppLogoMaskable512Url(nextMaskable512);
+      purgeServiceWorkerIconCache();
+
       showFeedback(
         'success',
         cleanLogo
-          ? 'Custom App Logo saved! All website headers, popups, browser tabs, and mobile manifest icons now use your new logo.'
-          : 'App Logo reset to default HopelandJobs emblem.'
+          ? 'App Logo published (192px, 512px & Maskable)! Website tabs and new Phone/Computer installs use it immediately. On phones where HopelandJobs was already installed earlier, reopen the app or remove & re-install via "Download Application" to refresh the home screen icon.'
+          : 'App Logo reset to default HopelandJobs green briefcase icon across phones and computers.'
       );
     } catch (err: any) {
       showFeedback('error', 'Error saving app logo: ' + (err?.message || 'Unknown error'));
@@ -177,6 +253,9 @@ export const SiteSettingsPanel: React.FC<Props> = ({
     try {
       const cleanDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'hopelandjobs.tech';
       const nowIso = new Date().toISOString();
+      const logoChanged =
+        appLogoUrl.trim() !== (settings.appLogoUrl || '').trim() ||
+        appLogo512Url.trim() !== (settings.appLogo512Url || '').trim();
       await onSaveSettings({
         ...settings,
         contactEmail: contactEmail.trim(),
@@ -185,14 +264,16 @@ export const SiteSettingsPanel: React.FC<Props> = ({
         customDomain: cleanDomain,
         aboutText: aboutText.trim(),
         appLogoUrl: appLogoUrl.trim(),
-        appLogoUpdatedAt:
-          appLogoUrl.trim() !== (settings.appLogoUrl || '').trim()
-            ? nowIso
-            : settings.appLogoUpdatedAt || nowIso,
+        appLogo512Url: appLogo512Url.trim(),
+        appLogoMaskable512Url: appLogoMaskable512Url.trim(),
+        appLogoUpdatedAt: logoChanged ? nowIso : settings.appLogoUpdatedAt || nowIso,
         gaMeasurementId: settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID,
         gaTrackingEnabled: settings.gaTrackingEnabled !== false,
         updatedAt: nowIso,
       });
+      if (logoChanged) {
+        purgeServiceWorkerIconCache();
+      }
       showFeedback(
         'success',
         `Site settings saved permanently! Active domain: "${cleanDomain}". Always-On GA4 (${settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID}) preserved.`
@@ -488,10 +569,10 @@ export const SiteSettingsPanel: React.FC<Props> = ({
             </div>
 
             <div className="bg-[#0B132B] p-4 rounded-xl flex items-center gap-3">
-              <AppBrandLogo logoUrl={appLogoUrl} size="xl" variant="amber" />
+              <AppBrandLogo logoUrl={appLogoUrl} size="xl" variant="green" />
               <div>
-                <p className="text-xs font-extrabold text-white">Phone Home Screen</p>
-                <p className="text-[11px] text-slate-300">PWA &amp; Notification Icon</p>
+                <p className="text-xs font-extrabold text-white">Phone &amp; Computer Icon</p>
+                <p className="text-[11px] text-slate-300">192px, 512px &amp; Maskable</p>
               </div>
             </div>
           </div>
@@ -530,17 +611,23 @@ export const SiteSettingsPanel: React.FC<Props> = ({
               <input
                 type="text"
                 value={appLogoUrl.startsWith('data:image/') ? '' : appLogoUrl}
-                onChange={(e) => setAppLogoUrl(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAppLogoUrl(val);
+                  setAppLogo512Url(val);
+                  setAppLogoMaskable512Url(val);
+                }}
                 placeholder={
                   appLogoUrl.startsWith('data:image/')
-                    ? 'Custom uploaded image stored (paste an https:// URL to replace)'
+                    ? 'Custom uploaded icon pack ready (paste an https:// URL to replace)'
                     : 'https://example.com/hopeland-logo.png'
                 }
                 className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-[#16A34A] outline-none font-mono"
               />
               {appLogoUrl.startsWith('data:image/') && (
                 <p className="text-[11px] text-emerald-700 font-semibold mt-1">
-                  Uploaded logo ready ({Math.round(appLogoUrl.length / 1024)} KB compressed). Click Save App Logo to apply live.
+                  Uploaded icon pack ready (192px: {Math.round(appLogoUrl.length / 1024)} KB
+                  {appLogo512Url ? ` • 512px: ${Math.round(appLogo512Url.length / 1024)} KB` : ''}). Click Save App Logo to publish to phones &amp; computers.
                 </p>
               )}
             </div>
