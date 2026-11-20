@@ -330,6 +330,8 @@ export default function App() {
   const [isIosInstallGuideOpen, setIsIosInstallGuideOpen] = useState(false);
   const [isInstallPopupOpen, setIsInstallPopupOpen] = useState(false);
   const [isMinuteInstallReminderOpen, setIsMinuteInstallReminderOpen] = useState(false);
+  const [isResolvingDeepLink, setIsResolvingDeepLink] = useState(false);
+  const [deepLinkNotFoundNotice, setDeepLinkNotFoundNotice] = useState<string | null>(null);
   const {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
@@ -502,9 +504,18 @@ export default function App() {
         const notifIdFromUrl = urlParams.get('notificationId');
         if (notifIdFromUrl) pendingNotifReadIdRef.current = notifIdFromUrl;
       }
-      const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
-      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
-      deepLinkTargetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
+      const rawParamId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id') || '';
+      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?#]+)/);
+      let pathId = '';
+      if (pathMatch?.[1]) {
+        try {
+          pathId = decodeURIComponent(pathMatch[1]);
+        } catch {
+          pathId = pathMatch[1];
+        }
+      }
+      const cleanedTarget = (rawParamId || pathId).trim().replace(/[.,;!?)\]]+$/, '');
+      deepLinkTargetId = cleanedTarget && cleanedTarget.toLowerCase() !== 'latest' ? cleanedTarget : undefined;
       deepLinkArrivedFromTelegram = urlParams.get('utm_source') === 'telegram';
       deepLinkApplyAction =
         urlParams.get('apply') === '1' ||
@@ -512,30 +523,75 @@ export default function App() {
         deepLinkArrivedFromTelegram;
 
       if (deepLinkTargetId) {
-        fetchVacancyById(deepLinkTargetId)
-          .then((found) => {
-            if (!found) return;
-            setSelectedVacancy((prev) => prev || found);
-            setIsTelegramApplyArrival(deepLinkApplyAction);
-            document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
-            trackAnalyticsEvent('vacancy_view', {
+        let deepLinkFound = false;
+        let singleFetchDone = false;
+        let catalogLoadDone = false;
+
+        const openResolvedDeepLink = (found: Vacancy) => {
+          if (deepLinkFound) return;
+          deepLinkFound = true;
+          setIsResolvingDeepLink(false);
+          setDeepLinkNotFoundNotice(null);
+          setSelectedVacancy((prev) => prev || found);
+          setIsTelegramApplyArrival(deepLinkApplyAction);
+          document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+          trackAnalyticsEvent('vacancy_view', {
+            jobId: found.id,
+            jobTitle: found.title,
+            organization: found.organization,
+            category: found.category,
+            path: `/jobs/${encodeURIComponent(found.id)}`,
+          });
+          if (deepLinkArrivedFromTelegram) {
+            trackAnalyticsEvent('click_telegram_link', {
               jobId: found.id,
               jobTitle: found.title,
               organization: found.organization,
               category: found.category,
               path: `/jobs/${encodeURIComponent(found.id)}`,
             });
-            if (deepLinkArrivedFromTelegram) {
-              trackAnalyticsEvent('click_telegram_link', {
-                jobId: found.id,
-                jobTitle: found.title,
-                organization: found.organization,
-                category: found.category,
-                path: `/jobs/${encodeURIComponent(found.id)}`,
-              });
+          }
+        };
+
+        const checkDeepLinkFinished = () => {
+          if (!deepLinkFound && singleFetchDone && catalogLoadDone) {
+            setIsResolvingDeepLink(false);
+            setDeepLinkNotFoundNotice(
+              'This job vacancy is no longer available or has been removed. Browse all verified open jobs below.'
+            );
+          }
+        };
+
+        // Instant check against local cache first
+        const cachedNow = getCachedPublishedVacancies();
+        const immediateMatch = cachedNow.find(
+          (v) =>
+            v.id === deepLinkTargetId ||
+            v.id.toLowerCase() === deepLinkTargetId!.toLowerCase()
+        );
+        if (immediateMatch) {
+          openResolvedDeepLink(immediateMatch);
+        } else {
+          setIsResolvingDeepLink(true);
+        }
+
+        fetchVacancyById(deepLinkTargetId)
+          .then((found) => {
+            if (found) {
+              openResolvedDeepLink(found);
             }
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => {
+            singleFetchDone = true;
+            checkDeepLinkFinished();
+          });
+
+        (window as any).__hopelandOpenDeepLink = openResolvedDeepLink;
+        (window as any).__hopelandMarkCatalogDone = () => {
+          catalogLoadDone = true;
+          checkDeepLinkFinished();
+        };
       }
     }
 
@@ -551,9 +607,13 @@ export default function App() {
                 (v) => v.id === deepLinkTargetId || v.id.toLowerCase() === deepLinkTargetId!.toLowerCase()
               );
               if (found) {
-                setSelectedVacancy((prev) => prev || found);
-                setIsTelegramApplyArrival(deepLinkApplyAction);
-                document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+                if (typeof (window as any).__hopelandOpenDeepLink === 'function') {
+                  (window as any).__hopelandOpenDeepLink(found);
+                } else {
+                  setSelectedVacancy((prev) => prev || found);
+                  setIsTelegramApplyArrival(deepLinkApplyAction);
+                  document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+                }
               }
             }
           }
@@ -586,15 +646,22 @@ export default function App() {
             (v) => v.id === deepLinkTargetId || v.id.toLowerCase() === deepLinkTargetId!.toLowerCase()
           );
           if (found) {
-            setSelectedVacancy((prev) => prev || found);
-            setIsTelegramApplyArrival(deepLinkApplyAction);
-            document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+            if (typeof (window as any).__hopelandOpenDeepLink === 'function') {
+              (window as any).__hopelandOpenDeepLink(found);
+            } else {
+              setSelectedVacancy((prev) => prev || found);
+              setIsTelegramApplyArrival(deepLinkApplyAction);
+              document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+            }
           }
         }
       } catch (err) {
         console.warn('Initial primary data load error:', err);
       } finally {
         setLoading(false);
+        if (typeof (window as any).__hopelandMarkCatalogDone === 'function') {
+          (window as any).__hopelandMarkCatalogDone();
+        }
       }
     }
     loadPrimaryData();
@@ -1016,18 +1083,45 @@ export default function App() {
     const handlePopState = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
-      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
-      const targetId = jobId || pathMatch?.[1];
+      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?#]+)/);
+      let decodedPathId = '';
+      if (pathMatch?.[1]) {
+        try {
+          decodedPathId = decodeURIComponent(pathMatch[1]);
+        } catch {
+          decodedPathId = pathMatch[1];
+        }
+      }
+      const targetId = (jobId || decodedPathId).trim().replace(/[.,;!?)\]]+$/, '');
 
       if (targetId) {
-        const found = vacancies.find((v) => v.id === targetId);
+        const found = vacancies.find(
+          (v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()
+        );
         if (found) {
           setSelectedVacancy(found);
+          setDeepLinkNotFoundNotice(null);
           document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+        } else {
+          setIsResolvingDeepLink(true);
+          fetchVacancyById(targetId)
+            .then((resolved) => {
+              setIsResolvingDeepLink(false);
+              if (resolved) {
+                setSelectedVacancy(resolved);
+                setDeepLinkNotFoundNotice(null);
+                document.title = `${resolved.title} at ${resolved.organization} | HOPELAND JOBS`;
+              } else {
+                setDeepLinkNotFoundNotice(
+                  'This job vacancy is no longer available or has been removed. Browse all verified open jobs below.'
+                );
+              }
+            })
+            .catch(() => setIsResolvingDeepLink(false));
         }
       } else {
         setSelectedVacancy(null);
-        document.title = 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
+        document.title = siteContent.browserTitle?.trim() || 'HOPELAND JOBS | Hopeland Jobs - Find Your Opportunity.';
       }
       const viewParam = urlParams.get('view');
       if (viewParam === 'top-recommendations') {
@@ -1955,10 +2049,10 @@ export default function App() {
 
   // Sync browser tab title & default job categories expansion state from Admin CMS settings
   useEffect(() => {
-    if (typeof document !== 'undefined' && siteContent.browserTitle?.trim()) {
+    if (typeof document !== 'undefined' && !selectedVacancy && siteContent.browserTitle?.trim()) {
       document.title = siteContent.browserTitle.trim();
     }
-  }, [siteContent.browserTitle]);
+  }, [siteContent.browserTitle, selectedVacancy]);
 
   useEffect(() => {
     setShowHomeCategories(Boolean(siteContent.categoriesDefaultExpanded));
@@ -3871,6 +3965,34 @@ export default function App() {
             telegramUrl={siteSettings.telegramChannelUrl}
           />
         </Suspense>
+      )}
+
+      {/* Deep-Link Loading Indicator & Missing-Vacancy Notice (Telegram / Direct Job Links) */}
+      {isResolvingDeepLink && !selectedVacancy && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-[#0B132B] text-white shadow-2xl border border-emerald-400/30 flex items-center gap-3 text-xs font-bold"
+        >
+          <span className="w-4 h-4 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin shrink-0" />
+          <span>Opening vacancy details...</span>
+        </div>
+      )}
+
+      {deepLinkNotFoundNotice && !selectedVacancy && !isResolvingDeepLink && (
+        <div
+          role="alert"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] px-4 py-3.5 rounded-2xl bg-amber-50 text-amber-950 border border-amber-300 shadow-2xl flex items-start justify-between gap-3 text-xs"
+        >
+          <p className="font-semibold leading-relaxed">{deepLinkNotFoundNotice}</p>
+          <button
+            type="button"
+            onClick={() => setDeepLinkNotFoundNotice(null)}
+            className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-900 text-white font-bold hover:bg-amber-800 cursor-pointer"
+          >
+            OK
+          </button>
+        </div>
       )}
 
       {/* Individual Vacancy Modal */}

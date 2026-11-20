@@ -1242,6 +1242,14 @@ export const TelegramSettings: React.FC<Props> = ({
                       📍 <strong>City of Work:</strong> {activeBroadcastVacancy.location}
                     </p>
                   )}
+                {activeBroadcastVacancy.applicationDeadline &&
+                  !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none|-)$/i.test(
+                    activeBroadcastVacancy.applicationDeadline.trim()
+                  ) && (
+                    <p className="text-slate-100">
+                      📅 <strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}
+                    </p>
+                  )}
                 <p className="pt-2 text-[11px] text-slate-300 border-t border-white/10">
                   Full details &amp; how to apply are on our website. Tap <strong className="text-white">Apply Now</strong> below.
                 </p>

@@ -4023,15 +4023,47 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     res.json({ success: true, total: list.length, vacancies: list });
   });
   app.get("/api/vacancies/:id", (req, res) => {
-    const rawId = decodeURIComponent(String(req.params.id || "")).trim();
+    const rawParam = String(req.params.id || "");
+    let decoded = rawParam;
+    try {
+      decoded = decodeURIComponent(rawParam);
+    } catch {
+    }
+    const rawId = decoded.trim().replace(/[.,;!?)\]]+$/, "");
     if (!rawId) {
       res.status(400).json({ error: "Vacancy ID is required" });
       return;
     }
+    const lowerId = rawId.toLowerCase();
     const list = loadVacanciesCatalog();
-    const found = list.find(
-      (v) => v && v.status === "published" && hasValidVacancyDeadline(v) && (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
+    let found = list.find(
+      (v) => v && v.status !== "draft" && v.status !== "duplicate" && hasValidVacancyDeadline(v) && (String(v.id) === rawId || String(v.id).toLowerCase() === lowerId)
     );
+    if (!found) {
+      try {
+        const tgQueuePath = path.join(DATA_DIR, "telegram_queue.json");
+        const tgStore = loadJsonFileSafe(tgQueuePath, null);
+        if (tgStore) {
+          const recMap = tgStore.publishedRecords || {};
+          const matchedRecKey = Object.keys(recMap).find(
+            (k) => k === rawId || k.toLowerCase() === lowerId
+          );
+          const snap = matchedRecKey ? recMap[matchedRecKey]?.vacancySnapshot : null;
+          if (snap && snap.status !== "draft" && snap.status !== "duplicate" && hasValidVacancyDeadline(snap)) {
+            found = snap;
+          }
+          if (!found && Array.isArray(tgStore?.queueState?.items)) {
+            const qItem = tgStore.queueState.items.find(
+              (it) => it?.vacancy && (String(it.vacancyId) === rawId || String(it.vacancyId || "").toLowerCase() === lowerId)
+            );
+            if (qItem?.vacancy && qItem.vacancy.status !== "draft" && qItem.vacancy.status !== "duplicate" && hasValidVacancyDeadline(qItem.vacancy)) {
+              found = qItem.vacancy;
+            }
+          }
+        }
+      } catch {
+      }
+    }
     if (!found) {
       res.status(404).json({ error: "Vacancy not found" });
       return;
@@ -6126,6 +6158,7 @@ ${text}`;
   const TELEGRAM_CONFIG_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
   const TELEGRAM_QUEUE_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
   const TELEGRAM_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path2.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
   const BOT_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
   const SYSTEM_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "system_health.json");
   const AUDIT_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
@@ -8223,8 +8256,60 @@ ${text}`;
   }
   function recordPublishedVacancyServer(record) {
     const store = loadTelegramQueueDisk();
-    store.publishedRecords[record.vacancyId] = record;
+    const prev = store.publishedRecords[record.vacancyId];
+    store.publishedRecords[record.vacancyId] = {
+      ...prev || {},
+      ...record,
+      vacancySnapshot: record.vacancySnapshot || prev?.vacancySnapshot
+    };
     saveTelegramQueueDisk(store);
+  }
+  function ensureVacancyHasStableIdServer(vacancy) {
+    if (!vacancy || typeof vacancy !== "object") return vacancy;
+    const currentId = String(vacancy.id || "").trim();
+    if (currentId && currentId.toLowerCase() !== "latest") {
+      return vacancy;
+    }
+    const slugBase = String(vacancy.title || vacancy.organization || "job").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 28);
+    const generatedId = `tg_${slugBase || "vac"}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    return { ...vacancy, id: generatedId };
+  }
+  function upsertVacancyIntoCatalogServer(vacancy) {
+    const withId = ensureVacancyHasStableIdServer(vacancy);
+    if (!withId?.id || !hasValidVacancyDeadline(withId)) return withId;
+    try {
+      ensureRuntimeDataDir();
+      let list = [];
+      if (fs2.existsSync(VACANCIES_CATALOG_FILE_SERVER)) {
+        const parsed = JSON.parse(fs2.readFileSync(VACANCIES_CATALOG_FILE_SERVER, "utf-8"));
+        if (Array.isArray(parsed)) list = parsed;
+      }
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      const normalizedItem = {
+        ...withId,
+        id: String(withId.id).trim(),
+        status: withId.status && withId.status !== "draft" && withId.status !== "duplicate" ? withId.status : "published",
+        publishedAt: withId.publishedAt || nowIso,
+        createdAt: withId.createdAt || nowIso,
+        updatedAt: nowIso
+      };
+      const idx = list.findIndex(
+        (v) => v?.id && (String(v.id) === normalizedItem.id || String(v.id).toLowerCase() === normalizedItem.id.toLowerCase())
+      );
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...normalizedItem };
+      } else {
+        list.unshift(normalizedItem);
+      }
+      const safeList = list.filter((v) => v?.id && hasValidVacancyDeadline(v));
+      const tmpPath = `${VACANCIES_CATALOG_FILE_SERVER}.${process.pid}.${Date.now()}.tmp`;
+      fs2.writeFileSync(tmpPath, JSON.stringify(safeList, null, 2), "utf-8");
+      fs2.renameSync(tmpPath, VACANCIES_CATALOG_FILE_SERVER);
+      return normalizedItem;
+    } catch (e) {
+      console.warn("Notice: Failed upserting vacancy into server catalog:", e);
+      return withId;
+    }
   }
   function escapeHtml(text) {
     if (!text) return "";
@@ -8243,19 +8328,21 @@ ${text}`;
   }
   function normalizeWebsiteDomain(domainOrUrl) {
     const raw = (domainOrUrl || "").trim();
-    if (!raw || raw.toLowerCase() === "healmorin.com" || raw.toLowerCase() === "hopelandjobs.tech") {
+    if (!raw) {
       return "https://www.hopelandjobs.tech";
     }
-    const clean = raw.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-    if (!clean || clean.toLowerCase() === "hopelandjobs.tech") {
+    const cleanHost = raw.replace(/^https?:\/\//i, "").split(/[/?#]/)[0].trim().toLowerCase();
+    if (!cleanHost || cleanHost === "healmorin.com" || cleanHost === "www.healmorin.com" || cleanHost === "hopelandjobs.tech" || cleanHost === "www.hopelandjobs.tech" || cleanHost.startsWith("localhost") || cleanHost.startsWith("127.0.0.1") || cleanHost.includes("ais-dev-") || cleanHost.includes("ais-pre-") || cleanHost.endsWith(".run.app") || cleanHost.endsWith(".usercontent.goog")) {
       return "https://www.hopelandjobs.tech";
     }
-    return `https://${clean}`;
+    return `https://${cleanHost}`;
   }
   function buildTelegramVacancyUrl(baseUrl, vacancy, includeApplyAction = true) {
-    const safeId = encodeURIComponent(String(vacancy?.id || "").trim() || "latest");
+    const cleanBase = normalizeWebsiteDomain(baseUrl).replace(/\/+$/, "");
+    const rawId = String(vacancy?.id || "").trim();
+    const safeId = encodeURIComponent(rawId || "latest");
     const applyParam = includeApplyAction ? "apply=1&" : "";
-    return `${baseUrl}/jobs/${safeId}?${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+    return `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
   }
   function resolveVacancyImageUrl(vacancy) {
     const candidates = [vacancy?.imageUrl, vacancy?.organizationLogo, vacancy?.bannerUrl, vacancy?.posterUrl];
@@ -8313,11 +8400,27 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
   function stripUrlsAndEmailsForTelegram(text) {
     return String(text || "").replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.[^\s]+/gi, "").replace(/\bt\.me\/\S+/gi, "").replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "").replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|et|tech|io|co|gov|edu|info)(?:\/\S*)?/gi, "").replace(/(?:\+251[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3,4}|\b0[19]\d[\s-]?\d{3}[\s-]?\d{4}\b)/g, "").replace(/\b(?:how\s+to\s+apply\s*:|application\s+method\s*:|method\s+to\s+apply\s*:|apply\s+via\s*:|send\s+(?:your\s+)?cv\s+to|submit\s+in\s+person|p\.?\s*o\.?\s*box\s*\d+)\b/gi, "").replace(/\s{2,}/g, " ").trim();
   }
+  function formatDeadlineForTelegramServer(rawDeadline) {
+    const clean = stripUrlsAndEmailsForTelegram(rawDeadline || "");
+    if (!clean || !isMeaningfulField(clean)) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+      const parsed = new Date(clean);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        });
+      }
+    }
+    return truncateText(clean, 80);
+  }
   function buildTelegramJobHtml(vacancy, _domainOrUrl = "www.hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia", compactForCaption = false) {
     const cleanOrg2 = stripUrlsAndEmailsForTelegram(vacancy?.organization || "") || "Employer";
     const cleanTitle2 = stripUrlsAndEmailsForTelegram(vacancy?.title || "") || "Open Position";
     const cleanSalary = isMeaningfulField(vacancy?.salary) ? stripUrlsAndEmailsForTelegram(vacancy.salary) : "";
     const cleanCity = isMeaningfulField(vacancy?.location) ? stripUrlsAndEmailsForTelegram(vacancy.location) : "";
+    const cleanDeadline = formatDeadlineForTelegramServer(vacancy?.applicationDeadline);
     const orgName = escapeHtml(truncateText(cleanOrg2, 140));
     const positionTitle = escapeHtml(truncateText(cleanTitle2, 180));
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 <b>WASH JOB</b>\n\n" : "";
@@ -8331,6 +8434,9 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
     if (cleanCity) {
       lines.push(`\u{1F4CD} <b>City of Work:</b> ${escapeHtml(truncateText(cleanCity, 100))}`);
     }
+    if (cleanDeadline) {
+      lines.push(`\u{1F4C5} <b>Deadline:</b> ${escapeHtml(cleanDeadline)}`);
+    }
     const footer = "Full vacancy details are inside our website. Tap <b>Apply Now</b> below.";
     const fullText = `${washPrefix}${lines.join("\n")}
 
@@ -8343,6 +8449,7 @@ ${footer}`;
     const cleanTitle2 = stripUrlsAndEmailsForTelegram(vacancy?.title || "") || "Open Position";
     const cleanSalary = isMeaningfulField(vacancy?.salary) ? stripUrlsAndEmailsForTelegram(vacancy.salary) : "";
     const cleanCity = isMeaningfulField(vacancy?.location) ? stripUrlsAndEmailsForTelegram(vacancy.location) : "";
+    const cleanDeadline = formatDeadlineForTelegramServer(vacancy?.applicationDeadline);
     const orgName = truncateText(cleanOrg2, 140);
     const positionTitle = truncateText(cleanTitle2, 180);
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 WASH JOB\n\n" : "";
@@ -8355,6 +8462,9 @@ ${footer}`;
     }
     if (cleanCity) {
       lines.push(`City of Work: ${truncateText(cleanCity, 100)}`);
+    }
+    if (cleanDeadline) {
+      lines.push(`Deadline: ${cleanDeadline}`);
     }
     const footer = "Full vacancy details are inside our website. Tap Apply Now below.";
     const fullText = `${washPrefix}${lines.join("\n")}
@@ -8392,6 +8502,8 @@ ${footer}`;
         hasWashLabel: washCheck.hasWashLabel
       };
     }
+    const resolvedBaseUrlPreview = normalizeWebsiteDomain(domainOrUrl);
+    const previewApplyLink = buildTelegramVacancyUrl(resolvedBaseUrlPreview, vacancy, true);
     if (dryRun) {
       return {
         ok: true,
@@ -8399,6 +8511,7 @@ ${footer}`;
         resolvedChatId: cleanChannel,
         formattedMessage: htmlMsg,
         formattedPlain: plainMsg,
+        applyUrl: previewApplyLink,
         isWashNgo: washCheck.isWashNgo,
         hasWashLabel: washCheck.hasWashLabel,
         usedPhoto: Boolean(resolveVacancyImageUrl(vacancy))
@@ -8440,7 +8553,7 @@ ${footer}`;
     };
     const resolvedBaseUrl = normalizeWebsiteDomain(domainOrUrl);
     const vacancyApplyLink = buildTelegramVacancyUrl(resolvedBaseUrl, vacancy, true);
-    const replyMarkup = /^https:\/\/[^/\s]+/i.test(vacancyApplyLink) && !/localhost|127\.0\.0\.1/i.test(vacancyApplyLink) ? {
+    const replyMarkup = {
       inline_keyboard: [
         [
           {
@@ -8449,7 +8562,7 @@ ${footer}`;
           }
         ]
       ]
-    } : void 0;
+    };
     const trySendOnce = async (targetChatId) => {
       if (photoUrl && captionWash?.valid && captionWash.html.length <= 1024) {
         try {
@@ -8521,6 +8634,7 @@ ${footer}`;
               resolvedChatId: candidate,
               formattedMessage: resAttempt.usedPlain ? plainMsg : htmlMsg,
               formattedPlain: plainMsg,
+              applyUrl: vacancyApplyLink,
               isWashNgo: washCheck.isWashNgo,
               hasWashLabel: washCheck.hasWashLabel,
               usedPhoto: resAttempt.usedPhoto
@@ -8836,10 +8950,13 @@ ${footer}`;
               });
             }
           } else {
+            const persistedVacancy = upsertVacancyIntoCatalogServer(item.vacancy);
+            item.vacancy = persistedVacancy;
+            item.vacancyId = String(persistedVacancy.id || item.vacancyId);
             const sendRes = await sendTelegramVacancyMessage(
               token,
               targetChannel,
-              item.vacancy,
+              persistedVacancy,
               domain,
               false,
               persisted.telegramChannelId,
@@ -8863,18 +8980,26 @@ ${footer}`;
             if (afterItem && afterItem.vacancyId === item.vacancyId) {
               const nowIso = (/* @__PURE__ */ new Date()).toISOString();
               if (sendRes.ok) {
+                const publishedVacancy = upsertVacancyIntoCatalogServer({
+                  ...persistedVacancy,
+                  telegramPublished: true,
+                  telegramMessageId: Number(sendRes.messageId || 0),
+                  telegramPublishedAt: nowIso
+                });
                 afterItem.status = "published";
                 afterItem.telegramMessageId = sendRes.messageId;
                 afterItem.publishedAt = nowIso;
                 afterItem.error = void 0;
                 afterItem.updatedAt = nowIso;
+                afterItem.vacancy = publishedVacancy;
                 afterStore.publishedRecords[item.vacancyId] = {
                   vacancyId: item.vacancyId,
                   telegramMessageId: Number(sendRes.messageId || 0),
                   publishedAt: nowIso,
                   channel: sendRes.resolvedChatId || targetChannel,
                   title: item.title,
-                  organization: item.organization
+                  organization: item.organization,
+                  vacancySnapshot: publishedVacancy
                 };
                 afterStore.queueState.updatedAt = nowIso;
                 saveTelegramQueueDisk(afterStore);
@@ -8979,20 +9104,22 @@ ${footer}`;
       ).chatId;
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
       const resolvedMode = distributionMode || persisted.telegramDistributionMode || "all_jobs";
-      const items = vacancies.map((v) => {
+      const items = vacancies.map((rawV) => {
+        const v = ensureVacancyHasStableIdServer(rawV);
         const existingRec = !forceRetry && v?.id ? store.publishedRecords[String(v.id)] : void 0;
         if ((v?.telegramPublished || existingRec) && !forceRetry) {
+          const persistedExisting = upsertVacancyIntoCatalogServer(v);
           return {
-            vacancyId: String(v.id),
-            title: String(v.title || "Untitled Vacancy"),
-            organization: String(v.organization || "Employer"),
-            category: v.category,
+            vacancyId: String(persistedExisting.id),
+            title: String(persistedExisting.title || "Untitled Vacancy"),
+            organization: String(persistedExisting.organization || "Employer"),
+            category: persistedExisting.category,
             status: "published",
             attempts: 1,
-            telegramMessageId: existingRec?.telegramMessageId || v.telegramMessageId,
-            publishedAt: existingRec?.publishedAt || v.telegramPublishedAt || nowIso,
+            telegramMessageId: existingRec?.telegramMessageId || persistedExisting.telegramMessageId,
+            publishedAt: existingRec?.publishedAt || persistedExisting.telegramPublishedAt || nowIso,
             updatedAt: nowIso,
-            vacancy: v
+            vacancy: persistedExisting
           };
         }
         const preGate = evaluateTelegramPublishEligibilityServer(
@@ -9015,15 +9142,16 @@ ${footer}`;
             vacancy: v
           };
         }
+        const persistedQueued = upsertVacancyIntoCatalogServer(v);
         return {
-          vacancyId: String(v.id),
-          title: String(v.title || "Untitled Vacancy"),
-          organization: String(v.organization || "Employer"),
-          category: v.category,
+          vacancyId: String(persistedQueued.id),
+          title: String(persistedQueued.title || "Untitled Vacancy"),
+          organization: String(persistedQueued.organization || "Employer"),
+          category: persistedQueued.category,
           status: "pending",
           attempts: 0,
           updatedAt: nowIso,
-          vacancy: v
+          vacancy: persistedQueued
         };
       });
       const hasPending = items.some((it) => it.status === "pending");
@@ -9163,11 +9291,12 @@ ${footer}`;
         return;
       }
       let effectiveDomain = customDomain || persisted?.customDomain || (process.env.APP_URL ? process.env.APP_URL.replace(/^https?:\/\//i, "").replace(/\/+$/, "") : "") || "hopelandjobs.tech";
-      if (effectiveDomain === "healmorin.com") effectiveDomain = "hopelandjobs.tech";
+      effectiveDomain = normalizeWebsiteDomain(effectiveDomain);
+      const preparedVacancy = dryRun ? ensureVacancyHasStableIdServer(vacancy) : upsertVacancyIntoCatalogServer(vacancy);
       const result = await sendTelegramVacancyMessage(
         effectiveToken || "dry-run",
         targetChannel,
-        vacancy,
+        preparedVacancy,
         effectiveDomain,
         Boolean(dryRun),
         channelId
@@ -9175,9 +9304,9 @@ ${footer}`;
       if (!result.ok) {
         if (!dryRun) {
           appendTelegramLogServer({
-            vacancyId: String(vacancy.id || "unknown"),
-            title: String(vacancy.title || "Vacancy"),
-            organization: vacancy.organization,
+            vacancyId: String(preparedVacancy.id || "unknown"),
+            title: String(preparedVacancy.title || "Vacancy"),
+            organization: preparedVacancy.organization,
             action: action === "auto_publish" ? "auto_publish" : forceRetry ? "retry" : "manual_publish",
             status: "failed",
             channel: targetChannel,
@@ -9190,25 +9319,33 @@ ${footer}`;
           discoveredChats: result.discoveredChats,
           formattedMessage: result.formattedMessage,
           formattedPlain: result.formattedPlain,
+          applyUrl: result.applyUrl,
           isWashNgo: result.isWashNgo,
           hasWashLabel: result.hasWashLabel
         });
         return;
       }
       const publishedAt = (/* @__PURE__ */ new Date()).toISOString();
-      if (!dryRun && vacancy.id) {
+      if (!dryRun && preparedVacancy.id) {
+        const updatedVacancy = upsertVacancyIntoCatalogServer({
+          ...preparedVacancy,
+          telegramPublished: true,
+          telegramMessageId: Number(result.messageId || 0),
+          telegramPublishedAt: publishedAt
+        });
         recordPublishedVacancyServer({
-          vacancyId: String(vacancy.id),
+          vacancyId: String(updatedVacancy.id),
           telegramMessageId: Number(result.messageId || 0),
           publishedAt,
           channel: result.resolvedChatId || targetChannel,
-          title: String(vacancy.title || "Vacancy"),
-          organization: vacancy.organization
+          title: String(updatedVacancy.title || "Vacancy"),
+          organization: updatedVacancy.organization,
+          vacancySnapshot: updatedVacancy
         });
         appendTelegramLogServer({
-          vacancyId: String(vacancy.id),
-          title: String(vacancy.title || "Vacancy"),
-          organization: vacancy.organization,
+          vacancyId: String(updatedVacancy.id),
+          title: String(updatedVacancy.title || "Vacancy"),
+          organization: updatedVacancy.organization,
           action: action === "auto_publish" ? "auto_publish" : forceRetry ? "retry" : "manual_publish",
           status: "published",
           telegramMessageId: result.messageId,
@@ -9225,6 +9362,7 @@ ${footer}`;
         telegramPublishedAt: publishedAt,
         formattedMessage: result.formattedMessage,
         formattedPlain: result.formattedPlain,
+        applyUrl: result.applyUrl || buildTelegramVacancyUrl(effectiveDomain, preparedVacancy, true),
         isWashNgo: result.isWashNgo,
         hasWashLabel: result.hasWashLabel,
         usedPhoto: result.usedPhoto
@@ -9248,12 +9386,11 @@ ${footer}`;
       const targetChannel = normalizeTelegramChatIdServer(
         channelName || persisted.telegramChannelName || persisted.telegramChannelId || "@DreamBigJobsEthiopia"
       ).chatId;
-      let domain = persisted?.customDomain || "hopelandjobs.tech";
-      if (domain === "healmorin.com") domain = "hopelandjobs.tech";
-      const appUrl = domain.startsWith("http") ? domain.replace(/\/+$/, "") : `https://${domain}`;
+      const appUrl = normalizeWebsiteDomain(persisted?.customDomain || "hopelandjobs.tech");
       const results = [];
       let discoveredChats;
-      for (const v of vacancies) {
+      for (const rawV of vacancies) {
+        const v = dryRun ? ensureVacancyHasStableIdServer(rawV) : upsertVacancyIntoCatalogServer(rawV);
         const gate = evaluateTelegramPublishEligibilityServer(v, persisted, Boolean(forceRetry), v?.contentType, distributionMode);
         if (!gate.allowed) {
           if (!dryRun) {
@@ -9291,18 +9428,25 @@ ${footer}`;
         if (postRes.ok) {
           const publishedAt = (/* @__PURE__ */ new Date()).toISOString();
           if (!dryRun && v.id) {
+            const updatedVacancy = upsertVacancyIntoCatalogServer({
+              ...v,
+              telegramPublished: true,
+              telegramMessageId: Number(postRes.messageId || 0),
+              telegramPublishedAt: publishedAt
+            });
             recordPublishedVacancyServer({
-              vacancyId: String(v.id),
+              vacancyId: String(updatedVacancy.id),
               telegramMessageId: Number(postRes.messageId || 0),
               publishedAt,
               channel: postRes.resolvedChatId || targetChannel,
-              title: String(v.title || "Vacancy"),
-              organization: v.organization
+              title: String(updatedVacancy.title || "Vacancy"),
+              organization: updatedVacancy.organization,
+              vacancySnapshot: updatedVacancy
             });
             appendTelegramLogServer({
-              vacancyId: String(v.id),
-              title: String(v.title || "Vacancy"),
-              organization: v.organization,
+              vacancyId: String(updatedVacancy.id),
+              title: String(updatedVacancy.title || "Vacancy"),
+              organization: updatedVacancy.organization,
               action: "queue_publish",
               status: "published",
               telegramMessageId: postRes.messageId,
@@ -9319,6 +9463,7 @@ ${footer}`;
             hasWashLabel: postRes.hasWashLabel,
             formattedMessage: postRes.formattedMessage,
             formattedPlain: postRes.formattedPlain,
+            applyUrl: postRes.applyUrl || buildTelegramVacancyUrl(appUrl, v, true),
             status: "success",
             telegramMessageId: postRes.messageId,
             telegramPublishedAt: publishedAt
@@ -11651,7 +11796,8 @@ Return strict JSON:
         location = "Addis Ababa",
         experienceYears = "",
         educationQualification = "",
-        notes = ""
+        notes = "",
+        applicationDeadline = ""
       } = req.body || {};
       if (!title.trim() || !organization.trim()) {
         res.status(400).json({ error: "Job title and organization are required for AI drafting." });
@@ -11667,6 +11813,7 @@ INPUTS:
 - Location: ${location}
 - Experience: ${experienceYears}
 - Education: ${educationQualification}
+- Application Deadline: ${applicationDeadline}
 - Raw Notes: ${String(notes || "").slice(0, 1500)}
 
 Return strict JSON:
@@ -11674,7 +11821,7 @@ Return strict JSON:
 - responsibilities: array of 5 clear, realistic job duty bullet points
 - requiredSkills: array of 5 key skills required for this role
 - applicationInstructions: polite, accurate instructions telling candidates how to prepare and submit via official employer channels
-- telegramCaption: clean, concise English Telegram summary ONLY containing Employer, Position, and City of Work (STRICT RULE: NEVER include URLs, links, emails, phone numbers, physical addresses, or method of applying in telegramCaption \u2014 tell readers to tap Apply Now to view details inside the website)`;
+- telegramCaption: clean, concise English Telegram summary ONLY containing Employer, Position, City of Work, and Deadline if provided (STRICT RULE: NEVER include URLs, links, emails, phone numbers, physical addresses, or method of applying in telegramCaption \u2014 tell readers to tap Apply Now to view details inside the website)`;
       let aiResult = null;
       try {
         const response = await ai.models.generateContent({
@@ -11701,6 +11848,13 @@ Return strict JSON:
       } catch (genErr) {
         console.warn("Gemini admin-vacancy-assist fallback:", genErr.message || genErr);
       }
+      const deadlineCaptionLine = formatDeadlineForTelegramServer(applicationDeadline) ? `
+\u{1F4C5} Deadline: ${formatDeadlineForTelegramServer(applicationDeadline)}` : "";
+      const defaultTelegramCaption = `\u{1F3E2} Employer: ${stripUrlsAndEmailsForTelegram(organization)}
+\u{1F4BC} Position: ${stripUrlsAndEmailsForTelegram(title)}
+\u{1F4CD} City of Work: ${stripUrlsAndEmailsForTelegram(location)}${deadlineCaptionLine}
+
+Full vacancy details are inside our website. Tap Apply Now below.`;
       if (!aiResult) {
         aiResult = {
           description: `${organization} is inviting qualified and motivated candidates to apply for the position of ${title} based in ${location}.
@@ -11721,20 +11875,12 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
             "Attention to Detail"
           ],
           applicationInstructions: "Interested and qualified candidates should submit their updated CV, application letter, and supporting educational and work experience credentials through the official employer channel before the closing date.",
-          telegramCaption: `\u{1F3E2} Employer: ${stripUrlsAndEmailsForTelegram(organization)}
-\u{1F4BC} Position: ${stripUrlsAndEmailsForTelegram(title)}
-\u{1F4CD} City of Work: ${stripUrlsAndEmailsForTelegram(location)}
-
-Full vacancy details are inside our website. Tap Apply Now below.`
+          telegramCaption: defaultTelegramCaption
         };
       } else if (aiResult.telegramCaption) {
         const cleanedCap = stripUrlsAndEmailsForTelegram(aiResult.telegramCaption);
         const capCheck = validateTelegramPostContentStrict(cleanedCap);
-        aiResult.telegramCaption = capCheck.safe ? cleanedCap : `\u{1F3E2} Employer: ${stripUrlsAndEmailsForTelegram(organization)}
-\u{1F4BC} Position: ${stripUrlsAndEmailsForTelegram(title)}
-\u{1F4CD} City of Work: ${stripUrlsAndEmailsForTelegram(location)}
-
-Full vacancy details are inside our website. Tap Apply Now below.`;
+        aiResult.telegramCaption = capCheck.safe ? cleanedCap : defaultTelegramCaption;
       }
       res.json({
         ...aiResult,

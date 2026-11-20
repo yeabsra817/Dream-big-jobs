@@ -205,15 +205,17 @@ export const BulkImportSystem: React.FC<Props> = ({
 
       setProcessingStep(`Publishing ${validList.length} verified vacancies to website categories & broadcasting to Telegram...`);
 
-      // Step 3: Prepare and publish
+      // Step 3: Save to website database & server catalog FIRST so Telegram links resolve immediately
       let toPublish = validList.map((v) => ({
         ...v,
         status: 'published' as const,
         publishedAt: new Date().toISOString(),
       }));
+      await onPublishVacancies(toPublish);
 
-      // Broadcast to Telegram (enforcing active distributionMode + pre-publish gatekeeper)
+      // Step 4: Broadcast to Telegram (enforcing active distributionMode + pre-publish gatekeeper)
       let telegramNote = '';
+      let telegramMetaUpdated = false;
       try {
         const channel = siteSettings?.telegramChannelName || '@DreamBigJobsEthiopia';
         const effectiveSettings = { ...siteSettings, telegramDistributionMode: telegramOption };
@@ -235,6 +237,7 @@ export const BulkImportSystem: React.FC<Props> = ({
           toPublish = toPublish.map((vac) => {
             const resItem = resultMap.get(vac.id);
             if (resItem?.status === 'success') {
+              telegramMetaUpdated = true;
               return {
                 ...vac,
                 telegramPublished: true,
@@ -255,8 +258,10 @@ export const BulkImportSystem: React.FC<Props> = ({
         console.warn('Telegram broadcast notice:', tgErr);
       }
 
-      // Save to database
-      await onPublishVacancies(toPublish);
+      // Persist Telegram message IDs & status back to database
+      if (telegramMetaUpdated) {
+        await onPublishVacancies(toPublish);
+      }
 
       // Clear form
       setRawText('');
@@ -450,8 +455,11 @@ export const BulkImportSystem: React.FC<Props> = ({
     setIsSaving(true);
     try {
       let finalToPublish = [...toPublish];
+      // Persist to website database & server catalog FIRST so Telegram links always open the exact posted job
+      await onPublishVacancies(finalToPublish);
 
       // Automatically publish to Telegram channel if enabled (enforcing distributionMode)
+      let telegramMetaUpdated = false;
       if (siteSettings?.telegramAutoPublish) {
         try {
           const channel = siteSettings.telegramChannelName || '@DreamBigJobsEthiopia';
@@ -474,6 +482,7 @@ export const BulkImportSystem: React.FC<Props> = ({
             finalToPublish = finalToPublish.map((vac) => {
               const resItem = resultMap.get(vac.id);
               if (resItem?.status === 'success') {
+                telegramMetaUpdated = true;
                 return {
                   ...vac,
                   telegramPublished: true,
@@ -481,6 +490,7 @@ export const BulkImportSystem: React.FC<Props> = ({
                   telegramPublishedAt: resItem.telegramPublishedAt,
                 };
               } else if (resItem?.status === 'failed') {
+                telegramMetaUpdated = true;
                 return {
                   ...vac,
                   telegramPublished: false,
@@ -495,7 +505,9 @@ export const BulkImportSystem: React.FC<Props> = ({
         }
       }
 
-      await onPublishVacancies(finalToPublish);
+      if (telegramMetaUpdated) {
+        await onPublishVacancies(finalToPublish);
+      }
       // Remove published from pending list
       setExtractedVacancies((prev) => prev.filter((v) => !selectedIds.has(v.id)));
       setSelectedIds(new Set());

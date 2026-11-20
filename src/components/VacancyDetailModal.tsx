@@ -410,6 +410,26 @@ ${currentUrl}`;
                   </>
                 )}
               </div>
+
+              {(vacancy.status === 'expired' || vacancy.status === 'archived' || daysInfo.expired) && (
+                <div className="mt-4 w-full max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-extrabold text-amber-900">
+                      Application Deadline Closed ({deadlineDisplay})
+                    </p>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      You can still review the full details of this vacancy below, or browse currently open jobs on HopelandJobs.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-900 text-white text-[11px] font-bold hover:bg-amber-800 transition-colors cursor-pointer"
+                  >
+                    Open Jobs
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Structured Key Metadata Rows (Matching Reference Layout) */}

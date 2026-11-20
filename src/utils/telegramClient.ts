@@ -549,14 +549,30 @@ function isMeaningfulClientField(val?: string | null): boolean {
  */
 export function normalizeWebsiteDomain(domainOrUrl?: string): string {
   const raw = (domainOrUrl || '').trim();
-  if (!raw || raw.toLowerCase() === 'healmorin.com' || raw.toLowerCase() === 'hopelandjobs.tech') {
+  if (!raw) {
     return 'https://www.hopelandjobs.tech';
   }
-  const clean = raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  if (!clean || clean.toLowerCase() === 'hopelandjobs.tech') {
+  const cleanHost = raw
+    .replace(/^https?:\/\//i, '')
+    .split(/[/?#]/)[0]
+    .trim()
+    .toLowerCase();
+  if (
+    !cleanHost ||
+    cleanHost === 'healmorin.com' ||
+    cleanHost === 'www.healmorin.com' ||
+    cleanHost === 'hopelandjobs.tech' ||
+    cleanHost === 'www.hopelandjobs.tech' ||
+    cleanHost.startsWith('localhost') ||
+    cleanHost.startsWith('127.0.0.1') ||
+    cleanHost.includes('ais-dev-') ||
+    cleanHost.includes('ais-pre-') ||
+    cleanHost.endsWith('.run.app') ||
+    cleanHost.endsWith('.usercontent.goog')
+  ) {
     return 'https://www.hopelandjobs.tech';
   }
-  return `https://${clean}`;
+  return `https://${cleanHost}`;
 }
 
 export function buildTelegramVacancyUrl(
@@ -564,9 +580,11 @@ export function buildTelegramVacancyUrl(
   vacancy: any,
   includeApplyAction = true
 ): string {
-  const safeId = encodeURIComponent(String(vacancy?.id || '').trim() || 'latest');
+  const cleanBase = normalizeWebsiteDomain(baseUrl).replace(/\/+$/, '');
+  const rawId = String(vacancy?.id || '').trim();
+  const safeId = encodeURIComponent(rawId || 'latest');
   const applyParam = includeApplyAction ? 'apply=1&' : '';
-  return `${baseUrl}/jobs/${safeId}?${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  return `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
 }
 
 function stripUrlsAndEmailsClient(text: string): string {
@@ -582,6 +600,22 @@ function stripUrlsAndEmailsClient(text: string): string {
     .trim();
 }
 
+function formatDeadlineForTelegramClient(rawDeadline?: string | null): string {
+  const clean = stripUrlsAndEmailsClient(rawDeadline || '');
+  if (!clean || !isMeaningfulClientField(clean)) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+    const parsed = new Date(clean);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+  }
+  return truncateTextClient(clean, 80);
+}
+
 export function buildTelegramJobHtml(
   vacancy: any,
   _customDomainOrUrl = 'www.hopelandjobs.tech',
@@ -595,6 +629,7 @@ export function buildTelegramJobHtml(
   const cleanCity = isMeaningfulClientField(vacancy?.location)
     ? stripUrlsAndEmailsClient(vacancy.location)
     : '';
+  const cleanDeadline = formatDeadlineForTelegramClient(vacancy?.applicationDeadline);
 
   const orgName = escapeHtml(truncateTextClient(cleanOrg, 140));
   const positionTitle = escapeHtml(truncateTextClient(cleanTitle, 180));
@@ -610,6 +645,9 @@ export function buildTelegramJobHtml(
   }
   if (cleanCity) {
     lines.push(`📍 <b>City of Work:</b> ${escapeHtml(truncateTextClient(cleanCity, 100))}`);
+  }
+  if (cleanDeadline) {
+    lines.push(`📅 <b>Deadline:</b> ${escapeHtml(cleanDeadline)}`);
   }
 
   return `${washPrefix}${lines.join('\n')}\n\nFull vacancy details are inside our website. Tap <b>Apply Now</b> below.`;
@@ -628,6 +666,7 @@ export function buildTelegramJobPlainText(
   const cleanCity = isMeaningfulClientField(vacancy?.location)
     ? stripUrlsAndEmailsClient(vacancy.location)
     : '';
+  const cleanDeadline = formatDeadlineForTelegramClient(vacancy?.applicationDeadline);
 
   const orgName = truncateTextClient(cleanOrg, 140);
   const positionTitle = truncateTextClient(cleanTitle, 180);
@@ -643,6 +682,9 @@ export function buildTelegramJobPlainText(
   }
   if (cleanCity) {
     lines.push(`City of Work: ${truncateTextClient(cleanCity, 100)}`);
+  }
+  if (cleanDeadline) {
+    lines.push(`Deadline: ${cleanDeadline}`);
   }
 
   return `${washPrefix}${lines.join('\n')}\n\nFull vacancy details are inside our website. Tap Apply Now below.`;

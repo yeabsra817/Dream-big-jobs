@@ -2647,19 +2647,61 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   });
 
   app.get('/api/vacancies/:id', (req: Request, res: Response): void => {
-    const rawId = decodeURIComponent(String(req.params.id || '')).trim();
+    const rawParam = String(req.params.id || '');
+    let decoded = rawParam;
+    try {
+      decoded = decodeURIComponent(rawParam);
+    } catch {}
+    const rawId = decoded.trim().replace(/[.,;!?)\]]+$/, '');
     if (!rawId) {
       res.status(400).json({ error: 'Vacancy ID is required' });
       return;
     }
+    const lowerId = rawId.toLowerCase();
     const list = loadVacanciesCatalog();
-    const found = list.find(
+    // Allow published, expired, and archived vacancies to resolve when opened from a Telegram link (exclude draft & duplicate)
+    let found = list.find(
       (v: any) =>
         v &&
-        v.status === 'published' &&
+        v.status !== 'draft' &&
+        v.status !== 'duplicate' &&
         hasValidVacancyDeadline(v) &&
-        (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
+        (String(v.id) === rawId || String(v.id).toLowerCase() === lowerId)
     );
+
+    // Fallback: check Telegram published records & queue snapshots so any Telegram-broadcast job always resolves
+    if (!found) {
+      try {
+        const tgQueuePath = path.join(DATA_DIR, 'telegram_queue.json');
+        const tgStore = loadJsonFileSafe<any>(tgQueuePath, null);
+        if (tgStore) {
+          const recMap = tgStore.publishedRecords || {};
+          const matchedRecKey = Object.keys(recMap).find(
+            (k) => k === rawId || k.toLowerCase() === lowerId
+          );
+          const snap = matchedRecKey ? recMap[matchedRecKey]?.vacancySnapshot : null;
+          if (snap && snap.status !== 'draft' && snap.status !== 'duplicate' && hasValidVacancyDeadline(snap)) {
+            found = snap;
+          }
+          if (!found && Array.isArray(tgStore?.queueState?.items)) {
+            const qItem = tgStore.queueState.items.find(
+              (it: any) =>
+                it?.vacancy &&
+                (String(it.vacancyId) === rawId || String(it.vacancyId || '').toLowerCase() === lowerId)
+            );
+            if (
+              qItem?.vacancy &&
+              qItem.vacancy.status !== 'draft' &&
+              qItem.vacancy.status !== 'duplicate' &&
+              hasValidVacancyDeadline(qItem.vacancy)
+            ) {
+              found = qItem.vacancy;
+            }
+          }
+        }
+      } catch {}
+    }
+
     if (!found) {
       res.status(404).json({ error: 'Vacancy not found' });
       return;

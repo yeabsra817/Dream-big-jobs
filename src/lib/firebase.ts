@@ -448,30 +448,59 @@ export async function fetchPublishedVacanciesFromServerFast(): Promise<Vacancy[]
 export async function fetchPublishedVacancies(): Promise<Vacancy[]> {
   const path = 'vacancies';
   const cached = getCachedPublishedVacancies();
+  const mergeVacancyLists = (primary: Vacancy[], secondary: Vacancy[]): Vacancy[] => {
+    const map = new Map<string, Vacancy>();
+    const put = (item: Vacancy) => {
+      if (!item?.id || !hasValidVacancyDeadline(item)) return;
+      const existing = map.get(item.id);
+      if (!existing) {
+        map.set(item.id, item);
+        return;
+      }
+      const prevTs = new Date(existing.updatedAt || existing.publishedAt || existing.createdAt || 0).getTime();
+      const nextTs = new Date(item.updatedAt || item.publishedAt || item.createdAt || 0).getTime();
+      if (nextTs >= prevTs) {
+        map.set(item.id, { ...existing, ...item });
+      }
+    };
+    secondary.forEach(put);
+    primary.forEach(put);
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        new Date(b.publishedAt || b.createdAt || 0).getTime() -
+        new Date(a.publishedAt || a.createdAt || 0).getTime()
+    );
+  };
+
   try {
     const q = query(collection(db, path), where('status', '==', 'published'));
-    const snapshot = await withTimeout(getDocs(q), 4500, null as any);
-    if (!snapshot) {
-      if (cached.length > 0) return cached;
-      return await fetchPublishedVacanciesFromServerFast();
+    const [fsRes, srvRes] = await Promise.allSettled([
+      withTimeout(getDocs(q), 4500, null as any),
+      fetchPublishedVacanciesFromServerFast(),
+    ]);
+
+    const firestoreList: Vacancy[] = [];
+    if (fsRes.status === 'fulfilled' && fsRes.value) {
+      fsRes.value.forEach((d: any) => {
+        const item = { ...(d.data() as Vacancy), id: d.id };
+        if (hasValidVacancyDeadline(item)) {
+          firestoreList.push(item);
+        }
+      });
+    } else if (fsRes.status === 'rejected' && isPermissionError(fsRes.reason)) {
+      handleFirestoreError(fsRes.reason, OperationType.LIST, path);
     }
-    const list: Vacancy[] = [];
-    snapshot.forEach((d: any) => {
-      const item = { ...(d.data() as Vacancy), id: d.id };
-      if (hasValidVacancyDeadline(item)) {
-        list.push(item);
-      }
-    });
-    // Sort in memory by publishedAt descending
-    list.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
-    if (list.length > 0) {
+
+    const serverList: Vacancy[] = srvRes.status === 'fulfilled' && Array.isArray(srvRes.value) ? srvRes.value : [];
+    const merged = mergeVacancyLists(firestoreList, serverList);
+
+    if (merged.length > 0) {
       try {
-        localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(list));
+        localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(merged));
       } catch {}
-      return list;
+      return merged;
     }
-    const serverFallback = await fetchPublishedVacanciesFromServerFast();
-    return serverFallback.length > 0 ? serverFallback : cached;
+    return cached;
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.LIST, path);
@@ -483,39 +512,68 @@ export async function fetchPublishedVacancies(): Promise<Vacancy[]> {
 }
 
 export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
-  const cleanId = String(id || '').trim();
+  const cleanId = String(id || '').trim().replace(/[.,;!?)\]]+$/, '');
   if (!cleanId) return null;
+  const lowerId = cleanId.toLowerCase();
+
+  const isDisplayableVacancy = (v: any): v is Vacancy =>
+    Boolean(
+      v &&
+        v.id &&
+        v.status !== 'draft' &&
+        v.status !== 'duplicate' &&
+        hasValidVacancyDeadline(v)
+    );
+
   const cached = getCachedPublishedVacancies();
   const cachedMatch = cached.find(
-    (v) => (v.id === cleanId || v.id.toLowerCase() === cleanId.toLowerCase()) && hasValidVacancyDeadline(v)
+    (v) => (v.id === cleanId || v.id.toLowerCase() === lowerId) && isDisplayableVacancy(v)
   );
   if (cachedMatch) return cachedMatch;
 
-  // Race fast same-origin server RAM cache AND direct Firestore getDoc simultaneously
+  // Also check admin/local vacancy cache if present
+  try {
+    const rawAll = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
+    if (rawAll) {
+      const parsedAll: Vacancy[] = JSON.parse(rawAll);
+      if (Array.isArray(parsedAll)) {
+        const localMatch = parsedAll.find(
+          (v) => (v.id === cleanId || v.id.toLowerCase() === lowerId) && isDisplayableVacancy(v)
+        );
+        if (localMatch) return localMatch;
+      }
+    }
+  } catch {}
+
+  // Race fast same-origin server catalog/snapshot lookup AND direct Firestore getDoc simultaneously
   const fromServer = (async (): Promise<Vacancy> => {
     const res = await fetch(`/api/vacancies/${encodeURIComponent(cleanId)}`, {
       headers: { Accept: 'application/json' },
     });
     if (!res.ok) throw new Error('server_miss');
     const data = await res.json();
-    if (data?.vacancy?.id && hasValidVacancyDeadline(data.vacancy)) return data.vacancy as Vacancy;
+    if (isDisplayableVacancy(data?.vacancy)) return data.vacancy as Vacancy;
     throw new Error('server_empty');
   })();
 
   const fromFirestore = (async (): Promise<Vacancy> => {
-    const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4000, null as any);
-    if (snap && snap.exists()) {
-      const data = snap.data() as Vacancy;
-      if (data?.status === 'published' && hasValidVacancyDeadline(data)) {
-        return { ...data, id: snap.id };
+    try {
+      const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4500, null as any);
+      if (snap && snap.exists()) {
+        const data = { ...(snap.data() as Vacancy), id: snap.id };
+        if (isDisplayableVacancy(data)) {
+          return data;
+        }
       }
+    } catch {
+      // Ignore Firestore permission errors for archived/expired docs so server response can win
     }
     throw new Error('firestore_miss');
   })();
 
   try {
     const winner = await Promise.any([fromServer, fromFirestore]);
-    if (winner && hasValidVacancyDeadline(winner)) {
+    if (isDisplayableVacancy(winner)) {
       saveVacancyToLocalCache(winner);
       return winner;
     }
