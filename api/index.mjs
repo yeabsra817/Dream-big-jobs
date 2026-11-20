@@ -1978,7 +1978,126 @@ function validateTelegramPostContentStrict(plainText) {
   };
 }
 
+// firebase-applet-config.json
+var firebase_applet_config_default = {
+  projectId: "gen-lang-client-0056760370",
+  appId: "1:2600605948:web:9ef2fb0809b1145fb85f79",
+  apiKey: "AIzaSyCrc3pXWkhLB-qN5Nf6Hgx3dnmGklcI6K8",
+  authDomain: "gen-lang-client-0056760370.firebaseapp.com",
+  firestoreDatabaseId: "ai-studio-dreambigjobs-b797042c-4a25-436e-8ecd-223397ea813f",
+  storageBucket: "gen-lang-client-0056760370.firebasestorage.app",
+  messagingSenderId: "2600605948",
+  measurementId: "",
+  oAuthClientId: "2600605948-kcj24obqiaf0m5sq8mjs0kv85t8dmjgm.apps.googleusercontent.com",
+  recaptchaSiteKey: ""
+};
+
 // serverUserEngine.ts
+function decodeFirestoreRestValue(val) {
+  if (!val || typeof val !== "object") return void 0;
+  if ("stringValue" in val) return String(val.stringValue);
+  if ("integerValue" in val) return Number(val.integerValue);
+  if ("doubleValue" in val) return Number(val.doubleValue);
+  if ("booleanValue" in val) return Boolean(val.booleanValue);
+  if ("nullValue" in val) return null;
+  if ("timestampValue" in val) return String(val.timestampValue);
+  if ("arrayValue" in val) {
+    const arr = Array.isArray(val.arrayValue?.values) ? val.arrayValue.values : [];
+    return arr.map((item) => decodeFirestoreRestValue(item)).filter((x) => x !== void 0);
+  }
+  if ("mapValue" in val) {
+    const fields = val.mapValue?.fields || {};
+    const out = {};
+    for (const [k, v] of Object.entries(fields)) {
+      const decoded = decodeFirestoreRestValue(v);
+      if (decoded !== void 0) out[k] = decoded;
+    }
+    return out;
+  }
+  return void 0;
+}
+function decodeFirestoreRestDocument(docObj) {
+  if (!docObj || typeof docObj !== "object" || !docObj.fields) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(docObj.fields)) {
+    const decoded = decodeFirestoreRestValue(v);
+    if (decoded !== void 0) out[k] = decoded;
+  }
+  if (!out.id && typeof docObj.name === "string") {
+    const parts = docObj.name.split("/");
+    out.id = parts[parts.length - 1];
+  }
+  return out.id ? out : null;
+}
+async function fetchVacancyFromFirestoreRest(vacancyId) {
+  const projectId = String(firebase_applet_config_default?.projectId || "").trim();
+  const databaseId = String(firebase_applet_config_default?.firestoreDatabaseId || "(default)").trim();
+  const apiKey = String(firebase_applet_config_default?.apiKey || "").trim();
+  if (!projectId || !vacancyId) return null;
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/${encodeURIComponent(databaseId)}/documents/vacancies/${encodeURIComponent(
+    vacancyId
+  )}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ""}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(4500)
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const decoded = decodeFirestoreRestDocument(json);
+    if (decoded && decoded.status !== "draft" && decoded.status !== "duplicate" && hasValidVacancyDeadline(decoded)) {
+      return decoded;
+    }
+  } catch {
+  }
+  return null;
+}
+async function fetchPublishedVacanciesFromFirestoreRest() {
+  const projectId = String(firebase_applet_config_default?.projectId || "").trim();
+  const databaseId = String(firebase_applet_config_default?.firestoreDatabaseId || "(default)").trim();
+  const apiKey = String(firebase_applet_config_default?.apiKey || "").trim();
+  if (!projectId) return [];
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/${encodeURIComponent(databaseId)}/documents:runQuery${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ""}`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "vacancies" }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: "status" },
+              op: "EQUAL",
+              value: { stringValue: "published" }
+            }
+          },
+          limit: 300
+        }
+      }),
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    const out = [];
+    for (const row of rows) {
+      if (row?.document) {
+        const decoded = decodeFirestoreRestDocument(row.document);
+        if (decoded && decoded.status === "published" && hasValidVacancyDeadline(decoded)) {
+          out.push(decoded);
+        }
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 function registerUserNotificationAndAnalyticsRoutes(ctx) {
   const {
     app,
@@ -2144,7 +2263,9 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
     } catch {
     }
     if (vacanciesCatalogMemCache) return vacanciesCatalogMemCache;
-    const rawList = loadJsonFileSafe(VACANCIES_CATALOG_FILE, []);
+    const bundledSeedPath = path.join(process.cwd(), "data", "vacancies_catalog.json");
+    const sourcePath = fs.existsSync(VACANCIES_CATALOG_FILE) ? VACANCIES_CATALOG_FILE : fs.existsSync(bundledSeedPath) ? bundledSeedPath : VACANCIES_CATALOG_FILE;
+    const rawList = loadJsonFileSafe(sourcePath, []);
     const { withDeadline } = partitionVacanciesByDeadline(Array.isArray(rawList) ? rawList : []);
     vacanciesCatalogMemCache = withDeadline;
     return vacanciesCatalogMemCache;
@@ -4015,14 +4136,25 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       syncedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
   });
-  app.get("/api/vacancies", (_req, res) => {
-    const list = loadVacanciesCatalog().filter((v) => v && v.status === "published" && hasValidVacancyDeadline(v)).sort(
+  app.get("/api/vacancies", async (_req, res) => {
+    let list = loadVacanciesCatalog().filter((v) => v && v.status === "published" && hasValidVacancyDeadline(v));
+    if (list.length === 0) {
+      const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
+      if (cloudList.length > 0) {
+        list = cloudList;
+        try {
+          saveVacanciesCatalog(cloudList);
+        } catch {
+        }
+      }
+    }
+    list = list.sort(
       (a, b) => new Date(b.publishedAt || b.createdAt || 0).getTime() - new Date(a.publishedAt || a.createdAt || 0).getTime()
     );
     res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=60");
     res.json({ success: true, total: list.length, vacancies: list });
   });
-  app.get("/api/vacancies/:id", (req, res) => {
+  app.get("/api/vacancies/:id", async (req, res) => {
     const rawParam = String(req.params.id || "");
     let decoded = rawParam;
     try {
@@ -4062,6 +4194,20 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
           }
         }
       } catch {
+      }
+    }
+    if (!found) {
+      const cloudVacancy = await fetchVacancyFromFirestoreRest(rawId);
+      if (cloudVacancy) {
+        found = cloudVacancy;
+        try {
+          const nextCatalog = [
+            cloudVacancy,
+            ...list.filter((v) => String(v?.id || "") !== String(cloudVacancy.id))
+          ];
+          saveVacanciesCatalog(nextCatalog);
+        } catch {
+        }
       }
     }
     if (!found) {
@@ -5222,6 +5368,83 @@ ${rows.join("\n")}`;
       pendingQueue: loadNotificationQueue().filter((q) => q.status === "pending").length
     })
   };
+}
+
+// src/utils/telegramSnapshot.ts
+function clip(val, maxLen) {
+  const s = String(val ?? "").trim();
+  if (!s) return void 0;
+  return s.length <= maxLen ? s : `${s.slice(0, Math.max(0, maxLen - 1)).trim()}\u2026`;
+}
+function toBase64UrlUtf8(str) {
+  if (typeof Buffer !== "undefined" && typeof Buffer.from === "function") {
+    return Buffer.from(str, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function encodeTelegramVacancySnapshot(vacancy, maxEncodedLength = 1450) {
+  if (!vacancy || typeof vacancy !== "object") return null;
+  const id = String(vacancy.id || "").trim();
+  const title = clip(vacancy.title, 140);
+  const organization = clip(vacancy.organization, 120);
+  const deadline = clip(vacancy.applicationDeadline, 80);
+  if (!id || !title || !organization || !deadline) return null;
+  const tiers = [
+    { descMax: 360, instrMax: 240, respCount: 4, respMax: 90, skillCount: 6 },
+    { descMax: 200, instrMax: 160, respCount: 2, respMax: 75, skillCount: 4 },
+    { descMax: 120, instrMax: 120, respCount: 0, respMax: 0, skillCount: 3 },
+    { descMax: 0, instrMax: 100, respCount: 0, respMax: 0, skillCount: 0 }
+  ];
+  for (const tier of tiers) {
+    const payload = {
+      i: id,
+      t: title,
+      o: organization,
+      d: deadline,
+      ...clip(vacancy.category, 60) ? { c: clip(vacancy.category, 60) } : {},
+      ...clip(vacancy.location, 80) ? { l: clip(vacancy.location, 80) } : {},
+      ...clip(vacancy.employmentType, 30) ? { e: clip(vacancy.employmentType, 30) } : {},
+      ...clip(vacancy.salary, 70) ? { s: clip(vacancy.salary, 70) } : {},
+      ...clip(vacancy.educationQualification, 120) ? { q: clip(vacancy.educationQualification, 120) } : {},
+      ...clip(vacancy.requiredFieldOfStudy, 100) ? { f: clip(vacancy.requiredFieldOfStudy, 100) } : {},
+      ...clip(vacancy.experienceYears, 60) ? { x: clip(vacancy.experienceYears, 60) } : {},
+      ...clip(vacancy.applicationMethod, 60) ? { m: clip(vacancy.applicationMethod, 60) } : {},
+      ...clip(vacancy.applicationUrl, 240) ? { u: clip(vacancy.applicationUrl, 240) } : {},
+      ...clip(vacancy.applicationEmail, 100) ? { a: clip(vacancy.applicationEmail, 100) } : {},
+      ...clip(vacancy.contactInfo, 140) ? { n: clip(vacancy.contactInfo, 140) } : {},
+      ...clip(vacancy.publishedAt, 40) ? { g: clip(vacancy.publishedAt, 40) } : {}
+    };
+    if (tier.descMax > 0) {
+      const b = clip(vacancy.description, tier.descMax);
+      if (b) payload.b = b;
+    }
+    if (tier.instrMax > 0) {
+      const p = clip(vacancy.applicationInstructions, tier.instrMax);
+      if (p) payload.p = p;
+    }
+    if (tier.skillCount > 0 && Array.isArray(vacancy.requiredSkills)) {
+      const skills = vacancy.requiredSkills.map((sk) => clip(sk, 40)).filter(Boolean).slice(0, tier.skillCount);
+      if (skills.length > 0) payload.k = skills;
+    }
+    if (tier.respCount > 0 && Array.isArray(vacancy.responsibilities)) {
+      const resps = vacancy.responsibilities.map((rp) => clip(rp, tier.respMax)).filter(Boolean).slice(0, tier.respCount);
+      if (resps.length > 0) payload.r = resps;
+    }
+    try {
+      const encoded = `j.${toBase64UrlUtf8(JSON.stringify(payload))}`;
+      if (encoded.length <= maxEncodedLength) {
+        return encoded;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 // serverApp.ts
@@ -8342,7 +8565,15 @@ ${text}`;
     const rawId = String(vacancy?.id || "").trim();
     const safeId = encodeURIComponent(rawId || "latest");
     const applyParam = includeApplyAction ? "apply=1&" : "";
-    return `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+    const baseLink = `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+    const remainingBudget = Math.max(0, 1850 - baseLink.length - 3);
+    if (remainingBudget >= 280) {
+      const encodedSnap = encodeTelegramVacancySnapshot(vacancy, Math.min(1450, remainingBudget));
+      if (encodedSnap) {
+        return `${baseLink}&v=${encodedSnap}`;
+      }
+    }
+    return baseLink;
   }
   function resolveVacancyImageUrl(vacancy) {
     const candidates = [vacancy?.imageUrl, vacancy?.organizationLogo, vacancy?.bannerUrl, vacancy?.posterUrl];

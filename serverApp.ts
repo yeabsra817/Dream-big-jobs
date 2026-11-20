@@ -10,6 +10,7 @@ import {
   validateTelegramPostContentStrict,
   validateVacancyStrict,
 } from './src/utils/vacancyValidator';
+import { encodeTelegramVacancySnapshot } from './src/utils/telegramSnapshot';
 
 const Type = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -3834,7 +3835,15 @@ function buildTelegramVacancyUrl(baseUrl: string, vacancy: any, includeApplyActi
   const rawId = String(vacancy?.id || '').trim();
   const safeId = encodeURIComponent(rawId || 'latest');
   const applyParam = includeApplyAction ? 'apply=1&' : '';
-  return `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const baseLink = `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const remainingBudget = Math.max(0, 1850 - baseLink.length - 3);
+  if (remainingBudget >= 280) {
+    const encodedSnap = encodeTelegramVacancySnapshot(vacancy, Math.min(1450, remainingBudget));
+    if (encodedSnap) {
+      return `${baseLink}&v=${encodedSnap}`;
+    }
+  }
+  return baseLink;
 }
 
 function resolveVacancyImageUrl(vacancy: any): string | null {

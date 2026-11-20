@@ -54,8 +54,18 @@ import { InternationalControlCenter } from './InternationalControlCenter';
 import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
-import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
-import { signInWithPopup } from 'firebase/auth';
+import {
+  auth,
+  googleProvider,
+  ADMIN_EMAIL,
+  ADMIN_EMAILS,
+  safeResponseJson,
+  isUserAdmin,
+  signInWithGoogleResilient,
+  establishDeveloperGoogleSession,
+  syncLocalVacanciesToFirestoreCloud,
+} from '../../lib/firebase';
+import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
 import { AppBrandLogo } from '../AppBrandLogo';
 
@@ -172,6 +182,52 @@ export const AdminDashboard: React.FC<Props> = ({
   const [isCloudStatusModalOpen, setIsCloudStatusModalOpen] = useState(false);
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const [cloudSyncFeedback, setCloudSyncFeedback] = useState<string | null>(null);
+
+  // Reactive Firebase Google Auth status (Developer Password alone does not authenticate Firestore writes)
+  const [isFirebaseGoogleConnected, setIsFirebaseGoogleConnected] = useState<boolean>(() =>
+    Boolean(auth.currentUser && isUserAdmin(auth.currentUser))
+  );
+  const [isConnectingGoogleSync, setIsConnectingGoogleSync] = useState(false);
+  const [googleSyncBannerMsg, setGoogleSyncBannerMsg] = useState<string | null>(null);
+  const [googleSyncBannerError, setGoogleSyncBannerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setIsFirebaseGoogleConnected(Boolean(user && isUserAdmin(user)));
+    });
+    return () => unsub();
+  }, []);
+
+  const handleConnectGoogleCloudSync = async () => {
+    setIsConnectingGoogleSync(true);
+    setGoogleSyncBannerError(null);
+    setGoogleSyncBannerMsg(null);
+    try {
+      const result = await signInWithGoogleResilient(googleProvider);
+      if (!result) {
+        return;
+      }
+      if (!isUserAdmin(result.user)) {
+        setGoogleSyncBannerError(
+          `Signed in as ${result.user.email || 'another account'}, which is not an authorized Admin account. Please choose ${ADMIN_EMAIL}.`
+        );
+        return;
+      }
+      const ownerEmail = result.user.email || ADMIN_EMAIL;
+      await establishDeveloperGoogleSession(ownerEmail).catch(() => {});
+      setIsFirebaseGoogleConnected(true);
+      const { synced } = await syncLocalVacanciesToFirestoreCloud(vacancies);
+      setGoogleSyncBannerMsg(
+        synced > 0
+          ? `Connected to Cloud Database & synced ${synced} vacancies so every user's phone opens your links immediately.`
+          : `Connected to Cloud Database! All vacancies now sync globally to every user's phone.`
+      );
+    } catch (err: any) {
+      setGoogleSyncBannerError(err?.message || 'Google Cloud sign-in was cancelled or blocked.');
+    } finally {
+      setIsConnectingGoogleSync(false);
+    }
+  };
 
   const handleQuickSaveDomain = async (domainToSave: string) => {
     setIsSavingDomain(true);
@@ -597,6 +653,53 @@ export const AdminDashboard: React.FC<Props> = ({
 
       {/* Main Tab Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+        {!isFirebaseGoogleConnected && (
+          <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-extrabold text-amber-950">
+                    Developer Password Mode (Local Browser Only) — Connect Google Cloud Sync
+                  </h3>
+                  <p className="text-xs text-amber-900 mt-1 leading-relaxed">
+                    You signed in with Developer Password without Google Auth. Jobs and settings saved in this mode stay on your device until you connect your authorized Google account ({ADMIN_EMAIL}). Tap the button to sync all {vacancies.length} vacancies to the global Cloud Database so every user&apos;s phone opens them.
+                  </p>
+                  {googleSyncBannerError && (
+                    <p className="text-xs font-bold text-rose-700 mt-2">{googleSyncBannerError}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleConnectGoogleCloudSync}
+                disabled={isConnectingGoogleSync}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold whitespace-nowrap shadow-sm transition-colors disabled:opacity-60"
+              >
+                <Cloud className="w-4 h-4" />
+                <span>{isConnectingGoogleSync ? 'Connecting & Syncing...' : 'Connect Google Cloud Sync'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {googleSyncBannerMsg && (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center justify-between gap-3 text-emerald-900 text-xs sm:text-sm font-semibold">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{googleSyncBannerMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGoogleSyncBannerMsg(null)}
+              className="text-emerald-700 hover:text-emerald-950 p-1"
+              aria-label="Dismiss cloud sync message"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {activeTab === 'bulk' && (
           <BulkImportSystem
             existingVacancies={vacancies}

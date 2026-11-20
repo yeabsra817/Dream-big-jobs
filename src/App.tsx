@@ -99,6 +99,7 @@ import {
   establishDeveloperGoogleSession,
   logoutDeveloperSession,
   fetchInternationalStateFromServer,
+  syncLocalVacanciesToFirestoreCloud,
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
@@ -110,6 +111,7 @@ import {
 import { resolveSiteContent } from './utils/siteContentDefaults';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
+import { decodeTelegramVacancySnapshot } from './utils/telegramSnapshot';
 import { Navbar } from './components/Navbar';
 import { CategoryCard } from './components/CategoryCard';
 import { CategoryIcon } from './components/CategoryIcon';
@@ -515,7 +517,9 @@ export default function App() {
         }
       }
       const cleanedTarget = (rawParamId || pathId).trim().replace(/[.,;!?)\]]+$/, '');
-      deepLinkTargetId = cleanedTarget && cleanedTarget.toLowerCase() !== 'latest' ? cleanedTarget : undefined;
+      const embeddedSnapshotVacancy = decodeTelegramVacancySnapshot(urlParams.get('v'));
+      const resolvedUrlId = cleanedTarget && cleanedTarget.toLowerCase() !== 'latest' ? cleanedTarget : undefined;
+      deepLinkTargetId = resolvedUrlId || embeddedSnapshotVacancy?.id;
       deepLinkArrivedFromTelegram = urlParams.get('utm_source') === 'telegram';
       deepLinkApplyAction =
         urlParams.get('apply') === '1' ||
@@ -523,38 +527,47 @@ export default function App() {
         deepLinkArrivedFromTelegram;
 
       if (deepLinkTargetId) {
-        let deepLinkFound = false;
+        let deepLinkOpened = false;
+        let deepLinkFoundFromDb = false;
+        let deepLinkAnalyticsTracked = false;
         let singleFetchDone = false;
         let catalogLoadDone = false;
 
-        const openResolvedDeepLink = (found: Vacancy) => {
-          if (deepLinkFound) return;
-          deepLinkFound = true;
+        const openResolvedDeepLink = (found: Vacancy, options?: { isSnapshotFallback?: boolean }) => {
+          if (deepLinkFoundFromDb) return;
+          if (!options?.isSnapshotFallback) {
+            deepLinkFoundFromDb = true;
+          }
+          deepLinkOpened = true;
           setIsResolvingDeepLink(false);
           setDeepLinkNotFoundNotice(null);
-          setSelectedVacancy((prev) => prev || found);
+          // If live DB record arrives after an instant snapshot preview, seamlessly upgrade with the full record
+          setSelectedVacancy((prev) => (!prev || !options?.isSnapshotFallback ? found : prev));
           setIsTelegramApplyArrival(deepLinkApplyAction);
           document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
-          trackAnalyticsEvent('vacancy_view', {
-            jobId: found.id,
-            jobTitle: found.title,
-            organization: found.organization,
-            category: found.category,
-            path: `/jobs/${encodeURIComponent(found.id)}`,
-          });
-          if (deepLinkArrivedFromTelegram) {
-            trackAnalyticsEvent('click_telegram_link', {
+          if (!deepLinkAnalyticsTracked) {
+            deepLinkAnalyticsTracked = true;
+            trackAnalyticsEvent('vacancy_view', {
               jobId: found.id,
               jobTitle: found.title,
               organization: found.organization,
               category: found.category,
               path: `/jobs/${encodeURIComponent(found.id)}`,
             });
+            if (deepLinkArrivedFromTelegram) {
+              trackAnalyticsEvent('click_telegram_link', {
+                jobId: found.id,
+                jobTitle: found.title,
+                organization: found.organization,
+                category: found.category,
+                path: `/jobs/${encodeURIComponent(found.id)}`,
+              });
+            }
           }
         };
 
         const checkDeepLinkFinished = () => {
-          if (!deepLinkFound && singleFetchDone && catalogLoadDone) {
+          if (!deepLinkOpened && singleFetchDone && catalogLoadDone) {
             setIsResolvingDeepLink(false);
             setDeepLinkNotFoundNotice(
               'This job vacancy is no longer available or has been removed. Browse all verified open jobs below.'
@@ -571,6 +584,9 @@ export default function App() {
         );
         if (immediateMatch) {
           openResolvedDeepLink(immediateMatch);
+        } else if (embeddedSnapshotVacancy) {
+          // Zero-failure portable Telegram snapshot opens the exact job immediately on any user's phone
+          openResolvedDeepLink(embeddedSnapshotVacancy, { isSnapshotFallback: true });
         } else {
           setIsResolvingDeepLink(true);
         }
@@ -723,6 +739,8 @@ export default function App() {
           setAdminEmail(ownerEmail);
           setActiveAdminSessionEmail(ownerEmail);
           establishDeveloperGoogleSession(ownerEmail).catch(() => {});
+          // Automatically push any locally-cached vacancies (from earlier Developer Password sessions) to Firestore Cloud
+          syncLocalVacanciesToFirestoreCloud().catch(() => {});
         } else if (!getActiveAdminSessionEmail()) {
           setIsOwnerAuthorized(false);
           setAdminEmail(null);
@@ -1093,18 +1111,32 @@ export default function App() {
         }
       }
       const targetId = (jobId || decodedPathId).trim().replace(/[.,;!?)\]]+$/, '');
+      const popSnapshot = decodeTelegramVacancySnapshot(urlParams.get('v'));
+      const effectiveTargetId = targetId || popSnapshot?.id || '';
 
-      if (targetId) {
+      if (effectiveTargetId) {
         const found = vacancies.find(
-          (v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()
+          (v) => v.id === effectiveTargetId || v.id.toLowerCase() === effectiveTargetId.toLowerCase()
         );
         if (found) {
           setSelectedVacancy(found);
           setDeepLinkNotFoundNotice(null);
           document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+        } else if (popSnapshot) {
+          setSelectedVacancy(popSnapshot);
+          setDeepLinkNotFoundNotice(null);
+          document.title = `${popSnapshot.title} at ${popSnapshot.organization} | HOPELAND JOBS`;
+          fetchVacancyById(effectiveTargetId)
+            .then((resolved) => {
+              if (resolved) {
+                setSelectedVacancy(resolved);
+                document.title = `${resolved.title} at ${resolved.organization} | HOPELAND JOBS`;
+              }
+            })
+            .catch(() => {});
         } else {
           setIsResolvingDeepLink(true);
-          fetchVacancyById(targetId)
+          fetchVacancyById(effectiveTargetId)
             .then((resolved) => {
               setIsResolvingDeepLink(false);
               if (resolved) {

@@ -21,6 +21,122 @@ import {
   partitionVacanciesByDeadline,
   validateVacancyStrict,
 } from './src/utils/vacancyValidator';
+import firebaseAppletConfig from './firebase-applet-config.json';
+
+function decodeFirestoreRestValue(val: any): any {
+  if (!val || typeof val !== 'object') return undefined;
+  if ('stringValue' in val) return String(val.stringValue);
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('booleanValue' in val) return Boolean(val.booleanValue);
+  if ('nullValue' in val) return null;
+  if ('timestampValue' in val) return String(val.timestampValue);
+  if ('arrayValue' in val) {
+    const arr = Array.isArray(val.arrayValue?.values) ? val.arrayValue.values : [];
+    return arr.map((item: any) => decodeFirestoreRestValue(item)).filter((x: any) => x !== undefined);
+  }
+  if ('mapValue' in val) {
+    const fields = val.mapValue?.fields || {};
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      const decoded = decodeFirestoreRestValue(v);
+      if (decoded !== undefined) out[k] = decoded;
+    }
+    return out;
+  }
+  return undefined;
+}
+
+function decodeFirestoreRestDocument(docObj: any): any | null {
+  if (!docObj || typeof docObj !== 'object' || !docObj.fields) return null;
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(docObj.fields)) {
+    const decoded = decodeFirestoreRestValue(v);
+    if (decoded !== undefined) out[k] = decoded;
+  }
+  if (!out.id && typeof docObj.name === 'string') {
+    const parts = docObj.name.split('/');
+    out.id = parts[parts.length - 1];
+  }
+  return out.id ? out : null;
+}
+
+async function fetchVacancyFromFirestoreRest(vacancyId: string): Promise<any | null> {
+  const projectId = String((firebaseAppletConfig as any)?.projectId || '').trim();
+  const databaseId = String((firebaseAppletConfig as any)?.firestoreDatabaseId || '(default)').trim();
+  const apiKey = String((firebaseAppletConfig as any)?.apiKey || '').trim();
+  if (!projectId || !vacancyId) return null;
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/${encodeURIComponent(databaseId)}/documents/vacancies/${encodeURIComponent(
+    vacancyId
+  )}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(4500),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const decoded = decodeFirestoreRestDocument(json);
+    if (
+      decoded &&
+      decoded.status !== 'draft' &&
+      decoded.status !== 'duplicate' &&
+      hasValidVacancyDeadline(decoded)
+    ) {
+      return decoded;
+    }
+  } catch {}
+  return null;
+}
+
+async function fetchPublishedVacanciesFromFirestoreRest(): Promise<any[]> {
+  const projectId = String((firebaseAppletConfig as any)?.projectId || '').trim();
+  const databaseId = String((firebaseAppletConfig as any)?.firestoreDatabaseId || '(default)').trim();
+  const apiKey = String((firebaseAppletConfig as any)?.apiKey || '').trim();
+  if (!projectId) return [];
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+    projectId
+  )}/databases/${encodeURIComponent(databaseId)}/documents:runQuery${
+    apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''
+  }`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: 'vacancies' }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath: 'status' },
+              op: 'EQUAL',
+              value: { stringValue: 'published' },
+            },
+          },
+          limit: 300,
+        },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    const out: any[] = [];
+    for (const row of rows) {
+      if (row?.document) {
+        const decoded = decodeFirestoreRestDocument(row.document);
+        if (decoded && decoded.status === 'published' && hasValidVacancyDeadline(decoded)) {
+          out.push(decoded);
+        }
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 
 export interface ServerUserEngineContext {
   app: Express;
@@ -240,7 +356,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       }
     } catch {}
     if (vacanciesCatalogMemCache) return vacanciesCatalogMemCache;
-    const rawList = loadJsonFileSafe<any[]>(VACANCIES_CATALOG_FILE, []);
+    // On cold Vercel serverless starts, seed from bundled repo data/vacancies_catalog.json if /tmp is empty
+    const bundledSeedPath = path.join(process.cwd(), 'data', 'vacancies_catalog.json');
+    const sourcePath = fs.existsSync(VACANCIES_CATALOG_FILE)
+      ? VACANCIES_CATALOG_FILE
+      : fs.existsSync(bundledSeedPath)
+      ? bundledSeedPath
+      : VACANCIES_CATALOG_FILE;
+    const rawList = loadJsonFileSafe<any[]>(sourcePath, []);
     const { withDeadline } = partitionVacanciesByDeadline(Array.isArray(rawList) ? rawList : []);
     vacanciesCatalogMemCache = withDeadline;
     return vacanciesCatalogMemCache;
@@ -2634,19 +2757,30 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   // ROUTES: VACANCIES CATALOG SYNC (TRIGGERS BACKGROUND MATCHING + ALERTS)
   // =========================================================================
 
-  app.get('/api/vacancies', (_req: Request, res: Response): void => {
-    const list = loadVacanciesCatalog()
-      .filter((v: any) => v && v.status === 'published' && hasValidVacancyDeadline(v))
-      .sort(
-        (a: any, b: any) =>
-          new Date(b.publishedAt || b.createdAt || 0).getTime() -
-          new Date(a.publishedAt || a.createdAt || 0).getTime()
-      );
+  app.get('/api/vacancies', async (_req: Request, res: Response): Promise<void> => {
+    let list = loadVacanciesCatalog()
+      .filter((v: any) => v && v.status === 'published' && hasValidVacancyDeadline(v));
+
+    if (list.length === 0) {
+      const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
+      if (cloudList.length > 0) {
+        list = cloudList;
+        try {
+          saveVacanciesCatalog(cloudList);
+        } catch {}
+      }
+    }
+
+    list = list.sort(
+      (a: any, b: any) =>
+        new Date(b.publishedAt || b.createdAt || 0).getTime() -
+        new Date(a.publishedAt || a.createdAt || 0).getTime()
+    );
     res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
     res.json({ success: true, total: list.length, vacancies: list });
   });
 
-  app.get('/api/vacancies/:id', (req: Request, res: Response): void => {
+  app.get('/api/vacancies/:id', async (req: Request, res: Response): Promise<void> => {
     const rawParam = String(req.params.id || '');
     let decoded = rawParam;
     try {
@@ -2659,7 +2793,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
     const lowerId = rawId.toLowerCase();
     const list = loadVacanciesCatalog();
-    // Allow published, expired, and archived vacancies to resolve when opened from a Telegram link (exclude draft & duplicate)
+    // Allow published, expired, closed, and archived vacancies to resolve when opened from a Telegram link (exclude draft & duplicate)
     let found = list.find(
       (v: any) =>
         v &&
@@ -2669,7 +2803,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         (String(v.id) === rawId || String(v.id).toLowerCase() === lowerId)
     );
 
-    // Fallback: check Telegram published records & queue snapshots so any Telegram-broadcast job always resolves
+    // Fallback 1: check Telegram published records & queue snapshots so any Telegram-broadcast job always resolves
     if (!found) {
       try {
         const tgQueuePath = path.join(DATA_DIR, 'telegram_queue.json');
@@ -2700,6 +2834,21 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           }
         }
       } catch {}
+    }
+
+    // Fallback 2: query Firestore cloud directly via REST API (handles cold Vercel serverless instances seamlessly)
+    if (!found) {
+      const cloudVacancy = await fetchVacancyFromFirestoreRest(rawId);
+      if (cloudVacancy) {
+        found = cloudVacancy;
+        try {
+          const nextCatalog = [
+            cloudVacancy,
+            ...list.filter((v: any) => String(v?.id || '') !== String(cloudVacancy.id)),
+          ];
+          saveVacanciesCatalog(nextCatalog);
+        } catch {}
+      }
     }
 
     if (!found) {

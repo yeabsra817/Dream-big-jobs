@@ -99,8 +99,11 @@ service cloud.firestore {
 
     // Vacancies Collection
     match /vacancies/{vacancyId} {
-      // Public can read published vacancies; admin can read everything (drafts, duplicates, etc.)
-      allow get: if (resource.data.status == 'published') || isOwnerAdmin();
+      // Public can directly view published, expired, closed, or archived vacancies via deep links (e.g. Telegram);
+      // drafts and duplicates remain strictly admin-only, and public list queries only return published jobs.
+      allow get: if isValidId(vacancyId) && (
+        (resource.data.status in ['published', 'expired', 'closed', 'archived']) || isOwnerAdmin()
+      );
       allow list: if (resource.data.status == 'published') || isOwnerAdmin();
 
       // Only the verified website owner/admin can create, update, or delete vacancies

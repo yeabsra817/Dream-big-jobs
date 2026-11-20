@@ -679,26 +679,28 @@ export async function saveVacancy(vacancy: Vacancy): Promise<void> {
     }
   }
 
-  const path = `vacancies/${vacancy.id}`;
+  const safeId = String(vacancy.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  const normalizedVacancy: Vacancy = safeId && safeId !== vacancy.id ? { ...vacancy, id: safeId } : vacancy;
+  const path = `vacancies/${normalizedVacancy.id}`;
   // 1. Always persist to local cache first so admin edits are never lost
-  saveVacancyToLocalCache(vacancy);
+  saveVacancyToLocalCache(normalizedVacancy);
 
   // If user is not yet authenticated with Firebase, defer cloud write
   if (!auth.currentUser) {
     return;
   }
 
-  // 2. Cloud write with non-blocking timeout fallback
+  // 2. Cloud write with generous mobile-network timeout (15s)
   try {
-    const rawPayload: Record<string, any> = { ...vacancy };
-    if (vacancy.telegramPublished && (!vacancy.telegramPublishError || vacancy.telegramPublishError === '')) {
+    const rawPayload: Record<string, any> = { ...normalizedVacancy };
+    if (normalizedVacancy.telegramPublished && (!normalizedVacancy.telegramPublishError || normalizedVacancy.telegramPublishError === '')) {
       rawPayload.telegramPublishError = deleteField();
     }
     const cleanPayload = sanitizeForFirestore(rawPayload);
 
-    const writePromise = setDoc(doc(db, 'vacancies', vacancy.id), cleanPayload, { merge: true });
+    const writePromise = setDoc(doc(db, 'vacancies', normalizedVacancy.id), cleanPayload, { merge: true });
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Cloud sync timeout; saved to local database')), 2000)
+      setTimeout(() => reject(new Error('Cloud sync timeout; saved to local database')), 15000)
     );
 
     await Promise.race([writePromise, timeoutPromise]);
@@ -720,12 +722,17 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
   }
 
   // Filter out any incomplete published vacancies
-  const validToSave = withDeadline.filter((v) => {
-    if (v.status === 'published') {
-      return validateVacancyStrict(v, { allowExpired: false }).valid;
-    }
-    return true;
-  });
+  const validToSave = withDeadline
+    .filter((v) => {
+      if (v.status === 'published') {
+        return validateVacancyStrict(v, { allowExpired: false }).valid;
+      }
+      return true;
+    })
+    .map((v) => {
+      const safeId = String(v.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+      return safeId && safeId !== v.id ? { ...v, id: safeId } : v;
+    });
 
   if (validToSave.length === 0) return;
 
@@ -736,28 +743,78 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
 
   if (!auth.currentUser) return;
 
-  // 2. Atomic writeBatch for cloud persistence (1 atomic network call instead of 50 individual requests)
+  // 2. Chunked atomic writeBatch for full cloud persistence (handles >100 items safely on mobile networks)
   try {
-    const batch = writeBatch(db);
-    const slice = validToSave.slice(0, 100);
-    for (const v of slice) {
-      const rawPayload: Record<string, any> = { ...v };
-      if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
-        rawPayload.telegramPublishError = deleteField();
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < validToSave.length; i += CHUNK_SIZE) {
+      const chunk = validToSave.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const v of chunk) {
+        const rawPayload: Record<string, any> = { ...v };
+        if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
+          rawPayload.telegramPublishError = deleteField();
+        }
+        const cleanPayload = sanitizeForFirestore(rawPayload);
+        batch.set(doc(db, 'vacancies', v.id), cleanPayload, { merge: true });
       }
-      const cleanPayload = sanitizeForFirestore(rawPayload);
-      batch.set(doc(db, 'vacancies', v.id), cleanPayload, { merge: true });
+
+      const commitPromise = batch.commit();
+      const timeoutPromise = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Batch commit timeout; local cache active')), 20000)
+      );
+
+      await Promise.race([commitPromise, timeoutPromise]);
     }
-
-    const commitPromise = batch.commit();
-    const timeoutPromise = new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error('Batch commit timeout; local cache active')), 2500)
-    );
-
-    await Promise.race([commitPromise, timeoutPromise]);
   } catch (err) {
     console.warn('saveBatchVacancies background sync note:', err);
   }
+}
+
+/**
+ * Uploads any locally-cached or in-memory vacancies (e.g. posted while in Developer Password mode)
+ * to Firestore cloud once the admin is authenticated with Google, so all users worldwide see them.
+ */
+export async function syncLocalVacanciesToFirestoreCloud(
+  extraVacancies: Vacancy[] = []
+): Promise<{ synced: number; skipped: number }> {
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
+    return { synced: 0, skipped: extraVacancies.length };
+  }
+  const map = new Map<string, Vacancy>();
+  try {
+    for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((v: Vacancy) => {
+            if (v?.id && hasValidVacancyDeadline(v)) {
+              map.set(v.id, v);
+            }
+          });
+        }
+      }
+    }
+  } catch {}
+  extraVacancies.forEach((v) => {
+    if (v?.id && hasValidVacancyDeadline(v)) {
+      map.set(v.id, v);
+    }
+  });
+
+  const candidates = Array.from(map.values()).filter((v) => {
+    if (v.status === 'published') {
+      return validateVacancyStrict(v, { allowExpired: false }).valid;
+    }
+    return v.status !== 'draft' && v.status !== 'duplicate';
+  });
+
+  if (candidates.length === 0) {
+    return { synced: 0, skipped: 0 };
+  }
+
+  await saveBatchVacancies(candidates);
+  return { synced: candidates.length, skipped: Math.max(0, map.size - candidates.length) };
 }
 
 function vacancyTelegramErrorClean(v: Vacancy): boolean {

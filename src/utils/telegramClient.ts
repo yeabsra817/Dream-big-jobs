@@ -12,6 +12,7 @@ import {
   validateTelegramPostContentStrict,
   validateVacancyStrict,
 } from './vacancyValidator';
+import { encodeTelegramVacancySnapshot } from './telegramSnapshot';
 
 /**
  * Determine whether a vacancy is genuinely a Banking / Financial Institution job.
@@ -584,7 +585,15 @@ export function buildTelegramVacancyUrl(
   const rawId = String(vacancy?.id || '').trim();
   const safeId = encodeURIComponent(rawId || 'latest');
   const applyParam = includeApplyAction ? 'apply=1&' : '';
-  return `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const baseLink = `${cleanBase}/jobs/${safeId}?jobId=${safeId}&${applyParam}utm_source=telegram&utm_medium=channel&utm_campaign=vacancy`;
+  const remainingBudget = Math.max(0, 1850 - baseLink.length - 3);
+  if (remainingBudget >= 280) {
+    const encodedSnap = encodeTelegramVacancySnapshot(vacancy, Math.min(1450, remainingBudget));
+    if (encodedSnap) {
+      return `${baseLink}&v=${encodedSnap}`;
+    }
+  }
+  return baseLink;
 }
 
 function stripUrlsAndEmailsClient(text: string): string {
