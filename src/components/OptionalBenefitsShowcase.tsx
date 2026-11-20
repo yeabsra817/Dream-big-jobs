@@ -14,9 +14,12 @@ import {
   BookmarkCheck,
 } from 'lucide-react';
 import { AppBrandLogo } from './AppBrandLogo';
+import { SiteContentConfig } from '../types/job';
+import { DEFAULT_SITE_CONTENT } from '../utils/siteContentDefaults';
 
 interface Props {
   appLogoUrl?: string | null;
+  siteContent?: Required<SiteContentConfig>;
   isLoggedIn: boolean;
   userDisplayName?: string | null;
   isStandaloneApp: boolean;
@@ -94,6 +97,7 @@ const APP_BENEFITS = [
 
 export const OptionalBenefitsShowcase: React.FC<Props> = ({
   appLogoUrl,
+  siteContent = DEFAULT_SITE_CONTENT,
   isLoggedIn,
   userDisplayName,
   isStandaloneApp,
@@ -113,6 +117,10 @@ export const OptionalBenefitsShowcase: React.FC<Props> = ({
     }
   };
 
+  const isDefaultHeading =
+    !siteContent.benefitsHeadingEn ||
+    siteContent.benefitsHeadingEn.trim() === DEFAULT_SITE_CONTENT.benefitsHeadingEn;
+
   return (
     <section
       id="optional-benefits-section"
@@ -123,22 +131,32 @@ export const OptionalBenefitsShowcase: React.FC<Props> = ({
         {/* Section Header — Bold Bilingual Optional Assurance */}
         <div className="max-w-3xl mx-auto text-center mb-10 sm:mb-12 space-y-3">
           <p className="text-xs sm:text-sm font-extrabold text-[#15803D] tracking-wide">
-            100% Optional · ሙሉ በሙሉ አማራጭ · Free Forever
+            {siteContent.benefitsBadgeText}
           </p>
           <h2
             id="optional-benefits-heading"
             className="text-2xl sm:text-4xl font-extrabold tracking-tight text-[#0B132B] text-balance"
           >
-            Browse Freely — Or Get Even More with{' '}
-            <span className="text-[#16A34A]">Free Registration</span> &amp;{' '}
-            <span className="text-[#1D4ED8]">the Official App</span>
+            {isDefaultHeading ? (
+              <>
+                Browse Freely — Or Get Even More with{' '}
+                <span className="text-[#16A34A]">Free Registration</span> &amp;{' '}
+                <span className="text-[#1D4ED8]">the Official App</span>
+              </>
+            ) : (
+              siteContent.benefitsHeadingEn
+            )}
           </h2>
-          <p className="text-sm sm:text-base font-bold text-[#0B132B] leading-relaxed">
-            ማንኛውንም ስራ ያለ ምዝገባ በነፃ ይመልከቱና ያመልክቱ — መመዝገብ፣ መግባት ወይም አፑን ማውረድ ሙሉ በሙሉ በፍላጎትዎ ነው።
-          </p>
-          <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
-            Login, Register, and App Download are never required. Discover the big advantages below in English and Amharic:
-          </p>
+          {siteContent.benefitsSubheadingAm && (
+            <p className="text-sm sm:text-base font-bold text-[#0B132B] leading-relaxed">
+              {siteContent.benefitsSubheadingAm}
+            </p>
+          )}
+          {siteContent.benefitsSubheadingEn && (
+            <p className="text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
+              {siteContent.benefitsSubheadingEn}
+            </p>
+          )}
         </div>
 
         {/* Bold, Colorful 2-Column Benefits Grid */}
@@ -153,10 +171,10 @@ export const OptionalBenefitsShowcase: React.FC<Props> = ({
                     Optional Free Account · ነፃ አካውንት (አማራጭ)
                   </p>
                   <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                    Why Register or Login?
+                    {siteContent.registerCardTitleEn}
                   </h3>
                   <p className="text-sm sm:text-base font-bold text-emerald-50">
-                    የመመዝገብ እና የመግባት ጥቅሞች
+                    {siteContent.registerCardTitleAm}
                   </p>
                 </div>
                 <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/25 text-white flex items-center justify-center shrink-0">
@@ -247,10 +265,10 @@ export const OptionalBenefitsShowcase: React.FC<Props> = ({
                     Optional Official App · ኦፊሴላዊ መተግበሪያ (አማራጭ)
                   </p>
                   <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                    Why Download the App?
+                    {siteContent.appCardTitleEn}
                   </h3>
                   <p className="text-sm sm:text-base font-bold text-[#4ADE80]">
-                    አፑን የማውረድ ጥቅሞች (ለስልክ እና ለኮምፒውተር)
+                    {siteContent.appCardTitleAm}
                   </p>
                 </div>
                 <AppBrandLogo logoUrl={appLogoUrl} size="lg" variant="green" />

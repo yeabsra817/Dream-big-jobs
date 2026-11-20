@@ -1,5 +1,25 @@
 [
   {
+    "id": "aud_1795182192444_7cfca",
+    "action": "settings_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "settings",
+    "targetId": "site_settings",
+    "summary": "Updated platform settings (channel: @hopelandJobsEthiopia, GA4: G-KH6X73105S)",
+    "severity": "info",
+    "timestamp": "2026-11-20T13:43:12.444Z"
+  },
+  {
+    "id": "aud_1795182192344_ylys9",
+    "action": "settings_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "targetType": "settings",
+    "targetId": "site_settings",
+    "summary": "Updated platform settings (channel: @hopelandJobsEthiopia, GA4: G-KH6X73105S)",
+    "severity": "info",
+    "timestamp": "2026-11-20T13:43:12.344Z"
+  },
+  {
     "id": "aud_1795024918795_rk87m",
     "action": "settings_updated",
     "actorEmail": "nexusitsoultion@gmail.com",

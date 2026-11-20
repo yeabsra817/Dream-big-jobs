@@ -2170,16 +2170,39 @@ app.get('/api/settings', (req: Request, res: Response): void => {
     appLogoMaskable512Url:
       typeof persisted.appLogoMaskable512Url === 'string' ? persisted.appLogoMaskable512Url : '',
     appLogoUpdatedAt: typeof persisted.appLogoUpdatedAt === 'string' ? persisted.appLogoUpdatedAt : '',
+    siteContent:
+      persisted.siteContent && typeof persisted.siteContent === 'object'
+        ? persisted.siteContent
+        : undefined,
     updatedAt: persisted.updatedAt || new Date().toISOString(),
   });
 });
 
 app.post('/api/settings', (req: Request, res: Response): void => {
   try {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: 'Admin authorization required to amend website settings.',
+      });
+      return;
+    }
+
     const incoming = req.body || {};
     const current = loadPersistedSettings() || {};
     const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
-    const merged = { ...current, ...incomingWithoutRaw };
+    const merged: Record<string, any> = {
+      ...current,
+      ...incomingWithoutRaw,
+      updatedAt: incomingWithoutRaw.updatedAt || new Date().toISOString(),
+    };
+
+    if (incomingWithoutRaw.siteContent && typeof incomingWithoutRaw.siteContent === 'object') {
+      merged.siteContent = {
+        ...(current.siteContent && typeof current.siteContent === 'object' ? current.siteContent : {}),
+        ...incomingWithoutRaw.siteContent,
+      };
+    }
 
     if (
       Object.prototype.hasOwnProperty.call(incoming, 'appLogoUrl') ||

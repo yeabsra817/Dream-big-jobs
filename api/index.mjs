@@ -6959,15 +6959,33 @@ ${text}`;
       appLogo512Url: typeof persisted.appLogo512Url === "string" ? persisted.appLogo512Url : "",
       appLogoMaskable512Url: typeof persisted.appLogoMaskable512Url === "string" ? persisted.appLogoMaskable512Url : "",
       appLogoUpdatedAt: typeof persisted.appLogoUpdatedAt === "string" ? persisted.appLogoUpdatedAt : "",
+      siteContent: persisted.siteContent && typeof persisted.siteContent === "object" ? persisted.siteContent : void 0,
       updatedAt: persisted.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     });
   });
   app.post("/api/settings", (req, res) => {
     try {
+      if (!isPersistentOwnerRequest(req)) {
+        res.status(403).json({
+          success: false,
+          error: "Admin authorization required to amend website settings."
+        });
+        return;
+      }
       const incoming = req.body || {};
       const current = loadPersistedSettings() || {};
       const { telegramBotToken: _discardIncomingRaw, ...incomingWithoutRaw } = incoming;
-      const merged = { ...current, ...incomingWithoutRaw };
+      const merged = {
+        ...current,
+        ...incomingWithoutRaw,
+        updatedAt: incomingWithoutRaw.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+      };
+      if (incomingWithoutRaw.siteContent && typeof incomingWithoutRaw.siteContent === "object") {
+        merged.siteContent = {
+          ...current.siteContent && typeof current.siteContent === "object" ? current.siteContent : {},
+          ...incomingWithoutRaw.siteContent
+        };
+      }
       if (Object.prototype.hasOwnProperty.call(incoming, "appLogoUrl") || Object.prototype.hasOwnProperty.call(incoming, "appLogo512Url") || Object.prototype.hasOwnProperty.call(incoming, "appLogoMaskable512Url")) {
         const nextLogo = typeof incoming.appLogoUrl === "string" ? incoming.appLogoUrl.trim() : "";
         const nextLogo512 = typeof incoming.appLogo512Url === "string" ? incoming.appLogo512Url.trim() : "";

@@ -7,12 +7,16 @@ interface Props {
   vacancies: Vacancy[];
   onSelectCompany: (company: EthiopianCompanyItem) => void;
   onViewAllCompanies: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
 export const FeaturedCompaniesCarousel: React.FC<Props> = ({
   vacancies,
   onSelectCompany,
   onViewAllCompanies,
+  title = 'Featured Companies',
+  subtitle = 'Explore verified vacancies from leading banks, airlines, telecom, insurance, and UN organizations in Ethiopia.',
 }) => {
   const featuredList = useMemo(
     () => ETHIOPIAN_TRUSTED_COMPANIES.filter((c) => c.featured !== false),
@@ -87,10 +91,10 @@ export const FeaturedCompaniesCarousel: React.FC<Props> = ({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10">
           <div className="text-center sm:text-left">
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Featured Companies
+              {title}
             </h2>
             <p className="text-sm text-blue-100 mt-1.5 max-w-xl">
-              Explore verified vacancies from leading banks, airlines, telecom, insurance, and UN organizations in Ethiopia.
+              {subtitle}
             </p>
           </div>
 

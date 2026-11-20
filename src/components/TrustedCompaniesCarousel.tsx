@@ -3,6 +3,7 @@ import { ETHIOPIAN_TRUSTED_COMPANIES, EthiopianCompanyItem } from '../data/trust
 
 interface Props {
   onSelectCompany: (company: EthiopianCompanyItem) => void;
+  title?: string;
 }
 
 const LogoCard: React.FC<{
@@ -37,18 +38,21 @@ const LogoCard: React.FC<{
   );
 };
 
-export const TrustedCompaniesCarousel: React.FC<Props> = ({ onSelectCompany }) => {
+export const TrustedCompaniesCarousel: React.FC<Props> = ({
+  onSelectCompany,
+  title = 'Companies',
+}) => {
   const duplicatedList = [...ETHIOPIAN_TRUSTED_COMPANIES, ...ETHIOPIAN_TRUSTED_COMPANIES];
 
   return (
     <section
-      aria-label="Companies"
+      aria-label={title}
       className="bg-white py-9 sm:py-11 border-t border-slate-100"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-6 sm:mb-7">
           <h2 className="text-base sm:text-lg font-bold tracking-tight text-[#0B132B]">
-            Companies
+            {title}
           </h2>
         </div>
       </div>

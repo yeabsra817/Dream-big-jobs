@@ -107,6 +107,7 @@ import {
   partitionVacanciesByDeadline,
   validateVacancyStrict,
 } from './utils/vacancyValidator';
+import { resolveSiteContent } from './utils/siteContentDefaults';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
@@ -231,6 +232,7 @@ export default function App() {
       }
     );
   });
+  const siteContent = useMemo(() => resolveSiteContent(siteSettings), [siteSettings]);
   const [duplicateReports, setDuplicateReports] = useState<DuplicateReportItem[]>([]);
   const [internationalJobs, setInternationalJobs] = useState<InternationalJob[]>([]);
   const [immigrationPathways, setImmigrationPathways] = useState<ImmigrationPathway[]>([]);
@@ -264,7 +266,9 @@ export default function App() {
   });
   const [isAdminView, setIsAdminView] = useState(false);
   const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
-  const [showHomeCategories, setShowHomeCategories] = useState(false);
+  const [showHomeCategories, setShowHomeCategories] = useState<boolean>(() =>
+    Boolean(resolveSiteContent(getCachedSiteSettings()).categoriesDefaultExpanded)
+  );
   const [activeExpansionView, setActiveExpansionView] = useState<
     'international-jobs' | 'immigration' | 'scholarships' | null
   >(() => {
@@ -1949,9 +1953,23 @@ export default function App() {
     setIsInstallPopupOpen(true);
   }, [triggerNativeAppInstall]);
 
-  // Show subtle non-blocking official dim-light Download App reminder every 1 minute (60s) until installed
+  // Sync browser tab title & default job categories expansion state from Admin CMS settings
   useEffect(() => {
+    if (typeof document !== 'undefined' && siteContent.browserTitle?.trim()) {
+      document.title = siteContent.browserTitle.trim();
+    }
+  }, [siteContent.browserTitle]);
+
+  useEffect(() => {
+    setShowHomeCategories(Boolean(siteContent.categoriesDefaultExpanded));
+  }, [siteContent.categoriesDefaultExpanded]);
+
+  // Show subtle non-blocking official dim-light Download App reminder on Admin-configured interval (0 disables)
+  useEffect(() => {
+    const intervalSeconds = Number(siteContent.downloadReminderIntervalSeconds ?? 60);
     if (
+      !Number.isFinite(intervalSeconds) ||
+      intervalSeconds <= 0 ||
       isStandaloneApp ||
       isAdminView ||
       isInstallPopupOpen ||
@@ -1973,10 +1991,11 @@ export default function App() {
 
     const timer = setTimeout(() => {
       setIsMinuteInstallReminderOpen(true);
-    }, 60_000);
+    }, Math.max(15, intervalSeconds) * 1000);
 
     return () => clearTimeout(timer);
   }, [
+    siteContent.downloadReminderIntervalSeconds,
     isStandaloneApp,
     isAdminView,
     isInstallPopupOpen,
@@ -2295,185 +2314,203 @@ export default function App() {
           /* HOMEPAGE (Clean Ethiojobs-inspired HopelandJobs Layout) */
           <>
             {/* 1. CLEAN WHITE HERO & ROUNDED SEARCH SECTION */}
-            <section className="relative bg-white overflow-hidden pt-10 pb-14 sm:pt-16 sm:pb-20 px-4 sm:px-6 lg:px-8">
-              {/* Subtle Illustrated Backdrop Graphic around edges, pure white center */}
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-50"
-              >
-                <img
-                  src={heroCareerBackdropImg}
-                  alt=""
-                  className="w-full h-full object-cover object-center"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/55 to-white" />
-              </div>
-
-              <div className="relative z-10 max-w-4xl mx-auto">
-                {/* Welcoming Bilingual Hero Headline */}
-                <div className="text-center max-w-2xl mx-auto mb-7 sm:mb-8 space-y-2">
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-[#0B132B] leading-[1.15] text-balance">
-                    Find Verified Jobs in Ethiopia &amp; Abroad
-                  </h1>
-                  <p className="text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
-                    በኢትዮጵያ እና በውጭ ሀገር የተረጋገጡ የስራ እድሎችን በቀላሉ ያግኙ
-                  </p>
-                </div>
-
-                {/* Clean minimal Jobs / Companies tabs above the search bar */}
+            {siteContent.showHeroSection && (
+              <section className="relative bg-white overflow-hidden pt-10 pb-14 sm:pt-16 sm:pb-20 px-4 sm:px-6 lg:px-8">
+                {/* Subtle Illustrated Backdrop Graphic around edges, pure white center */}
                 <div
-                  role="tablist"
-                  aria-label="Search type"
-                  className="flex items-center justify-center gap-6 mb-5"
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-50"
                 >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={searchTab === 'jobs'}
-                    onClick={() => setSearchTab('jobs')}
-                    className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
-                      searchTab === 'jobs'
-                        ? 'border-[#16A34A] text-[#0B132B]'
-                        : 'border-transparent text-slate-500 hover:text-[#0B132B]'
-                    }`}
-                  >
-                    Jobs
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={searchTab === 'companies'}
-                    onClick={() => setSearchTab('companies')}
-                    className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
-                      searchTab === 'companies'
-                        ? 'border-[#16A34A] text-[#0B132B]'
-                        : 'border-transparent text-slate-500 hover:text-[#0B132B]'
-                    }`}
-                  >
-                    Companies
-                  </button>
+                  <img
+                    src={siteContent.heroCustomBackgroundUrl?.trim() || heroCareerBackdropImg}
+                    alt=""
+                    className="w-full h-full object-cover object-center"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/55 to-white" />
                 </div>
 
-                {/* Prominent Rounded Search Bar */}
-                <form
-                  onSubmit={handleHeroSearchSubmit}
-                  className="bg-white rounded-full p-2 sm:p-2.5 shadow-[0_10px_36px_rgba(11,19,43,0.08)] border border-slate-200/90 focus-within:border-[#16A34A] focus-within:ring-4 focus-within:ring-[#16A34A]/10 transition-all flex items-center gap-2"
-                >
-                  <div className="relative flex-1 min-w-0 flex items-center pl-3 sm:pl-4">
-                    <Search className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
-                    <input
-                      type="text"
-                      value={heroSearch}
-                      onChange={(e) => {
-                        setHeroSearch(e.target.value);
-                        if (aiSearchResult) setAiSearchResult(null);
-                        if (aiSearchError) setAiSearchError(null);
-                      }}
-                      placeholder={
-                        searchTab === 'jobs'
-                          ? 'Job title, keywords, or skills...'
-                          : 'Search companies in Ethiopia (e.g. CBE, Airlines, UNICEF)...'
-                      }
-                      aria-label={searchTab === 'jobs' ? 'Search jobs' : 'Search companies'}
-                      className="w-full py-2 sm:py-2.5 bg-transparent text-sm sm:text-base text-[#0B132B] placeholder:text-slate-400 outline-none font-medium"
-                    />
+                <div className="relative z-10 max-w-4xl mx-auto">
+                  {/* Welcoming Bilingual Hero Headline */}
+                  <div className="text-center max-w-2xl mx-auto mb-7 sm:mb-8 space-y-2">
+                    <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-[#0B132B] leading-[1.15] text-balance">
+                      {siteContent.heroTitle}
+                    </h1>
+                    {siteContent.heroSubtitleAmharic && (
+                      <p className="text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
+                        {siteContent.heroSubtitleAmharic}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Clean desktop location selector inside the rounded bar when on Jobs tab */}
+                  {/* Clean minimal Jobs / Companies tabs above the search bar */}
+                  <div
+                    role="tablist"
+                    aria-label="Search type"
+                    className="flex items-center justify-center gap-6 mb-5"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={searchTab === 'jobs'}
+                      onClick={() => setSearchTab('jobs')}
+                      className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
+                        searchTab === 'jobs'
+                          ? 'border-[#16A34A] text-[#0B132B]'
+                          : 'border-transparent text-slate-500 hover:text-[#0B132B]'
+                      }`}
+                    >
+                      Jobs
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={searchTab === 'companies'}
+                      onClick={() => setSearchTab('companies')}
+                      className={`pb-2 text-sm sm:text-base font-bold transition-colors border-b-2 cursor-pointer whitespace-nowrap ${
+                        searchTab === 'companies'
+                          ? 'border-[#16A34A] text-[#0B132B]'
+                          : 'border-transparent text-slate-500 hover:text-[#0B132B]'
+                      }`}
+                    >
+                      Companies
+                    </button>
+                  </div>
+
+                  {/* Prominent Rounded Search Bar */}
+                  <form
+                    onSubmit={handleHeroSearchSubmit}
+                    className="bg-white rounded-full p-2 sm:p-2.5 shadow-[0_10px_36px_rgba(11,19,43,0.08)] border border-slate-200/90 focus-within:border-[#16A34A] focus-within:ring-4 focus-within:ring-[#16A34A]/10 transition-all flex items-center gap-2"
+                  >
+                    <div className="relative flex-1 min-w-0 flex items-center pl-3 sm:pl-4">
+                      <Search className="w-5 h-5 text-slate-400 shrink-0 mr-2.5" />
+                      <input
+                        type="text"
+                        value={heroSearch}
+                        onChange={(e) => {
+                          setHeroSearch(e.target.value);
+                          if (aiSearchResult) setAiSearchResult(null);
+                          if (aiSearchError) setAiSearchError(null);
+                        }}
+                        placeholder={
+                          searchTab === 'jobs'
+                            ? siteContent.heroSearchPlaceholderJobs
+                            : siteContent.heroSearchPlaceholderCompanies
+                        }
+                        aria-label={searchTab === 'jobs' ? 'Search jobs' : 'Search companies'}
+                        className="w-full py-2 sm:py-2.5 bg-transparent text-sm sm:text-base text-[#0B132B] placeholder:text-slate-400 outline-none font-medium"
+                      />
+                    </div>
+
+                    {/* Clean desktop location selector inside the rounded bar when on Jobs tab */}
+                    {searchTab === 'jobs' && (
+                      <div className="hidden md:flex items-center border-l border-slate-200 pl-3 pr-1 max-w-[185px]">
+                        <MapPin className="w-4 h-4 text-slate-400 shrink-0 mr-1.5" />
+                        <select
+                          value={heroLocation}
+                          onChange={(e) => setHeroLocation(e.target.value)}
+                          aria-label="Filter by location"
+                          className="w-full py-2 bg-transparent text-xs sm:text-sm font-medium text-slate-600 outline-none cursor-pointer truncate"
+                        >
+                          <option value="All">All Ethiopia</option>
+                          {ETHIOPIAN_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="px-5 sm:px-7 py-2.5 sm:py-3 rounded-full bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm transition-colors shrink-0 cursor-pointer shadow-sm"
+                    >
+                      {siteContent.heroSearchButtonText}
+                    </button>
+                  </form>
+
+                  {/* Mobile-only compact location selector */}
                   {searchTab === 'jobs' && (
-                    <div className="hidden md:flex items-center border-l border-slate-200 pl-3 pr-1 max-w-[185px]">
-                      <MapPin className="w-4 h-4 text-slate-400 shrink-0 mr-1.5" />
-                      <select
-                        value={heroLocation}
-                        onChange={(e) => setHeroLocation(e.target.value)}
-                        aria-label="Filter by location"
-                        className="w-full py-2 bg-transparent text-xs sm:text-sm font-medium text-slate-600 outline-none cursor-pointer truncate"
-                      >
-                        <option value="All">All Ethiopia</option>
-                        {ETHIOPIAN_LOCATIONS.map((loc) => (
-                          <option key={loc} value={loc}>
-                            {loc}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="mt-3 flex md:hidden justify-center">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                        <MapPin className="w-3.5 h-3.5 text-[#16A34A]" />
+                        <select
+                          value={heroLocation}
+                          onChange={(e) => setHeroLocation(e.target.value)}
+                          aria-label="Filter by location mobile"
+                          className="bg-transparent font-medium outline-none cursor-pointer"
+                        >
+                          <option value="All">All Ethiopia</option>
+                          {ETHIOPIAN_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    className="px-5 sm:px-7 py-2.5 sm:py-3 rounded-full bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm transition-colors shrink-0 cursor-pointer shadow-sm"
-                  >
-                    Search
-                  </button>
-                </form>
-
-                {/* Mobile-only compact location selector */}
-                {searchTab === 'jobs' && (
-                  <div className="mt-3 flex md:hidden justify-center">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-600">
-                      <MapPin className="w-3.5 h-3.5 text-[#16A34A]" />
-                      <select
-                        value={heroLocation}
-                        onChange={(e) => setHeroLocation(e.target.value)}
-                        aria-label="Filter by location mobile"
-                        className="bg-transparent font-medium outline-none cursor-pointer"
-                      >
-                        <option value="All">All Ethiopia</option>
-                        {ETHIOPIAN_LOCATIONS.map((loc) => (
-                          <option key={loc} value={loc}>
-                            {loc}
-                          </option>
-                        ))}
-                      </select>
+                  {/* Bold Optional Quick Actions & Benefits Jump Row */}
+                  <div className="mt-6 flex flex-col items-center gap-3">
+                    {(siteContent.heroNoLoginNoticeEn || siteContent.heroNoLoginNoticeAm) && (
+                      <p className="text-xs sm:text-[13px] font-semibold text-slate-700 text-center">
+                        {siteContent.heroNoLoginNoticeEn}
+                        {siteContent.heroNoLoginNoticeEn && siteContent.heroNoLoginNoticeAm && ' · '}
+                        {siteContent.heroNoLoginNoticeAm && (
+                          <span className="text-[#15803D] font-bold">
+                            {siteContent.heroNoLoginNoticeAm}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap items-center justify-center gap-2.5">
+                      {!currentUser && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserAuthModalMode('signup');
+                            setIsUserAuthModalOpen(true);
+                          }}
+                          className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#059669] hover:from-[#15803D] hover:to-[#047857] text-white font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-emerald-600/20 cursor-pointer whitespace-nowrap"
+                        >
+                          {siteContent.heroRegisterButtonText}
+                        </button>
+                      )}
+                      {!isStandaloneApp && (
+                        <button
+                          type="button"
+                          onClick={handleDownloadApplicationClick}
+                          className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-amber-500/25 cursor-pointer whitespace-nowrap"
+                        >
+                          {siteContent.heroDownloadButtonText}
+                        </button>
+                      )}
+                      {siteContent.showBenefitsSection && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById('optional-benefits-section');
+                            el?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-[#132959] text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                        >
+                          {siteContent.heroBenefitsButtonText}
+                        </button>
+                      )}
                     </div>
                   </div>
-                )}
-
-                {/* Bold Optional Quick Actions & Benefits Jump Row */}
-                <div className="mt-6 flex flex-col items-center gap-3">
-                  <p className="text-xs sm:text-[13px] font-semibold text-slate-700 text-center">
-                    No login required to browse or apply ·{' '}
-                    <span className="text-[#15803D] font-bold">ያለ ምዝገባ በነፃ ይጠቀሙ</span>
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2.5">
-                    {!currentUser && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUserAuthModalMode('signup');
-                          setIsUserAuthModalOpen(true);
-                        }}
-                        className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#059669] hover:from-[#15803D] hover:to-[#047857] text-white font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-emerald-600/20 cursor-pointer whitespace-nowrap"
-                      >
-                        Register Free · በነፃ ይመዝገቡ
-                      </button>
-                    )}
-                    {!isStandaloneApp && (
-                      <button
-                        type="button"
-                        onClick={handleDownloadApplicationClick}
-                        className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-amber-500/25 cursor-pointer whitespace-nowrap"
-                      >
-                        Download App · አፑን ያውርዱ
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const el = document.getElementById('optional-benefits-section');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-[#132959] text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap shadow-xs"
-                    >
-                      Why Register &amp; Get the App? · ጥቅሞቹን ይመልከቱ
-                    </button>
-                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
 
             {/* 2. TRUSTED BY ETHIOPIAN COMPANIES CAROUSEL (Right-to-Left Infinite Scroll) */}
-            <TrustedCompaniesCarousel onSelectCompany={handleSelectCompanyFromShowcase} />
+            {siteContent.showTrustedCompanies && (
+              <TrustedCompaniesCarousel
+                onSelectCompany={handleSelectCompanyFromShowcase}
+                title={siteContent.trustedCompaniesTitle}
+              />
+            )}
 
             {/* 3. SEARCH RESULTS SECTION (Shown when visitor searches or clicks a company) */}
             {(heroSearch.trim().length > 0 ||
@@ -2737,141 +2774,152 @@ export default function App() {
             )}
 
             {/* 4. JOB CATEGORIES SECTION — Hidden by default; visitors can list them on demand */}
-            <section
-              id="categories-section"
-              aria-label="Job Categories"
-              className={`bg-[#F5F7FA] px-4 sm:px-6 lg:px-8 border-t border-slate-200/70 transition-colors ${
-                showHomeCategories ? 'py-12 sm:py-16' : 'py-6 sm:py-8'
-              }`}
-            >
-              <div className="max-w-7xl mx-auto">
-                <div
-                  className={`bg-white rounded-2xl border border-slate-200/80 px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                    showHomeCategories ? 'mb-8' : ''
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[#0B132B]">
-                      All Job Categories
-                    </h2>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-slate-500 mt-1 tabular-nums">
-                      <span>{OFFICIAL_CATEGORIES.length} Sectors</span>
-                      <span aria-hidden="true">·</span>
-                      <span>
-                        {totalActiveVacancies} {totalActiveVacancies === 1 ? 'Open Job' : 'Open Jobs'}
-                      </span>
-                      <span aria-hidden="true" className="hidden sm:inline">·</span>
-                      <span className="hidden sm:inline">
-                        Banking, Healthcare, Engineering, NGOs, IT &amp; more
-                      </span>
+            {siteContent.showCategoriesSection && (
+              <section
+                id="categories-section"
+                aria-label={siteContent.categoriesTitle}
+                className={`bg-[#F5F7FA] px-4 sm:px-6 lg:px-8 border-t border-slate-200/70 transition-colors ${
+                  showHomeCategories ? 'py-12 sm:py-16' : 'py-6 sm:py-8'
+                }`}
+              >
+                <div className="max-w-7xl mx-auto">
+                  <div
+                    className={`bg-white rounded-2xl border border-slate-200/80 px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      showHomeCategories ? 'mb-8' : ''
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[#0B132B]">
+                        {siteContent.categoriesTitle}
+                      </h2>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-slate-500 mt-1 tabular-nums">
+                        <span>{OFFICIAL_CATEGORIES.length} Sectors</span>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {totalActiveVacancies} {totalActiveVacancies === 1 ? 'Open Job' : 'Open Jobs'}
+                        </span>
+                        {siteContent.categoriesSubtitle && (
+                          <>
+                            <span aria-hidden="true" className="hidden sm:inline">·</span>
+                            <span className="hidden sm:inline">
+                              {siteContent.categoriesSubtitle}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowHomeCategories((prev) => !prev)}
+                        aria-expanded={showHomeCategories}
+                        aria-controls="home-categories-grid"
+                        className={`inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] ${
+                          showHomeCategories
+                            ? 'bg-slate-100 hover:bg-slate-200 text-[#0B132B]'
+                            : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
+                        }`}
+                      >
+                        <LayoutGrid className="w-4 h-4 shrink-0" />
+                        <span>
+                          {showHomeCategories
+                            ? siteContent.categoriesHideButtonText
+                            : siteContent.categoriesShowButtonText}
+                        </span>
+                        {showHomeCategories ? (
+                          <ChevronUp className="w-4 h-4 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 shrink-0" />
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowHomeCategories((prev) => !prev)}
-                      aria-expanded={showHomeCategories}
-                      aria-controls="home-categories-grid"
-                      className={`inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] ${
-                        showHomeCategories
-                          ? 'bg-slate-100 hover:bg-slate-200 text-[#0B132B]'
-                          : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
-                      }`}
-                    >
-                      <LayoutGrid className="w-4 h-4 shrink-0" />
-                      <span>
-                        {showHomeCategories ? 'Hide Job Categories' : 'List All Job Categories'}
-                      </span>
-                      {showHomeCategories ? (
-                        <ChevronUp className="w-4 h-4 shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 shrink-0" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {showHomeCategories && (
-                  <>
-                    <div
-                      id="home-categories-grid"
-                      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5"
-                    >
-                      {OFFICIAL_CATEGORIES.map((cat) => {
-                        const count = activeCountMap.get(cat.name) || 0;
-                        return (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => handleSelectCategoryByName(cat.name)}
-                            className="group bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#16A34A] hover:shadow-md transition-all text-left flex items-start gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
-                          >
-                            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#16A34A] group-hover:bg-[#16A34A] group-hover:text-white transition-colors flex items-center justify-center shrink-0">
-                              <CategoryIcon iconName={cat.iconName} className="w-5 h-5" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h3 className="text-sm font-bold text-[#0B132B] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug">
-                                {cat.name}
-                              </h3>
-                              {cat.amharicName && (
-                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                                  {cat.amharicName}
+                  {showHomeCategories && (
+                    <>
+                      <div
+                        id="home-categories-grid"
+                        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5"
+                      >
+                        {OFFICIAL_CATEGORIES.map((cat) => {
+                          const count = activeCountMap.get(cat.name) || 0;
+                          return (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => handleSelectCategoryByName(cat.name)}
+                              className="group bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#16A34A] hover:shadow-md transition-all text-left flex items-start gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                            >
+                              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#16A34A] group-hover:bg-[#16A34A] group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                                <CategoryIcon iconName={cat.iconName} className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-sm font-bold text-[#0B132B] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug">
+                                  {cat.name}
+                                </h3>
+                                {cat.amharicName && (
+                                  <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                    {cat.amharicName}
+                                  </p>
+                                )}
+                                <p className="text-xs font-semibold text-slate-500 mt-1.5 tabular-nums">
+                                  {count} {count === 1 ? 'Open Job' : 'Open Jobs'}
                                 </p>
-                              )}
-                              <p className="text-xs font-semibold text-slate-500 mt-1.5 tabular-nums">
-                                {count} {count === 1 ? 'Open Job' : 'Open Jobs'}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
 
-                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAllCategoriesView(true);
-                          window.scrollTo({ top: 0, behavior: 'auto' });
-                        }}
-                        className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                        <span>Filter &amp; Search All {OFFICIAL_CATEGORIES.length} Categories</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowHomeCategories(false)}
-                        className="inline-flex items-center gap-1.5 min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                        <span>Hide Categories</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </section>
+                      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAllCategoriesView(true);
+                            window.scrollTo({ top: 0, behavior: 'auto' });
+                          }}
+                          className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          <LayoutGrid className="w-4 h-4" />
+                          <span>Filter &amp; Search All {OFFICIAL_CATEGORIES.length} Categories</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowHomeCategories(false)}
+                          className="inline-flex items-center gap-1.5 min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          <ChevronUp className="w-4 h-4" />
+                          <span>{siteContent.categoriesHideButtonText}</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
 
             {/* 4B. OPTIONAL LOGIN, REGISTER & APP DOWNLOAD BENEFITS (ENGLISH & AMHARIC) */}
-            <OptionalBenefitsShowcase
-              appLogoUrl={siteSettings.appLogoUrl}
-              isLoggedIn={Boolean(currentUser || userProfile?.email)}
-              userDisplayName={userProfile?.fullName || currentUser?.displayName || currentUser?.email}
-              isStandaloneApp={isStandaloneApp}
-              isDesktop={isDesktopDevice}
-              onOpenAuth={(mode) => {
-                setUserAuthModalMode(mode);
-                setIsUserAuthModalOpen(true);
-              }}
-              onOpenDashboard={() => {
-                setJobSeekerInitialTab('overview');
-                setIsJobSeekerDashboardOpen(true);
-              }}
-              onDownloadApp={handleDownloadApplicationClick}
-            />
+            {siteContent.showBenefitsSection && (
+              <OptionalBenefitsShowcase
+                appLogoUrl={siteSettings.appLogoUrl}
+                siteContent={siteContent}
+                isLoggedIn={Boolean(currentUser || userProfile?.email)}
+                userDisplayName={userProfile?.fullName || currentUser?.displayName || currentUser?.email}
+                isStandaloneApp={isStandaloneApp}
+                isDesktop={isDesktopDevice}
+                onOpenAuth={(mode) => {
+                  setUserAuthModalMode(mode);
+                  setIsUserAuthModalOpen(true);
+                }}
+                onOpenDashboard={() => {
+                  setJobSeekerInitialTab('overview');
+                  setIsJobSeekerDashboardOpen(true);
+                }}
+                onDownloadApp={handleDownloadApplicationClick}
+              />
+            )}
 
             {/* LOCAL JOBS FOR YOUR EXPERIENCE + SEE ALL TOGGLE (Strictly Rendered ONLY when registered & signed in) */}
             {registeredProfile ? (
@@ -3199,261 +3247,277 @@ export default function App() {
             )}
 
             {/* 5. FEATURED COMPANIES SLIDER SECTION (Blue Background #1E40AF-#0F3D8A) */}
-            <FeaturedCompaniesCarousel
-              vacancies={publishedVacancies}
-              onSelectCompany={handleSelectCompanyFromShowcase}
-              onViewAllCompanies={handleViewAllFeaturedCompanies}
-            />
+            {siteContent.showFeaturedCompanies && (
+              <FeaturedCompaniesCarousel
+                vacancies={publishedVacancies}
+                onSelectCompany={handleSelectCompanyFromShowcase}
+                onViewAllCompanies={handleViewAllFeaturedCompanies}
+                title={siteContent.featuredCompaniesTitle}
+                subtitle={siteContent.featuredCompaniesSubtitle}
+              />
+            )}
 
             {/* 6. HOW HOPELANDJOBS WORKS SECTION (Light Grey #F5F7FA) */}
-            <section
-              aria-label="How HopelandJobs Works"
-              className="bg-[#F5F7FA] py-14 sm:py-16 px-4 sm:px-6 lg:px-8"
-            >
-              <div className="max-w-6xl mx-auto">
-                <div className="text-center max-w-2xl mx-auto mb-10">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
-                    How HopelandJobs Works
-                  </h2>
-                  <p className="text-sm text-slate-500 mt-2">
-                    Find verified Ethiopian careers, organize your application documents, and receive real-time job alerts tailored to your profile.
-                  </p>
+            {siteContent.showHowItWorksSection && (
+              <section
+                aria-label={siteContent.howItWorksTitle}
+                className="bg-[#F5F7FA] py-14 sm:py-16 px-4 sm:px-6 lg:px-8"
+              >
+                <div className="max-w-6xl mx-auto">
+                  <div className="text-center max-w-2xl mx-auto mb-10">
+                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
+                      {siteContent.howItWorksTitle}
+                    </h2>
+                    <p className="text-sm text-slate-500 mt-2">
+                      {siteContent.howItWorksSubtitle}
+                    </p>
+                  </div>
+
+                  {/* Large Centered Clean Illustration */}
+                  {!howWorksImgError ? (
+                    <div className="max-w-4xl mx-auto mb-10 rounded-2xl overflow-hidden bg-white border border-slate-200/80 shadow-sm">
+                      <img
+                        src={howHopelandWorksImg}
+                        alt="How HopelandJobs works across job discovery, CV profile readiness, and alerts"
+                        onError={() => setHowWorksImgError(true)}
+                        className="w-full h-auto object-cover"
+                      />
+                    </div>
+                  ) : null}
+
+                  {/* Concise 3-Step Horizontal Flow */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center font-bold text-sm tabular-nums">
+                        01
+                      </div>
+                      <h3 className="text-base font-bold text-[#0B132B]">
+                        {siteContent.howItWorksStep1Title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {siteContent.howItWorksStep1Desc}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center">
+                        <UploadCloud className="w-5 h-5" />
+                      </div>
+                      <h3 className="text-base font-bold text-[#0B132B]">
+                        {siteContent.howItWorksStep2Title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {siteContent.howItWorksStep2Desc}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center">
+                        <BellRing className="w-5 h-5" />
+                      </div>
+                      <h3 className="text-base font-bold text-[#0B132B]">
+                        {siteContent.howItWorksStep3Title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        {siteContent.howItWorksStep3Desc}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Large Centered Clean Illustration */}
-                {!howWorksImgError ? (
-                  <div className="max-w-4xl mx-auto mb-10 rounded-2xl overflow-hidden bg-white border border-slate-200/80 shadow-sm">
-                    <img
-                      src={howHopelandWorksImg}
-                      alt="How HopelandJobs works across job discovery, CV profile readiness, and alerts"
-                      onError={() => setHowWorksImgError(true)}
-                      className="w-full h-auto object-cover"
-                    />
-                  </div>
-                ) : null}
-
-                {/* Concise 3-Step Horizontal Flow */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center font-bold text-sm tabular-nums">
-                      01
-                    </div>
-                    <h3 className="text-base font-bold text-[#0B132B]">
-                      Search Verified Jobs
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      Browse genuine job announcements across Ethiopia’s top banks, NGOs, UN agencies, airlines, and corporate employers with confirmed deadlines.
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1E40AF] flex items-center justify-center">
-                      <UploadCloud className="w-5 h-5" />
-                    </div>
-                    <h3 className="text-base font-bold text-[#0B132B]">
-                      Build Profile &amp; CV Vault
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      Save your education, work history, CV, and supporting credentials securely once so you are always ready to apply directly.
-                    </p>
-                  </div>
-
-                  <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-[#16A34A] flex items-center justify-center">
-                      <BellRing className="w-5 h-5" />
-                    </div>
-                    <h3 className="text-base font-bold text-[#0B132B]">
-                      Get Matched &amp; Apply
-                    </h3>
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      Receive instant alerts when vacancies matching your qualifications and preferred sectors open, with direct official employer application links.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </section>
+              </section>
+            )}
 
             {/* 7. CV & APPLICATION ADVISOR + ABOUT HOPELANDJOBS (Restrained White Section) */}
-            <section
-              id="cv-assistance-section"
-              className="bg-white py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200/80"
-            >
-              <div className="max-w-7xl mx-auto space-y-10">
-                <div className="bg-[#F5F7FA] rounded-3xl p-6 sm:p-10 border border-slate-200/80 space-y-8">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                    <div className="space-y-4">
-                      <h2 className="text-2xl sm:text-3xl font-bold text-[#0B132B]">
-                        CV &amp; Application Assistance
-                      </h2>
-                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                        Applying for banking positions at CBE or Awash, UN agencies like UNICEF, or corporate roles in Addis Ababa? Prepare your application documents to match official Ethiopian recruitment standards.
-                      </p>
+            {(siteContent.showCvAssistanceSection || siteContent.showAboutSection) && (
+              <section
+                id="cv-assistance-section"
+                className="bg-white py-14 px-4 sm:px-6 lg:px-8 border-t border-slate-200/80"
+              >
+                <div className="max-w-7xl mx-auto space-y-10">
+                  {siteContent.showCvAssistanceSection && (
+                    <div className="bg-[#F5F7FA] rounded-3xl p-6 sm:p-10 border border-slate-200/80 space-y-8">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                        <div className="space-y-4">
+                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0B132B]">
+                            {siteContent.cvAssistanceTitle}
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            {siteContent.cvAssistanceSubtitle}
+                          </p>
 
-                      <div className="space-y-2 text-xs sm:text-sm text-slate-700 font-medium">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
-                          <span>Tailored cover letter &amp; interview tips on every vacancy.</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
-                          <span>Document checklists (Degree, Official Transcript, National ID).</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
-                          <span>Direct employer submission portals — zero application fees.</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                      <h3 className="text-xs font-bold text-[#0B132B] uppercase tracking-wider">
-                        Standard Ethiopian Application Checklist
-                      </h3>
-                      <div className="space-y-2 text-xs text-slate-700">
-                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
-                          <span>1. Professional CV (Chronological format)</span>
-                          <span className="text-[#16A34A] font-semibold">Standard</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
-                          <span>2. Tailored Application Letter referencing Ref #</span>
-                          <span className="text-[#16A34A] font-semibold">Essential</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
-                          <span>3. University Degree &amp; Official Student Copy</span>
-                          <span className="text-[#16A34A] font-semibold">Required</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
-                          <span>4. Renewed National ID (Fayda / Kebele ID)</span>
-                          <span className="text-[#16A34A] font-semibold">Verified</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Interactive Ask Hopeland AI Career & CV Advisor */}
-                  <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0">
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-[#0B132B]">
-                          Hopeland AI Career &amp; CV Advisor
-                        </h3>
-                        <p className="text-xs text-slate-500">
-                          Instant guidance tailored for Ethiopian banks, NGOs, and corporate employers.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        'Banking CV tips for CBE & Awash',
-                        'NGO cover letter checklist',
-                        'Fresh graduate interview prep',
-                      ].map((prompt) => (
-                        <button
-                          key={prompt}
-                          type="button"
-                          onClick={() => handleAskCareerCoach(prompt)}
-                          disabled={isCareerCoachLoading}
-                          className="px-3 py-1.5 rounded-xl bg-[#F5F7FA] hover:bg-emerald-50 border border-slate-200 hover:border-[#16A34A]/50 text-[#0B132B] font-semibold text-xs transition-colors cursor-pointer"
-                        >
-                          {prompt}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        value={careerQuestion}
-                        onChange={(e) => setCareerQuestion(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && careerQuestion.trim()) {
-                            e.preventDefault();
-                            handleAskCareerCoach();
-                          }
-                        }}
-                        placeholder="Ask any CV, interview, or Ethiopian job search question..."
-                        className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-[#0B132B] outline-none focus:ring-2 focus:ring-[#16A34A]/20 focus:border-[#16A34A]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAskCareerCoach()}
-                        disabled={isCareerCoachLoading || !careerQuestion.trim()}
-                        className="px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
-                      >
-                        {isCareerCoachLoading ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-4 h-4" />
-                        )}
-                        <span>{isCareerCoachLoading ? 'Thinking...' : 'Ask Advisor'}</span>
-                      </button>
-                    </div>
-
-                    {careerCoachError && (
-                      <p className="text-xs text-rose-600 font-medium">{careerCoachError}</p>
-                    )}
-
-                    {careerCoachAdvice && (
-                      <div className="p-4 rounded-xl bg-[#F5F7FA] border border-slate-200 space-y-3 text-xs sm:text-sm">
-                        <div className="font-bold text-[#0B132B]">Career Guidance</div>
-                        <p className="text-slate-700 leading-relaxed whitespace-pre-line">
-                          {careerCoachAdvice.adviceAnswer}
-                        </p>
-                        {careerCoachAdvice.profileStrengthTips?.length > 0 && (
-                          <div className="space-y-1 pt-1">
-                            <div className="text-xs font-bold uppercase text-[#16A34A]">
-                              Actionable Tips
+                          <div className="space-y-2 text-xs sm:text-sm text-slate-700 font-medium">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                              <span>Tailored cover letter &amp; interview tips on every vacancy.</span>
                             </div>
-                            <ul className="list-disc pl-4 space-y-1 text-slate-700">
-                              {careerCoachAdvice.profileStrengthTips.map((tip, i) => (
-                                <li key={i}>{tip}</li>
-                              ))}
-                            </ul>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                              <span>Document checklists (Degree, Official Transcript, National ID).</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />
+                              <span>Direct employer submission portals — zero application fees.</span>
+                            </div>
                           </div>
-                        )}
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                          <h3 className="text-xs font-bold text-[#0B132B] uppercase tracking-wider">
+                            Standard Ethiopian Application Checklist
+                          </h3>
+                          <div className="space-y-2 text-xs text-slate-700">
+                            <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                              <span>1. Professional CV (Chronological format)</span>
+                              <span className="text-[#16A34A] font-semibold">Standard</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                              <span>2. Tailored Application Letter referencing Ref #</span>
+                              <span className="text-[#16A34A] font-semibold">Essential</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                              <span>3. University Degree &amp; Official Student Copy</span>
+                              <span className="text-[#16A34A] font-semibold">Required</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-[#F5F7FA] border border-slate-200/70 flex items-center justify-between">
+                              <span>4. Renewed National ID (Fayda / Kebele ID)</span>
+                              <span className="text-[#16A34A] font-semibold">Verified</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Clean About HopelandJobs Summary */}
-                <div
-                  id="about-section"
-                  className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-4"
-                >
-                  <div className="space-y-3">
-                    <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span>Verified Quality Promise</span>
-                    </div>
-                    <h2 className="text-2xl font-bold text-[#0B132B]">About HOPELAND JOBS</h2>
-                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                      {siteSettings.aboutText ||
-                        'HOPELAND JOBS is Ethiopia’s trusted, verified recruitment information portal connecting professionals with genuine opportunities across banking, NGOs, embassies, aviation, hospitality, corporate organizations, and international career pathways.'}
-                    </p>
-                  </div>
+                      {/* Interactive Ask Hopeland AI Career & CV Advisor */}
+                      {siteContent.showAiCareerAdvisor && (
+                        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-[#16A34A] text-white flex items-center justify-center shrink-0">
+                              <Sparkles className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-[#0B132B]">
+                                Hopeland AI Career &amp; CV Advisor
+                              </h3>
+                              <p className="text-xs text-slate-500">
+                                Instant guidance tailored for Ethiopian banks, NGOs, and corporate employers.
+                              </p>
+                            </div>
+                          </div>
 
-                  <div className="bg-[#F5F7FA] p-6 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs sm:text-sm text-slate-700">
-                    <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
-                      <span><strong>Verified Vacancies:</strong> Confirmed deadlines and official employers.</span>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              'Banking CV tips for CBE & Awash',
+                              'NGO cover letter checklist',
+                              'Fresh graduate interview prep',
+                            ].map((prompt) => (
+                              <button
+                                key={prompt}
+                                type="button"
+                                onClick={() => handleAskCareerCoach(prompt)}
+                                disabled={isCareerCoachLoading}
+                                className="px-3 py-1.5 rounded-xl bg-[#F5F7FA] hover:bg-emerald-50 border border-slate-200 hover:border-[#16A34A]/50 text-[#0B132B] font-semibold text-xs transition-colors cursor-pointer"
+                              >
+                                {prompt}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              value={careerQuestion}
+                              onChange={(e) => setCareerQuestion(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && careerQuestion.trim()) {
+                                  e.preventDefault();
+                                  handleAskCareerCoach();
+                                }
+                              }}
+                              placeholder="Ask any CV, interview, or Ethiopian job search question..."
+                              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm text-[#0B132B] outline-none focus:ring-2 focus:ring-[#16A34A]/20 focus:border-[#16A34A]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAskCareerCoach()}
+                              disabled={isCareerCoachLoading || !careerQuestion.trim()}
+                              className="px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+                            >
+                              {isCareerCoachLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-4 h-4" />
+                              )}
+                              <span>{isCareerCoachLoading ? 'Thinking...' : 'Ask Advisor'}</span>
+                            </button>
+                          </div>
+
+                          {careerCoachError && (
+                            <p className="text-xs text-rose-600 font-medium">{careerCoachError}</p>
+                          )}
+
+                          {careerCoachAdvice && (
+                            <div className="p-4 rounded-xl bg-[#F5F7FA] border border-slate-200 space-y-3 text-xs sm:text-sm">
+                              <div className="font-bold text-[#0B132B]">Career Guidance</div>
+                              <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                                {careerCoachAdvice.adviceAnswer}
+                              </p>
+                              {careerCoachAdvice.profileStrengthTips?.length > 0 && (
+                                <div className="space-y-1 pt-1">
+                                  <div className="text-xs font-bold uppercase text-[#16A34A]">
+                                    Actionable Tips
+                                  </div>
+                                  <ul className="list-disc pl-4 space-y-1 text-slate-700">
+                                    {careerCoachAdvice.profileStrengthTips.map((tip, i) => (
+                                      <li key={i}>{tip}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
-                      <span><strong>Direct Portals:</strong> Zero hidden third-party application fees.</span>
+                  )}
+
+                  {/* Clean About HopelandJobs Summary */}
+                  {siteContent.showAboutSection && (
+                    <div
+                      id="about-section"
+                      className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-4"
+                    >
+                      <div className="space-y-3">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A]">
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Verified Quality Promise</span>
+                        </div>
+                        <h2 className="text-2xl font-bold text-[#0B132B]">
+                          {siteContent.aboutSectionTitle}
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                          {siteSettings.aboutText ||
+                            'HOPELAND JOBS is Ethiopia’s trusted, verified recruitment information portal connecting professionals with genuine opportunities across banking, NGOs, embassies, aviation, hospitality, corporate organizations, and international career pathways.'}
+                        </p>
+                      </div>
+
+                      <div className="bg-[#F5F7FA] p-6 rounded-2xl border border-slate-200/80 space-y-2.5 text-xs sm:text-sm text-slate-700">
+                        <div className="flex items-start gap-2.5">
+                          <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                          <span><strong>Verified Vacancies:</strong> Confirmed deadlines and official employers.</span>
+                        </div>
+                        <div className="flex items-start gap-2.5">
+                          <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                          <span><strong>Direct Portals:</strong> Zero hidden third-party application fees.</span>
+                        </div>
+                        <div className="flex items-start gap-2.5">
+                          <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                          <span><strong>Instant Alerts:</strong> Personalized notifications when matching roles open.</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-start gap-2.5">
-                      <Check className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
-                      <span><strong>Instant Alerts:</strong> Personalized notifications when matching roles open.</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            </section>
+              </section>
+            )}
           </>
         )}
       </main>

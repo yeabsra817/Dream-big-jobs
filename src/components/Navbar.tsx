@@ -21,6 +21,8 @@ import {
   Share,
   ChevronDown,
   Bell,
+  Megaphone,
+  ExternalLink,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
 import {
@@ -31,6 +33,7 @@ import {
 } from '../types/jobSeeker';
 import { NotificationCenterPopover } from './NotificationCenterPopover';
 import { AppBrandLogo } from './AppBrandLogo';
+import { resolveSiteContent } from '../utils/siteContentDefaults';
 
 interface Props {
   siteSettings: SiteSettings;
@@ -114,7 +117,9 @@ export const Navbar: React.FC<Props> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const [dismissedInstallStrip, setDismissedInstallStrip] = useState(false);
+  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const siteContent = resolveSiteContent(siteSettings);
 
   const handleDownloadAppClick = () => {
     if (onOpenDownloadApplication) {
@@ -166,41 +171,83 @@ export const Navbar: React.FC<Props> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-[0_2px_12px_rgba(11,19,43,0.06)]">
-      {/* Official Top Bar — Optional Download Application (Phone & Computer) */}
-      {!isStandaloneApp && !dismissedInstallStrip && (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
-        <div className="bg-gradient-to-r from-[#0B132B] via-[#132959] to-[#0B132B] text-slate-200 border-b border-amber-400/25">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-10 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
+      {/* Optional Admin-Controlled Sitewide Announcement Banner */}
+      {siteContent.showAnnouncementBanner &&
+        siteContent.announcementText.trim().length > 0 &&
+        !dismissedAnnouncement && (
+          <div className="bg-emerald-700 text-white border-b border-emerald-800">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-3 text-xs font-semibold">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Megaphone className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="truncate sm:whitespace-normal">{siteContent.announcementText}</span>
+                {siteContent.announcementLinkUrl.trim().length > 0 && (
+                  <a
+                    href={
+                      siteContent.announcementLinkUrl.startsWith('http')
+                        ? siteContent.announcementLinkUrl
+                        : `https://${siteContent.announcementLinkUrl}`
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-white/15 hover:bg-white/25 text-amber-200 font-bold whitespace-nowrap shrink-0 transition-colors"
+                  >
+                    <span>{siteContent.announcementLinkLabel || 'Learn More'}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={handleDownloadAppClick}
-                className="group inline-flex items-center gap-2 px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] text-xs font-extrabold tracking-tight transition-all cursor-pointer shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 whitespace-nowrap"
-                title="Optional: Download HopelandJobs application for Phone or Computer"
+                onClick={() => setDismissedAnnouncement(true)}
+                aria-label="Dismiss announcement"
+                className="p-1 rounded-md text-emerald-100 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Download App · አፑን ያውርዱ</span>
+                <X className="w-3.5 h-3.5" />
               </button>
-              <span className="hidden md:inline text-xs font-semibold text-emerald-200 truncate">
-                Phone &amp; Computer · Optional · ፈጣን የስራ ማሳወቂያ
-              </span>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setDismissedInstallStrip(true)}
-              aria-label="Hide download bar"
-              title="Hide for now"
-              className="p-1 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
           </div>
-        </div>
-      )}
+        )}
+
+      {/* Official Top Bar — Optional Download Application (Phone & Computer) */}
+      {siteContent.showTopDownloadBar &&
+        !isStandaloneApp &&
+        !dismissedInstallStrip &&
+        (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
+          <div className="bg-gradient-to-r from-[#0B132B] via-[#132959] to-[#0B132B] text-slate-200 border-b border-amber-400/25">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-10 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={handleDownloadAppClick}
+                  className="group inline-flex items-center gap-2 px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] text-xs font-extrabold tracking-tight transition-all cursor-pointer shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 whitespace-nowrap"
+                  title="Optional: Download application for Phone or Computer"
+                >
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{siteContent.topDownloadBarText}</span>
+                </button>
+                {siteContent.topDownloadBarSubtitle && (
+                  <span className="hidden md:inline text-xs font-semibold text-emerald-200 truncate">
+                    {siteContent.topDownloadBarSubtitle}
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDismissedInstallStrip(true)}
+                aria-label="Hide download bar"
+                title="Hide for now"
+                className="p-1 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-[72px] gap-4 lg:gap-8">
-          {/* Zone 1: HopelandJobs Brand Logo (Left) */}
+          {/* Zone 1: Brand Logo (Left) */}
           <button
             type="button"
             onClick={() => {
@@ -216,7 +263,8 @@ export const Navbar: React.FC<Props> = ({
               className="group-hover:brightness-95 transition-all"
             />
             <span className="font-extrabold text-xl sm:text-[22px] tracking-tight text-[#0B132B] whitespace-nowrap shrink-0">
-              Hopeland<span className="text-[#16A34A]">Jobs</span>
+              {siteContent.brandPrimary}
+              <span className="text-[#16A34A]">{siteContent.brandAccent}</span>
             </span>
           </button>
 
@@ -225,20 +273,24 @@ export const Navbar: React.FC<Props> = ({
             aria-label="Main navigation"
             className="hidden lg:flex items-center gap-7 text-sm font-semibold text-slate-700"
           >
-            <button
-              type="button"
-              onClick={onHomeClick}
-              className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Jobs
-            </button>
-            <button
-              type="button"
-              onClick={handleCategoriesNav}
-              className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Categories
-            </button>
+            {siteContent.showNavJobs && (
+              <button
+                type="button"
+                onClick={onHomeClick}
+                className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Jobs
+              </button>
+            )}
+            {siteContent.showNavCategories && (
+              <button
+                type="button"
+                onClick={handleCategoriesNav}
+                className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Categories
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenLocations}
@@ -246,7 +298,7 @@ export const Navbar: React.FC<Props> = ({
             >
               Locations
             </button>
-            {onOpenInternationalJobs && (
+            {siteContent.showNavInternational && onOpenInternationalJobs && (
               <button
                 type="button"
                 onClick={onOpenInternationalJobs}
@@ -635,29 +687,33 @@ export const Navbar: React.FC<Props> = ({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => {
-              onHomeClick();
-              setMobileMenuOpen(false);
-            }}
-            className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
-          >
-            <Briefcase className="w-4 h-4 text-[#16A34A]" />
-            <span>Jobs Home</span>
-          </button>
+          {siteContent.showNavJobs && (
+            <button
+              type="button"
+              onClick={() => {
+                onHomeClick();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <Briefcase className="w-4 h-4 text-[#16A34A]" />
+              <span>Jobs Home</span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => {
-              handleCategoriesNav();
-              setMobileMenuOpen(false);
-            }}
-            className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
-          >
-            <LayoutGrid className="w-4 h-4 text-[#16A34A]" />
-            <span>All Categories</span>
-          </button>
+          {siteContent.showNavCategories && (
+            <button
+              type="button"
+              onClick={() => {
+                handleCategoriesNav();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <LayoutGrid className="w-4 h-4 text-[#16A34A]" />
+              <span>All Categories</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -697,7 +753,7 @@ export const Navbar: React.FC<Props> = ({
             <span>CV Assistance</span>
           </button>
 
-          {onOpenInternationalJobs && (
+          {siteContent.showNavInternational && onOpenInternationalJobs && (
             <button
               type="button"
               onClick={() => {
@@ -711,7 +767,7 @@ export const Navbar: React.FC<Props> = ({
             </button>
           )}
 
-          {onOpenImmigration && (
+          {siteContent.showNavImmigration && onOpenImmigration && (
             <button
               type="button"
               onClick={() => {
@@ -725,7 +781,7 @@ export const Navbar: React.FC<Props> = ({
             </button>
           )}
 
-          {onOpenScholarships && (
+          {siteContent.showNavScholarships && onOpenScholarships && (
             <button
               type="button"
               onClick={() => {

@@ -179,6 +179,100 @@ export interface DuplicateReportItem {
 import type { TelegramDistributionMode, ResearchFrequency } from './international';
 export type { TelegramDistributionMode, ResearchFrequency };
 
+export interface SiteContentConfig {
+  // Brand & Header
+  brandPrimary?: string;
+  brandAccent?: string;
+  browserTitle?: string;
+  showAnnouncementBanner?: boolean;
+  announcementText?: string;
+  announcementLinkUrl?: string;
+  announcementLinkLabel?: string;
+  showTopDownloadBar?: boolean;
+  topDownloadBarText?: string;
+  topDownloadBarSubtitle?: string;
+  downloadReminderIntervalSeconds?: number;
+  showNavJobs?: boolean;
+  showNavCategories?: boolean;
+  showNavInternational?: boolean;
+  showNavImmigration?: boolean;
+  showNavScholarships?: boolean;
+
+  // Homepage Hero Section
+  showHeroSection?: boolean;
+  heroTitle?: string;
+  heroSubtitleAmharic?: string;
+  heroSearchPlaceholderJobs?: string;
+  heroSearchPlaceholderCompanies?: string;
+  heroSearchButtonText?: string;
+  heroNoLoginNoticeEn?: string;
+  heroNoLoginNoticeAm?: string;
+  heroRegisterButtonText?: string;
+  heroDownloadButtonText?: string;
+  heroBenefitsButtonText?: string;
+  heroCustomBackgroundUrl?: string;
+
+  // Trusted Companies Strip
+  showTrustedCompanies?: boolean;
+  trustedCompaniesTitle?: string;
+
+  // Job Categories Section
+  showCategoriesSection?: boolean;
+  categoriesDefaultExpanded?: boolean;
+  categoriesTitle?: string;
+  categoriesSubtitle?: string;
+  categoriesShowButtonText?: string;
+  categoriesHideButtonText?: string;
+
+  // Optional Login, Register & App Benefits Section
+  showBenefitsSection?: boolean;
+  benefitsBadgeText?: string;
+  benefitsHeadingEn?: string;
+  benefitsSubheadingAm?: string;
+  benefitsSubheadingEn?: string;
+  registerCardTitleEn?: string;
+  registerCardTitleAm?: string;
+  appCardTitleEn?: string;
+  appCardTitleAm?: string;
+
+  // Featured Companies Carousel
+  showFeaturedCompanies?: boolean;
+  featuredCompaniesTitle?: string;
+  featuredCompaniesSubtitle?: string;
+
+  // How It Works Section
+  showHowItWorksSection?: boolean;
+  howItWorksTitle?: string;
+  howItWorksSubtitle?: string;
+  howItWorksStep1Title?: string;
+  howItWorksStep1Desc?: string;
+  howItWorksStep2Title?: string;
+  howItWorksStep2Desc?: string;
+  howItWorksStep3Title?: string;
+  howItWorksStep3Desc?: string;
+
+  // CV & Application Assistance + About Section
+  showCvAssistanceSection?: boolean;
+  cvAssistanceTitle?: string;
+  cvAssistanceSubtitle?: string;
+  showAiCareerAdvisor?: boolean;
+  showAboutSection?: boolean;
+  aboutSectionTitle?: string;
+
+  // Footer & Social Links
+  footerTelegramButtonText?: string;
+  footerVerificationText?: string;
+  footerCopyrightText?: string;
+  showFooterSectors?: boolean;
+  showFooterCities?: boolean;
+  showFooterGlobalLinks?: boolean;
+  socialFacebookUrl?: string;
+  socialLinkedinUrl?: string;
+  socialTwitterUrl?: string;
+  socialTiktokUrl?: string;
+  socialYoutubeUrl?: string;
+}
+
 export interface SiteSettings {
   telegramChannelName: string;
   telegramChannelId?: string;
@@ -213,6 +307,7 @@ export interface SiteSettings {
   appLogo512Url?: string; // Exact 512x512 PNG data URI for Android WebAPK & Desktop PWA icons
   appLogoMaskable512Url?: string; // Exact 512x512 maskable safe-zone PNG data URI for Android adaptive icons
   appLogoUpdatedAt?: string; // ISO timestamp for cache-busting PWA manifest & icons
+  siteContent?: SiteContentConfig; // Full Admin CMS overrides for Homepage, Header, Sections, & Footer
   updatedAt: string;
   // Smart Alerts & Thresholds
   alertTrafficDropThreshold?: number; // e.g. 50% drop

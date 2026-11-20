@@ -718,14 +718,14 @@ export async function deleteVacancy(id: string): Promise<void> {
     }
   } catch {}
 
-  if (!auth.currentUser) {
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
     return;
   }
 
   try {
     await deleteDoc(doc(db, 'vacancies', id));
   } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, path);
+    console.warn(`Firestore delete note (${path}):`, err);
   }
 }
 
@@ -827,27 +827,41 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   const { telegramBotToken: _stripSrv, ...safeSrvSettings } = serverSettings as Partial<SiteSettings>;
   const { telegramBotToken: _stripCache, ...safeCached } = cached as Partial<SiteSettings>;
 
-  // Merge with highest priority: Firestore > Server > Local Cache > Defaults
+  // Merge by newest timestamp so Developer-Password server saves are never overwritten by older Firestore snapshots
+  const srvUpdatedTs = safeSrvSettings.updatedAt ? Date.parse(safeSrvSettings.updatedAt) || 0 : 0;
+  const fsUpdatedTs = safeFsSettings.updatedAt ? Date.parse(safeFsSettings.updatedAt) || 0 : 0;
+  const serverIsNewer = srvUpdatedTs > fsUpdatedTs;
+
+  const primaryRemote = serverIsNewer ? safeSrvSettings : safeFsSettings;
+  const secondaryRemote = serverIsNewer ? safeFsSettings : safeSrvSettings;
+
+  const mergedSiteContent = {
+    ...(safeCached.siteContent && typeof safeCached.siteContent === 'object' ? safeCached.siteContent : {}),
+    ...(secondaryRemote.siteContent && typeof secondaryRemote.siteContent === 'object' ? secondaryRemote.siteContent : {}),
+    ...(primaryRemote.siteContent && typeof primaryRemote.siteContent === 'object' ? primaryRemote.siteContent : {}),
+  };
+
   const merged: SiteSettings = {
     ...defaultSettings,
     ...safeCached,
-    ...safeSrvSettings,
-    ...safeFsSettings,
+    ...secondaryRemote,
+    ...primaryRemote,
+    siteContent: Object.keys(mergedSiteContent).length > 0 ? mergedSiteContent : undefined,
     appLogoUrl:
-      safeFsSettings.appLogoUrl ?? safeSrvSettings.appLogoUrl ?? safeCached.appLogoUrl ?? '',
+      primaryRemote.appLogoUrl ?? secondaryRemote.appLogoUrl ?? safeCached.appLogoUrl ?? '',
     appLogo512Url:
-      safeFsSettings.appLogo512Url ??
-      safeSrvSettings.appLogo512Url ??
+      primaryRemote.appLogo512Url ??
+      secondaryRemote.appLogo512Url ??
       safeCached.appLogo512Url ??
       '',
     appLogoMaskable512Url:
-      safeFsSettings.appLogoMaskable512Url ??
-      safeSrvSettings.appLogoMaskable512Url ??
+      primaryRemote.appLogoMaskable512Url ??
+      secondaryRemote.appLogoMaskable512Url ??
       safeCached.appLogoMaskable512Url ??
       '',
     appLogoUpdatedAt:
-      safeFsSettings.appLogoUpdatedAt ??
-      safeSrvSettings.appLogoUpdatedAt ??
+      primaryRemote.appLogoUpdatedAt ??
+      secondaryRemote.appLogoUpdatedAt ??
       safeCached.appLogoUpdatedAt ??
       '',
     telegramBotTokenConfigured: Boolean(
@@ -901,10 +915,12 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
   const path = 'siteSettings/general';
   // Security: strip raw bot token before saving to client cache or Firestore
   const { telegramBotToken: rawTokenOnlyForServerSync, ...safeSettingsRaw } = settings;
+  const nowIso = safeSettingsRaw.updatedAt || new Date().toISOString();
   const safeSettings: SiteSettings = {
     ...safeSettingsRaw,
     gaMeasurementId: safeSettingsRaw.gaMeasurementId || 'G-KH6X73105S',
     gaTrackingEnabled: safeSettingsRaw.gaTrackingEnabled ?? true,
+    updatedAt: nowIso,
   };
 
   // 1. Update localStorage immediately (never storing raw bot token)
@@ -913,31 +929,51 @@ export async function saveSiteSettings(settings: SiteSettings): Promise<void> {
     localStorage.removeItem('dreambigjobs_telegram_bot_token');
   } catch {}
 
-  // 2. Persist to server backend disk (server strips token out of public settings and isolates it in server-only config)
+  // 2. Persist to server backend with verified Developer Session credentials & owner headers
+  let serverSaved = false;
+  let serverErrorMessage = '';
   try {
-    const adminEmail = getActiveAdminSessionEmail() || auth.currentUser?.email || '';
-    await fetch('/api/settings', {
+    const authHeaders = getOwnerAuthHeaders();
+    const res = await fetch('/api/settings', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+        ...authHeaders,
       },
       body: JSON.stringify(
         rawTokenOnlyForServerSync ? { ...safeSettings, telegramBotToken: rawTokenOnlyForServerSync } : safeSettings
       ),
     });
-  } catch (e) {
+    if (res.ok) {
+      serverSaved = true;
+    } else {
+      const errBody = await safeResponseJson<{ error?: string }>(res);
+      serverErrorMessage = errBody?.error || `Server rejected settings update (${res.status})`;
+    }
+  } catch (e: any) {
+    serverErrorMessage = e?.message || 'Server settings sync unavailable';
     console.warn('Server settings sync notice:', e);
   }
 
-  // 3. Persist sanitized metadata to Cloud Firestore (never saving raw bot token)
-  try {
-    const cleanPayload = sanitizeForFirestore(safeSettings);
-    await setDoc(doc(db, 'siteSettings', 'general'), cleanPayload, { merge: true });
-  } catch (err) {
-    if (isPermissionError(err)) {
-      handleFirestoreError(err, OperationType.WRITE, path);
+  // 3. Mirror sanitized metadata to Cloud Firestore whenever Firebase Auth Owner is signed in
+  // (When logged in via Developer Password alone, auth.currentUser is null — server persistence is authoritative and must not fail with Firestore permission-denied)
+  let firestoreSaved = false;
+  if (auth.currentUser && isUserAdmin(auth.currentUser)) {
+    try {
+      const cleanPayload = sanitizeForFirestore(safeSettings);
+      await setDoc(doc(db, 'siteSettings', 'general'), cleanPayload, { merge: true });
+      firestoreSaved = true;
+    } catch (err) {
+      console.warn(`Firestore settings mirror notice (${path}):`, err);
+      if (!serverSaved && isPermissionError(err)) {
+        handleFirestoreError(err, OperationType.WRITE, path);
+      }
     }
+  }
+
+  if (!serverSaved && !firestoreSaved && serverErrorMessage) {
+    throw new Error(serverErrorMessage);
   }
 }
 

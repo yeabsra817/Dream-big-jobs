@@ -23,6 +23,7 @@ import {
   Check,
   RefreshCw,
   Users,
+  Layout,
 } from 'lucide-react';
 import {
   Vacancy,
@@ -52,6 +53,7 @@ import { ApplicantManager } from './ApplicantManager';
 import { InternationalControlCenter } from './InternationalControlCenter';
 import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { UserAnalyticsCenter } from './UserAnalyticsCenter';
+import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
 import { auth, googleProvider, ADMIN_EMAIL, ADMIN_EMAILS, safeResponseJson } from '../../lib/firebase';
 import { signInWithPopup } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
@@ -138,6 +140,7 @@ export const AdminDashboard: React.FC<Props> = ({
 
   const [activeTab, setActiveTab] = useState<
     | 'bulk'
+    | 'siteEditor'
     | 'international'
     | 'telegramQueue'
     | 'manual'
@@ -278,36 +281,36 @@ export const AdminDashboard: React.FC<Props> = ({
       {/* Top Admin Header Bar */}
       <header className="bg-[#0B132B] text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-20">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 py-3 min-h-[68px]">
             {/* Left: Brand & Admin badge */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-1">
               <button
                 onClick={onCloseDashboard}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer"
                 title="Return to Public Website View"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">View Public Website</span>
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 {siteSettings.appLogoUrl ? (
                   <AppBrandLogo logoUrl={siteSettings.appLogoUrl} size="md" variant="amber" />
                 ) : (
-                  <div className="w-9 h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm">
-                    <Shield className="w-5 h-5 fill-current" />
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm shrink-0">
+                    <Shield className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
                   </div>
                 )}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-lg text-white">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <span className="font-extrabold text-sm sm:text-lg text-white leading-tight truncate">
                       ADMIN CONTROL PANEL
                     </span>
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
                       Owner
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-400 truncate max-w-[200px] sm:max-w-none">
                     HOPELAND JOBS • {adminEmail || 'nexusitsoultion@gmail.com'}
                   </p>
                 </div>
@@ -315,7 +318,7 @@ export const AdminDashboard: React.FC<Props> = ({
             </div>
 
             {/* Right: Quick actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               {/* Smart Alerts Notification Bell */}
               <SmartAlertsBell
                 vacancies={vacancies}
@@ -329,13 +332,13 @@ export const AdminDashboard: React.FC<Props> = ({
               {/* Cloud Sync Status Indicator & Modal Trigger */}
               <button
                 onClick={() => setIsCloudStatusModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 font-bold text-xs transition-colors border border-emerald-500/40 shadow-xs"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 font-bold text-xs transition-colors border border-emerald-500/40 shadow-xs shrink-0 cursor-pointer"
                 title="Firebase Cloud Sync (Firestore & 10GB Storage): Active & persistent across all browsers"
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <Cloud className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Cloud Synced</span>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-200 px-1.5 py-0.5 rounded font-mono">10 GB</span>
+                <span className="hidden md:inline">Cloud Synced</span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-200 px-1.5 py-0.5 rounded font-mono whitespace-nowrap">10 GB</span>
               </button>
 
               <button
@@ -343,11 +346,11 @@ export const AdminDashboard: React.FC<Props> = ({
                   setEditDomain(siteSettings.customDomain || 'hopelandjobs.tech');
                   setIsDomainModalOpen(true);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors border border-slate-700"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors border border-slate-700 shrink-0 cursor-pointer"
                 title="Change Primary Website Domain (e.g. hopelandjobs.tech) - Automatically updates all Telegram posts and links"
               >
                 <Globe className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline text-slate-400">Domain:</span>
+                <span className="hidden md:inline text-slate-400">Domain:</span>
                 <span className="text-amber-300 font-bold underline underline-offset-2">
                   {siteSettings.customDomain || 'hopelandjobs.tech'}
                 </span>
@@ -358,7 +361,7 @@ export const AdminDashboard: React.FC<Props> = ({
                   setEditingVacancy(null);
                   setIsManualModalOpen(true);
                 }}
-                className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+                className="hidden lg:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm shrink-0 cursor-pointer"
               >
                 <FilePlus className="w-4 h-4" />
                 <span>Post Single Vacancy</span>
@@ -366,7 +369,8 @@ export const AdminDashboard: React.FC<Props> = ({
 
               <button
                 onClick={onLogout}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-300 text-xs font-semibold transition-colors border border-slate-700"
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-300 text-xs font-semibold transition-colors border border-slate-700 shrink-0 cursor-pointer"
+                title="Sign Out"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sign Out</span>
@@ -375,10 +379,10 @@ export const AdminDashboard: React.FC<Props> = ({
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pt-1 pb-3 scrollbar-none border-t border-slate-800/80 text-xs font-bold">
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-2 pb-3 scrollbar-none border-t border-slate-800/80 text-xs font-bold">
             <button
               onClick={() => setActiveTab('bulk')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors cursor-pointer ${
                 activeTab === 'bulk'
                   ? 'bg-amber-400 text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -386,6 +390,18 @@ export const AdminDashboard: React.FC<Props> = ({
             >
               <Sparkles className="w-4 h-4" />
               <span>Bulk Import System (50 Jobs)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('siteEditor')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
+                activeTab === 'siteEditor'
+                  ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
+                  : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/35'
+              }`}
+            >
+              <Layout className="w-4 h-4" />
+              <span>Homepage &amp; Website Editor</span>
             </button>
 
             {isYeabsraOwner && (
@@ -590,6 +606,14 @@ export const AdminDashboard: React.FC<Props> = ({
             telegramUrl={siteSettings.telegramChannelUrl}
             siteSettings={siteSettings}
             onSendToTelegramQueue={handleSendToTelegramQueue}
+          />
+        )}
+
+        {activeTab === 'siteEditor' && (
+          <HomepageWebsiteEditor
+            settings={siteSettings}
+            onSaveSettings={onSaveSiteSettings}
+            onPreviewWebsite={onCloseDashboard}
           />
         )}
 
