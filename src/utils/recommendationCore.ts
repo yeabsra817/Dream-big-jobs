@@ -143,6 +143,8 @@ export interface ExperienceMatchAssessment {
   matchedJobDomains: string[];
   meetsYearsRequirement: boolean;
   yearsWarning?: string;
+  matchedIndicators?: string[];
+  failedIndicators?: string[];
 }
 
 export interface ProfessionFamilyDef {
@@ -328,20 +330,39 @@ export const PROFESSION_FAMILIES: ProfessionFamilyDef[] = [
       /\bnurs(?:e|ing)\b/i,
       /\bdoctor\b/i,
       /\bphysician\b/i,
+      /\bgeneral practitioner\b/i,
       /\bmedical\b/i,
       /\bclinical\b/i,
-      /\bpharmac(?:y|ist)\b/i,
-      /\blab(?:oratory)? technologist\b/i,
+      /\bpharmac(?:y|ist|eutical)\b/i,
+      /\bdruggist\b/i,
+      /\blab(?:oratory)? (?:technologist|technician|scientist)\b/i,
       /\bmidwif(?:e|ery)\b/i,
       /\bhospital\b/i,
-      /\bdent(?:al|ist)\b/i,
+      /\bclinic\b/i,
+      /\bdent(?:al|ist|istry)\b/i,
       /\bcaregiver\b/i,
       /\belderly care\b/i,
       /\bhealthcare\b/i,
       /\bhealth care\b/i,
       /\bsurgeon\b/i,
+      /\bsurgery\b/i,
       /\bphysiotherap(?:y|ist)\b/i,
+      /\banesthes(?:ia|iologist|tist)\b/i,
+      /\bradiolog(?:y|ist|rapher)\b/i,
+      /\bsonograph(?:y|er)\b/i,
+      /\boptometr(?:y|ist)\b/i,
+      /\bophthalmolog(?:y|ist)\b/i,
+      /\bpediatric(?:s|ian)?\b/i,
+      /\bgynecolog(?:y|ist)\b/i,
+      /\bobstetric(?:s|ian)?\b/i,
+      /\bpsychiatr(?:y|ist)\b/i,
+      /\bparamedic\b/i,
+      /\bemergency medicine\b/i,
+      /\bhealth officer\b/i,
+      /\bhealth extension\b/i,
+      /\bbiomedical\b/i,
     ],
+    excludePattern: /\b(veterinar(?:y|ian)\s+(?:surgeon|doctor|clinic|medicine|health)|(?:animal|livestock)\s+(?:health|hospital|clinic|surgery))\b/i,
     relatedIds: ['healthcare_public', 'ngo_humanitarian'],
   },
   {
@@ -355,40 +376,82 @@ export const PROFESSION_FAMILIES: ProfessionFamilyDef[] = [
       /\benvironmental health\b/i,
       /\bhealth coordinator\b/i,
       /\bhealth officer\b/i,
+      /\bhealth management\b/i,
+      /\bmental health\b/i,
+      /\bpsycholog(?:y|ist)\b/i,
+      /\bimmunization\b/i,
+      /\bmaternal health\b/i,
     ],
     relatedIds: ['healthcare_clinical', 'ngo_humanitarian', 'wash'],
   },
   {
     id: 'engineering_civil',
-    label: 'Civil & Construction',
+    label: 'Civil & Construction Engineering',
     patterns: [
       /\bcivil engineer(?:ing)?\b/i,
       /\bconstruction\b/i,
       /\barchitect(?:ure|ural)?\b/i,
-      /\bstructural engineer\b/i,
+      /\bstructural engineer(?:ing)?\b/i,
+      /\bgeotechnical\b/i,
       /\bquantity survey(?:or|ing)\b/i,
       /\bsite engineer\b/i,
+      /\boffice engineer\b/i,
+      /\bresident engineer\b/i,
       /\broad engineer\b/i,
+      /\bhighway engineer\b/i,
+      /\bbridge engineer\b/i,
+      /\bland survey(?:or|ing)\b/i,
       /\burban plan(?:ner|ning)\b/i,
       /\bautocad\b/i,
+      /\brevit\b/i,
+      /\betabs\b/i,
+      /\bcontract administration\b/i,
     ],
-    relatedIds: ['wash', 'engineering_electromech', 'project_management', 'skilled_trades'],
+    relatedIds: ['wash', 'engineering_electromech', 'engineering_specialized', 'project_management', 'skilled_trades'],
   },
   {
     id: 'engineering_electromech',
     label: 'Electrical & Mechanical Engineering',
     patterns: [
       /\belectrical engineer(?:ing)?\b/i,
+      /\belectronics engineer(?:ing)?\b/i,
       /\bmechanical engineer(?:ing)?\b/i,
       /\belectromechanical\b/i,
       /\bindustrial engineer(?:ing)?\b/i,
+      /\bautomotive engineer(?:ing)?\b/i,
       /\bmaintenance engineer\b/i,
       /\bplant engineer\b/i,
       /\bhvac\b/i,
+      /\bmep engineer\b/i,
       /\bmechatronics\b/i,
-      /\bpower engineer\b/i,
+      /\bpower engineer(?:ing)?\b/i,
+      /\bpower systems?\b/i,
+      /\bplc\b/i,
+      /\bscada\b/i,
+      /\bsolar engineer\b/i,
+      /\brenewable energy\b/i,
     ],
-    relatedIds: ['engineering_civil', 'manufacturing_ops', 'skilled_trades', 'telecom', 'it_software'],
+    relatedIds: ['engineering_civil', 'engineering_specialized', 'manufacturing_ops', 'skilled_trades', 'telecom', 'it_software'],
+  },
+  {
+    id: 'engineering_specialized',
+    label: 'Chemical, Mining, Biomedical & Specialized Engineering',
+    patterns: [
+      /\bchemical engineer(?:ing)?\b/i,
+      /\bprocess engineer(?:ing)?\b/i,
+      /\bbiomedical engineer(?:ing)?\b/i,
+      /\bmining engineer(?:ing)?\b/i,
+      /\bgeolog(?:y|ist)\b/i,
+      /\btextile engineer(?:ing)?\b/i,
+      /\bagricultural engineer(?:ing)?\b/i,
+      /\benvironmental engineer(?:ing)?\b/i,
+      /\bwater resources? engineer(?:ing)?\b/i,
+      /\bsanitary engineer(?:ing)?\b/i,
+      /\bpetroleum engineer(?:ing)?\b/i,
+      /\baerospace engineer(?:ing)?\b/i,
+      /\bgis specialist\b/i,
+    ],
+    relatedIds: ['engineering_civil', 'engineering_electromech', 'wash', 'manufacturing_ops', 'agriculture_env'],
   },
   {
     id: 'manufacturing_ops',
@@ -575,6 +638,26 @@ export const PROFESSION_FAMILIES: ProfessionFamilyDef[] = [
     relatedIds: ['ngo_humanitarian', 'manufacturing_ops'],
   },
   {
+    id: 'media_creative',
+    label: 'Media, Design & Communications',
+    patterns: [
+      /\bjournalis(?:m|t)\b/i,
+      /\breporter\b/i,
+      /\beditor\b/i,
+      /\bgraphic design(?:er)?\b/i,
+      /\bvideo editor\b/i,
+      /\bphotograph(?:y|er)\b/i,
+      /\bcommunications? officer\b/i,
+      /\bcopywriter\b/i,
+      /\bcontent creator\b/i,
+      /\bsocial media\b/i,
+      /\btranslat(?:or|ion)\b/i,
+      /\binterpreter\b/i,
+      /\bbroadcast\b/i,
+    ],
+    relatedIds: ['sales_marketing', 'ngo_humanitarian', 'it_software'],
+  },
+  {
     id: 'skilled_trades',
     label: 'Skilled Trades & Driving',
     patterns: [
@@ -626,10 +709,14 @@ const SECTOR_ALIAS_GROUPS: Array<{ label: string; keywords: string[] }> = [
   { label: 'manufacturing', keywords: ['manufacturing', 'factory', 'industrial', 'plant', 'production', 'textile', 'brewery', 'cement', 'pharmaceutical manufacturing'] },
   { label: 'private', keywords: ['private', 'corporate', 'company', 'plc', 'share company', 'enterprise', 'telecom', 'safaricom', 'logistics', 'supply chain', 'procurement', 'sales', 'marketing', 'human resource', 'administration'] },
   { label: 'it', keywords: ['software', 'developer', 'engineer', 'it ', 'technology', 'data', 'network', 'cyber', 'devops', 'ict'] },
-  { label: 'health', keywords: ['medical', 'health', 'hospital', 'clinic', 'nurse', 'doctor', 'pharmacist', 'public health', 'nutrition'] },
+  { label: 'health', keywords: ['medical', 'health', 'healthcare', 'hospital', 'clinic', 'nurse', 'nursing', 'doctor', 'physician', 'pharmacist', 'pharmacy', 'midwife', 'laboratory', 'radiology', 'anesthesia', 'dental', 'optometry', 'public health', 'nutrition', 'biomedical'] },
   { label: 'finance', keywords: ['accounting', 'finance', 'auditor', 'audit', 'tax', 'cpa', 'acca', 'ifrs'] },
   { label: 'education', keywords: ['education', 'university', 'college', 'teacher', 'lecturer', 'instructor', 'academic'] },
-  { label: 'engineering', keywords: ['civil', 'construction', 'electrical', 'mechanical', 'architect', 'surveyor', 'site engineer'] },
+  { label: 'engineering', keywords: ['engineering', 'engineer', 'civil', 'construction', 'electrical', 'mechanical', 'electromechanical', 'chemical', 'industrial', 'biomedical', 'mining', 'geologist', 'architect', 'surveyor', 'site engineer', 'structural', 'autocad', 'hvac', 'mep'] },
+  { label: 'agriculture', keywords: ['agriculture', 'agricultural', 'agronomy', 'agronomist', 'veterinary', 'veterinarian', 'livestock', 'horticulture', 'forestry', 'agribusiness', 'food security', 'environment'] },
+  { label: 'legal', keywords: ['legal', 'lawyer', 'attorney', 'compliance', 'regulatory', 'paralegal', 'law'] },
+  { label: 'media', keywords: ['journalism', 'journalist', 'media', 'communications', 'graphic design', 'editor', 'translator', 'broadcast'] },
+  { label: 'logistics', keywords: ['logistics', 'supply chain', 'procurement', 'warehouse', 'freight', 'customs', 'fleet', 'driver'] },
   { label: 'other', keywords: ['other', 'general', 'all sector', 'any sector', 'multi-sector'] },
 ];
 
@@ -644,8 +731,190 @@ function extractSectorTags(text: string): string[] {
   return found;
 }
 
+export function isRegisteredUserProfile(profile: JobSeekerProfile | null | undefined): profile is JobSeekerProfile {
+  return Boolean(profile && typeof profile.uid === 'string' && profile.uid.trim().length > 0);
+}
+
+export function parseSalaryMaxEtb(salaryText?: string): number | null {
+  if (!salaryText) return null;
+  const text = String(salaryText).trim();
+  if (!text || /(not stated|not specified|negotiable|attractive|company scale|as per|competitive)/i.test(text) && !/\d/.test(text)) {
+    return null;
+  }
+  // Do not confuse USD/EUR salaries with ETB numeric thresholds
+  if (/(\$|usd|eur|€|gbp|£)/i.test(text) && !/(etb|birr)/i.test(text)) {
+    return null;
+  }
+  const matches = text.match(/\d[\d,]*(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) return null;
+  const nums = matches
+    .map((m) => parseFloat(m.replace(/,/g, '')))
+    .filter((n) => Number.isFinite(n) && n >= 500 && n <= 10_000_000);
+  if (nums.length === 0) return null;
+  return Math.max(...nums);
+}
+
+export interface StrictIndicatorEvaluation {
+  hasStrictIndicators: boolean;
+  passes: boolean;
+  matchedIndicators: string[];
+  failedIndicators: string[];
+}
+
+export function getActiveAdditionalIndicators(profile: JobSeekerProfile | null | undefined): string[] {
+  if (!profile || !Array.isArray(profile.additionalRequirements)) return [];
+  return Array.from(
+    new Set(
+      profile.additionalRequirements
+        .map((r) => String(r || '').trim())
+        .filter((r) => r.length >= 2)
+    )
+  );
+}
+
+export function hasStrictUserIndicators(profile: JobSeekerProfile | null | undefined): boolean {
+  if (!isRegisteredUserProfile(profile)) return false;
+  const customIndicators = getActiveAdditionalIndicators(profile);
+  const hasStrictLoc = Boolean(
+    profile.strictLocationMatch &&
+      profile.preferredWorkLocation &&
+      !/^(any|all|any location|all ethiopia)$/i.test(profile.preferredWorkLocation.trim())
+  );
+  const hasStrictType = Boolean(
+    profile.strictEmploymentTypeMatch &&
+      profile.preferredEmploymentType &&
+      profile.preferredEmploymentType !== 'Any'
+  );
+  const minSal = parseSalaryMaxEtb(profile.minimumSalaryEtb);
+  return customIndicators.length > 0 || hasStrictLoc || hasStrictType || (minSal !== null && minSal > 0);
+}
+
+function doesIndicatorMatchText(indicatorRaw: string, fullTextLower: string): boolean {
+  const ind = indicatorRaw.trim().toLowerCase();
+  if (!ind) return true;
+  if (fullTextLower.includes(ind)) return true;
+
+  // Common helpful equivalents so real requirements match cleanly
+  if (ind === 'bsc' || ind === 'b.sc' || ind === 'ba' || ind === 'bachelor' || ind === "bachelor's") {
+    if (/\b(bachelor|bsc|b\.?sc|ba\b|b\.?eng|b\.?tech|first degree|degree)\b/i.test(fullTextLower)) return true;
+  }
+  if (ind === 'msc' || ind === 'm.sc' || ind === 'mba' || ind === 'master' || ind === "master's") {
+    if (/\b(master|msc|m\.?sc|mba|mph|ma\b|postgraduate)\b/i.test(fullTextLower)) return true;
+  }
+  if (ind === 'ngo' || ind === 'ingo') {
+    if (/\b(ngo|ingo|humanitarian|united nations|unicef|undp|wfp|unhcr|save the children|world vision|care|oxfam|irc)\b/i.test(fullTextLower)) {
+      return true;
+    }
+  }
+  if (ind === 'remote' || ind === 'work from home' || ind === 'wfh') {
+    if (/\b(remote|work from home|wfh|telecommute|anywhere)\b/i.test(fullTextLower)) return true;
+  }
+
+  // Multi-word indicator: require ALL meaningful words to appear in the job
+  const words = ind.split(/[^a-z0-9+]+/).filter((w) => w.length >= 2 && !/^(and|or|the|for|in|of|to|with|at|on)$/.test(w));
+  if (words.length >= 2 && words.every((w) => fullTextLower.includes(w))) {
+    return true;
+  }
+  return false;
+}
+
+export function evaluateStrictUserIndicators(
+  profile: JobSeekerProfile | null | undefined,
+  jobContext: {
+    fullText: string;
+    location?: string;
+    employmentType?: string;
+    salary?: string;
+  }
+): StrictIndicatorEvaluation {
+  if (!isRegisteredUserProfile(profile)) {
+    return { hasStrictIndicators: false, passes: true, matchedIndicators: [], failedIndicators: [] };
+  }
+
+  const fullTextLower = (jobContext.fullText || '').toLowerCase();
+  const jobLocLower = (jobContext.location || '').toLowerCase();
+  const jobTypeLower = (jobContext.employmentType || '').toLowerCase();
+
+  const matchedIndicators: string[] = [];
+  const failedIndicators: string[] = [];
+  let hasStrict = false;
+
+  // 1. User-entered Must-Have Indicators / Additional Requirements (ALL must match!)
+  const customIndicators = getActiveAdditionalIndicators(profile);
+  if (customIndicators.length > 0) {
+    hasStrict = true;
+    for (const ind of customIndicators) {
+      if (doesIndicatorMatchText(ind, fullTextLower)) {
+        matchedIndicators.push(ind);
+      } else {
+        failedIndicators.push(`Missing indicator: "${ind}"`);
+      }
+    }
+  }
+
+  // 2. Strict Preferred Location filter (when enabled by user)
+  const prefLoc = (profile.preferredWorkLocation || '').trim();
+  if (
+    profile.strictLocationMatch &&
+    prefLoc &&
+    !/^(any|all|any location|all ethiopia)$/i.test(prefLoc)
+  ) {
+    hasStrict = true;
+    const prefLower = prefLoc.toLowerCase();
+    const cityToken = prefLower.split(/[\s,(/]+/)[0] || prefLower;
+    const isRemoteJob = /\b(remote|anywhere)\b/i.test(jobLocLower) || /\bremote\b/i.test(jobTypeLower);
+    const locMatches = prefLower.includes('remote')
+      ? isRemoteJob
+      : jobLocLower.includes(prefLower) ||
+        (cityToken.length >= 3 && jobLocLower.includes(cityToken));
+    if (locMatches) {
+      matchedIndicators.push(`Location: ${prefLoc}`);
+    } else {
+      failedIndicators.push(`Location does not match ${prefLoc}`);
+    }
+  }
+
+  // 3. Strict Preferred Employment Type filter (when enabled by user)
+  const prefType = (profile.preferredEmploymentType || 'Any').trim();
+  if (profile.strictEmploymentTypeMatch && prefType && prefType !== 'Any') {
+    hasStrict = true;
+    const prefTypeLower = prefType.toLowerCase();
+    const typeMatches =
+      jobTypeLower.includes(prefTypeLower) ||
+      (prefTypeLower === 'remote' && /\b(remote|work from home)\b/i.test(fullTextLower)) ||
+      (prefTypeLower === 'internship' && /\b(intern|internship|trainee|graduate trainee)\b/i.test(fullTextLower)) ||
+      (prefTypeLower === 'full-time' && /\b(full[- ]?time|permanent)\b/i.test(jobTypeLower));
+    if (typeMatches) {
+      matchedIndicators.push(`Job Type: ${prefType}`);
+    } else {
+      failedIndicators.push(`Employment type is not ${prefType}`);
+    }
+  }
+
+  // 4. Minimum Salary Requirement (ETB) — exclude any job with a stated lower ETB salary
+  const minSalary = parseSalaryMaxEtb(profile.minimumSalaryEtb);
+  if (minSalary !== null && minSalary > 0) {
+    hasStrict = true;
+    const jobMaxSalary = parseSalaryMaxEtb(jobContext.salary);
+    if (jobMaxSalary !== null) {
+      if (jobMaxSalary >= minSalary) {
+        matchedIndicators.push(`Salary ≥ ${minSalary.toLocaleString()} ETB`);
+      } else {
+        failedIndicators.push(`Salary (${jobMaxSalary.toLocaleString()} ETB) below minimum ${minSalary.toLocaleString()} ETB`);
+      }
+    }
+  }
+
+  return {
+    hasStrictIndicators: hasStrict,
+    passes: failedIndicators.length === 0,
+    matchedIndicators,
+    failedIndicators,
+  };
+}
+
 export function hasProfileExperienceSignals(profile: JobSeekerProfile | null | undefined): boolean {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   return Boolean(
     (Array.isArray(profile.experience) && profile.experience.length > 0) ||
       (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
@@ -654,8 +923,10 @@ export function hasProfileExperienceSignals(profile: JobSeekerProfile | null | u
       (Array.isArray(profile.skills) && profile.skills.length > 0) ||
       (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2) ||
       (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      (profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2) ||
       (Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0) ||
-      (Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || '').trim().length >= 2))
+      (Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || '').trim().length >= 2)) ||
+      getActiveAdditionalIndicators(profile).length > 0
   );
 }
 
@@ -665,12 +936,14 @@ function getProfileExperienceText(profile: JobSeekerProfile): {
   allText: string;
 } {
   const expEntriesText = (profile.experience || [])
-    .map((e) => `${e.jobTitle || ''} ${e.companyName || ''} ${e.responsibilities || ''}`)
+    .map((e) => `${e.jobTitle || ''} ${e.companyName || ''} ${e.responsibilities || ''} ${e.achievements || ''}`)
     .join(' ');
   const prevPosText = (profile.previousPositions || []).join(' ');
   const primaryExperienceText = [
     expEntriesText,
     profile.currentPosition || '',
+    profile.desiredJobTitle || '',
+    profile.customProfessionOrCategory || '',
     prevPosText,
     ...(profile.areasOfExpertise || []),
     ...(profile.skills || []),
@@ -679,10 +952,10 @@ function getProfileExperienceText(profile: JobSeekerProfile): {
     .join(' ');
 
   const secondaryProfileText = [
-    profile.desiredJobTitle || '',
     profile.preferredIndustry || '',
     ...(profile.preferredSectors || []),
     ...(profile.professionalInterests || []),
+    ...(profile.additionalRequirements || []),
     ...(profile.education || []).map((e) => `${e.fieldOfStudy || ''} ${e.qualification || ''}`),
     ...(profile.certifications || []).map((c) => `${c.name || ''}`),
   ]
@@ -700,7 +973,12 @@ function assessExperienceAgainstJobText(
   profile: JobSeekerProfile | null | undefined,
   jobCoreText: string,
   jobBroadText: string,
-  requiredExperienceText: string | undefined
+  requiredExperienceText: string | undefined,
+  strictContext?: {
+    location?: string;
+    employmentType?: string;
+    salary?: string;
+  }
 ): ExperienceMatchAssessment {
   const empty: ExperienceMatchAssessment = {
     isMatch: false,
@@ -711,7 +989,23 @@ function assessExperienceAgainstJobText(
     matchedJobDomains: [],
     meetsYearsRequirement: true,
   };
-  if (!profile || !hasProfileExperienceSignals(profile)) return empty;
+  if (!isRegisteredUserProfile(profile) || !hasProfileExperienceSignals(profile)) return empty;
+
+  const fullSearchText = `${jobCoreText} ${jobBroadText} ${strictContext?.location || ''} ${strictContext?.employmentType || ''} ${strictContext?.salary || ''}`;
+
+  // Enforce ALL user-supplied strict indicators/requirements FIRST ("give him only")
+  const strictEval = evaluateStrictUserIndicators(profile, {
+    fullText: fullSearchText,
+    location: strictContext?.location,
+    employmentType: strictContext?.employmentType,
+    salary: strictContext?.salary,
+  });
+  if (!strictEval.passes) {
+    return {
+      ...empty,
+      failedIndicators: strictEval.failedIndicators,
+    };
+  }
 
   const userExpYears = getProfileExplicitExperienceYears(profile);
   const reqYears = parseMinRequiredYears(requiredExperienceText);
@@ -734,6 +1028,11 @@ function assessExperienceAgainstJobText(
   const jobLower = `${jobCoreText} ${jobBroadText}`.toLowerCase();
 
   const matchedTitleTokens = tokens.titleTokens.filter((t) => jobLower.includes(t));
+  const matchedCustomProfTokens = tokens.customProfessionTokens.filter((t) => jobLower.includes(t));
+  const matchedCustomPhrase =
+    tokens.customProfessionPhrase.length >= 3 && jobLower.includes(tokens.customProfessionPhrase);
+  const matchedExpRespTokens = tokens.experienceResponsibilityTokens.filter((t) => jobLower.includes(t));
+  const matchedStudyTokens = tokens.studyTokens.filter((t) => jobLower.includes(t));
   const matchedSkillTokens = Array.from(
     new Set([
       ...tokens.skillTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
@@ -745,7 +1044,7 @@ function assessExperienceAgainstJobText(
   // 1. Direct Profession Family Match
   const directFamilies = userFamilies.filter((uf) => jobFamilies.some((jf) => jf.id === uf.id));
 
-  // 2. Related Profession Family Match (e.g. Banking experience -> Finance job)
+  // 2. Related Profession Family Match (e.g. Banking experience -> Finance job, Civil -> WASH)
   let bestRelatedPair: { user: ProfessionFamilyDef; job: ProfessionFamilyDef } | null = null;
   if (directFamilies.length === 0) {
     for (const uf of userFamilies) {
@@ -763,33 +1062,59 @@ function assessExperienceAgainstJobText(
   let score = 0;
   let badgeLabel = '';
 
-  if (directFamilies.length > 0 || matchedTitleTokens.length > 0 || matchedSkillTokens.length >= 2) {
+  const hasCustomIndicatorsMatched = getActiveAdditionalIndicators(profile).length > 0 && strictEval.matchedIndicators.length > 0;
+
+  if (
+    directFamilies.length > 0 ||
+    matchedCustomPhrase ||
+    matchedCustomProfTokens.length > 0 ||
+    matchedTitleTokens.length > 0 ||
+    matchedSkillTokens.length >= 2 ||
+    matchedExpRespTokens.length >= 2
+  ) {
     matchType = 'direct';
     const primaryLabel =
+      (matchedCustomPhrase || matchedCustomProfTokens.length > 0 ? profile.customProfessionOrCategory : '') ||
       directFamilies[0]?.label ||
       profile.currentPosition ||
+      profile.desiredJobTitle ||
       profile.areasOfExpertise?.[0] ||
       'Your Experience';
     score =
       72 +
       Math.min(18, directFamilies.length * 10) +
-      Math.min(15, matchedTitleTokens.length * 6) +
-      Math.min(12, matchedSkillTokens.length * 4);
-    badgeLabel = `Matches ${primaryLabel} Experience`;
+      Math.min(16, (matchedTitleTokens.length + matchedCustomProfTokens.length) * 6) +
+      Math.min(12, matchedSkillTokens.length * 4) +
+      Math.min(8, matchedExpRespTokens.length * 3) +
+      (matchedCustomPhrase ? 10 : 0);
+    badgeLabel = `Matches ${primaryLabel}`;
   } else if (bestRelatedPair) {
     matchType = 'related';
     score =
       58 +
       Math.min(10, matchedSkillTokens.length * 4) +
-      Math.min(8, matchedTitleTokens.length * 4);
+      Math.min(8, matchedTitleTokens.length * 4) +
+      Math.min(6, matchedStudyTokens.length * 3);
     badgeLabel = `Related Field: ${bestRelatedPair.user.label} → ${bestRelatedPair.job.label}`;
-  } else if (matchedSkillTokens.length === 1) {
+  } else if (matchedSkillTokens.length === 1 || matchedStudyTokens.length > 0) {
     matchType = 'related';
-    score = 46;
-    badgeLabel = `Related Skill: ${matchedSkillTokens[0]}`;
+    score = 48 + Math.min(10, matchedStudyTokens.length * 5);
+    badgeLabel =
+      matchedSkillTokens[0]
+        ? `Matches Skill: ${matchedSkillTokens[0]}`
+        : `Matches Education: ${matchedStudyTokens[0]}`;
+  } else if (hasCustomIndicatorsMatched) {
+    // User explicitly specified custom indicators and this job satisfied EVERY single one
+    matchType = 'direct';
+    score = 74;
+    badgeLabel = `Matches Your Indicators (${strictEval.matchedIndicators.slice(0, 2).join(', ')})`;
   }
 
   if (matchType === 'none') return empty;
+
+  if (strictEval.matchedIndicators.length > 0) {
+    score += Math.min(12, strictEval.matchedIndicators.length * 4);
+  }
 
   // Years adjustment: keep fully qualified jobs ranked highest
   if (meetsYearsRequirement) {
@@ -799,7 +1124,7 @@ function assessExperienceAgainstJobText(
   } else if (yearsGap <= 5) {
     score -= 18;
   } else {
-    // Large seniority gap: still demote cleanly; avoid false match when >6yr over profile
+    // Large seniority gap: still demote cleanly
     score -= 32;
   }
 
@@ -812,6 +1137,7 @@ function assessExperienceAgainstJobText(
     matchedJobDomains: jobFamilies.map((f) => f.label),
     meetsYearsRequirement,
     yearsWarning,
+    matchedIndicators: strictEval.matchedIndicators,
   };
 }
 
@@ -830,8 +1156,12 @@ export function assessVacancyExperienceMatch(
       ? [String(v.responsibilities)]
       : [];
   const coreText = `${v.title || ''} ${v.category || ''} ${v.requiredFieldOfStudy || ''} ${skillsArr.join(' ')}`;
-  const broadText = `${coreText} ${v.organization || ''} ${v.description || ''} ${respArr.join(' ')}`;
-  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears);
+  const broadText = `${coreText} ${v.organization || ''} ${v.description || ''} ${respArr.join(' ')} ${v.educationQualification || ''} ${v.specialRequirements || ''}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears, {
+    location: v.location,
+    employmentType: v.employmentType,
+    salary: v.salary,
+  });
 }
 
 export function assessInternationalJobExperienceMatch(
@@ -839,8 +1169,12 @@ export function assessInternationalJobExperienceMatch(
   ij: InternationalJob
 ): ExperienceMatchAssessment {
   const coreText = `${ij.jobTitle || ''} ${ij.category || ''} ${ij.requiredEducation || ''}`;
-  const broadText = `${coreText} ${ij.employerOrProgramme || ''} ${ij.visaSponsorshipInfo || ''} ${ij.officialApplicationInstructions || ''}`;
-  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience);
+  const broadText = `${coreText} ${ij.employerOrProgramme || ''} ${ij.country || ''} ${ij.location || ''} ${ij.visaSponsorshipInfo || ''} ${ij.officialApplicationInstructions || ''}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience, {
+    location: `${ij.location || ''} ${ij.country || ''}`.trim(),
+    employmentType: ij.category,
+    salary: ij.salary,
+  });
 }
 
 function tokenizeProfileKeywords(profile: JobSeekerProfile) {
@@ -858,17 +1192,64 @@ function tokenizeProfileKeywords(profile: JobSeekerProfile) {
     'officer',
     'staff',
     'job',
+    'jobs',
+    'work',
+    'working',
     'senior',
     'junior',
     'assistant',
     'associate',
+    'manager',
+    'director',
+    'supervisor',
+    'coordinator',
+    'specialist',
+    'analyst',
+    'consultant',
+    'advisor',
+    'executive',
+    'head',
+    'lead',
+    'chief',
+    'expert',
+    'professional',
+    'engineer',
+    'engineering',
     'general',
     'service',
     'services',
     'company',
     'sector',
+    'sectors',
     'private',
     'public',
+    'other',
+    'team',
+    'daily',
+    'responsible',
+    'responsibilities',
+    'managed',
+    'managing',
+    'support',
+    'supporting',
+    'years',
+    'year',
+    'experience',
+    'degree',
+    'bachelor',
+    'master',
+    'diploma',
+    'certificate',
+    'bsc',
+    'msc',
+    'mba',
+    'mph',
+    'phd',
+    'tvet',
+    'associate',
+    'postgraduate',
+    'undergraduate',
+    'ethiopia',
   ]);
   const splitClean = (values: string[]) =>
     Array.from(
@@ -883,24 +1264,33 @@ function tokenizeProfileKeywords(profile: JobSeekerProfile) {
 
   const preferredSectorsRaw = [
     profile.preferredIndustry || '',
+    profile.customProfessionOrCategory || '',
     profile.staffDepartmentOrSector || '',
     ...(profile.preferredSectors || []),
     ...(profile.professionalInterests || []),
   ].filter(Boolean);
 
+  const customProfessionPhrase = (profile.customProfessionOrCategory || '').trim().toLowerCase();
+
   return {
     titleTokens: splitClean([
       profile.currentPosition || '',
       profile.desiredJobTitle || '',
+      profile.customProfessionOrCategory || '',
       ...(profile.previousPositions || []),
       ...(profile.experience || []).map((e) => e.jobTitle || ''),
     ]),
+    experienceResponsibilityTokens: splitClean(
+      (profile.experience || []).map((e) => `${e.responsibilities || ''} ${e.achievements || ''}`)
+    ),
+    customProfessionPhrase,
+    customProfessionTokens: splitClean([profile.customProfessionOrCategory || '']),
     skillTokens: (profile.skills || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseTokens: (profile.areasOfExpertise || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseWordTokens: splitClean([...(profile.areasOfExpertise || []), ...(profile.skills || [])]),
     interestTokens: (profile.professionalInterests || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     certTokens: (profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`.trim().toLowerCase()).filter(Boolean),
-    studyTokens: splitClean((profile.education || []).map((e) => `${e.fieldOfStudy} ${e.qualification}`)),
+    studyTokens: splitClean((profile.education || []).map((e) => e.fieldOfStudy || '')),
     preferredSectorTags: extractSectorTags(preferredSectorsRaw.join(' ')),
     preferredSectorsRaw: preferredSectorsRaw.map((s) => s.toLowerCase()),
   };
@@ -936,28 +1326,29 @@ function detectMissingMandatoryLicenses(requiredText: string, profile: JobSeeker
 }
 
 export function hasSufficientProfileForRecommendations(profile: JobSeekerProfile | null | undefined): boolean {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   return Boolean(
     (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
       (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2) ||
+      (profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2) ||
       (profile.skills && profile.skills.length > 0) ||
       (profile.areasOfExpertise && profile.areasOfExpertise.length > 0) ||
       (profile.education && profile.education.length > 0) ||
       (profile.experience && profile.experience.length > 0) ||
-      profile.noExperience === true ||
-      (profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0) ||
       (profile.professionalInterests && profile.professionalInterests.length > 0) ||
       (profile.preferredSectors && profile.preferredSectors.length > 0) ||
-      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2)
+      (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      getActiveAdditionalIndicators(profile).length > 0
   );
 }
 
 export function hasCompletedMandatoryPreferences(profile: JobSeekerProfile | null | undefined): boolean {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   const hasExperienceStatus = Boolean(
     profile.noExperience === true ||
       (Array.isArray(profile.experience) && profile.experience.length > 0) ||
-      (profile.currentPosition && profile.currentPosition.trim().length >= 2)
+      (profile.currentPosition && profile.currentPosition.trim().length >= 2) ||
+      (profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2)
   );
   const hasYearsOfExperience = Boolean(
     profile.noExperience === true ||
@@ -965,7 +1356,9 @@ export function hasCompletedMandatoryPreferences(profile: JobSeekerProfile | nul
   );
   const hasJobExpertise = Boolean(
     (Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0) ||
-      (Array.isArray(profile.skills) && profile.skills.length > 0)
+      (Array.isArray(profile.skills) && profile.skills.length > 0) ||
+      (profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2) ||
+      getActiveAdditionalIndicators(profile).length > 0
   );
   return hasExperienceStatus && hasYearsOfExperience && hasJobExpertise;
 }
@@ -989,13 +1382,13 @@ export function isVerifiedActiveVacancy(v: Vacancy): boolean {
 }
 
 export function computeStaffOpportunityRecommendations(
-  profile: JobSeekerProfile,
+  profile: JobSeekerProfile | null | undefined,
   domesticVacancies: Vacancy[],
   internationalJobs: InternationalJob[] = [],
   scholarships: ExperienceScholarship[] = [],
   limit: number = 30
 ): RecommendedOpportunity[] {
-  if (!hasSufficientProfileForRecommendations(profile)) {
+  if (!isRegisteredUserProfile(profile) || !hasSufficientProfileForRecommendations(profile)) {
     return [];
   }
   if (profile.accountStatus === 'suspended') {
@@ -1012,9 +1405,18 @@ export function computeStaffOpportunityRecommendations(
   for (const v of domesticVacancies || []) {
     if (!isVerifiedActiveVacancy(v)) continue;
 
-    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(' ')} ${v.description} ${(v.responsibilities || []).join(' ')} ${v.specialRequirements || ''}`.toLowerCase();
-    const combinedText = `${roleAndReqText} ${v.organization} ${v.category}`.toLowerCase();
+    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(' ')} ${v.description} ${(v.responsibilities || []).join(' ')} ${v.educationQualification || ''} ${v.specialRequirements || ''}`.toLowerCase();
+    const combinedText = `${roleAndReqText} ${v.organization} ${v.category} ${v.location} ${v.employmentType || ''} ${v.salary || ''}`.toLowerCase();
     const vacSectorTags = extractSectorTags(`${v.category} ${v.title} ${v.organization} ${v.description} ${v.isWashNgo ? 'wash' : ''}`);
+
+    // Strictly enforce ALL user-added indicators / requirements ("give him only")
+    const strictEval = evaluateStrictUserIndicators(profile, {
+      fullText: combinedText,
+      location: v.location,
+      employmentType: v.employmentType,
+      salary: v.salary,
+    });
+    if (!strictEval.passes) continue;
 
     const missingMandatory: string[] = [];
 
@@ -1120,7 +1522,20 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(`Preferred location: ${v.location}`);
     }
 
-    // Experience & Related-Profession Match (e.g. Banking -> Banking & Finance/Accounting)
+    // Strict Indicator Confirmation Bonus
+    if (strictEval.matchedIndicators.length > 0) {
+      score += Math.min(28, strictEval.matchedIndicators.length * 10);
+      reasons.push(`Meets your indicators: ${strictEval.matchedIndicators.slice(0, 3).join(', ')}`);
+    }
+
+    // Experience Responsibilities Alignment (require >=2 distinct keywords to avoid stray single-word noise)
+    const matchedExpResp = tokens.experienceResponsibilityTokens.filter((w) => roleAndReqText.includes(w));
+    if (matchedExpResp.length >= 2) {
+      score += Math.min(18, matchedExpResp.length * 6);
+      reasons.push(`Experience background: ${matchedExpResp.slice(0, 3).join(', ')}`);
+    }
+
+    // Experience & Related-Profession Match (e.g. Banking -> Banking & Finance/Accounting, Health, Engineering, Custom)
     const expAssessment = assessVacancyExperienceMatch(profile, v);
     if (expAssessment.isMatch && expAssessment.matchType === 'direct') {
       score += 24;
@@ -1130,13 +1545,17 @@ export function computeStaffOpportunityRecommendations(
       reasons.push(expAssessment.badgeLabel);
     }
 
-    // Direct role, expertise, skill, study, certification, or experience-family fit
+    // Direct role, expertise, skill, study, certification, custom indicator, or experience-family fit
+    const hasCustomIndicatorFit =
+      getActiveAdditionalIndicators(profile).length > 0 && strictEval.matchedIndicators.length > 0;
     const hasDirectDomainFit =
       matchedTitleWords.length > 0 ||
       matchedSkills.length > 0 ||
+      matchedExpResp.length >= 2 ||
       matchedStudy.length > 0 ||
       matchedCerts.length > 0 ||
-      expAssessment.isMatch;
+      expAssessment.isMatch ||
+      hasCustomIndicatorFit;
 
     // Exclude unrelated jobs from recommendations when score is weak or there is no genuine domain/sector connection
     const hasRelevantMatch =
@@ -1203,10 +1622,23 @@ export function computeStaffOpportunityRecommendations(
     const licenseGaps = detectMissingMandatoryLicenses(`${ij.jobTitle} ${ij.requiredEducation}`, profile);
     missingMandatory.push(...licenseGaps);
 
-    const combinedText = `${ij.jobTitle} ${ij.category} ${ij.requiredEducation} ${ij.employerOrProgramme} ${ij.country} ${ij.languageRequirements}`.toLowerCase();
+    const combinedText = `${ij.jobTitle} ${ij.category} ${ij.requiredEducation} ${ij.employerOrProgramme} ${ij.country} ${ij.location} ${ij.languageRequirements} ${ij.visaSponsorshipInfo || ''}`.toLowerCase();
+
+    // Enforce user-added strict indicators on international jobs too
+    const strictEval = evaluateStrictUserIndicators(profile, {
+      fullText: combinedText,
+      location: `${ij.location}, ${ij.country}`,
+      employmentType: ij.category,
+      salary: ij.salary,
+    });
+    if (!strictEval.passes) continue;
 
     let score = 0;
     const reasons: string[] = [];
+    if (strictEval.matchedIndicators.length > 0) {
+      score += Math.min(24, strictEval.matchedIndicators.length * 10);
+      reasons.push(`Meets your indicators: ${strictEval.matchedIndicators.slice(0, 3).join(', ')}`);
+    }
 
     const matchedTitle = tokens.titleTokens.filter((t) => combinedText.includes(t));
     if (matchedTitle.length > 0) {

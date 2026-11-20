@@ -16,6 +16,11 @@ import {
   isUserInactiveForThreeDayCheck,
   THREE_DAYS_MS,
 } from './src/utils/inactiveReminderFormat';
+import {
+  hasValidVacancyDeadline,
+  partitionVacanciesByDeadline,
+  validateVacancyStrict,
+} from './src/utils/vacancyValidator';
 
 export interface ServerUserEngineContext {
   app: Express;
@@ -203,15 +208,60 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     }
   }
 
+  let vacanciesCatalogMemCache: any[] | null = null;
+  let vacanciesCatalogMtimeMs = 0;
+
   function loadVacanciesCatalog(): any[] {
-    const list = loadJsonFileSafe<any[]>(VACANCIES_CATALOG_FILE, []);
-    return Array.isArray(list) ? list : [];
+    try {
+      if (fs.existsSync(VACANCIES_CATALOG_FILE)) {
+        const stat = fs.statSync(VACANCIES_CATALOG_FILE);
+        if (vacanciesCatalogMemCache && stat.mtimeMs === vacanciesCatalogMtimeMs) {
+          return vacanciesCatalogMemCache;
+        }
+        const rawList = loadJsonFileSafe<any[]>(VACANCIES_CATALOG_FILE, []);
+        const safeRaw = Array.isArray(rawList) ? rawList : [];
+        const { withDeadline, withoutDeadline } = partitionVacanciesByDeadline(safeRaw);
+        if (withoutDeadline.length > 0) {
+          console.warn(
+            `[HOPELAND AUTO-PURGE] Permanently deleting ${withoutDeadline.length} vacancy(ies) with no valid deadline from server catalog.`
+          );
+          try {
+            ensureRuntimeDataDir();
+            writeJsonFileAtomic(VACANCIES_CATALOG_FILE, withDeadline);
+            vacanciesCatalogMtimeMs = fs.statSync(VACANCIES_CATALOG_FILE).mtimeMs;
+          } catch {
+            vacanciesCatalogMtimeMs = stat.mtimeMs;
+          }
+        } else {
+          vacanciesCatalogMtimeMs = stat.mtimeMs;
+        }
+        vacanciesCatalogMemCache = withDeadline;
+        return vacanciesCatalogMemCache;
+      }
+    } catch {}
+    if (vacanciesCatalogMemCache) return vacanciesCatalogMemCache;
+    const rawList = loadJsonFileSafe<any[]>(VACANCIES_CATALOG_FILE, []);
+    const { withDeadline } = partitionVacanciesByDeadline(Array.isArray(rawList) ? rawList : []);
+    vacanciesCatalogMemCache = withDeadline;
+    return vacanciesCatalogMemCache;
   }
 
   function saveVacanciesCatalog(list: any[]): void {
+    const safeList = Array.isArray(list) ? list.filter((v) => hasValidVacancyDeadline(v)) : [];
     ensureRuntimeDataDir();
-    writeJsonFileAtomic(VACANCIES_CATALOG_FILE, list);
+    writeJsonFileAtomic(VACANCIES_CATALOG_FILE, safeList);
+    vacanciesCatalogMemCache = safeList;
+    try {
+      vacanciesCatalogMtimeMs = fs.statSync(VACANCIES_CATALOG_FILE).mtimeMs;
+    } catch {
+      vacanciesCatalogMtimeMs = Date.now();
+    }
   }
+
+  // Immediately purge any legacy no-deadline vacancies on boot
+  try {
+    loadVacanciesCatalog();
+  } catch {}
 
   function loadAllRecommendations(): Record<string, { recalculatedAt: string; items: RecommendedOpportunity[] }> {
     const data = loadJsonFileSafe<Record<string, any>>(USER_RECOMMENDATIONS_FILE, {});
@@ -2584,6 +2634,18 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
   // ROUTES: VACANCIES CATALOG SYNC (TRIGGERS BACKGROUND MATCHING + ALERTS)
   // =========================================================================
 
+  app.get('/api/vacancies', (_req: Request, res: Response): void => {
+    const list = loadVacanciesCatalog()
+      .filter((v: any) => v && v.status === 'published' && hasValidVacancyDeadline(v))
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.publishedAt || b.createdAt || 0).getTime() -
+          new Date(a.publishedAt || a.createdAt || 0).getTime()
+      );
+    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    res.json({ success: true, total: list.length, vacancies: list });
+  });
+
   app.get('/api/vacancies/:id', (req: Request, res: Response): void => {
     const rawId = decodeURIComponent(String(req.params.id || '')).trim();
     if (!rawId) {
@@ -2595,12 +2657,14 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       (v: any) =>
         v &&
         v.status === 'published' &&
+        hasValidVacancyDeadline(v) &&
         (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
     );
     if (!found) {
       res.status(404).json({ error: 'Vacancy not found' });
       return;
     }
+    res.setHeader('Cache-Control', 'public, max-age=20, stale-while-revalidate=60');
     res.json({ success: true, vacancy: found });
   });
 
@@ -2644,9 +2708,34 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     );
     let newlyPublishedOrUpdatedId = changedVacancyId || '';
     let resolvedChangeType: 'published' | 'updated' | undefined = changeType;
+    const deletedNoDeadlineIds: string[] = [];
+    const rejectedIncomplete: Array<{ id: string; title: string; missingFields: string[] }> = [];
 
     for (const item of incomingList) {
       if (!item?.id) continue;
+
+      // STRICT RULE 1: Any vacancy without a real calendar deadline is permanently deleted and never stored
+      if (!hasValidVacancyDeadline(item)) {
+        map.delete(item.id);
+        changedSet.delete(String(item.id));
+        deletedNoDeadlineIds.push(String(item.id));
+        continue;
+      }
+
+      // STRICT RULE 2: Published vacancies synced by owner must satisfy all 6 mandatory requirements
+      if (mode !== 'seed_if_empty' && item.status === 'published') {
+        const validation = validateVacancyStrict(item, { allowExpired: false });
+        if (!validation.valid) {
+          changedSet.delete(String(item.id));
+          rejectedIncomplete.push({
+            id: String(item.id),
+            title: String(item.title || 'Untitled'),
+            missingFields: validation.missingFields,
+          });
+          continue;
+        }
+      }
+
       const prev = map.get(item.id);
       if (!prev && item.status === 'published') {
         changedSet.add(item.id);
@@ -2668,7 +2757,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       map.set(item.id, item);
     }
 
-    const merged = Array.from(map.values());
+    const merged = Array.from(map.values()).filter((v) => hasValidVacancyDeadline(v));
     saveVacanciesCatalog(merged);
 
     const changedIds = Array.from(changedSet);
@@ -2710,6 +2799,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     res.json({
       success: true,
       total: merged.length,
+      deletedNoDeadlineIds,
+      rejectedIncomplete,
       backgroundMatchingTriggered: true,
       notifiedUsersCount,
       notificationsDispatched,

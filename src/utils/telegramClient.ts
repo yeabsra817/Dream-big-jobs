@@ -6,6 +6,12 @@ import {
   TelegramVerificationStatusCode,
   Vacancy,
 } from '../types/job';
+import {
+  extractDirectEmployerChannels,
+  parseValidDeadline,
+  validateTelegramPostContentStrict,
+  validateVacancyStrict,
+} from './vacancyValidator';
 
 /**
  * Determine whether a vacancy is genuinely a Banking / Financial Institution job.
@@ -90,27 +96,17 @@ export function getTelegramDistributionModeLabel(mode?: TelegramDistributionMode
 }
 
 export function isVacancyDeadlineExpiredClient(deadline?: string): boolean {
-  if (!deadline) return false;
-  const trimmed = deadline.trim();
-  if (!trimmed || /not stated|open until filled|ongoing|rolling/i.test(trimmed)) return false;
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  parsed.setHours(23, 59, 59, 999);
-  return parsed.getTime() < today.getTime();
+  const parsed = parseValidDeadline(deadline);
+  if (!parsed.hasValidDeadline) return false;
+  return parsed.isExpired;
 }
 
 export function hasOfficialApplicationMethodClient(v: Partial<Vacancy>): boolean {
-  const url = String(v.applicationUrl || '').trim();
-  const email = String(v.applicationEmail || '').trim();
-  const instr = String(v.applicationInstructions || '').trim();
-  const contact = String(v.contactInfo || '').trim();
-  return Boolean(url.length > 6 || email.includes('@') || instr.length > 8 || contact.length > 5);
+  return extractDirectEmployerChannels(v).valid;
 }
 
 /**
- * Enforces Telegram 4-option distribution setting + pre-publish quality/deadline/content separation checks.
+ * Enforces Telegram 4-option distribution setting + strict 6-field quality/deadline/content separation checks.
  */
 export function evaluateVacancyForTelegramClient(
   vacancy: Partial<Vacancy>,
@@ -132,18 +128,22 @@ export function evaluateVacancyForTelegramClient(
       reason: 'Blocked by Content Separation Rule: Scholarship opportunities are never sent to the Jobs Telegram channel unless explicitly enabled.',
     };
   }
-  if (!vacancy.title || !vacancy.organization) {
-    return { allowed: false, reason: 'Blocked: Missing job title or employer.' };
-  }
   if (!forceRetry && vacancy.telegramPublished) {
     return { allowed: false, reason: 'Blocked: Already published to Telegram (duplicate protection).' };
   }
-  if (vacancy.status === 'expired' || isVacancyDeadlineExpiredClient(vacancy.applicationDeadline)) {
-    return { allowed: false, reason: `Blocked: Application deadline (${vacancy.applicationDeadline || 'expired'}) is closed.` };
+  if (vacancy.status === 'expired' || vacancy.status === 'archived' || vacancy.status === 'draft' || vacancy.status === 'duplicate') {
+    return { allowed: false, reason: `Blocked: Vacancy status is "${vacancy.status}". Only open published vacancies can be posted to Telegram.` };
   }
-  if (!hasOfficialApplicationMethodClient(vacancy)) {
-    return { allowed: false, reason: 'Blocked: Official employer application method (URL, email, or verified instructions) is missing.' };
+
+  // STRICT MANDATORY GATE: Deadline + Employer Name + Position + Requirements + Method to Apply + Direct Link/Email/Physical Address
+  const strictCheck = validateVacancyStrict(vacancy, { allowExpired: false });
+  if (!strictCheck.valid) {
+    return {
+      allowed: false,
+      reason: `Blocked: Incomplete vacancy cannot be posted to Telegram. Missing: ${strictCheck.missingFields.join(', ')}.`,
+    };
   }
+
   if (mode === 'banking_only' && !isBankingVacancyClient(vacancy)) {
     return { allowed: false, reason: 'Filtered out by OPTION B (BANKING JOBS ONLY): Not a verified banking/financial vacancy.' };
   }
@@ -540,8 +540,8 @@ function truncateTextClient(val: string | null | undefined, maxLen: number): str
 
 function isMeaningfulClientField(val?: string | null): boolean {
   const s = String(val || '').trim();
-  if (!s) return false;
-  return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
+  if (!s || s === '-' || s === '—') return false;
+  return !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none)$/i.test(s);
 }
 
 /**
@@ -573,160 +573,13 @@ function stripUrlsAndEmailsClient(text: string): string {
   return String(text || '')
     .replace(/https?:\/\/\S+/gi, '')
     .replace(/\bwww\.[^\s]+/gi, '')
+    .replace(/\bt\.me\/\S+/gi, '')
     .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '')
+    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|et|tech|io|co|gov|edu|info)(?:\/\S*)?/gi, '')
+    .replace(/(?:\+251[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3,4}|\b0[19]\d[\s-]?\d{3}[\s-]?\d{4}\b)/g, '')
+    .replace(/\b(?:how\s+to\s+apply\s*:|application\s+method\s*:|method\s+to\s+apply\s*:|apply\s+via\s*:|send\s+(?:your\s+)?cv\s+to|submit\s+in\s+person|p\.?\s*o\.?\s*box\s*\d+)\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-}
-
-export function buildTelegramAmharicPromoHtml(_baseUrl?: string): string {
-  return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
-
-በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
-
-✅ በነፃ አካውንት ይክፈቱ።
-✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
-✅ የስራ ፍላጎትዎን ይምረጡ።
-✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
-
-🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
-
-👇 <b>ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
-}
-
-export function buildTelegramAmharicPromoPlain(_baseUrl?: string): string {
-  return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
-
-በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
-
-✅ በነፃ አካውንት ይክፈቱ።
-✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
-✅ የስራ ፍላጎትዎን ይምረጡ።
-✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
-
-🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
-
-👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!`;
-}
-
-function formatCategoryHashtagClient(category?: string): string {
-  const c = String(category || '').trim().toLowerCase();
-  if (!c) return '#Vacancy';
-  if (c.includes('health')) return '#HealthCare';
-  if (c.includes('banking')) return '#BankingAndFinance';
-  if (c.includes('microfinance')) return '#Microfinance';
-  if (c.includes('ngo')) return '#NGO';
-  if (c.includes('embassy')) return '#EmbassyAndDiplomatic';
-  if (c.includes('it and technology') || c.includes('technology')) return '#ITAndTechnology';
-  if (c.includes('accounting')) return '#AccountingAndFinance';
-  if (c.includes('engineering')) return '#EngineeringAndConstruction';
-  if (c.includes('education')) return '#Education';
-  if (c.includes('hospitality') || c.includes('hotel')) return '#HotelAndHospitality';
-  if (c.includes('tourism')) return '#TourismAndTravel';
-  if (c.includes('government')) return '#Government';
-  if (c.includes('insurance')) return '#Insurance';
-  if (c.includes('internship') || c.includes('trainee')) return '#GraduateTrainee';
-  if (c.includes('remote')) return '#RemoteJobs';
-  if (c.includes('private')) return '#PrivateCompanies';
-  const words = String(category || '')
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
-  return words.length > 0 ? `#${words.join('')}` : '#Vacancy';
-}
-
-function deriveCareerLevelClient(vacancy: any): string {
-  if (isMeaningfulClientField(vacancy?.jobGrade)) {
-    return truncateTextClient(vacancy.jobGrade, 60);
-  }
-  const expText = String(vacancy?.experienceYears || '').trim();
-  const titleText = String(vacancy?.title || '').toLowerCase();
-  const combined = `${expText.toLowerCase()} ${titleText}`;
-
-  const numMatch = expText.match(/(\d+)/);
-  const minYears = numMatch ? Number(numMatch[1]) : null;
-
-  if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
-    return 'Entry Level (0-1 year)';
-  }
-  if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || (minYears !== null && minYears >= 5)) {
-    return expText ? `Senior (${truncateTextClient(expText, 30)})` : 'Senior (5-8 years)';
-  }
-  if (minYears !== null && minYears >= 3) {
-    return expText ? `Mid Level (${truncateTextClient(expText, 30)})` : 'Mid Level (3-5 years)';
-  }
-  if (minYears !== null && minYears >= 1) {
-    return expText ? `Junior (${truncateTextClient(expText, 30)})` : 'Junior (1-3 years)';
-  }
-  return 'Mid Level';
-}
-
-function formatDeadlineDisplayClient(deadline?: string): string {
-  const s = String(deadline || '').trim();
-  if (!s || !isMeaningfulClientField(s)) return '';
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-  }
-  return truncateTextClient(s, 60);
-}
-
-export function buildRequirementsBulletLinesClient(vacancy: any): string[] {
-  const bullets: string[] = [];
-  const pushClean = (line: string) => {
-    const cleaned = stripUrlsAndEmailsClient(line).replace(/^[•\-\*]\s*/, '').trim();
-    if (!cleaned || cleaned.length < 3) return;
-    if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
-      bullets.push(truncateTextClient(cleaned, 210));
-    }
-  };
-
-  if (isMeaningfulClientField(vacancy?.educationQualification)) {
-    const edu = stripUrlsAndEmailsClient(vacancy.educationQualification);
-    const field = isMeaningfulClientField(vacancy?.requiredFieldOfStudy)
-      ? ` in ${stripUrlsAndEmailsClient(vacancy.requiredFieldOfStudy)}`
-      : '';
-    pushClean(`${edu}${field}`);
-  } else if (isMeaningfulClientField(vacancy?.requiredFieldOfStudy)) {
-    pushClean(`Field of Study: ${stripUrlsAndEmailsClient(vacancy.requiredFieldOfStudy)}`);
-  }
-
-  if (isMeaningfulClientField(vacancy?.experienceYears)) {
-    pushClean(`Minimum ${stripUrlsAndEmailsClient(vacancy.experienceYears)} relevant experience`);
-  }
-
-  if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    const skillsList = vacancy.requiredSkills
-      .map((s: any) => stripUrlsAndEmailsClient(String(s || '')))
-      .filter(Boolean);
-    if (skillsList.length > 0) {
-      pushClean(`Required Competencies & Skills: ${skillsList.slice(0, 8).join(', ')}`);
-    }
-  }
-
-  if (isMeaningfulClientField(vacancy?.specialRequirements)) {
-    pushClean(vacancy.specialRequirements);
-  }
-
-  if (isMeaningfulClientField(vacancy?.description)) {
-    const descLines = String(vacancy.description)
-      .split(/\n+/)
-      .map((l) => l.trim())
-      .filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
-    for (const line of descLines.slice(0, 2)) {
-      pushClean(line);
-    }
-  }
-
-  if (bullets.length === 0) {
-    pushClean(
-      `${truncateTextClient(vacancy?.title || 'Position', 80)} — ${truncateTextClient(vacancy?.category || 'Relevant qualification', 80)}`
-    );
-  }
-
-  return bullets.slice(0, 6);
 }
 
 export function buildTelegramJobHtml(
@@ -734,44 +587,32 @@ export function buildTelegramJobHtml(
   _customDomainOrUrl = 'www.hopelandjobs.tech',
   _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
-  const orgName = escapeHtml(truncateTextClient(vacancy.organization || 'Employer', 140));
-  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateTextClient(vacancy.organizationAmharic, 90))})` : '';
-  const positionTitle = escapeHtml(truncateTextClient(vacancy.title || 'Various Positions', 180));
-  const categoryHashtag = escapeHtml(formatCategoryHashtagClient(vacancy.category));
-  const careerLevel = escapeHtml(deriveCareerLevelClient(vacancy));
-  const deadlineDisplay = escapeHtml(formatDeadlineDisplayClient(vacancy.applicationDeadline));
+  const cleanOrg = stripUrlsAndEmailsClient(vacancy?.organization || '') || 'Employer';
+  const cleanTitle = stripUrlsAndEmailsClient(vacancy?.title || '') || 'Open Position';
+  const cleanSalary = isMeaningfulClientField(vacancy?.salary)
+    ? stripUrlsAndEmailsClient(vacancy.salary)
+    : '';
+  const cleanCity = isMeaningfulClientField(vacancy?.location)
+    ? stripUrlsAndEmailsClient(vacancy.location)
+    : '';
 
-  const infoLines: string[] = [];
-  infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
-  if (isMeaningfulClientField(vacancy.location)) {
-    infoLines.push(`<b>Location:</b> ${escapeHtml(truncateTextClient(vacancy.location, 100))}`);
-  }
-  if (deadlineDisplay) {
-    infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
-  }
-  infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
-  infoLines.push(
-    `<b>Number of people required:</b> ${
-      isMeaningfulClientField(vacancy.vacanciesCount)
-        ? escapeHtml(truncateTextClient(vacancy.vacanciesCount, 40))
-        : '1'
-    }`
-  );
-
-  const reqBulletsHtml = buildRequirementsBulletLinesClient(vacancy)
-    .map((b) => `• ${escapeHtml(b)}`)
-    .join('\n');
+  const orgName = escapeHtml(truncateTextClient(cleanOrg, 140));
+  const positionTitle = escapeHtml(truncateTextClient(cleanTitle, 180));
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  const coreText = `${washPrefix}<b>${positionTitle}</b>
-<i>at ${orgName}${orgAmharic}</i>
+  const lines: string[] = [
+    `🏢 <b>Employer:</b> ${orgName}`,
+    `💼 <b>Position:</b> ${positionTitle}`,
+  ];
 
-${infoLines.join('\n\n')}
+  if (cleanSalary) {
+    lines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateTextClient(cleanSalary, 100))}`);
+  }
+  if (cleanCity) {
+    lines.push(`📍 <b>City of Work:</b> ${escapeHtml(truncateTextClient(cleanCity, 100))}`);
+  }
 
-<b>Requirements:</b>
-${reqBulletsHtml}`;
-
-  return `${coreText}\n\n${buildTelegramAmharicPromoHtml()}`;
+  return `${washPrefix}${lines.join('\n')}\n\nFull vacancy details are inside our website. Tap <b>Apply Now</b> below.`;
 }
 
 export function buildTelegramJobPlainText(
@@ -779,42 +620,32 @@ export function buildTelegramJobPlainText(
   _customDomainOrUrl = 'www.hopelandjobs.tech',
   _channelUsername = '@DreamBigJobsEthiopia'
 ): string {
-  const orgName = truncateTextClient(vacancy.organization || 'Employer', 140);
-  const orgAmharic = vacancy.organizationAmharic ? ` (${truncateTextClient(vacancy.organizationAmharic, 90)})` : '';
-  const positionTitle = truncateTextClient(vacancy.title || 'Various Positions', 180);
-  const categoryHashtag = formatCategoryHashtagClient(vacancy.category);
-  const careerLevel = deriveCareerLevelClient(vacancy);
-  const deadlineDisplay = formatDeadlineDisplayClient(vacancy.applicationDeadline);
+  const cleanOrg = stripUrlsAndEmailsClient(vacancy?.organization || '') || 'Employer';
+  const cleanTitle = stripUrlsAndEmailsClient(vacancy?.title || '') || 'Open Position';
+  const cleanSalary = isMeaningfulClientField(vacancy?.salary)
+    ? stripUrlsAndEmailsClient(vacancy.salary)
+    : '';
+  const cleanCity = isMeaningfulClientField(vacancy?.location)
+    ? stripUrlsAndEmailsClient(vacancy.location)
+    : '';
 
-  const infoLines: string[] = [];
-  infoLines.push(`Categories: ${categoryHashtag}`);
-  if (isMeaningfulClientField(vacancy.location)) {
-    infoLines.push(`Location: ${truncateTextClient(vacancy.location, 100)}`);
-  }
-  if (deadlineDisplay) {
-    infoLines.push(`Deadline: ${deadlineDisplay}`);
-  }
-  infoLines.push(`Career Level: ${careerLevel}`);
-  infoLines.push(
-    `Number of people required: ${
-      isMeaningfulClientField(vacancy.vacanciesCount) ? truncateTextClient(vacancy.vacanciesCount, 40) : '1'
-    }`
-  );
-
-  const reqBulletsPlain = buildRequirementsBulletLinesClient(vacancy)
-    .map((b) => `• ${b}`)
-    .join('\n');
+  const orgName = truncateTextClient(cleanOrg, 140);
+  const positionTitle = truncateTextClient(cleanTitle, 180);
   const washPrefix = isWashNgoVacancyClient(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  const coreText = `${washPrefix}${positionTitle}
-at ${orgName}${orgAmharic}
+  const lines: string[] = [
+    `Employer: ${orgName}`,
+    `Position: ${positionTitle}`,
+  ];
 
-${infoLines.join('\n\n')}
+  if (cleanSalary) {
+    lines.push(`Salary: ${truncateTextClient(cleanSalary, 100)}`);
+  }
+  if (cleanCity) {
+    lines.push(`City of Work: ${truncateTextClient(cleanCity, 100)}`);
+  }
 
-Requirements:
-${reqBulletsPlain}`;
-
-  return `${coreText}\n\n${buildTelegramAmharicPromoPlain()}`;
+  return `${washPrefix}${lines.join('\n')}\n\nFull vacancy details are inside our website. Tap Apply Now below.`;
 }
 
 /**
@@ -1025,6 +856,17 @@ export async function broadcastJobToTelegram(
       success: false,
       blockedByRule: true,
       error: gateCheck.reason || 'Blocked by Telegram publishing rules.',
+    };
+  }
+
+  const contentAudit = validateTelegramPostContentStrict(
+    buildTelegramJobPlainText(vacancy, effectiveDomain, cleanChan)
+  );
+  if (!contentAudit.safe) {
+    return {
+      success: false,
+      blockedByRule: true,
+      error: `Blocked by Strict Telegram Policy: ${contentAudit.violations.join(' ')}`,
     };
   }
 

@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-18T09:27:32.413Z",
+  "checkedAt": "2026-11-20T10:27:50.834Z",
   "overallStatus": "HEALTHY",
-  "serverUptimeSeconds": 2,
+  "serverUptimeSeconds": 1021,
   "storage": {
     "persistentDbWritable": true,
     "filesPresent": {
@@ -13,7 +13,7 @@
       "analytics_events": true
     },
     "backupCount": 3,
-    "latestBackupAt": "2026-11-18T09:00:54.873Z"
+    "latestBackupAt": "2026-11-20T09:40:04.255Z"
   },
   "telegramBot": {
     "configured": true,
@@ -23,8 +23,8 @@
     "channelId": "-1004499169829",
     "status": "CONNECTED",
     "statusCode": "connected",
-    "lastCheckedAt": "2026-11-18T09:27:32.354Z",
-    "lastSuccessfulTestAt": "2026-11-18T09:27:32.354Z",
+    "lastCheckedAt": "2026-11-20T10:27:50.755Z",
+    "lastSuccessfulTestAt": "2026-11-20T10:27:50.755Z",
     "lastError": null,
     "consecutiveFailures": 0,
     "reconnectAttempts": 0,
@@ -35,13 +35,13 @@
     "gaMeasurementId": "G-KH6X73105S",
     "gaTrackingEnabled": true,
     "alwaysOnEnforced": true,
-    "totalEventsRecorded": 7
+    "totalEventsRecorded": 8
   },
   "counts": {
     "vacancies": 0,
     "staffProfiles": 8,
     "jobApplications": 1,
-    "auditLogs": 38,
-    "unacknowledgedAlerts": 5
+    "auditLogs": 46,
+    "unacknowledgedAlerts": 6
   }
 }

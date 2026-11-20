@@ -50,12 +50,13 @@ import {
   calculateProfileCompletion,
   evaluateMandatoryProfileCompletion,
 } from '../types/jobSeeker';
-import { Vacancy } from '../types/job';
+import { Vacancy, ETHIOPIAN_LOCATIONS } from '../types/job';
 import { InternationalJob, ExperienceScholarship } from '../types/international';
 import {
   computeStaffOpportunityRecommendations,
   hasCompletedMandatoryPreferences,
   hasSufficientProfileForRecommendations,
+  hasStrictUserIndicators,
 } from '../utils/recommendationEngine';
 import { uploadDocumentToCloud, TARGET_STORAGE_CAPACITY_GB } from '../lib/storageService';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
@@ -68,8 +69,12 @@ import {
 
 const RECOMMENDED_SECTOR_OPTIONS = [
   'Commercial Banking & Finance',
+  'Accounting & Finance',
   'Microfinance & SACCOs',
   'Insurance & Risk',
+  'Health & Medical',
+  'Engineering & Construction',
+  'IT, Software & Telecom',
   'WASH (Water, Sanitation & Hygiene)',
   'International NGOs & UN',
   'Local NGOs & Civil Society',
@@ -79,10 +84,13 @@ const RECOMMENDED_SECTOR_OPTIONS = [
   'Hotels & Tourism',
   'Manufacturing & Industrial',
   'Private Companies & Corporate',
-  'IT, Software & Telecom',
-  'Health & Medical',
   'Education & Academic',
-  'Other / General Sectors',
+  'Agriculture & Environment',
+  'Logistics & Supply Chain',
+  'Legal & Compliance',
+  'Media, Design & Communications',
+  'Skilled Trades & Driving',
+  'Other / Custom Profession',
 ];
 
 const QUICK_EXPERIENCE_YEAR_OPTIONS = [
@@ -99,14 +107,30 @@ const QUICK_EXPERIENCE_YEAR_OPTIONS = [
 const QUICK_EXPERTISE_SUGGESTIONS = [
   'Accounting & Finance',
   'Banking Operations',
+  'Health & Nursing',
+  'Pharmacy & Medical Lab',
+  'Civil & Construction Engineering',
+  'Electrical & Mechanical Engineering',
   'Software Development',
   'Project Management',
   'WASH Engineering',
-  'Health & Nursing',
   'Logistics & Supply Chain',
   'Human Resources',
   'Monitoring & Evaluation',
+  'Agriculture & Agronomy',
   'Sales & Marketing',
+];
+
+const QUICK_INDICATOR_SUGGESTIONS = [
+  'Addis Ababa',
+  'Remote',
+  'BSc',
+  'MSc',
+  'NGO',
+  'IFRS',
+  'AutoCAD',
+  'Clinical',
+  'Driver License',
 ];
 
 interface Props {
@@ -193,6 +217,11 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   const [formProfile, setFormProfile] = useState<JobSeekerProfile>({
     ...profile,
     accountRole: profile.accountRole || 'staff',
+    customProfessionOrCategory: profile.customProfessionOrCategory || '',
+    additionalRequirements: Array.isArray(profile.additionalRequirements) ? profile.additionalRequirements : [],
+    strictLocationMatch: Boolean(profile.strictLocationMatch),
+    strictEmploymentTypeMatch: Boolean(profile.strictEmploymentTypeMatch),
+    minimumSalaryEtb: profile.minimumSalaryEtb || '',
     previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
     areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
     professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
@@ -210,6 +239,11 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     setFormProfile({
       ...profile,
       accountRole: profile.accountRole || 'staff',
+      customProfessionOrCategory: profile.customProfessionOrCategory || '',
+      additionalRequirements: Array.isArray(profile.additionalRequirements) ? profile.additionalRequirements : [],
+      strictLocationMatch: Boolean(profile.strictLocationMatch),
+      strictEmploymentTypeMatch: Boolean(profile.strictEmploymentTypeMatch),
+      minimumSalaryEtb: profile.minimumSalaryEtb || '',
       previousPositions: Array.isArray(profile.previousPositions) ? profile.previousPositions : [],
       areasOfExpertise: Array.isArray(profile.areasOfExpertise) ? profile.areasOfExpertise : [],
       professionalInterests: Array.isArray(profile.professionalInterests) ? profile.professionalInterests : [],
@@ -221,6 +255,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
   const [newPrevPosition, setNewPrevPosition] = useState('');
   const [newSkillInput, setNewSkillInput] = useState('');
   const [newExpertiseInput, setNewExpertiseInput] = useState('');
+  const [newIndicatorInput, setNewIndicatorInput] = useState('');
   const [isAddingCert, setIsAddingCert] = useState(false);
   const [newCert, setNewCert] = useState<Partial<CertificationItem>>({
     name: '',
@@ -2090,7 +2125,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                   Preferred Job Sectors for Automatic Matching &amp; Alerts
                 </label>
                 <p className="text-[11px] text-slate-500 mb-2.5">
-                  Select all sectors you want automatic job recommendations and notifications for:
+                  Select all sectors (including Health, Engineering, Banking, NGO, IT, Agriculture, or Other) you want real job matches for:
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {RECOMMENDED_SECTOR_OPTIONS.map((sec) => {
@@ -2118,6 +2153,241 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Custom Unlisted Profession & Strict Matching Indicators / Requirements */}
+              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-[#0B132B] flex items-center gap-1.5">
+                      <Target className="w-4 h-4 text-[#16A34A]" />
+                      <span>Custom Profession &amp; Strict Matching Indicators (Optional)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      Add any unlisted profession (Health, Engineering, Veterinary, Journalism, Mining, etc.) or exact requirements.{' '}
+                      <strong className="text-emerald-900">
+                        If you add indicators below, we will ONLY show jobs that meet EVERY requirement you add.
+                      </strong>{' '}
+                      <span className="block text-[11px] text-emerald-800/90 mt-0.5">
+                        እዚህ የጨመሯቸውን ልዩ መስፈርቶች ሁሉ የሚያሟሉ ስራዎች ብቻ ይቀርቡልዎታል።
+                      </span>
+                    </p>
+                  </div>
+                  {hasStrictUserIndicators(formProfile) && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#16A34A] text-white text-[10px] font-extrabold shrink-0 self-start">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Strict Filter Active</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Custom Profession / Unlisted Field */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Custom Profession or Unlisted Job Category (For Any Job Not Listed Above)
+                  </label>
+                  <input
+                    type="text"
+                    value={formProfile.customProfessionOrCategory || ''}
+                    onChange={(e) =>
+                      setFormProfile({ ...formProfile, customProfessionOrCategory: e.target.value })
+                    }
+                    placeholder="e.g. Biomedical Engineer, Clinical Pharmacist, Radiologist, Civil Site Engineer, Veterinarian, Journalist..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-emerald-200 text-xs font-medium focus:ring-2 focus:ring-[#16A34A] outline-none"
+                  />
+                </div>
+
+                {/* Must-Have Indicators / Requirements */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                    Must-Have Indicators / Specific Requirements (ONLY matching jobs will be returned)
+                  </label>
+                  {(formProfile.additionalRequirements || []).length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {(formProfile.additionalRequirements || []).map((ind, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0B132B] text-white text-xs font-bold"
+                        >
+                          <span>{ind}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (formProfile.additionalRequirements || []).filter((_, i) => i !== idx);
+                              setFormProfile({ ...formProfile, additionalRequirements: next });
+                            }}
+                            className="text-slate-300 hover:text-rose-300 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={newIndicatorInput}
+                      onChange={(e) => setNewIndicatorInput(e.target.value)}
+                      placeholder="Add a must-have requirement (e.g. AutoCAD, IFRS, Hawassa, Remote, Clinical, BSc, NGO)..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newIndicatorInput.trim();
+                          const curr = formProfile.additionalRequirements || [];
+                          if (val && !curr.some((x) => x.toLowerCase() === val.toLowerCase())) {
+                            setFormProfile({ ...formProfile, additionalRequirements: [...curr, val] });
+                          }
+                          setNewIndicatorInput('');
+                        }
+                      }}
+                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-white border border-emerald-200 text-xs font-medium focus:ring-2 focus:ring-[#16A34A] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = newIndicatorInput.trim();
+                        const curr = formProfile.additionalRequirements || [];
+                        if (val && !curr.some((x) => x.toLowerCase() === val.toLowerCase())) {
+                          setFormProfile({ ...formProfile, additionalRequirements: [...curr, val] });
+                        }
+                        setNewIndicatorInput('');
+                      }}
+                      className="px-4 py-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold shrink-0 cursor-pointer"
+                    >
+                      Add Requirement
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_INDICATOR_SUGGESTIONS.map((tag) => {
+                      const exists = (formProfile.additionalRequirements || []).some(
+                        (x) => x.toLowerCase() === tag.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          disabled={exists}
+                          onClick={() => {
+                            const curr = formProfile.additionalRequirements || [];
+                            if (!exists) {
+                              setFormProfile({ ...formProfile, additionalRequirements: [...curr, tag] });
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                            exists
+                              ? 'bg-emerald-200 text-emerald-950 border-emerald-300'
+                              : 'bg-white text-slate-700 border-emerald-200 hover:bg-emerald-100 cursor-pointer'
+                          }`}
+                        >
+                          {exists ? `✓ ${tag}` : `+ ${tag}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Strict Location, Employment Type & Minimum Salary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Preferred Work Location
+                    </label>
+                    <select
+                      value={formProfile.preferredWorkLocation || 'Any Location'}
+                      onChange={(e) =>
+                        setFormProfile({
+                          ...formProfile,
+                          preferredWorkLocation: e.target.value,
+                          strictLocationMatch:
+                            e.target.value === 'Any Location' ? false : formProfile.strictLocationMatch,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-emerald-200 text-xs font-medium outline-none focus:ring-2 focus:ring-[#16A34A]"
+                    >
+                      <option value="Any Location">Any Location / All Ethiopia</option>
+                      {ETHIOPIAN_LOCATIONS.map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc}
+                        </option>
+                      ))}
+                    </select>
+                    {formProfile.preferredWorkLocation &&
+                      formProfile.preferredWorkLocation !== 'Any Location' && (
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-950 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formProfile.strictLocationMatch)}
+                            onChange={(e) =>
+                              setFormProfile({ ...formProfile, strictLocationMatch: e.target.checked })
+                            }
+                            className="w-3.5 h-3.5 accent-[#16A34A] cursor-pointer"
+                          />
+                          <span>ONLY show jobs in this location</span>
+                        </label>
+                      )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Preferred Job Type
+                    </label>
+                    <select
+                      value={formProfile.preferredEmploymentType || 'Any'}
+                      onChange={(e) =>
+                        setFormProfile({
+                          ...formProfile,
+                          preferredEmploymentType: e.target.value as JobSeekerProfile['preferredEmploymentType'],
+                          strictEmploymentTypeMatch:
+                            e.target.value === 'Any' ? false : formProfile.strictEmploymentTypeMatch,
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-emerald-200 text-xs font-medium outline-none focus:ring-2 focus:ring-[#16A34A]"
+                    >
+                      <option value="Any">Any Employment Type</option>
+                      <option value="Full-time">Full-time</option>
+                      <option value="Part-time">Part-time</option>
+                      <option value="Contract">Contract</option>
+                      <option value="Internship">Internship</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                    {formProfile.preferredEmploymentType &&
+                      formProfile.preferredEmploymentType !== 'Any' && (
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-950 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(formProfile.strictEmploymentTypeMatch)}
+                            onChange={(e) =>
+                              setFormProfile({
+                                ...formProfile,
+                                strictEmploymentTypeMatch: e.target.checked,
+                              })
+                            }
+                            className="w-3.5 h-3.5 accent-[#16A34A] cursor-pointer"
+                          />
+                          <span>ONLY show {formProfile.preferredEmploymentType} jobs</span>
+                        </label>
+                      )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Minimum Salary Filter (ETB)
+                    </label>
+                    <input
+                      type="text"
+                      value={formProfile.minimumSalaryEtb || ''}
+                      onChange={(e) =>
+                        setFormProfile({ ...formProfile, minimumSalaryEtb: e.target.value })
+                      }
+                      placeholder="e.g. 25000 (optional)"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-emerald-200 text-xs font-medium outline-none focus:ring-2 focus:ring-[#16A34A]"
+                    />
+                    <p className="text-[10px] text-slate-500">
+                      Excludes vacancies stating a lower ETB salary.
+                    </p>
+                  </div>
                 </div>
               </div>
 

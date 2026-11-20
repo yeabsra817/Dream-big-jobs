@@ -16,6 +16,7 @@ import {
   ReceiptText,
   Sparkles,
   Laptop,
+  Layers,
   HelpCircle,
 } from 'lucide-react';
 
@@ -58,6 +59,8 @@ export const CategoryIcon: React.FC<Props> = ({ iconName, className = 'w-6 h-6' 
       return <Sparkles className={className} />;
     case 'Laptop':
       return <Laptop className={className} />;
+    case 'Layers':
+      return <Layers className={className} />;
     default:
       return <HelpCircle className={className} />;
   }

@@ -3,6 +3,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
+import {
+  extractDirectEmployerChannels,
+  hasValidVacancyDeadline,
+  parseValidDeadline,
+  validateTelegramPostContentStrict,
+  validateVacancyStrict,
+} from './src/utils/vacancyValidator';
 
 const Type = {
   TYPE_UNSPECIFIED: 'TYPE_UNSPECIFIED',
@@ -262,32 +269,32 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
   return blocks.map((block) => {
     const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
 
-    // Title
+    // Title (never fabricate placeholder title)
     const titleMatch = block.match(/(?:Position|Job Title|Role|Title)\s*:\s*([^\n\r]+)/i);
     let title = titleMatch ? titleMatch[1].trim() : '';
     if (!title) {
       const titleLine = lines.find((l) =>
-        /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista|coordinator|teller|analyst)/i.test(l)
+        /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista|coordinator|teller|analyst|technician|supervisor|consultant|advisor|lecturer|teacher|midwife|lawyer)/i.test(l)
       );
-      title = titleLine || lines[0] || 'Job Vacancy';
+      title = titleLine || '';
     }
     title = title.replace(/^[-*•\d\.\)\s]+/, '').replace(/[:;-]+$/, '').trim();
 
-    // Organization
+    // Organization (never fabricate 'Ethiopian Organization')
     const orgMatch = block.match(/(?:Organization|Employer|Hiring Organization|Company|Bank|Hotel)\s*:\s*([^\n\r]+)/i);
     let organization = orgMatch ? orgMatch[1].trim() : '';
     if (!organization) {
       const orgLine = lines.find(
         (l) =>
-          /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|unhcr|wfp|msf|oxfam|save the children|world vision|care|plan international|icrc|irc|mercy corps|plc|p\.l\.c|share company|s\.c\.?|association|ngo|hospital|clinic|university|college|corporation|enterprise)/i.test(l) &&
+          /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|unhcr|wfp|msf|oxfam|save the children|world vision|care|plan international|icrc|irc|mercy corps|plc|p\.l\.c|share company|s\.c\.?|association|ngo|hospital|clinic|university|college|corporation|enterprise|authority|ministry|foundation|agency|institute)/i.test(l) &&
           l !== title
       );
-      organization = orgLine || (lines.length > 1 && lines[0] !== title ? lines[0] : 'Ethiopian Organization');
+      organization = orgLine || '';
     }
     organization = organization.replace(/^[-*•\d\.\)\s]+/, '').replace(/[:;-]+$/, '').trim();
 
     // Location
-    const locMatch = block.match(/(?:Location|Place of Work|Duty Station|Address)\s*:\s*([^\n\r]+)/i);
+    const locMatch = block.match(/(?:Location|Place of Work|Duty Station|Work Location)\s*:\s*([^\n\r]+)/i);
     let location = locMatch ? locMatch[1].trim() : '';
     if (!location) {
       if (/bole|addis ababa|sheger|finfinne/i.test(block)) location = 'Addis Ababa';
@@ -304,47 +311,73 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
       else location = 'Addis Ababa, Ethiopia';
     }
 
-    // Deadline
-    const deadlineMatch = block.match(/(?:Deadline|Closing Date|Apply before|Application Deadline)\s*:\s*([^\n\r]+)/i);
-    const deadline = deadlineMatch ? deadlineMatch[1].trim() : 'Not specified in the original vacancy';
+    // Deadline (leave empty if genuinely missing so strict gate rejects it)
+    const deadlineMatch = block.match(/(?:Application\s+Deadline|Deadline|Closing\s+Date|Apply\s+before|Closes?\s+on|Due\s+Date)\s*:\s*([^\n\r]+)/i);
+    const deadline = deadlineMatch ? deadlineMatch[1].trim() : '';
 
     // Salary
-    const salaryMatch = block.match(/(?:Salary|Remuneration|Pay)\s*:\s*([^\n\r]+)/i);
-    const salary = salaryMatch ? salaryMatch[1].trim() : 'Attractive / Per Company Scale';
+    const salaryMatch = block.match(/(?:Salary|Remuneration|Pay|Compensation)\s*:\s*([^\n\r]+)/i);
+    const salary = salaryMatch ? salaryMatch[1].trim() : '';
 
     // Experience
-    const expMatch = block.match(/(?:Experience|Work Experience)\s*:\s*([^\n\r]+)/i);
-    const experienceYears = expMatch ? expMatch[1].trim() : 'Not specified in the original vacancy';
+    const expMatch = block.match(/(?:Work\s+Experience|Experience)\s*:\s*([^\n\r]+)/i);
+    const experienceYears = expMatch ? expMatch[1].trim() : '';
 
-    // Education / Qualifications
-    const eduMatch = block.match(/(?:Education|Qualification|Qualifications|Educational Background)\s*:\s*([^\n\r]+)/i);
-    const educationQualification = eduMatch ? eduMatch[1].trim() : 'Not specified in the original vacancy';
+    // Education / Qualifications / Requirements
+    const eduMatch = block.match(/(?:Education|Qualification|Qualifications|Educational\s+Background|Minimum\s+Requirements?|Requirements?|Eligibility)\s*:\s*([^\n\r]+)/i);
+    const educationQualification = eduMatch ? eduMatch[1].trim() : '';
 
     // Field of Study
-    const fieldMatch = block.match(/(?:Field of Study|Discipline|Major)\s*:\s*([^\n\r]+)/i);
-    const requiredFieldOfStudy = fieldMatch ? fieldMatch[1].trim() : educationQualification;
+    const fieldMatch = block.match(/(?:Field\s+of\s+Study|Discipline|Major)\s*:\s*([^\n\r]+)/i);
+    const requiredFieldOfStudy = fieldMatch ? fieldMatch[1].trim() : '';
+
+    // Special / Extra Requirements
+    const specialReqMatch = block.match(/(?:Special\s+Requirements?|Other\s+Requirements?|Skills|Competencies)\s*:\s*([^\n\r]+)/i);
+    const specialRequirements = specialReqMatch ? specialReqMatch[1].trim() : '';
 
     // Responsibilities
-    const respMatch = block.match(/(?:Responsibilities|Duties|Job Description|Overview)\s*:\s*([^\n\r]+)/i);
+    const respMatch = block.match(/(?:Responsibilities|Duties|Job\s+Description|Overview)\s*:\s*([^\n\r]+)/i);
     const responsibilities = respMatch ? [respMatch[1].trim()] : [];
 
-    // Email & URL
+    // Direct Employer Channels: URL, Email, Physical Address
     const emailMatch = block.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
     const applicationEmail = emailMatch ? emailMatch[1] : '';
     const urlMatch = block.match(/(https?:\/\/[^\s\)]+)/i);
-    const applicationUrl = urlMatch ? urlMatch[1] : '';
+    const applicationUrl = urlMatch ? urlMatch[1].replace(/[),.;]+$/, '') : '';
+    const physicalMatch = block.match(/(?:Physical\s+Address|Submission\s+Address|Office\s+Address|Address|In[\s-]?Person\s+Address|Postal\s+Address|P\.?\s*O\.?\s*Box)\s*:\s*([^\n\r]+)/i);
+    const poBoxInlineMatch = block.match(/(P\.?\s*O\.?\s*Box\s*[:#]?\s*[A-Za-z0-9\-\s,\/]{2,60})/i);
+    const physicalAddress = physicalMatch
+      ? physicalMatch[1].trim()
+      : poBoxInlineMatch
+      ? poBoxInlineMatch[1].trim()
+      : '';
 
-    // Application Method
-    const methodMatch = block.match(/(?:Application Method|How to Apply|Apply Via)\s*:\s*([^\n\r]+)/i);
-    let applicationMethod = 'Online / In-Person';
+    // Application Method & Instructions (NEVER fabricate boilerplate!)
+    const methodMatch = block.match(/(?:Application\s+Method|Method\s+to\s+Apply|How\s+to\s+Apply|Apply\s+Via|Application\s+Instructions?)\s*:\s*([^\n\r]+)/i);
+    let applicationMethod = '';
     if (applicationUrl) applicationMethod = 'Online URL';
     else if (applicationEmail) applicationMethod = 'Email';
-    else if (/in person|physical|head office/i.test(block)) applicationMethod = 'In-Person / Physical';
-    const applicationInstructions = methodMatch ? methodMatch[1].trim() : (applicationUrl ? `Apply online at ${applicationUrl}` : applicationEmail ? `Send CV to ${applicationEmail}` : 'Submit application as indicated in vacancy description.');
+    else if (physicalAddress || /\b(?:in[\s-]?person|physically|head\s+office|hr\s+office|walk[\s-]?in|p\.?\s*o\.?\s*box)\b/i.test(block)) {
+      applicationMethod = /p\.?\s*o\.?\s*box|postal|mail/i.test(physicalAddress || block)
+        ? 'Postal / Mail'
+        : 'In-Person / Physical';
+    } else if (methodMatch) {
+      applicationMethod = 'Other';
+    }
+
+    const applicationInstructions = methodMatch
+      ? methodMatch[1].trim()
+      : applicationUrl
+      ? `Apply directly via official employer link: ${applicationUrl}`
+      : applicationEmail
+      ? `Send your application and CV directly to ${applicationEmail}`
+      : physicalAddress
+      ? `Submit your application in person / by post to: ${physicalAddress}`
+      : '';
 
     // Phone / Contact
     const phoneMatch = block.match(/(?:\+251\s*\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}|09\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
-    const contactInfo = phoneMatch ? `Phone: ${phoneMatch[0]}` : locMatch ? locMatch[1].trim() : location;
+    const contactInfo = physicalAddress || (phoneMatch ? `Phone: ${phoneMatch[0]}` : '');
 
     // Inferred Category
     const category = inferEthiopianCategory(title, organization, block);
@@ -352,19 +385,10 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
       title,
       organization,
       category,
-      description: block,
-      responsibilities,
-      requiredFieldOfStudy,
-    };
-
-    return {
-      title,
-      organization,
-      category,
       location,
       employmentType: /contract/i.test(block) ? 'Contract' : /part[\s-]?time/i.test(block) ? 'Part-time' : /intern/i.test(block) ? 'Internship' : 'Full-time',
-      vacanciesCount: 'Not specified in the original vacancy',
-      jobGrade: 'Not specified in the original vacancy',
+      vacanciesCount: '',
+      jobGrade: '',
       salary,
       educationQualification,
       requiredFieldOfStudy,
@@ -376,18 +400,25 @@ function parseVacanciesSmartFallback(rawText: string): any[] {
       applicationMethod,
       applicationEmail,
       applicationUrl,
+      physicalAddress,
       applicationInstructions,
       applicationDeadline: deadline,
       contactInfo,
       languageRequirements: 'English and Amharic',
-      ageRequirements: 'Not specified in the original vacancy',
-      genderRequirements: 'Not specified in the original vacancy',
-      specialRequirements: 'Not specified in the original vacancy',
+      ageRequirements: '',
+      genderRequirements: '',
+      specialRequirements,
       referenceNumber: '',
-      missingFields: [],
+    };
+
+    const strictCheck = validateVacancyStrict(draftObj as any, { allowExpired: false });
+
+    return {
+      ...draftObj,
+      missingFields: strictCheck.missingFields,
       broadCategory: classifyBroadCategoryServer(draftObj),
       isWashNgo: isWashNgoVacancyServer(draftObj),
-      isExpired: isVacancyDeadlineExpiredServer(deadline),
+      isExpired: strictCheck.isExpired,
     };
   });
 }
@@ -405,13 +436,14 @@ app.post('/api/gemini/parse-bulk-vacancies', async (req: Request, res: Response)
     const useDirectBatchEngine = smartPreSplit.length >= 12;
 
     const systemInstruction = `You are the specialized vacancy extraction parser for HOPELAND JOBS in Ethiopia.
-The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, and employers.
+The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, healthcare, engineering, and other employers.
 
-CRITICAL INSTRUCTIONS:
+CRITICAL STRICT RULES:
 1. Detect every single separate vacancy in the text (support 50, 100 or more vacancies without dropping any).
-2. NEVER invent fake vacancies, imaginary organizations, or synthetic URLs. Preserve all real details faithfully.
-3. If any field was not specified in the pasted text, you MUST output: "Not specified in the original vacancy".
-4. Assign every vacancy to EXACTLY ONE of the following 16 approved categories:
+2. NEVER invent, guess, or fabricate a deadline, employer name, job title, requirements, application method, application instructions, URL, email, or physical address if it is NOT explicitly present in the pasted text.
+3. If any field is NOT explicitly present in the pasted text, output an empty string "" (DO NOT invent placeholders or boilerplate text).
+4. Extract exact employer direct apply channels faithfully into applicationUrl, applicationEmail, and physicalAddress (office/in-person/P.O. Box submission address).
+5. Assign every vacancy to EXACTLY ONE of the following 17 approved categories:
    - "Banking and Financial Institutions"
    - "Microfinance Institutions"
    - "Embassy and Diplomatic Jobs"
@@ -428,7 +460,8 @@ CRITICAL INSTRUCTIONS:
    - "Accounting and Finance"
    - "Internships and Graduate Trainee Programs"
    - "Remote and International Jobs"
-5. Return a clean, structured JSON array conforming to the specified responseSchema.`;
+   - "Other Sectors and Professions"
+6. Return a clean, structured JSON array conforming to the specified responseSchema.`;
 
     const prompt = `Please parse all individual vacancies from the following text:\n\n${text}`;
     const candidateModels = ['gemini-4-hydrogen'];
@@ -452,17 +485,17 @@ CRITICAL INSTRUCTIONS:
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    title: { type: Type.STRING, description: 'Official Job Title' },
-                    organization: { type: Type.STRING, description: 'Organization / Company Name' },
-                    category: { type: Type.STRING, description: 'One of the exact 16 categories' },
-                    location: { type: Type.STRING, description: 'Ethiopian location or Remote' },
+                    title: { type: Type.STRING, description: 'Official Job Title (empty string if absent)' },
+                    organization: { type: Type.STRING, description: 'Employer / Organization Name (empty string if absent)' },
+                    category: { type: Type.STRING, description: 'One of the exact 17 categories' },
+                    location: { type: Type.STRING, description: 'Ethiopian city/location or Remote' },
                     employmentType: { type: Type.STRING, description: 'Full-time, Part-time, Contract, Permanent, Internship, Remote, Other' },
-                    vacanciesCount: { type: Type.STRING, description: 'Number of vacancies or Not specified' },
+                    vacanciesCount: { type: Type.STRING, description: 'Number of vacancies if stated' },
                     jobGrade: { type: Type.STRING, description: 'Job grade or level if stated' },
-                    salary: { type: Type.STRING, description: 'Salary in ETB or attractive / company scale' },
-                    educationQualification: { type: Type.STRING, description: 'Degree, Diploma, Masters, etc.' },
-                    requiredFieldOfStudy: { type: Type.STRING, description: 'Field of study required' },
-                    experienceYears: { type: Type.STRING, description: 'Required years of experience' },
+                    salary: { type: Type.STRING, description: 'Salary if explicitly stated, else empty string' },
+                    educationQualification: { type: Type.STRING, description: 'Required education/qualification (empty string if absent)' },
+                    requiredFieldOfStudy: { type: Type.STRING, description: 'Field of study required (empty string if absent)' },
+                    experienceYears: { type: Type.STRING, description: 'Required years of experience (empty string if absent)' },
                     requiredSkills: {
                       type: Type.ARRAY,
                       items: { type: Type.STRING },
@@ -479,16 +512,17 @@ CRITICAL INSTRUCTIONS:
                       items: { type: Type.STRING },
                       description: 'Required documents to apply',
                     },
-                    applicationMethod: { type: Type.STRING, description: 'Online URL, Email, In-Person / Physical, Postal / Mail, or Other' },
-                    applicationEmail: { type: Type.STRING, description: 'Employer application email if provided' },
-                    applicationUrl: { type: Type.STRING, description: 'Employer application link if provided' },
-                    applicationInstructions: { type: Type.STRING, description: 'How to apply instructions' },
-                    applicationDeadline: { type: Type.STRING, description: 'Deadline date or duration' },
-                    contactInfo: { type: Type.STRING, description: 'Phone, address, or PO Box' },
+                    applicationMethod: { type: Type.STRING, description: 'Online URL, Email, In-Person / Physical, Postal / Mail, or empty string if not stated' },
+                    applicationEmail: { type: Type.STRING, description: 'Employer direct application email if provided, else empty string' },
+                    applicationUrl: { type: Type.STRING, description: 'Employer direct application link if provided, else empty string' },
+                    physicalAddress: { type: Type.STRING, description: 'Employer physical office or P.O. Box submission address if provided, else empty string' },
+                    applicationInstructions: { type: Type.STRING, description: 'Exact how to apply instructions from text (empty string if absent)' },
+                    applicationDeadline: { type: Type.STRING, description: 'Exact calendar deadline date from text (empty string if absent)' },
+                    contactInfo: { type: Type.STRING, description: 'Phone, office address, or PO Box if stated' },
                     languageRequirements: { type: Type.STRING, description: 'Language skills required' },
                     ageRequirements: { type: Type.STRING, description: 'Age criteria if officially specified' },
                     genderRequirements: { type: Type.STRING, description: 'Gender criteria if officially specified' },
-                    specialRequirements: { type: Type.STRING, description: 'Special certifications or licenses' },
+                    specialRequirements: { type: Type.STRING, description: 'Special certifications, licenses, or extra requirements' },
                     referenceNumber: { type: Type.STRING, description: 'Job code or announcement reference number' },
                     missingFields: {
                       type: Type.ARRAY,
@@ -528,61 +562,64 @@ CRITICAL INSTRUCTIONS:
         : 'high-precision smart rule engine';
     }
 
-    // Format and enrich with IDs, System 1 broadCategory, WASH classification, and expiry flag
+    // Format and enrich with IDs, System 1 broadCategory, WASH classification, expiry flag & strict validation
     const now = new Date().toISOString();
     const formattedVacancies = rawVacancies.map((item: any, idx: number) => {
       const id = `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`;
       const resolvedCategory = item.category || inferEthiopianCategory(item.title || '', item.organization || '', item.description || '');
-      const enrichedObj = {
-        ...item,
-        category: resolvedCategory,
-      };
-      const isExpired = isVacancyDeadlineExpiredServer(item.applicationDeadline);
-      return {
+      const normalizedItem = {
         id,
-        title: item.title || 'Untitled Vacancy',
-        organization: item.organization || 'Not specified in the original vacancy',
+        title: String(item.title || '').trim(),
+        organization: String(item.organization || '').trim(),
         category: resolvedCategory,
-        location: item.location || 'Addis Ababa',
+        location: String(item.location || '').trim() || 'Addis Ababa',
         employmentType: item.employmentType || 'Full-time',
-        vacanciesCount: item.vacanciesCount || 'Not specified in the original vacancy',
-        jobGrade: item.jobGrade || 'Not specified in the original vacancy',
-        salary: item.salary || 'Not specified in the original vacancy',
-        educationQualification: item.educationQualification || 'Not specified in the original vacancy',
-        requiredFieldOfStudy: item.requiredFieldOfStudy || 'Not specified in the original vacancy',
-        experienceYears: item.experienceYears || 'Not specified in the original vacancy',
+        vacanciesCount: String(item.vacanciesCount || '').trim(),
+        jobGrade: String(item.jobGrade || '').trim(),
+        salary: String(item.salary || '').trim(),
+        educationQualification: String(item.educationQualification || '').trim(),
+        requiredFieldOfStudy: String(item.requiredFieldOfStudy || '').trim(),
+        experienceYears: String(item.experienceYears || '').trim(),
         requiredSkills: Array.isArray(item.requiredSkills) ? item.requiredSkills : [],
-        description: item.description || 'Not specified in the original vacancy',
+        description: String(item.description || '').trim(),
         responsibilities: Array.isArray(item.responsibilities) ? item.responsibilities : [],
         requiredDocuments: Array.isArray(item.requiredDocuments) ? item.requiredDocuments : ['CV', 'Relevant Credentials'],
-        applicationMethod: item.applicationMethod || 'Online URL',
-        applicationEmail: item.applicationEmail || '',
-        applicationUrl: item.applicationUrl || '',
-        applicationInstructions: item.applicationInstructions || 'Please follow employer instructions carefully.',
-        applicationDeadline: item.applicationDeadline || 'Not specified in the original vacancy',
-        contactInfo: item.contactInfo || 'Not specified in the original vacancy',
-        languageRequirements: item.languageRequirements || 'English and Amharic',
-        ageRequirements: item.ageRequirements || 'Not specified in the original vacancy',
-        genderRequirements: item.genderRequirements || 'Not specified in the original vacancy',
-        specialRequirements: item.specialRequirements || 'Not specified in the original vacancy',
-        referenceNumber: item.referenceNumber || '',
-        status: isExpired ? 'expired' : 'pending_review',
+        applicationMethod: String(item.applicationMethod || '').trim(),
+        applicationEmail: String(item.applicationEmail || '').trim(),
+        applicationUrl: String(item.applicationUrl || '').trim(),
+        physicalAddress: String(item.physicalAddress || '').trim(),
+        applicationInstructions: String(item.applicationInstructions || '').trim(),
+        applicationDeadline: String(item.applicationDeadline || '').trim(),
+        contactInfo: String(item.contactInfo || '').trim(),
+        languageRequirements: String(item.languageRequirements || '').trim() || 'English and Amharic',
+        ageRequirements: String(item.ageRequirements || '').trim(),
+        genderRequirements: String(item.genderRequirements || '').trim(),
+        specialRequirements: String(item.specialRequirements || '').trim(),
+        referenceNumber: String(item.referenceNumber || '').trim(),
+      };
+      const strictCheck = validateVacancyStrict(normalizedItem as any, { allowExpired: false });
+      return {
+        ...normalizedItem,
+        status: strictCheck.isExpired ? 'expired' : 'pending_review',
         featured: false,
         viewsCount: 0,
         sharesCount: 0,
         createdAt: now,
         updatedAt: now,
         isAiParsed: true,
-        missingFields: Array.isArray(item.missingFields) ? item.missingFields : [],
-        broadCategory: classifyBroadCategoryServer(enrichedObj),
-        isWashNgo: isWashNgoVacancyServer(enrichedObj),
-        isExpired,
+        missingFields: strictCheck.missingFields,
+        strictValidationPassed: strictCheck.valid,
+        broadCategory: classifyBroadCategoryServer(normalizedItem),
+        isWashNgo: isWashNgoVacancyServer(normalizedItem),
+        isExpired: strictCheck.isExpired,
       };
     });
 
     res.json({
       success: true,
       totalDetected: formattedVacancies.length,
+      validCount: formattedVacancies.filter((v: any) => v.strictValidationPassed).length,
+      rejectedIncompleteCount: formattedVacancies.filter((v: any) => !v.strictValidationPassed).length,
       vacancies: formattedVacancies,
       engine: engineUsed,
     });
@@ -591,20 +628,27 @@ CRITICAL INSTRUCTIONS:
     try {
       const fallbackList = parseVacanciesSmartFallback(req.body.text || '');
       const now = new Date().toISOString();
-      const formatted = fallbackList.map((item: any, idx: number) => ({
-        ...item,
-        id: `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-        status: item.isExpired ? 'expired' : 'pending_review',
-        featured: false,
-        viewsCount: 0,
-        sharesCount: 0,
-        createdAt: now,
-        updatedAt: now,
-        isAiParsed: true,
-      }));
+      const formatted = fallbackList.map((item: any, idx: number) => {
+        const strictCheck = validateVacancyStrict(item as any, { allowExpired: false });
+        return {
+          ...item,
+          id: `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+          status: strictCheck.isExpired ? 'expired' : 'pending_review',
+          featured: false,
+          viewsCount: 0,
+          sharesCount: 0,
+          createdAt: now,
+          updatedAt: now,
+          isAiParsed: true,
+          missingFields: strictCheck.missingFields,
+          strictValidationPassed: strictCheck.valid,
+        };
+      });
       res.json({
         success: true,
         totalDetected: formatted.length,
+        validCount: formatted.filter((v: any) => v.strictValidationPassed).length,
+        rejectedIncompleteCount: formatted.filter((v: any) => !v.strictValidationPassed).length,
         vacancies: formatted,
         engine: 'smart fallback',
       });
@@ -901,15 +945,31 @@ function evaluateDuplicatePair(
   return { isMatch: false, reason: '', score: 0 };
 }
 
-// Strict Duplicate Detection & Filtering Endpoint (used during uploads & manual entries)
+// Strict Duplicate Detection & Mandatory Field Gatekeeper Endpoint (used during bulk & single uploads)
 app.post('/api/admin/detect-duplicates', (req: Request, res: Response) => {
   try {
     const { candidates = [], existingVacancies = [] } = req.body;
 
     const duplicatesReport: any[] = [];
+    const rejectedIncomplete: any[] = [];
     const validCandidates: any[] = [];
 
     candidates.forEach((cand: any, idx: number) => {
+      // STRICT GATE: Block any vacancy missing deadline, employer name, position, requirements, method to apply, or direct link/email/physical address
+      const strictCheck = validateVacancyStrict(cand, { allowExpired: false });
+      if (!strictCheck.valid) {
+        rejectedIncomplete.push({
+          id: cand.id || `rej_${Date.now()}_${idx}`,
+          title: cand.title || '(Missing Position)',
+          organization: cand.organization || '(Missing Employer)',
+          applicationDeadline: cand.applicationDeadline || '(No Deadline)',
+          missingFields: strictCheck.missingFields,
+          reasons: strictCheck.reasons,
+          candidateData: cand,
+        });
+        return;
+      }
+
       let isDup = false;
       let matchedVacancy: any = null;
       let reason = '';
@@ -961,6 +1021,7 @@ app.post('/api/admin/detect-duplicates', (req: Request, res: Response) => {
           candidateData: cand,
         });
       } else {
+        cand.missingFields = [];
         validCandidates.push(cand);
       }
     });
@@ -969,9 +1030,10 @@ app.post('/api/admin/detect-duplicates', (req: Request, res: Response) => {
       totalDetected: candidates.length,
       successfullyOrganized: validCandidates.length,
       duplicatesDetected: duplicatesReport.length,
-      missingInfoCount: validCandidates.filter((v: any) => v.missingFields && v.missingFields.length > 0).length,
+      rejectedIncompleteCount: rejectedIncomplete.length,
+      missingInfoCount: rejectedIncomplete.length,
       readyForReview: validCandidates.length,
-      readyForPublication: validCandidates.filter((v: any) => v.title && v.organization && v.category).length,
+      readyForPublication: validCandidates.length,
     };
 
     res.json({
@@ -979,6 +1041,7 @@ app.post('/api/admin/detect-duplicates', (req: Request, res: Response) => {
       stats,
       validCandidates,
       duplicatesReport,
+      rejectedIncomplete,
     });
   } catch (error: any) {
     console.error('Duplicate detection error:', error);
@@ -1676,11 +1739,9 @@ let cachedFirestoreBrandLogo: {
   fetchedAt: number;
 } | null = null;
 
-function readFirebaseClientConfigServer(): { projectId: string; firestoreDatabaseId: string } | null {
+function readFirebaseClientConfigServer(): { projectId: string; firestoreDatabaseId: string } {
   const candidates = [
     path.join(process.cwd(), 'firebase-applet-config.json'),
-    path.join(__dirname, 'firebase-applet-config.json'),
-    path.join(__dirname, '..', 'firebase-applet-config.json'),
   ];
   for (const p of candidates) {
     try {
@@ -1699,6 +1760,73 @@ function readFirebaseClientConfigServer(): { projectId: string; firestoreDatabas
     projectId: 'gen-lang-client-0056760370',
     firestoreDatabaseId: 'ai-studio-dreambigjobs-b797042c-4a25-436e-8ecd-223397ea813f',
   };
+}
+
+function detectImageDimensions(buf: Buffer, mimeType: string): { width: number; height: number } | null {
+  try {
+    if (!buf || buf.length < 24) return null;
+    // PNG: 8-byte signature + IHDR chunk (width at 16..19, height at 20..23)
+    if (
+      buf[0] === 0x89 &&
+      buf[1] === 0x50 &&
+      buf[2] === 0x4e &&
+      buf[3] === 0x47 &&
+      buf.length >= 24
+    ) {
+      return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+    }
+    // WebP: RIFF....WEBP followed by VP8X, VP8L, or VP8
+    if (
+      buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buf.subarray(8, 12).toString('ascii') === 'WEBP'
+    ) {
+      const chunk = buf.subarray(12, 16).toString('ascii');
+      if (chunk === 'VP8X' && buf.length >= 30) {
+        const width = 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16));
+        const height = 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16));
+        return { width, height };
+      }
+      if (chunk === 'VP8L' && buf.length >= 25) {
+        const b0 = buf[21];
+        const b1 = buf[22];
+        const b2 = buf[23];
+        const b3 = buf[24];
+        const width = 1 + (((b1 & 0x3f) << 8) | b0);
+        const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+        return { width, height };
+      }
+      if (chunk === 'VP8 ' && buf.length >= 30) {
+        const width = buf.readUInt16LE(26) & 0x3fff;
+        const height = buf.readUInt16LE(28) & 0x3fff;
+        return { width, height };
+      }
+    }
+    // JPEG: scan SOF0/SOF1/SOF2 markers
+    if (buf[0] === 0xff && buf[1] === 0xd8) {
+      let offset = 2;
+      while (offset + 9 < buf.length) {
+        if (buf[offset] !== 0xff) break;
+        const marker = buf[offset + 1];
+        const segLen = buf.readUInt16BE(offset + 2);
+        if (
+          (marker >= 0xc0 && marker <= 0xc3) ||
+          (marker >= 0xc5 && marker <= 0xc7) ||
+          (marker >= 0xc9 && marker <= 0xcb) ||
+          (marker >= 0xcd && marker <= 0xcf)
+        ) {
+          const height = buf.readUInt16BE(offset + 5);
+          const width = buf.readUInt16BE(offset + 7);
+          return { width, height };
+        }
+        if (segLen < 2) break;
+        offset += 2 + segLen;
+      }
+    }
+    if (mimeType === 'image/svg+xml') {
+      return { width: 512, height: 512 };
+    }
+  } catch {}
+  return null;
 }
 
 async function getLiveBrandLogoState(): Promise<{
@@ -1724,23 +1852,21 @@ async function getLiveBrandLogoState(): Promise<{
   if (!cachedFirestoreBrandLogo || now - cachedFirestoreBrandLogo.fetchedAt > 20 * 1000) {
     try {
       const cfg = readFirebaseClientConfigServer();
-      if (cfg?.projectId) {
-        const dbId = encodeURIComponent(cfg.firestoreDatabaseId || '(default)');
-        const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/${dbId}/documents/siteSettings/general`;
-        const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
-        if (resp.ok) {
-          const docJson: any = await resp.json();
-          const f = docJson?.fields || {};
-          cachedFirestoreBrandLogo = {
-            appLogoUrl: String(f.appLogoUrl?.stringValue || '').trim(),
-            appLogo512Url: String(f.appLogo512Url?.stringValue || '').trim(),
-            appLogoMaskable512Url: String(f.appLogoMaskable512Url?.stringValue || '').trim(),
-            appLogoUpdatedAt: String(
-              f.appLogoUpdatedAt?.stringValue || f.updatedAt?.stringValue || ''
-            ).trim(),
-            fetchedAt: now,
-          };
-        }
+      const dbId = encodeURIComponent(cfg.firestoreDatabaseId || '(default)');
+      const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/${dbId}/documents/siteSettings/general`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(3500) });
+      if (resp.ok) {
+        const docJson: any = await resp.json();
+        const f = docJson?.fields || {};
+        cachedFirestoreBrandLogo = {
+          appLogoUrl: String(f.appLogoUrl?.stringValue || '').trim(),
+          appLogo512Url: String(f.appLogo512Url?.stringValue || '').trim(),
+          appLogoMaskable512Url: String(f.appLogoMaskable512Url?.stringValue || '').trim(),
+          appLogoUpdatedAt: String(
+            f.appLogoUpdatedAt?.stringValue || f.updatedAt?.stringValue || ''
+          ).trim(),
+          fetchedAt: now,
+        };
       }
     } catch {}
   }
@@ -1861,17 +1987,80 @@ async function handleDynamicManifestResponse(_req: Request, res: Response): Prom
   );
   const querySuffix = `?v=${versionTag}`;
 
-  const inferIconMime = (src?: string): string => {
-    const s = String(src || '');
-    if (s.startsWith('data:image/jpeg')) return 'image/jpeg';
-    if (s.startsWith('data:image/webp')) return 'image/webp';
-    if (s.startsWith('data:image/svg+xml')) return 'image/svg+xml';
-    return 'image/png';
-  };
+  // Build spec-compliant icons array whose declared sizes & MIME types strictly match actual served bytes
+  // (Chromium rejects manifests and suppresses beforeinstallprompt if declared sizes != actual image size)
+  const manifestIcons: Array<{ src: string; sizes: string; type: string; purpose: string }> = [];
 
-  const type192 = inferIconMime(brand.appLogoUrl);
-  const type512 = inferIconMime(brand.appLogo512Url || brand.appLogoUrl);
-  const typeMaskable = inferIconMime(brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl);
+  const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
+  const asset512 = await resolveCustomAppLogoAsset(brand.appLogo512Url || brand.appLogoUrl);
+  const assetMaskable = await resolveCustomAppLogoAsset(
+    brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl
+  );
+
+  if (asset192 || asset512) {
+    const dims192 = asset192 ? detectImageDimensions(asset192.buffer, asset192.mimeType) : null;
+    const dims512 = asset512 ? detectImageDimensions(asset512.buffer, asset512.mimeType) : null;
+    const dimsMask = assetMaskable
+      ? detectImageDimensions(assetMaskable.buffer, assetMaskable.mimeType)
+      : null;
+
+    if (asset192 && dims192 && dims192.width >= 144 && dims192.height >= 144) {
+      manifestIcons.push({
+        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
+        sizes: `${dims192.width}x${dims192.height}`,
+        type: asset192.mimeType,
+        purpose: 'any',
+      });
+    }
+
+    if (
+      asset512 &&
+      dims512 &&
+      dims512.width >= 144 &&
+      dims512.height >= 144 &&
+      (!dims192 || dims512.width !== dims192.width || dims512.height !== dims192.height)
+    ) {
+      manifestIcons.push({
+        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
+        sizes: `${dims512.width}x${dims512.height}`,
+        type: asset512.mimeType,
+        purpose: 'any',
+      });
+    }
+
+    if (assetMaskable && dimsMask && dimsMask.width >= 144 && dimsMask.height >= 144) {
+      manifestIcons.push({
+        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
+        sizes: `${dimsMask.width}x${dimsMask.height}`,
+        type: assetMaskable.mimeType,
+        purpose: 'maskable',
+      });
+    }
+  }
+
+  // Fallback to exact bundled 192x192 & 512x512 official PNGs if no valid custom icons resolved
+  if (manifestIcons.length === 0) {
+    manifestIcons.push(
+      {
+        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      }
+    );
+  }
 
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1886,29 +2075,11 @@ async function handleDynamicManifestResponse(_req: Request, res: Response): Prom
     display: 'standalone',
     display_override: ['window-controls-overlay', 'standalone'],
     orientation: 'any',
+    prefer_related_applications: false,
     background_color: '#FBFBFA',
     theme_color: '#0B132B',
     categories: ['business', 'productivity', 'employment'],
-    icons: [
-      {
-        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
-        sizes: '192x192',
-        type: type192,
-        purpose: 'any',
-      },
-      {
-        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
-        sizes: '512x512',
-        type: type512,
-        purpose: 'any',
-      },
-      {
-        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
-        sizes: '512x512',
-        type: typeMaskable,
-        purpose: 'maskable',
-      },
-    ],
+    icons: manifestIcons,
   });
 }
 
@@ -2354,6 +2525,25 @@ function saveUserProfile(profile: any, isOwnerActor: boolean = false): { savedPr
     preferredSectors: Array.isArray(safeIncoming.preferredSectors)
       ? safeIncoming.preferredSectors
       : existing?.preferredSectors || (safeIncoming.preferredIndustry ? [safeIncoming.preferredIndustry] : []),
+    customProfessionOrCategory:
+      typeof safeIncoming.customProfessionOrCategory === 'string'
+        ? safeIncoming.customProfessionOrCategory
+        : existing?.customProfessionOrCategory || '',
+    additionalRequirements: Array.isArray(safeIncoming.additionalRequirements)
+      ? safeIncoming.additionalRequirements
+      : existing?.additionalRequirements || [],
+    strictLocationMatch:
+      typeof safeIncoming.strictLocationMatch === 'boolean'
+        ? safeIncoming.strictLocationMatch
+        : Boolean(existing?.strictLocationMatch),
+    strictEmploymentTypeMatch:
+      typeof safeIncoming.strictEmploymentTypeMatch === 'boolean'
+        ? safeIncoming.strictEmploymentTypeMatch
+        : Boolean(existing?.strictEmploymentTypeMatch),
+    minimumSalaryEtb:
+      typeof safeIncoming.minimumSalaryEtb === 'string'
+        ? safeIncoming.minimumSalaryEtb
+        : existing?.minimumSalaryEtb || '',
     createdAt: existing?.createdAt || safeIncoming.createdAt || nowIso,
     updatedAt: nowIso,
   };
@@ -3518,8 +3708,8 @@ function truncateText(value: string | null | undefined, maxLen: number): string 
 
 function isMeaningfulField(val?: string | null): boolean {
   const s = String(val || '').trim();
-  if (!s) return false;
-  return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
+  if (!s || s === '-' || s === '—') return false;
+  return !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none)$/i.test(s);
 }
 
 function normalizeWebsiteDomain(domainOrUrl?: string): string {
@@ -3608,253 +3798,85 @@ function stripUrlsAndEmailsForTelegram(text: string): string {
   return String(text || '')
     .replace(/https?:\/\/\S+/gi, '')
     .replace(/\bwww\.[^\s]+/gi, '')
+    .replace(/\bt\.me\/\S+/gi, '')
     .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '')
+    .replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|et|tech|io|co|gov|edu|info)(?:\/\S*)?/gi, '')
+    .replace(/(?:\+251[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3,4}|\b0[19]\d[\s-]?\d{3}[\s-]?\d{4}\b)/g, '')
+    .replace(/\b(?:how\s+to\s+apply\s*:|application\s+method\s*:|method\s+to\s+apply\s*:|apply\s+via\s*:|send\s+(?:your\s+)?cv\s+to|submit\s+in\s+person|p\.?\s*o\.?\s*box\s*\d+)\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
-function buildTelegramAmharicPromoHtml(_baseUrl?: string): string {
-  return `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>
+function buildTelegramJobHtml(
+  vacancy: any,
+  _domainOrUrl = 'www.hopelandjobs.tech',
+  _channel = '@DreamBigJobsEthiopia',
+  compactForCaption = false
+): string {
+  const cleanOrg = stripUrlsAndEmailsForTelegram(vacancy?.organization || '') || 'Employer';
+  const cleanTitle = stripUrlsAndEmailsForTelegram(vacancy?.title || '') || 'Open Position';
+  const cleanSalary = isMeaningfulField(vacancy?.salary)
+    ? stripUrlsAndEmailsForTelegram(vacancy.salary)
+    : '';
+  const cleanCity = isMeaningfulField(vacancy?.location)
+    ? stripUrlsAndEmailsForTelegram(vacancy.location)
+    : '';
 
-በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
-
-✅ በነፃ አካውንት ይክፈቱ።
-✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
-✅ የስራ ፍላጎትዎን ይምረጡ።
-✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
-
-🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
-
-👇 <b>ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
-}
-
-function buildTelegramAmharicPromoPlain(_baseUrl?: string): string {
-  return `📢 አንድም የስራ እድል እንዳያመልጥዎ!
-
-በየቀኑ አዳዲስ የስራ ማስታወቂያዎችን በቀጥታ ለማግኘት አሁኑኑ በድረገጻችን ይመዝገቡ!
-
-✅ በነፃ አካውንት ይክፈቱ።
-✅ የግል ፕሮፋይልዎን ሙሉ በሙሉ ይሙሉ።
-✅ የስራ ፍላጎትዎን ይምረጡ።
-✅ የድረገጹን ማሳወቂያ ያብሩ (Enable Notifications)።
-
-🔔 ከዚያም ከፍላጎትዎ ጋር የሚዛመዱ አዳዲስ የስራ እድሎችን በየቀኑ ያግኙ!
-
-👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!`;
-}
-
-function formatCategoryHashtagServer(category?: string): string {
-  const c = String(category || '').trim().toLowerCase();
-  if (!c) return '#Vacancy';
-  if (c.includes('health')) return '#HealthCare';
-  if (c.includes('banking')) return '#BankingAndFinance';
-  if (c.includes('microfinance')) return '#Microfinance';
-  if (c.includes('ngo')) return '#NGO';
-  if (c.includes('embassy')) return '#EmbassyAndDiplomatic';
-  if (c.includes('it and technology') || c.includes('technology')) return '#ITAndTechnology';
-  if (c.includes('accounting')) return '#AccountingAndFinance';
-  if (c.includes('engineering')) return '#EngineeringAndConstruction';
-  if (c.includes('education')) return '#Education';
-  if (c.includes('hospitality') || c.includes('hotel')) return '#HotelAndHospitality';
-  if (c.includes('tourism')) return '#TourismAndTravel';
-  if (c.includes('government')) return '#Government';
-  if (c.includes('insurance')) return '#Insurance';
-  if (c.includes('internship') || c.includes('trainee')) return '#GraduateTrainee';
-  if (c.includes('remote')) return '#RemoteJobs';
-  if (c.includes('private')) return '#PrivateCompanies';
-  const words = String(category || '')
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1));
-  return words.length > 0 ? `#${words.join('')}` : '#Vacancy';
-}
-
-function deriveCareerLevelServer(vacancy: any): string {
-  if (isMeaningfulField(vacancy?.jobGrade)) {
-    return truncateText(vacancy.jobGrade, 60);
-  }
-  const expText = String(vacancy?.experienceYears || '').trim();
-  const titleText = String(vacancy?.title || '').toLowerCase();
-  const combined = `${expText.toLowerCase()} ${titleText}`;
-
-  const numMatch = expText.match(/(\d+)/);
-  const minYears = numMatch ? Number(numMatch[1]) : null;
-
-  if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
-    return 'Entry Level (0-1 year)';
-  }
-  if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || (minYears !== null && minYears >= 5)) {
-    return expText ? `Senior (${truncateText(expText, 30)})` : 'Senior (5-8 years)';
-  }
-  if (minYears !== null && minYears >= 3) {
-    return expText ? `Mid Level (${truncateText(expText, 30)})` : 'Mid Level (3-5 years)';
-  }
-  if (minYears !== null && minYears >= 1) {
-    return expText ? `Junior (${truncateText(expText, 30)})` : 'Junior (1-3 years)';
-  }
-  return 'Mid Level';
-}
-
-function formatDeadlineDisplayServer(deadline?: string): string {
-  const s = String(deadline || '').trim();
-  if (!s || !isMeaningfulField(s)) return '';
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s);
-    if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-  }
-  return truncateText(s, 60);
-}
-
-function buildRequirementsBulletLinesServer(vacancy: any, compactForCaption = false): string[] {
-  const bullets: string[] = [];
-  const pushClean = (line: string) => {
-    const cleaned = stripUrlsAndEmailsForTelegram(line).replace(/^[•\-\*]\s*/, '').trim();
-    if (!cleaned || cleaned.length < 3) return;
-    if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
-      bullets.push(truncateText(cleaned, compactForCaption ? 120 : 210));
-    }
-  };
-
-  if (isMeaningfulField(vacancy?.educationQualification)) {
-    const edu = stripUrlsAndEmailsForTelegram(vacancy.educationQualification);
-    const field = isMeaningfulField(vacancy?.requiredFieldOfStudy)
-      ? ` in ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`
-      : '';
-    pushClean(`${edu}${field}`);
-  } else if (isMeaningfulField(vacancy?.requiredFieldOfStudy)) {
-    pushClean(`Field of Study: ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`);
-  }
-
-  if (isMeaningfulField(vacancy?.experienceYears)) {
-    pushClean(`Minimum ${stripUrlsAndEmailsForTelegram(vacancy.experienceYears)} relevant experience`);
-  }
-
-  if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
-    const skillsList = vacancy.requiredSkills
-      .map((s: any) => stripUrlsAndEmailsForTelegram(String(s || '')))
-      .filter(Boolean);
-    if (skillsList.length > 0) {
-      pushClean(`Required Competencies & Skills: ${skillsList.slice(0, compactForCaption ? 4 : 8).join(', ')}`);
-    }
-  }
-
-  if (isMeaningfulField(vacancy?.specialRequirements)) {
-    pushClean(vacancy.specialRequirements);
-  }
-
-  if (!compactForCaption && isMeaningfulField(vacancy?.description)) {
-    const descLines = String(vacancy.description)
-      .split(/\n+/)
-      .map((l) => l.trim())
-      .filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
-    for (const line of descLines.slice(0, 2)) {
-      pushClean(line);
-    }
-  }
-
-  if (bullets.length === 0) {
-    pushClean(
-      `${truncateText(vacancy?.title || 'Position', 80)} — ${truncateText(vacancy?.category || 'Relevant qualification', 80)}`
-    );
-  }
-
-  return bullets.slice(0, compactForCaption ? 3 : 6);
-}
-
-function buildTelegramJobHtml(vacancy: any, _domainOrUrl = 'www.hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia', compactForCaption = false): string {
-  const orgName = escapeHtml(truncateText(vacancy.organization || 'Employer', 140));
-  const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateText(vacancy.organizationAmharic, 80))})` : '';
-  const positionTitle = escapeHtml(truncateText(vacancy.title || 'Various Positions', 180));
-  const categoryHashtag = escapeHtml(formatCategoryHashtagServer(vacancy.category));
-  const careerLevel = escapeHtml(deriveCareerLevelServer(vacancy));
-  const deadlineDisplay = escapeHtml(formatDeadlineDisplayServer(vacancy.applicationDeadline));
-
-  const infoLines: string[] = [];
-  infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
-  if (isMeaningfulField(vacancy.location)) {
-    infoLines.push(`<b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
-  }
-  if (deadlineDisplay) {
-    infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
-  }
-  infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
-  infoLines.push(
-    `<b>Number of people required:</b> ${
-      isMeaningfulField(vacancy.vacanciesCount)
-        ? escapeHtml(truncateText(vacancy.vacanciesCount, 40))
-        : '1'
-    }`
-  );
-
-  const bulletLines = buildRequirementsBulletLinesServer(vacancy, compactForCaption);
-  const reqBulletsHtml = bulletLines.map((b) => `• ${escapeHtml(b)}`).join('\n');
+  const orgName = escapeHtml(truncateText(cleanOrg, 140));
+  const positionTitle = escapeHtml(truncateText(cleanTitle, 180));
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ <b>WASH JOB</b>\n\n' : '';
 
-  const coreText = `${washPrefix}<b>${positionTitle}</b>
-<i>at ${orgName}${orgAmharic}</i>
+  const lines: string[] = [
+    `🏢 <b>Employer:</b> ${orgName}`,
+    `💼 <b>Position:</b> ${positionTitle}`,
+  ];
 
-${infoLines.join('\n\n')}
-
-<b>Requirements:</b>
-${reqBulletsHtml}`;
-
-  const promoHtml = buildTelegramAmharicPromoHtml();
-  const fullText = `${coreText}\n\n${promoHtml}`;
-  const maxAllowed = compactForCaption ? 1000 : 4000;
-  if (fullText.length <= maxAllowed) return fullText;
-  if (compactForCaption) {
-    const compactPromo = `📢 <b>አንድም የስራ እድል እንዳያመልጥዎ!</b>\n👇 <b>ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</b>`;
-    const budget = Math.max(250, maxAllowed - compactPromo.length - 4);
-    const trimmedCore = coreText.length > budget ? `${coreText.slice(0, budget)}…` : coreText;
-    return `${trimmedCore}\n\n${compactPromo}`;
+  if (cleanSalary) {
+    lines.push(`💰 <b>Salary:</b> ${escapeHtml(truncateText(cleanSalary, 100))}`);
   }
-  const maxCore = Math.max(400, 3980 - promoHtml.length);
-  return `${coreText.slice(0, maxCore)}…\n\n${promoHtml}`;
+  if (cleanCity) {
+    lines.push(`📍 <b>City of Work:</b> ${escapeHtml(truncateText(cleanCity, 100))}`);
+  }
+
+  const footer = 'Full vacancy details are inside our website. Tap <b>Apply Now</b> below.';
+  const fullText = `${washPrefix}${lines.join('\n')}\n\n${footer}`;
+  const maxAllowed = compactForCaption ? 1000 : 4000;
+  return fullText.length <= maxAllowed ? fullText : `${fullText.slice(0, maxAllowed - 1)}…`;
 }
 
-function buildTelegramJobPlainText(vacancy: any, _domainOrUrl = 'www.hopelandjobs.tech', _channel = '@DreamBigJobsEthiopia'): string {
-  const orgName = truncateText(vacancy.organization || 'Employer', 140);
-  const orgAmharic = vacancy.organizationAmharic ? ` (${truncateText(vacancy.organizationAmharic, 80)})` : '';
-  const positionTitle = truncateText(vacancy.title || 'Various Positions', 180);
-  const categoryHashtag = formatCategoryHashtagServer(vacancy.category);
-  const careerLevel = deriveCareerLevelServer(vacancy);
-  const deadlineDisplay = formatDeadlineDisplayServer(vacancy.applicationDeadline);
+function buildTelegramJobPlainText(
+  vacancy: any,
+  _domainOrUrl = 'www.hopelandjobs.tech',
+  _channel = '@DreamBigJobsEthiopia'
+): string {
+  const cleanOrg = stripUrlsAndEmailsForTelegram(vacancy?.organization || '') || 'Employer';
+  const cleanTitle = stripUrlsAndEmailsForTelegram(vacancy?.title || '') || 'Open Position';
+  const cleanSalary = isMeaningfulField(vacancy?.salary)
+    ? stripUrlsAndEmailsForTelegram(vacancy.salary)
+    : '';
+  const cleanCity = isMeaningfulField(vacancy?.location)
+    ? stripUrlsAndEmailsForTelegram(vacancy.location)
+    : '';
 
-  const infoLines: string[] = [];
-  infoLines.push(`Categories: ${categoryHashtag}`);
-  if (isMeaningfulField(vacancy.location)) {
-    infoLines.push(`Location: ${truncateText(vacancy.location, 100)}`);
-  }
-  if (deadlineDisplay) {
-    infoLines.push(`Deadline: ${deadlineDisplay}`);
-  }
-  infoLines.push(`Career Level: ${careerLevel}`);
-  infoLines.push(
-    `Number of people required: ${
-      isMeaningfulField(vacancy.vacanciesCount) ? truncateText(vacancy.vacanciesCount, 40) : '1'
-    }`
-  );
-
-  const bulletLines = buildRequirementsBulletLinesServer(vacancy, false);
-  const reqBulletsPlain = bulletLines.map((b) => `• ${b}`).join('\n');
+  const orgName = truncateText(cleanOrg, 140);
+  const positionTitle = truncateText(cleanTitle, 180);
   const washPrefix = isWashNgoVacancyServer(vacancy) ? '🟢⭐ WASH JOB\n\n' : '';
 
-  const coreText = `${washPrefix}${positionTitle}
-at ${orgName}${orgAmharic}
+  const lines: string[] = [
+    `Employer: ${orgName}`,
+    `Position: ${positionTitle}`,
+  ];
 
-${infoLines.join('\n\n')}
+  if (cleanSalary) {
+    lines.push(`Salary: ${truncateText(cleanSalary, 100)}`);
+  }
+  if (cleanCity) {
+    lines.push(`City of Work: ${truncateText(cleanCity, 100)}`);
+  }
 
-Requirements:
-${reqBulletsPlain}`;
-
-  const promoPlain = buildTelegramAmharicPromoPlain();
-  const fullText = `${coreText}\n\n${promoPlain}`;
-  if (fullText.length <= 4000) return fullText;
-  const maxCore = Math.max(400, 3980 - promoPlain.length);
-  return `${coreText.slice(0, maxCore)}…\n\n${promoPlain}`;
+  const footer = 'Full vacancy details are inside our website. Tap Apply Now below.';
+  const fullText = `${washPrefix}${lines.join('\n')}\n\n${footer}`;
+  return fullText.length <= 4000 ? fullText : `${fullText.slice(0, 3999)}…`;
 }
 
 async function sendTelegramVacancyMessage(
@@ -3901,6 +3923,19 @@ async function sendTelegramVacancyMessage(
 
   const htmlMsg = washCheck.html;
   const plainMsg = washCheck.plainText;
+
+  // STRICT RULE: Never post links, emails, phone numbers, or application methods inside Telegram post text
+  const contentAudit = validateTelegramPostContentStrict(plainMsg);
+  if (!contentAudit.safe) {
+    return {
+      ok: false,
+      error: `Blocked by Strict Telegram Policy (links and apply methods must only appear inside website): ${contentAudit.violations.join(' ')}`,
+      formattedMessage: htmlMsg,
+      formattedPlain: plainMsg,
+      isWashNgo: washCheck.isWashNgo,
+      hasWashLabel: washCheck.hasWashLabel,
+    };
+  }
 
   if (dryRun) {
     return {
@@ -3997,7 +4032,7 @@ async function sendTelegramVacancyMessage(
       chat_id: targetChatId,
       text: htmlMsg,
       parse_mode: 'HTML',
-      disable_web_page_preview: false,
+      disable_web_page_preview: true,
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
     if (data?.ok) {
@@ -4013,7 +4048,7 @@ async function sendTelegramVacancyMessage(
         const fallbackData = await callTelegramSend('sendMessage', {
           chat_id: targetChatId,
           text: plainMsg,
-          disable_web_page_preview: false,
+          disable_web_page_preview: true,
           ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         });
         if (fallbackData?.ok) {
@@ -4102,24 +4137,13 @@ async function sendTelegramVacancyMessage(
 }
 
 function isVacancyDeadlineExpiredServer(deadline?: string): boolean {
-  if (!deadline) return false;
-  const trimmed = String(deadline).trim();
-  if (!trimmed || /open|ongoing|rolling|until filled|not specified|not stated/i.test(trimmed)) return false;
-  const parsed = Date.parse(trimmed);
-  if (Number.isNaN(parsed)) return false;
-  const deadlineEnd = new Date(parsed);
-  deadlineEnd.setHours(23, 59, 59, 999);
-  return Date.now() > deadlineEnd.getTime();
+  const parsed = parseValidDeadline(deadline);
+  if (!parsed.hasValidDeadline) return false;
+  return parsed.isExpired;
 }
 
 function hasOfficialApplicationMethodServer(v: any): boolean {
-  const url = String(v?.applicationUrl || v?.directApplicationUrl || '').trim();
-  const email = String(v?.applicationEmail || '').trim();
-  const inst = String(v?.applicationInstructions || v?.officialApplicationInstructions || '').trim();
-  if (/^https?:\/\/\S+/i.test(url)) return true;
-  if (email.includes('@')) return true;
-  if (inst && !/^not specified|^not stated|^n\/a$/i.test(inst) && inst.length >= 10) return true;
-  return false;
+  return extractDirectEmployerChannels(v).valid;
 }
 
 function isBankingVacancyServer(v: any): boolean {
@@ -4175,12 +4199,16 @@ function evaluateTelegramPublishEligibilityServer(
   if (['draft', 'rejected', 'archived', 'duplicate', 'expired'].includes(status)) {
     return { allowed: false, reason: `Cannot broadcast vacancy with status "${vacancy.status}". Only verified open vacancies may be posted.` };
   }
-  if (isVacancyDeadlineExpiredServer(vacancy.applicationDeadline)) {
-    return { allowed: false, reason: `Blocked: Application deadline (${vacancy.applicationDeadline}) has already expired.` };
+
+  // STRICT MANDATORY GATE: Deadline + Employer Name + Position + Requirements + Method to Apply + Direct Link/Email/Physical Address
+  const strictCheck = validateVacancyStrict(vacancy, { allowExpired: false });
+  if (!strictCheck.valid) {
+    return {
+      allowed: false,
+      reason: `Blocked: Vacancy is incomplete and cannot be posted to Telegram. Missing: ${strictCheck.missingFields.join(', ')}.`,
+    };
   }
-  if (!hasOfficialApplicationMethodServer(vacancy)) {
-    return { allowed: false, reason: 'Blocked: Vacancy is missing a verified official application method (link, email, or official instructions).' };
-  }
+
   const mode = overrideMode || settings?.telegramDistributionMode || 'all_jobs';
   if (mode === 'banking_only' && (!isBankingVacancyServer(vacancy) || isNgoVacancyServer(vacancy))) {
     return {
@@ -4562,6 +4590,7 @@ app.post('/api/telegram/queue/start', (req: Request, res: Response): void => {
     ).chatId;
     const nowIso = new Date().toISOString();
 
+    const resolvedMode = distributionMode || persisted.telegramDistributionMode || 'all_jobs';
     const items: ServerTelegramQueueItem[] = vacancies.map((v: any) => {
       const existingRec = !forceRetry && v?.id ? store.publishedRecords[String(v.id)] : undefined;
       if ((v?.telegramPublished || existingRec) && !forceRetry) {
@@ -4574,6 +4603,26 @@ app.post('/api/telegram/queue/start', (req: Request, res: Response): void => {
           attempts: 1,
           telegramMessageId: existingRec?.telegramMessageId || v.telegramMessageId,
           publishedAt: existingRec?.publishedAt || v.telegramPublishedAt || nowIso,
+          updatedAt: nowIso,
+          vacancy: v,
+        };
+      }
+      const preGate = evaluateTelegramPublishEligibilityServer(
+        v,
+        persisted,
+        Boolean(forceRetry),
+        v?.contentType,
+        resolvedMode
+      );
+      if (!preGate.allowed && !preGate.alreadyPublished) {
+        return {
+          vacancyId: String(v?.id || `invalid_${Date.now()}`),
+          title: String(v?.title || 'Incomplete Vacancy'),
+          organization: String(v?.organization || 'Missing Employer'),
+          category: v?.category,
+          status: 'failed',
+          attempts: 1,
+          error: preGate.reason || 'Blocked: Vacancy failed mandatory requirements check.',
           updatedAt: nowIso,
           vacancy: v,
         };
@@ -7801,7 +7850,7 @@ Return strict JSON:
 - responsibilities: array of 5 clear, realistic job duty bullet points
 - requiredSkills: array of 5 key skills required for this role
 - applicationInstructions: polite, accurate instructions telling candidates how to prepare and submit via official employer channels
-- telegramCaption: clean, engaging Telegram channel summary (with emojis and hashtags like #EthiopiaJobs) under 350 characters`;
+- telegramCaption: clean, concise English Telegram summary ONLY containing Employer, Position, and City of Work (STRICT RULE: NEVER include URLs, links, emails, phone numbers, physical addresses, or method of applying in telegramCaption — tell readers to tap Apply Now to view details inside the website)`;
 
     let aiResult: any = null;
     try {
@@ -7849,8 +7898,14 @@ Return strict JSON:
         ],
         applicationInstructions:
           'Interested and qualified candidates should submit their updated CV, application letter, and supporting educational and work experience credentials through the official employer channel before the closing date.',
-        telegramCaption: `💼 ${title} at ${organization}\n📍 ${location} | 🏷️ ${category}\nApply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`,
+        telegramCaption: `🏢 Employer: ${stripUrlsAndEmailsForTelegram(organization)}\n💼 Position: ${stripUrlsAndEmailsForTelegram(title)}\n📍 City of Work: ${stripUrlsAndEmailsForTelegram(location)}\n\nFull vacancy details are inside our website. Tap Apply Now below.`,
       };
+    } else if (aiResult.telegramCaption) {
+      const cleanedCap = stripUrlsAndEmailsForTelegram(aiResult.telegramCaption);
+      const capCheck = validateTelegramPostContentStrict(cleanedCap);
+      aiResult.telegramCaption = capCheck.safe
+        ? cleanedCap
+        : `🏢 Employer: ${stripUrlsAndEmailsForTelegram(organization)}\n💼 Position: ${stripUrlsAndEmailsForTelegram(title)}\n📍 City of Work: ${stripUrlsAndEmailsForTelegram(location)}\n\nFull vacancy details are inside our website. Tap Apply Now below.`;
     }
 
     res.json({

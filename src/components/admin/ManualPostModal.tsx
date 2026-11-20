@@ -22,6 +22,7 @@ import {
 } from '../../types/job';
 import { checkDuplicateVacancy } from '../../utils/duplicateDetector';
 import { generateAdminVacancyDraft } from '../../lib/aiService';
+import { validateVacancyStrict } from '../../utils/vacancyValidator';
 
 interface Props {
   existingVacancies: Vacancy[];
@@ -48,14 +49,14 @@ export const ManualPostModal: React.FC<Props> = ({
   );
   const [vacanciesCount, setVacanciesCount] = useState(initialData?.vacanciesCount || '1');
   const [jobGrade, setJobGrade] = useState(initialData?.jobGrade || '');
-  const [salary, setSalary] = useState(initialData?.salary || 'Attractive / As per Company Scale');
+  const [salary, setSalary] = useState(initialData?.salary || '');
   const [educationQualification, setEducationQualification] = useState(
-    initialData?.educationQualification || 'Bachelor’s Degree'
+    initialData?.educationQualification || ''
   );
   const [requiredFieldOfStudy, setRequiredFieldOfStudy] = useState(
     initialData?.requiredFieldOfStudy || ''
   );
-  const [experienceYears, setExperienceYears] = useState(initialData?.experienceYears || '2 Years');
+  const [experienceYears, setExperienceYears] = useState(initialData?.experienceYears || '');
   const [skillsText, setSkillsText] = useState(initialData?.requiredSkills?.join(', ') || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [responsibilitiesText, setResponsibilitiesText] = useState(
@@ -69,27 +70,21 @@ export const ManualPostModal: React.FC<Props> = ({
   );
   const [applicationUrl, setApplicationUrl] = useState(initialData?.applicationUrl || '');
   const [applicationEmail, setApplicationEmail] = useState(initialData?.applicationEmail || '');
+  const [physicalAddress, setPhysicalAddress] = useState(initialData?.physicalAddress || '');
   const [applicationInstructions, setApplicationInstructions] = useState(
-    initialData?.applicationInstructions ||
-      'Interested and qualified applicants should submit their credentials following the official application link or contact details provided above.'
+    initialData?.applicationInstructions || ''
   );
   const [applicationDeadline, setApplicationDeadline] = useState(
-    initialData?.applicationDeadline || '2026-11-30'
+    initialData?.applicationDeadline || ''
   );
   const [contactInfo, setContactInfo] = useState(initialData?.contactInfo || '');
   const [referenceNumber, setReferenceNumber] = useState(initialData?.referenceNumber || '');
   const [languageRequirements, setLanguageRequirements] = useState(
     initialData?.languageRequirements || 'English and Amharic'
   );
-  const [ageRequirements, setAgeRequirements] = useState(
-    initialData?.ageRequirements || 'Not specified in the original vacancy'
-  );
-  const [genderRequirements, setGenderRequirements] = useState(
-    initialData?.genderRequirements || 'Not specified in the original vacancy'
-  );
-  const [specialRequirements, setSpecialRequirements] = useState(
-    initialData?.specialRequirements || 'Not specified in the original vacancy'
-  );
+  const [ageRequirements, setAgeRequirements] = useState(initialData?.ageRequirements || '');
+  const [genderRequirements, setGenderRequirements] = useState(initialData?.genderRequirements || '');
+  const [specialRequirements, setSpecialRequirements] = useState(initialData?.specialRequirements || '');
   const [status, setStatus] = useState<Vacancy['status']>(initialData?.status || 'published');
   const [featured, setFeatured] = useState<boolean>(initialData?.featured || false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -172,12 +167,51 @@ export const ManualPostModal: React.FC<Props> = ({
     initialData,
   ]);
 
+  // Live strict 6-field validation preview
+  const liveStrictValidation = useMemo(() => {
+    return validateVacancyStrict(
+      {
+        title: title.trim(),
+        organization: organization.trim(),
+        applicationDeadline: applicationDeadline.trim(),
+        educationQualification: educationQualification.trim(),
+        requiredFieldOfStudy: requiredFieldOfStudy.trim(),
+        experienceYears: experienceYears.trim(),
+        requiredSkills: skillsText
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        specialRequirements: specialRequirements.trim(),
+        description: description.trim(),
+        applicationMethod,
+        applicationInstructions: applicationInstructions.trim(),
+        applicationUrl: applicationUrl.trim(),
+        applicationEmail: applicationEmail.trim(),
+        physicalAddress: physicalAddress.trim(),
+        contactInfo: contactInfo.trim(),
+      },
+      { allowExpired: false }
+    );
+  }, [
+    title,
+    organization,
+    applicationDeadline,
+    educationQualification,
+    requiredFieldOfStudy,
+    experienceYears,
+    skillsText,
+    specialRequirements,
+    description,
+    applicationMethod,
+    applicationInstructions,
+    applicationUrl,
+    applicationEmail,
+    physicalAddress,
+    contactInfo,
+  ]);
+
   const handleSubmit = async (targetStatus: 'published' | 'draft') => {
     setFormError(null);
-    if (!title.trim() || !organization.trim()) {
-      setFormError('Please fill in Job Title and Organization name.');
-      return;
-    }
 
     if (
       duplicateCheck?.isDuplicate &&
@@ -190,7 +224,6 @@ export const ManualPostModal: React.FC<Props> = ({
       return;
     }
 
-    setIsSubmitting(true);
     const now = new Date().toISOString();
     const finalLocation = location === 'Other Ethiopian Cities / Regions' && customLocation ? customLocation : location;
 
@@ -201,17 +234,17 @@ export const ManualPostModal: React.FC<Props> = ({
       category,
       location: finalLocation,
       employmentType,
-      vacanciesCount: vacanciesCount.trim() || 'Not specified in the original vacancy',
-      jobGrade: jobGrade.trim() || 'Not specified in the original vacancy',
-      salary: salary.trim() || 'Not specified in the original vacancy',
-      educationQualification: educationQualification.trim() || 'Not specified in the original vacancy',
-      requiredFieldOfStudy: requiredFieldOfStudy.trim() || 'Not specified in the original vacancy',
-      experienceYears: experienceYears.trim() || 'Not specified in the original vacancy',
+      vacanciesCount: vacanciesCount.trim(),
+      jobGrade: jobGrade.trim(),
+      salary: salary.trim(),
+      educationQualification: educationQualification.trim(),
+      requiredFieldOfStudy: requiredFieldOfStudy.trim(),
+      experienceYears: experienceYears.trim(),
       requiredSkills: skillsText
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean),
-      description: description.trim() || 'Not specified in the original vacancy',
+      description: description.trim(),
       responsibilities: responsibilitiesText
         .split('\n')
         .map((s) => s.trim())
@@ -223,13 +256,14 @@ export const ManualPostModal: React.FC<Props> = ({
       applicationMethod,
       applicationUrl: applicationUrl.trim(),
       applicationEmail: applicationEmail.trim(),
+      physicalAddress: physicalAddress.trim(),
       applicationInstructions: applicationInstructions.trim(),
       applicationDeadline: applicationDeadline.trim(),
-      contactInfo: contactInfo.trim() || 'Not specified in the original vacancy',
-      languageRequirements: languageRequirements.trim() || 'Not specified in the original vacancy',
-      ageRequirements: ageRequirements.trim() || 'Not specified in the original vacancy',
-      genderRequirements: genderRequirements.trim() || 'Not specified in the original vacancy',
-      specialRequirements: specialRequirements.trim() || 'Not specified in the original vacancy',
+      contactInfo: contactInfo.trim() || physicalAddress.trim(),
+      languageRequirements: languageRequirements.trim(),
+      ageRequirements: ageRequirements.trim(),
+      genderRequirements: genderRequirements.trim(),
+      specialRequirements: specialRequirements.trim(),
       referenceNumber: referenceNumber.trim(),
       status: targetStatus,
       featured,
@@ -240,6 +274,16 @@ export const ManualPostModal: React.FC<Props> = ({
       publishedAt: targetStatus === 'published' ? (initialData?.publishedAt || now) : undefined,
     };
 
+    // STRICT MANDATORY GATE: Never save/publish any vacancy missing deadline, employer, position, requirements, method to apply, or direct link/email/physical address
+    const strictCheck = validateVacancyStrict(vacancy, { allowExpired: false });
+    if (!strictCheck.valid) {
+      setFormError(
+        `Cannot ${targetStatus === 'published' ? 'publish' : 'save'} incomplete vacancy. Missing mandatory fields: ${strictCheck.missingFields.join(' • ')}.`
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       await onSaveVacancy(vacancy);
       onClose();
@@ -314,6 +358,49 @@ export const ManualPostModal: React.FC<Props> = ({
               </div>
             </div>
           )}
+
+          {/* Strict 6-Field Mandatory Quality Checklist */}
+          <div
+            className={`p-4 rounded-2xl border text-xs space-y-2 ${
+              liveStrictValidation.valid
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-extrabold uppercase tracking-wider text-[11px]">
+                Strict Publishing Requirements (All 6 Mandatory)
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                  liveStrictValidation.valid
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-rose-100 text-rose-800 border border-rose-200'
+                }`}
+              >
+                {liveStrictValidation.valid
+                  ? 'READY TO PUBLISH'
+                  : `${liveStrictValidation.missingFields.length} MISSING`}
+              </span>
+            </div>
+            {!liveStrictValidation.valid ? (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {liveStrictValidation.missingFields.map((mf) => (
+                  <span
+                    key={mf}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold text-[11px]"
+                  >
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{mf}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] font-semibold text-emerald-800">
+                All mandatory fields verified (Position, Employer, Open Deadline, Requirements, Method to Apply, and Direct Employer Link/Email/Physical Address).
+              </p>
+            )}
+          </div>
 
           {formError && (
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
@@ -594,13 +681,13 @@ export const ManualPostModal: React.FC<Props> = ({
           {/* Application Method & Links */}
           <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-200 space-y-4">
             <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-              Application Details & Official Channels
+              Application Details & Direct Employer Channels * (Visible Inside Website Only — Never in Telegram)
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Application Method
+                  Application Method *
                 </label>
                 <select
                   value={applicationMethod}
@@ -617,7 +704,7 @@ export const ManualPostModal: React.FC<Props> = ({
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Official Application URL
+                  Employer Direct Link (URL)
                 </label>
                 <input
                   type="text"
@@ -630,7 +717,7 @@ export const ManualPostModal: React.FC<Props> = ({
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Application Email
+                  Employer Direct Email
                 </label>
                 <input
                   type="email"
@@ -644,14 +731,28 @@ export const ManualPostModal: React.FC<Props> = ({
 
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Application Instructions
+                Employer Physical / In-Person / P.O. Box Submission Address (Required if no Link or Email)
+              </label>
+              <input
+                type="text"
+                value={physicalAddress}
+                onChange={(e) => setPhysicalAddress(e.target.value)}
+                placeholder="e.g. Head Office HR Department, 4th Floor, Bole Sub-City, Addis Ababa or P.O. Box 1234"
+                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Method to Apply & Submission Instructions *
               </label>
               <textarea
                 rows={2}
                 value={applicationInstructions}
                 onChange={(e) => setApplicationInstructions(e.target.value)}
-                placeholder="Specific submission instructions from employer..."
+                placeholder="Write clear instructions explaining how candidates apply to the employer..."
                 className="w-full text-xs p-2.5 rounded-lg border border-slate-200 focus:border-amber-500 outline-none leading-relaxed"
+                required
               />
             </div>
 

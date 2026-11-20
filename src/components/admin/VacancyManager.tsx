@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Vacancy } from '../../types/job';
 import { isExpired, getDaysLeft } from '../../utils/helpers';
+import { parseValidDeadline, validateVacancyStrict } from '../../utils/vacancyValidator';
 import { VacancyDetailModal } from '../VacancyDetailModal';
 
 interface Props {
@@ -44,6 +45,7 @@ export const VacancyManager: React.FC<Props> = ({
   const [selectedInspect, setSelectedInspect] = useState<Vacancy | null>(null);
   const [extendingId, setExtendingId] = useState<string | null>(null);
   const [newDeadlines, setNewDeadlines] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return vacancies.filter((v) => {
@@ -66,13 +68,28 @@ export const VacancyManager: React.FC<Props> = ({
   }, [vacancies, search, statusFilter]);
 
   const handleExtend = async (v: Vacancy) => {
-    const customDate = newDeadlines[v.id];
-    if (!customDate) {
-      alert('Please enter a new deadline (e.g. 2026-12-15).');
+    setActionError(null);
+    const customDate = (newDeadlines[v.id] || '').trim();
+    const parsed = parseValidDeadline(customDate);
+    if (!parsed.hasValidDeadline || parsed.isExpired) {
+      setActionError('Please enter a valid future calendar deadline (e.g. 2026-12-15).');
       return;
     }
-    await onUpdateStatus(v.id, 'published', customDate);
-    setExtendingId(null);
+    try {
+      await onUpdateStatus(v.id, 'published', customDate);
+      setExtendingId(null);
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not extend deadline or reactivate vacancy.');
+    }
+  };
+
+  const handleSafeStatusUpdate = async (id: string, status: Vacancy['status']) => {
+    setActionError(null);
+    try {
+      await onUpdateStatus(id, status);
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not update vacancy status.');
+    }
   };
 
   const getStatusBadge = (v: Vacancy) => {
@@ -149,6 +166,18 @@ export const VacancyManager: React.FC<Props> = ({
           </button>
         </div>
 
+        {actionError && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-bold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button onClick={() => setActionError(null)} className="text-rose-700 hover:underline">
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Filter Toolbar */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
           <div className="sm:col-span-8 relative">
@@ -188,6 +217,7 @@ export const VacancyManager: React.FC<Props> = ({
           <div className="space-y-3">
             {filtered.map((vacancy) => {
               const isAutoExpired = isExpired(vacancy.applicationDeadline);
+              const strictCheck = validateVacancyStrict(vacancy, { allowExpired: false });
 
               return (
                 <div
@@ -198,6 +228,15 @@ export const VacancyManager: React.FC<Props> = ({
                     <div>
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         {getStatusBadge(vacancy)}
+                        {!strictCheck.valid && !isAutoExpired && (
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1"
+                            title={`Missing: ${strictCheck.missingFields.join(', ')}`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Missing: {strictCheck.missingFields.slice(0, 2).join(', ')}</span>
+                          </span>
+                        )}
                         {vacancy.telegramPublished ? (
                           <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#229ED9]/15 text-[#0277BD] border border-[#229ED9]/30 flex items-center gap-1">
                             <Send className="w-3 h-3 fill-current" />
@@ -278,9 +317,20 @@ export const VacancyManager: React.FC<Props> = ({
                       </button>
 
                       <button
-                        onClick={() => onBroadcastTelegram(vacancy)}
+                        onClick={() => {
+                          if (!strictCheck.valid) {
+                            setActionError(
+                              `Cannot send "${vacancy.title}" to Telegram. Missing mandatory fields: ${strictCheck.missingFields.join(', ')}.`
+                            );
+                            return;
+                          }
+                          setActionError(null);
+                          onBroadcastTelegram(vacancy);
+                        }}
                         className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
-                          vacancy.telegramPublished
+                          !strictCheck.valid
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : vacancy.telegramPublished
                             ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                             : 'bg-[#229ED9]/15 text-[#0288D1] hover:bg-[#229ED9]/25 border border-[#229ED9]/30'
                         }`}
@@ -304,7 +354,7 @@ export const VacancyManager: React.FC<Props> = ({
 
                       {vacancy.status !== 'published' && !isAutoExpired && (
                         <button
-                          onClick={() => onUpdateStatus(vacancy.id, 'published')}
+                          onClick={() => handleSafeStatusUpdate(vacancy.id, 'published')}
                           className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-colors"
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
@@ -314,7 +364,7 @@ export const VacancyManager: React.FC<Props> = ({
 
                       {vacancy.status === 'published' && (
                         <button
-                          onClick={() => onUpdateStatus(vacancy.id, 'closed')}
+                          onClick={() => handleSafeStatusUpdate(vacancy.id, 'closed')}
                           className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-lg text-slate-500 hover:text-slate-800"
                         >
                           Close

@@ -1,14 +1,14 @@
 {
   "status": "CONNECTED",
   "statusCode": "connected",
-  "lastCheckedAt": "2026-11-18T09:27:32.354Z",
-  "lastSuccessfulTestAt": "2026-11-18T09:27:32.354Z",
+  "lastCheckedAt": "2026-11-20T10:27:50.755Z",
+  "lastSuccessfulTestAt": "2026-11-20T10:27:50.755Z",
   "lastError": null,
   "consecutiveFailures": 0,
   "reconnectAttempts": 0,
   "botUsername": "@DreamBigJobsEthiopiaBot",
   "channelName": "@hopelandJobsEthiopia",
   "channelId": "-1004499169829",
-  "lastSource": "startup",
-  "updatedAt": "2026-11-18T09:27:32.355Z"
+  "lastSource": "auto_monitor",
+  "updatedAt": "2026-11-20T10:27:50.756Z"
 }

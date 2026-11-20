@@ -559,13 +559,32 @@ ${currentUrl}`;
 
             {/* Section: How to apply */}
             <section ref={applySectionRef} className="mt-7 pt-6 border-t border-slate-100 space-y-3.5">
-              <h2 className="text-lg font-bold text-slate-900">How to apply</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-bold text-slate-900">How to apply</h2>
+                {isMeaningful(vacancy.applicationMethod) && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-800">
+                    Method: {vacancy.applicationMethod}
+                  </span>
+                )}
+              </div>
               <p className="text-[15px] text-slate-700 leading-relaxed whitespace-pre-line">
                 {vacancy.applicationInstructions ||
                   'Qualified candidates who meet the minimum requirements can submit their application directly on HopelandJobs using the Apply Now button below or via the verified employer channel listed here.'}
               </p>
 
-              {isMeaningful(vacancy.contactInfo) && (
+              {isMeaningful(vacancy.physicalAddress) && (
+                <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-sm text-amber-950 flex items-start gap-2.5">
+                  <MapPin className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-amber-900 block text-xs uppercase tracking-wide">
+                      Physical / In-Person / Postal Submission Address
+                    </strong>
+                    <span className="text-sm font-medium">{vacancy.physicalAddress}</span>
+                  </div>
+                </div>
+              )}
+
+              {isMeaningful(vacancy.contactInfo) && vacancy.contactInfo !== vacancy.physicalAddress && (
                 <p className="text-sm text-slate-700">
                   <strong className="text-slate-900">Employer Contact:</strong> {vacancy.contactInfo}
                 </p>
@@ -591,7 +610,7 @@ ${currentUrl}`;
                       }}
                       className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 text-xs font-bold transition-colors"
                     >
-                      <span>Official Employer Portal</span>
+                      <span>Official Employer Direct Link</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
@@ -622,10 +641,9 @@ ${currentUrl}`;
 
               {onApplyOnWebsite && (
                 <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
                   <span>
-                    Click <strong>Apply Now</strong> below to submit your application directly on
-                    HopelandJobs with your uploaded CV and cover note.
+                    Click <strong>Apply Now</strong> below to apply directly (no account required) or sign in to submit with your saved CV. · ያለ ምዝገባ በቀጥታ ማመልከት ወይም በአካውንትዎ በ1 ንክኪ ማመልከት ይችላሉ።
                   </span>
                 </div>
               )}

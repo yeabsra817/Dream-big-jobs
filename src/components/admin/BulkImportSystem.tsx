@@ -38,6 +38,7 @@ import {
   isVacancyDeadlineExpiredClient,
   getTelegramDistributionModeLabel,
 } from '../../utils/telegramClient';
+import { validateVacancyStrict } from '../../utils/vacancyValidator';
 
 interface Props {
   existingVacancies: Vacancy[];
@@ -66,6 +67,15 @@ export const BulkImportSystem: React.FC<Props> = ({
   // Results
   const [extractedVacancies, setExtractedVacancies] = useState<Vacancy[]>([]);
   const [duplicateReports, setDuplicateReports] = useState<DuplicateReportItem[]>([]);
+  const [rejectedIncomplete, setRejectedIncomplete] = useState<
+    Array<{
+      id: string;
+      title: string;
+      organization: string;
+      applicationDeadline?: string;
+      missingFields: string[];
+    }>
+  >([]);
   const [stats, setStats] = useState<BulkImportStats | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('All');
@@ -156,13 +166,44 @@ export const BulkImportSystem: React.FC<Props> = ({
         onDuplicatesFound(dupData.duplicatesReport);
       }
 
-      const validList: Vacancy[] = dupData.validCandidates || [];
+      const serverRejected = Array.isArray(dupData.rejectedIncomplete) ? dupData.rejectedIncomplete : [];
+      const clientRejected: Array<{
+        id: string;
+        title: string;
+        organization: string;
+        applicationDeadline?: string;
+        missingFields: string[];
+      }> = [];
+      const validList: Vacancy[] = [];
+
+      for (const cand of (dupData.validCandidates || []) as Vacancy[]) {
+        const strict = validateVacancyStrict(cand, { allowExpired: false });
+        if (!strict.valid) {
+          clientRejected.push({
+            id: cand.id,
+            title: cand.title || '(Missing Position)',
+            organization: cand.organization || '(Missing Employer)',
+            applicationDeadline: cand.applicationDeadline || '(No Deadline)',
+            missingFields: strict.missingFields,
+          });
+        } else {
+          validList.push(cand);
+        }
+      }
+
+      const allRejected = [...serverRejected, ...clientRejected];
+      setRejectedIncomplete(allRejected);
+
       if (validList.length === 0) {
-        setErrorMessage('All pasted vacancies were matched as existing duplicates. No new vacancies to publish.');
+        setErrorMessage(
+          allRejected.length > 0
+            ? `Blocked ${allRejected.length} incomplete/no-deadline vacancy(ies) from publishing to website and Telegram. Every vacancy must include a valid future Deadline, Employer Name, Position, Requirements, Method to Apply, and Employer Direct Link, Email, or Physical Address.`
+            : 'All pasted vacancies were matched as existing duplicates. No new vacancies to publish.'
+        );
         return;
       }
 
-      setProcessingStep(`Publishing ${validList.length} vacancies to website categories & broadcasting to Telegram...`);
+      setProcessingStep(`Publishing ${validList.length} verified vacancies to website categories & broadcasting to Telegram...`);
 
       // Step 3: Prepare and publish
       let toPublish = validList.map((v) => ({
@@ -281,22 +322,50 @@ export const BulkImportSystem: React.FC<Props> = ({
         throw new Error(dupData.error || 'Duplicate detection failed.');
       }
 
-      // Step 3: Populate organized vacancies & duplicate report
-      const enrichedValid: Vacancy[] = (dupData.validCandidates || []).map((v: Vacancy) => {
+      // Step 3: Populate organized vacancies, blocked incomplete items & duplicate report
+      const serverRejected = Array.isArray(dupData.rejectedIncomplete) ? dupData.rejectedIncomplete : [];
+      const clientRejected: Array<{
+        id: string;
+        title: string;
+        organization: string;
+        applicationDeadline?: string;
+        missingFields: string[];
+      }> = [];
+      const enrichedValid: Vacancy[] = [];
+
+      for (const v of (dupData.validCandidates || []) as Vacancy[]) {
+        const strict = validateVacancyStrict(v, { allowExpired: false });
+        if (!strict.valid) {
+          clientRejected.push({
+            id: v.id,
+            title: v.title || '(Missing Position)',
+            organization: v.organization || '(Missing Employer)',
+            applicationDeadline: v.applicationDeadline || '(No Deadline)',
+            missingFields: strict.missingFields,
+          });
+          continue;
+        }
         const broad = v.broadCategory || classifyVacancyBroadSectorClient(v);
         const wash = typeof v.isWashNgo === 'boolean' ? v.isWashNgo : isWashNgoVacancyClient(v);
         const expired =
           typeof v.isExpired === 'boolean'
             ? v.isExpired
             : v.status === 'expired' || isVacancyDeadlineExpiredClient(v.applicationDeadline);
-        return { ...v, broadCategory: broad, isWashNgo: wash, isExpired: expired };
-      });
+        enrichedValid.push({ ...v, broadCategory: broad, isWashNgo: wash, isExpired: expired });
+      }
+
+      const allRejected = [...serverRejected, ...clientRejected];
+      setRejectedIncomplete(allRejected);
       setExtractedVacancies(enrichedValid);
       setDuplicateReports(dupData.duplicatesReport);
-      setStats(dupData.stats);
+      setStats({
+        ...dupData.stats,
+        successfullyOrganized: enrichedValid.length,
+        missingInfoCount: allRejected.length,
+      });
 
       // Select all valid candidates by default for publication review
-      const allIds = new Set<string>(dupData.validCandidates.map((v: Vacancy) => v.id));
+      const allIds = new Set<string>(enrichedValid.map((v: Vacancy) => v.id));
       setSelectedIds(allIds);
 
       // Notify parent to save duplicate report to database
@@ -304,11 +373,17 @@ export const BulkImportSystem: React.FC<Props> = ({
         onDuplicatesFound(dupData.duplicatesReport);
       }
 
-      setSuccessMessage(
-        `Extracted ${dupData.validCandidates.length} vacancies across ${
-          new Set(dupData.validCandidates.map((v: Vacancy) => v.category)).size
-        } categories! Scroll down to review and click Publish.`
-      );
+      if (enrichedValid.length === 0 && allRejected.length > 0) {
+        setErrorMessage(
+          `Blocked all ${allRejected.length} vacancy(ies) because mandatory details were missing (Deadline, Employer Name, Position, Requirements, Method to Apply, or Employer Direct Link/Email/Physical Address). See the Blocked list below.`
+        );
+      } else {
+        setSuccessMessage(
+          `Extracted ${enrichedValid.length} complete verified vacancies across ${
+            new Set(enrichedValid.map((v: Vacancy) => v.category)).size
+          } categories!${allRejected.length > 0 ? ` (${allRejected.length} incomplete/no-deadline jobs blocked automatically)` : ''} Scroll down to review and click Publish.`
+        );
+      }
 
       // Auto scroll to review section
       setTimeout(() => {
@@ -354,8 +429,9 @@ export const BulkImportSystem: React.FC<Props> = ({
 
   // Publish Selected
   const handlePublishSelected = async () => {
-    const toPublish = extractedVacancies
-      .filter((v) => selectedIds.has(v.id))
+    const selectedRaw = extractedVacancies.filter((v) => selectedIds.has(v.id));
+    const toPublish = selectedRaw
+      .filter((v) => validateVacancyStrict(v, { allowExpired: false }).valid)
       .map((v) => ({
         ...v,
         status: 'published' as const,
@@ -363,7 +439,11 @@ export const BulkImportSystem: React.FC<Props> = ({
       }));
 
     if (toPublish.length === 0) {
-      setErrorMessage('Please select at least one vacancy to publish.');
+      setErrorMessage(
+        selectedRaw.length > 0
+          ? 'Selected vacancies failed the strict 6-field mandatory check and cannot be published.'
+          : 'Please select at least one vacancy to publish.'
+      );
       return;
     }
 
@@ -679,6 +759,46 @@ export const BulkImportSystem: React.FC<Props> = ({
             <div className="text-xs font-bold text-purple-700 uppercase">Categories</div>
             <div className="text-2xl font-black text-purple-600 mt-1">{detectedCategoryNames.length}</div>
             <div className="text-[10px] text-slate-400">Sectors matched</div>
+          </div>
+        </div>
+      )}
+
+      {/* Blocked Incomplete / No-Deadline Vacancies Alert */}
+      {rejectedIncomplete.length > 0 && (
+        <div className="p-5 rounded-2xl bg-rose-50 border-2 border-rose-300 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-black text-rose-900">
+                ⛔ {rejectedIncomplete.length} Incomplete / No-Deadline {rejectedIncomplete.length === 1 ? 'Vacancy' : 'Vacancies'} Blocked From Website & Telegram
+              </h4>
+              <p className="text-xs text-rose-800 mt-0.5">
+                Strict Quality Rule: Jobs missing a real Deadline, Employer Name, Position, Requirements, Method to Apply, or Employer Direct Link / Email / Physical Address are never uploaded or posted to Telegram.
+              </p>
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+            {rejectedIncomplete.map((rej) => (
+              <div
+                key={rej.id}
+                className="bg-white p-3 rounded-xl border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+              >
+                <div>
+                  <span className="font-bold text-slate-900">{rej.title}</span>
+                  <span className="text-slate-500"> — {rej.organization}</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {rej.missingFields.map((mf) => (
+                    <span
+                      key={mf}
+                      className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]"
+                    >
+                      Missing: {mf}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

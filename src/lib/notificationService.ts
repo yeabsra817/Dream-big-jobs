@@ -170,6 +170,9 @@ let swRegistrationPromise: Promise<ServiceWorkerRegistration | null> | null = nu
 
 export async function registerServiceWorkerSafe(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  if (isRunningInEmbeddedIframe() || isPrivatePreviewHost(window.location.hostname)) {
+    return null;
+  }
   if (!swRegistrationPromise) {
     swRegistrationPromise = navigator.serviceWorker
       .register('/sw.js', { scope: '/' })

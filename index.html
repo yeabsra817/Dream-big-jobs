@@ -27,9 +27,39 @@
       window.addEventListener('appinstalled', function () {
         window.__hopelandDeferredInstallPrompt = null;
       });
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          var host = (window.location && window.location.hostname || '').toLowerCase();
+          var isEmbedded = false;
+          try { isEmbedded = window.self !== window.top; } catch (e) { isEmbedded = true; }
+          var isPreviewHost =
+            isEmbedded ||
+            host.indexOf('ais-dev-') !== -1 ||
+            host.indexOf('ais-pre-') !== -1 ||
+            host.endsWith('.run.app') ||
+            host.endsWith('.usercontent.goog') ||
+            host === 'localhost' ||
+            host === '127.0.0.1';
+          if (isPreviewHost) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) { r.unregister().catch(function () {}); });
+            }).catch(function () {});
+            if ('caches' in window) {
+              caches.keys().then(function (keys) {
+                keys.forEach(function (k) { caches.delete(k).catch(function () {}); });
+              }).catch(function () {});
+            }
+          } else {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {});
+          }
+        });
+      }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+    <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+Ethiopic:wght@400;600;700&display=swap" rel="stylesheet">
 
     <!-- Google tag (gtag.js) - Google Analytics 4 (Continuous 24/7 Active Measurement) -->
@@ -50,7 +80,7 @@
     <!-- Google Identity Services for one-tap and popups -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
-  <body class="bg-[#FBFBFA] text-[#0B132B] font-['Plus_Jakarta_Sans',sans-serif] antialiased min-h-screen selection:bg-amber-400 selection:text-slate-900">
+  <body class="bg-[#FBFBFA] text-[#0B132B] font-['Plus_Jakarta_Sans','Noto_Sans_Ethiopic',sans-serif] antialiased min-h-screen selection:bg-emerald-200 selection:text-slate-900">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

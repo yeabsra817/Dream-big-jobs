@@ -1,5 +1,6 @@
 import { Vacancy } from '../types/job';
 import { isExpired } from './helpers';
+import { partitionVacanciesByDeadline } from './vacancyValidator';
 
 export interface AutoRepairLog {
   id: string;
@@ -72,13 +73,38 @@ export function runAutonomousVacancyHealing(
   knownBrokenLinkIds: Set<string> = new Set()
 ): {
   healedVacancies: Vacancy[];
+  deletedNoDeadlineIds: string[];
   logs: AutoRepairLog[];
   changedCount: number;
 } {
   const logs: AutoRepairLog[] = [];
   let changedCount = 0;
 
-  const healedVacancies = vacancies.map((v) => {
+  // -------------------------------------------------------------
+  // Self-Healing Rule 0: Permanently Delete Vacancies Without a Real Deadline
+  // -------------------------------------------------------------
+  const { withDeadline, withoutDeadline } = partitionVacanciesByDeadline(vacancies);
+  const deletedNoDeadlineIds: string[] = [];
+
+  for (const invalid of withoutDeadline) {
+    if (invalid?.id) {
+      deletedNoDeadlineIds.push(invalid.id);
+    }
+    changedCount++;
+    logs.push({
+      id: `heal_nodeadline_${invalid.id}_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      category: 'expired_vacancy',
+      severity: 'critical',
+      targetId: invalid.id,
+      targetTitle: invalid.title || 'Untitled Vacancy',
+      action: 'Permanently Deleted Vacancy Without Deadline',
+      status: 'HEALED',
+      details: `Vacancy "${invalid.title || invalid.id}" had no valid calendar deadline ("${invalid.applicationDeadline || 'empty'}"). Permanently deleted from website and database per strict quality rule.`,
+    });
+  }
+
+  const healedVacancies = withDeadline.map((v) => {
     let modified = false;
     let updated = { ...v };
 
@@ -239,6 +265,7 @@ export function runAutonomousVacancyHealing(
 
   return {
     healedVacancies,
+    deletedNoDeadlineIds,
     logs,
     changedCount,
   };

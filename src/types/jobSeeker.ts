@@ -70,11 +70,16 @@ export interface JobSeekerProfile {
   employmentStatus: 'employed' | 'unemployed' | 'student' | 'freelance' | 'other';
   desiredJobTitle: string;
   preferredIndustry: string;
+  customProfessionOrCategory?: string;
   preferredSectors?: string[];
   yearsOfExperience: string;
   expectedSalaryEtb: string;
+  minimumSalaryEtb?: string;
   preferredEmploymentType: 'Full-time' | 'Part-time' | 'Contract' | 'Internship' | 'Remote' | 'Any';
   preferredWorkLocation: string;
+  strictLocationMatch?: boolean;
+  strictEmploymentTypeMatch?: boolean;
+  additionalRequirements?: string[];
   skills: string[];
   areasOfExpertise?: string[];
   professionalInterests?: string[];
@@ -520,9 +525,10 @@ export function evaluateMandatoryProfileCompletion(
     missingSections.push('Job Expertise & Core Skills');
   }
 
-  // 5. Industry (15 pts)
+  // 5. Industry or Custom Profession/Category (15 pts)
   const hasIndustry = Boolean(
     (profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2) ||
+      (profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2) ||
       (Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0)
   );
   if (hasIndustry) {
@@ -569,11 +575,16 @@ export const DEFAULT_JOB_SEEKER_PROFILE: JobSeekerProfile = {
   employmentStatus: 'unemployed',
   desiredJobTitle: '',
   preferredIndustry: '',
+  customProfessionOrCategory: '',
   preferredSectors: [],
   yearsOfExperience: '',
   expectedSalaryEtb: '',
-  preferredEmploymentType: 'Full-time',
-  preferredWorkLocation: 'Addis Ababa',
+  minimumSalaryEtb: '',
+  preferredEmploymentType: 'Any',
+  preferredWorkLocation: 'Any Location',
+  strictLocationMatch: false,
+  strictEmploymentTypeMatch: false,
+  additionalRequirements: [],
   skills: [],
   areasOfExpertise: [],
   professionalInterests: [],

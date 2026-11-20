@@ -1214,47 +1214,37 @@ export const TelegramSettings: React.FC<Props> = ({
                 </span>
                 <span className="font-mono text-slate-400">Apply button links to website</span>
               </div>
-              <div className="space-y-2 leading-relaxed text-[11px] whitespace-pre-wrap">
+              <div className="space-y-1.5 leading-relaxed text-[11px] whitespace-pre-wrap">
                 {isWashNgoVacancyClient(activeBroadcastVacancy) && (
-                  <p className="inline-block font-black text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded">
+                  <p className="inline-block font-black text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded mb-1">
                     🟢⭐ WASH JOB
                   </p>
                 )}
-                <div>
-                  <p className="font-bold text-sm text-white">{activeBroadcastVacancy.title || 'Various Positions'}</p>
-                  <p className="italic text-slate-300">at {activeBroadcastVacancy.organization || 'Ethiopian Employer'}</p>
-                </div>
-                <p className="text-slate-200">
-                  <strong>Categories:</strong> #{String(activeBroadcastVacancy.category || 'Vacancy').replace(/[^a-zA-Z0-9]/g, '')}
+                <p className="text-slate-100">
+                  🏢 <strong>Employer:</strong> {activeBroadcastVacancy.organization || 'Employer'}
                 </p>
-                {activeBroadcastVacancy.location && (
-                  <p className="text-slate-200"><strong>Location:</strong> {activeBroadcastVacancy.location}</p>
-                )}
-                {activeBroadcastVacancy.applicationDeadline && (
-                  <p className="text-slate-200"><strong>Deadline:</strong> {activeBroadcastVacancy.applicationDeadline}</p>
-                )}
-                <p className="text-slate-200">
-                  <strong>Career Level:</strong> {activeBroadcastVacancy.jobGrade || activeBroadcastVacancy.experienceYears || 'Mid Level'}
+                <p className="text-slate-100">
+                  💼 <strong>Position:</strong> {activeBroadcastVacancy.title || 'Open Position'}
                 </p>
-                <p className="text-slate-200">
-                  <strong>Number of people required:</strong> {activeBroadcastVacancy.vacanciesCount || '1'}
-                </p>
-                <div className="pt-1 space-y-1">
-                  <p className="font-bold text-white">Requirements:</p>
-                  {activeBroadcastVacancy.educationQualification && (
-                    <p className="text-slate-200">
-                      • {activeBroadcastVacancy.educationQualification}
-                      {activeBroadcastVacancy.requiredFieldOfStudy ? ` in ${activeBroadcastVacancy.requiredFieldOfStudy}` : ''}
+                {activeBroadcastVacancy.salary &&
+                  !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none|-)$/i.test(
+                    activeBroadcastVacancy.salary.trim()
+                  ) && (
+                    <p className="text-slate-100">
+                      💰 <strong>Salary:</strong> {activeBroadcastVacancy.salary}
                     </p>
                   )}
-                  {activeBroadcastVacancy.experienceYears && (
-                    <p className="text-slate-200">• Minimum {activeBroadcastVacancy.experienceYears} relevant experience</p>
+                {activeBroadcastVacancy.location &&
+                  !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none|-)$/i.test(
+                    activeBroadcastVacancy.location.trim()
+                  ) && (
+                    <p className="text-slate-100">
+                      📍 <strong>City of Work:</strong> {activeBroadcastVacancy.location}
+                    </p>
                   )}
-                </div>
-                <div className="pt-2 text-slate-200 space-y-1 border-t border-white/10">
-                  <p className="font-bold text-white">📢 አንድም የስራ እድል እንዳያመልጥዎ!</p>
-                  <p className="text-[11px] text-slate-300">👇 ዝርዝር መረጃ ለማየት እና ለማመልከት ከታች «Apply Now» የሚለውን ይጫኑ!</p>
-                </div>
+                <p className="pt-2 text-[11px] text-slate-300 border-t border-white/10">
+                  Full details &amp; how to apply are on our website. Tap <strong className="text-white">Apply Now</strong> below.
+                </p>
               </div>
               <div className="pt-1">
                 <div className="w-full py-2.5 px-4 rounded-xl bg-white/10 border border-white/15 text-center font-bold text-xs text-white flex items-center justify-center gap-1.5">

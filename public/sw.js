@@ -1,15 +1,31 @@
 /* HOPELAND JOBS Service Worker — Real Web Push, Notification Deep-Linking, and Reconnect Sync */
 
-const CACHE_NAME = 'hopelandjobs-shell-v5';
+const CACHE_NAME = 'hopelandjobs-shell-v7';
 const APP_SHELL_URLS = [
   '/pwa-badge-96x96.png',
 ];
+
+function isPreviewOrDevHost() {
+  try {
+    const h = (self.location && self.location.hostname || '').toLowerCase();
+    return (
+      h.includes('ais-dev-') ||
+      h.includes('ais-pre-') ||
+      h.endsWith('.run.app') ||
+      h.endsWith('.usercontent.goog') ||
+      h === 'localhost' ||
+      h === '127.0.0.1'
+    );
+  } catch {
+    return false;
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL_URLS).catch(() => {}))
+      .then((cache) => (isPreviewOrDevHost() ? Promise.resolve() : cache.addAll(APP_SHELL_URLS).catch(() => {})))
       .then(() => self.skipWaiting())
   );
 });
@@ -21,7 +37,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k !== CACHE_NAME)
+            .filter((k) => isPreviewOrDevHost() || k !== CACHE_NAME)
             .map((k) => caches.delete(k))
         )
       )
@@ -30,24 +46,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Never intercept any requests inside AI Studio preview / dev environments
+  if (isPreviewOrDevHost()) return;
+
   const { request } = event;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  const isDynamicBrandAsset =
-    url.pathname === '/api/manifest.webmanifest' ||
-    url.pathname.startsWith('/api/pwa-icon/') ||
-    url.pathname === '/manifest.webmanifest' ||
-    url.pathname === '/pwa-192x192.png' ||
-    url.pathname === '/pwa-512x512.png' ||
-    url.pathname === '/pwa-maskable-512x512.png' ||
-    url.pathname === '/apple-touch-icon.png' ||
-    url.pathname === '/favicon-32x32.png';
-
-  // Never intercept API calls (except dynamic brand/manifest fallback), dev/Vite scripts, or third-party endpoints
+  // Never intercept API calls (including /api/manifest.webmanifest & /api/pwa-icon/*), dev/Vite scripts, or third-party endpoints
   if (
     url.origin !== self.location.origin ||
-    (url.pathname.startsWith('/api/') && !isDynamicBrandAsset) ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname === '/manifest.webmanifest' ||
     url.pathname.startsWith('/@') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules/') ||
@@ -58,12 +68,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for HTML navigation; never cache non-OK, warmup, or Vite dev HTML
+  // Network-first for HTML navigation; never cache redirects, non-OK, warmup, or Vite dev HTML
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then(async (response) => {
-          if (response && response.ok && response.status === 200) {
+          if (response && response.type !== 'opaqueredirect' && response.ok && response.status === 200) {
             try {
               const previewClone = response.clone();
               const htmlText = await previewClone.text();
@@ -83,22 +93,6 @@ self.addEventListener('fetch', (event) => {
           const fallback = (await caches.match(request)) || (await caches.match('/'));
           return fallback || Response.error();
         })
-    );
-    return;
-  }
-
-  // Network-first for manifest & dynamic PWA icons so custom developer logo updates sync immediately
-  if (isDynamicBrandAsset) {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(async () => (await caches.match(request)) || Response.error())
     );
     return;
   }

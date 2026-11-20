@@ -18,6 +18,7 @@ export interface Vacancy {
   applicationMethod: 'Online URL' | 'Email' | 'In-Person / Physical' | 'Postal / Mail' | 'Other';
   applicationEmail?: string;
   applicationUrl?: string;
+  physicalAddress?: string;
   applicationInstructions: string;
   applicationDeadline: string;
   contactInfo: string;
@@ -145,7 +146,8 @@ export type JobCategoryName =
   | 'Engineering and Construction'
   | 'Accounting and Finance'
   | 'Internships and Graduate Trainee Programs'
-  | 'Remote and International Jobs';
+  | 'Remote and International Jobs'
+  | 'Other Sectors and Professions';
 
 export interface CategoryMeta {
   id: string;
@@ -481,6 +483,16 @@ export const OFFICIAL_CATEGORIES: CategoryMeta[] = [
     featuredEmployers: ['Global Remote Employers', 'African Development Bank', 'Remote Tech Hubs'],
     color: '#4338CA',
     bgLight: '#EEF2FF',
+  },
+  {
+    id: 'other-sectors-and-professions',
+    name: 'Other Sectors and Professions',
+    amharicName: 'ሌሎች ዘርፎች እና ሙያዎች',
+    iconName: 'Layers',
+    description: 'Agriculture, legal, logistics, manufacturing, mining, media, aviation, skilled trades, and any specialized or unlisted career field.',
+    featuredEmployers: ['Ethiopian Agriculture & Agribusiness', 'Logistics & Supply Chain Firms', 'Media & Legal Practices'],
+    color: '#0F766E',
+    bgLight: '#F0FDFA',
   },
 ];
 

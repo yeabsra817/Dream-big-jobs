@@ -60,6 +60,7 @@ import {
   DiscoveredTelegramChat,
 } from '../../utils/telegramClient';
 import { TelegramStatusPanel } from './TelegramStatusPanel';
+import { validateVacancyStrict } from '../../utils/vacancyValidator';
 
 interface Props {
   vacancies: Vacancy[];
@@ -129,11 +130,15 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const [bulkParsedVacancies, setBulkParsedVacancies] = useState<Vacancy[]>([]);
   const [bulkDuplicatesReport, setBulkDuplicatesReport] = useState<DuplicateReportItem[]>([]);
+  const [bulkRejectedIncomplete, setBulkRejectedIncomplete] = useState<
+    Array<{ id: string; title: string; organization: string; missingFields: string[] }>
+  >([]);
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
   const [bulkSummaryStats, setBulkSummaryStats] = useState<{
     totalDetected: number;
     validCount: number;
     duplicatesSkipped: number;
+    rejectedIncompleteCount: number;
     expiredCount: number;
     bankingCount: number;
     ngoCount: number;
@@ -439,26 +444,42 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         throw new Error(dupData?.error || 'Duplicate screening failed.');
       }
 
-      const validList: Vacancy[] = (dupData.validCandidates || []).map((v: Vacancy) => {
+      const serverRejected = Array.isArray(dupData.rejectedIncomplete) ? dupData.rejectedIncomplete : [];
+      const clientRejected: Array<{ id: string; title: string; organization: string; missingFields: string[] }> = [];
+      const validList: Vacancy[] = [];
+
+      for (const v of (dupData.validCandidates || []) as Vacancy[]) {
+        const strict = validateVacancyStrict(v, { allowExpired: false });
+        if (!strict.valid) {
+          clientRejected.push({
+            id: v.id,
+            title: v.title || '(Missing Position)',
+            organization: v.organization || '(Missing Employer)',
+            missingFields: strict.missingFields,
+          });
+          continue;
+        }
         const broad = v.broadCategory || classifyVacancyBroadSectorClient(v);
         const wash = typeof v.isWashNgo === 'boolean' ? v.isWashNgo : isWashNgoVacancyClient(v);
         const expiredFlag =
           typeof v.isExpired === 'boolean'
             ? v.isExpired
             : v.status === 'expired' || isVacancyDeadlineExpiredClient(v.applicationDeadline);
-        return {
+        validList.push({
           ...v,
           broadCategory: broad,
           isWashNgo: wash,
           isExpired: expiredFlag,
           status: expiredFlag ? ('expired' as const) : ('published' as const),
           publishedAt: v.publishedAt || new Date().toISOString(),
-        };
-      });
+        });
+      }
 
+      const allRejected = [...serverRejected, ...clientRejected];
       const dups: DuplicateReportItem[] = dupData.duplicatesReport || [];
       setBulkParsedVacancies(validList);
       setBulkDuplicatesReport(dups);
+      setBulkRejectedIncomplete(allRejected);
       setBulkSelectedIds(new Set(validList.filter((v) => !v.isExpired).map((v) => v.id)));
 
       const bankingCount = validList.filter((v) => v.broadCategory === 'Banking').length;
@@ -471,6 +492,7 @@ export const TelegramPublishQueue: React.FC<Props> = ({
         totalDetected: (parseData.vacancies || []).length,
         validCount: validList.length,
         duplicatesSkipped: dups.length,
+        rejectedIncompleteCount: allRejected.length,
         expiredCount,
         bankingCount,
         ngoCount,
@@ -479,8 +501,11 @@ export const TelegramPublishQueue: React.FC<Props> = ({
       });
 
       setNotification({
-        type: 'success',
-        message: `Parsed ${validList.length} verified vacancies (${bankingCount} Banking, ${ngoCount} NGO incl. ${washCount} 🟢⭐ WASH, ${otherCount} Other; ${dups.length} duplicates & ${expiredCount} expired flagged). Review below and select Option A–D to publish.`,
+        type: validList.length > 0 ? 'success' : 'error',
+        message:
+          validList.length > 0
+            ? `Parsed ${validList.length} verified vacancies (${bankingCount} Banking, ${ngoCount} NGO incl. ${washCount} 🟢⭐ WASH, ${otherCount} Other; ${allRejected.length} incomplete/no-deadline blocked, ${dups.length} duplicates skipped). Review below and select Option A–D to publish.`
+            : `Blocked ${allRejected.length} incomplete/no-deadline vacancy(ies) (${dups.length} duplicates). Every job must have a valid future Deadline, Employer Name, Position, Requirements, Method to Apply, and Direct Employer Link/Email/Physical Address.`,
       });
     } catch (err: any) {
       setNotification({ type: 'error', message: err?.message || 'Bulk parse failed.' });
@@ -498,9 +523,14 @@ export const TelegramPublishQueue: React.FC<Props> = ({
   };
 
   const handleSaveAndPublishBulkBatch = async (publishToTelegram: boolean) => {
-    const selected = bulkParsedVacancies.filter((v) => bulkSelectedIds.has(v.id));
+    const selected = bulkParsedVacancies.filter(
+      (v) => bulkSelectedIds.has(v.id) && validateVacancyStrict(v, { allowExpired: false }).valid
+    );
     if (selected.length === 0) {
-      setNotification({ type: 'error', message: 'Select at least one non-expired vacancy in the review table.' });
+      setNotification({
+        type: 'error',
+        message: 'Select at least one complete, non-expired vacancy with all 6 mandatory fields.',
+      });
       return;
     }
     setIsBatchRunning(true);
@@ -1570,13 +1600,33 @@ export const TelegramPublishQueue: React.FC<Props> = ({
                 { label: '🟢⭐ WASH NGO', value: bulkSummaryStats.washCount, cls: 'bg-emerald-100 border-emerald-400 text-emerald-950' },
                 { label: 'Other', value: bulkSummaryStats.otherCount, cls: 'bg-slate-50 border-slate-200 text-slate-700' },
                 { label: 'Duplicates', value: bulkSummaryStats.duplicatesSkipped, cls: 'bg-amber-50 border-amber-300 text-amber-900' },
-                { label: 'Expired', value: bulkSummaryStats.expiredCount, cls: 'bg-rose-50 border-rose-300 text-rose-900' },
+                { label: 'Blocked Incomplete', value: bulkSummaryStats.rejectedIncompleteCount, cls: 'bg-rose-50 border-rose-300 text-rose-900' },
               ].map((stat) => (
                 <div key={stat.label} className={`p-3 rounded-2xl border ${stat.cls}`}>
                   <div className="text-xl font-black">{stat.value}</div>
                   <div className="text-[10px] font-bold uppercase tracking-wide">{stat.label}</div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {bulkRejectedIncomplete.length > 0 && (
+            <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 space-y-2">
+              <div className="text-xs font-black text-rose-900">
+                ⛔ {bulkRejectedIncomplete.length} Incomplete / No-Deadline Vacancies Blocked (Never Posted to Website or Telegram)
+              </div>
+              <div className="max-h-44 overflow-y-auto space-y-1.5">
+                {bulkRejectedIncomplete.map((rej) => (
+                  <div key={rej.id} className="bg-white px-3 py-2 rounded-xl border border-rose-200 text-xs flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-slate-900">
+                      {rej.title} <span className="font-normal text-slate-500">— {rej.organization}</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-rose-700">
+                      Missing: {rej.missingFields.join(', ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

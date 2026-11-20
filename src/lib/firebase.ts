@@ -38,6 +38,11 @@ import {
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
+import {
+  hasValidVacancyDeadline,
+  partitionVacanciesByDeadline,
+  validateVacancyStrict,
+} from '../utils/vacancyValidator';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
 import {
@@ -375,7 +380,14 @@ export function getCachedPublishedVacancies(): Vacancy[] {
     const raw = localStorage.getItem(LOCAL_STORAGE_PUBLISHED_KEY) || localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const filtered = parsed.filter((v: Vacancy) => hasValidVacancyDeadline(v));
+    if (filtered.length !== parsed.length) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(filtered));
+      } catch {}
+    }
+    return filtered;
   } catch {
     return [];
   }
@@ -413,32 +425,60 @@ export function getCachedUserApplications(userId: string): UserJobApplication[] 
   }
 }
 
+// Fast server RAM-cached published vacancies fetch (sub-20ms on warm server)
+export async function fetchPublishedVacanciesFromServerFast(): Promise<Vacancy[]> {
+  try {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 2500) : null;
+    const res = await fetch('/api/vacancies', {
+      signal: controller?.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (timer) clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data?.vacancies) && data.vacancies.length > 0) {
+      return (data.vacancies as Vacancy[]).filter((v) => hasValidVacancyDeadline(v));
+    }
+  } catch {}
+  return [];
+}
+
 // Vacancy Firestore helpers
 export async function fetchPublishedVacancies(): Promise<Vacancy[]> {
   const path = 'vacancies';
   const cached = getCachedPublishedVacancies();
   try {
     const q = query(collection(db, path), where('status', '==', 'published'));
-    const snapshot = await withTimeout(getDocs(q), 5000, null as any);
+    const snapshot = await withTimeout(getDocs(q), 4500, null as any);
     if (!snapshot) {
-      return cached;
+      if (cached.length > 0) return cached;
+      return await fetchPublishedVacanciesFromServerFast();
     }
     const list: Vacancy[] = [];
     snapshot.forEach((d: any) => {
-      list.push({ ...(d.data() as Vacancy), id: d.id });
+      const item = { ...(d.data() as Vacancy), id: d.id };
+      if (hasValidVacancyDeadline(item)) {
+        list.push(item);
+      }
     });
     // Sort in memory by publishedAt descending
     list.sort((a, b) => new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime());
-    try {
-      localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(list));
-    } catch {}
-    return list;
+    if (list.length > 0) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(list));
+      } catch {}
+      return list;
+    }
+    const serverFallback = await fetchPublishedVacanciesFromServerFast();
+    return serverFallback.length > 0 ? serverFallback : cached;
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.LIST, path);
     }
     console.warn('Firestore offline/transient notice during fetchPublishedVacancies:', err);
-    return cached;
+    if (cached.length > 0) return cached;
+    return await fetchPublishedVacanciesFromServerFast();
   }
 }
 
@@ -447,25 +487,37 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
   if (!cleanId) return null;
   const cached = getCachedPublishedVacancies();
   const cachedMatch = cached.find(
-    (v) => v.id === cleanId || v.id.toLowerCase() === cleanId.toLowerCase()
+    (v) => (v.id === cleanId || v.id.toLowerCase() === cleanId.toLowerCase()) && hasValidVacancyDeadline(v)
   );
   if (cachedMatch) return cachedMatch;
 
-  try {
-    const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4500, null as any);
+  // Race fast same-origin server RAM cache AND direct Firestore getDoc simultaneously
+  const fromServer = (async (): Promise<Vacancy> => {
+    const res = await fetch(`/api/vacancies/${encodeURIComponent(cleanId)}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error('server_miss');
+    const data = await res.json();
+    if (data?.vacancy?.id && hasValidVacancyDeadline(data.vacancy)) return data.vacancy as Vacancy;
+    throw new Error('server_empty');
+  })();
+
+  const fromFirestore = (async (): Promise<Vacancy> => {
+    const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4000, null as any);
     if (snap && snap.exists()) {
       const data = snap.data() as Vacancy;
-      if (data?.status === 'published') {
+      if (data?.status === 'published' && hasValidVacancyDeadline(data)) {
         return { ...data, id: snap.id };
       }
     }
-  } catch {}
+    throw new Error('firestore_miss');
+  })();
 
   try {
-    const res = await fetch(`/api/vacancies/${encodeURIComponent(cleanId)}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.vacancy?.id) return data.vacancy as Vacancy;
+    const winner = await Promise.any([fromServer, fromFirestore]);
+    if (winner && hasValidVacancyDeadline(winner)) {
+      saveVacancyToLocalCache(winner);
+      return winner;
     }
   } catch {}
 
@@ -473,9 +525,11 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
 }
 
 export function saveVacancyToLocalCache(vacancy: Vacancy) {
+  if (!hasValidVacancyDeadline(vacancy)) return;
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
     let list: Vacancy[] = raw ? JSON.parse(raw) : [];
+    list = list.filter((v) => hasValidVacancyDeadline(v));
     const idx = list.findIndex((v) => v.id === vacancy.id);
     if (idx >= 0) {
       list[idx] = vacancy;
@@ -547,6 +601,26 @@ export function sanitizeForFirestore<T>(data: T): any {
 }
 
 export async function saveVacancy(vacancy: Vacancy): Promise<void> {
+  // STRICT RULE 1: Any vacancy without a real deadline is permanently deleted and never saved
+  if (!hasValidVacancyDeadline(vacancy)) {
+    if (vacancy?.id) {
+      await deleteVacancy(vacancy.id).catch(() => {});
+    }
+    throw new Error(
+      `Blocked & Deleted: Vacancy "${vacancy?.title || 'Untitled'}" has no valid calendar deadline. Vacancies without a deadline are never allowed.`
+    );
+  }
+
+  // STRICT RULE 2: Published vacancies must have all 6 mandatory fields
+  if (vacancy.status === 'published') {
+    const check = validateVacancyStrict(vacancy, { allowExpired: false });
+    if (!check.valid) {
+      throw new Error(
+        `Blocked: Vacancy "${vacancy.title || 'Untitled'}" cannot be published. Missing: ${check.missingFields.join(', ')}.`
+      );
+    }
+  }
+
   const path = `vacancies/${vacancy.id}`;
   // 1. Always persist to local cache first so admin edits are never lost
   saveVacancyToLocalCache(vacancy);
@@ -577,8 +651,28 @@ export async function saveVacancy(vacancy: Vacancy): Promise<void> {
 }
 
 export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
-  // 1. Immediately cache all items locally
-  for (const v of vacancies) {
+  const { withDeadline, withoutDeadline } = partitionVacanciesByDeadline(vacancies);
+
+  // Permanently delete any no-deadline vacancies included in a batch
+  if (withoutDeadline.length > 0) {
+    const noDeadlineIds = withoutDeadline.map((v) => v.id).filter(Boolean);
+    if (noDeadlineIds.length > 0) {
+      await deleteBatchVacancies(noDeadlineIds).catch(() => {});
+    }
+  }
+
+  // Filter out any incomplete published vacancies
+  const validToSave = withDeadline.filter((v) => {
+    if (v.status === 'published') {
+      return validateVacancyStrict(v, { allowExpired: false }).valid;
+    }
+    return true;
+  });
+
+  if (validToSave.length === 0) return;
+
+  // 1. Immediately cache all valid items locally
+  for (const v of validToSave) {
     saveVacancyToLocalCache(v);
   }
 
@@ -587,7 +681,7 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
   // 2. Atomic writeBatch for cloud persistence (1 atomic network call instead of 50 individual requests)
   try {
     const batch = writeBatch(db);
-    const slice = vacancies.slice(0, 100);
+    const slice = validToSave.slice(0, 100);
     for (const v of slice) {
       const rawPayload: Record<string, any> = { ...v };
       if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
@@ -615,10 +709,12 @@ function vacancyTelegramErrorClean(v: Vacancy): boolean {
 export async function deleteVacancy(id: string): Promise<void> {
   const path = `vacancies/${id}`;
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
-    if (raw) {
-      const list: Vacancy[] = JSON.parse(raw).filter((v: Vacancy) => v.id !== id);
-      localStorage.setItem(LOCAL_STORAGE_VACANCIES_KEY, JSON.stringify(list));
+    for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const list: Vacancy[] = JSON.parse(raw).filter((v: Vacancy) => v.id !== id);
+        localStorage.setItem(key, JSON.stringify(list));
+      }
     }
   } catch {}
 
@@ -637,10 +733,12 @@ export async function deleteBatchVacancies(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const idSet = new Set(ids);
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
-    if (raw) {
-      const list: Vacancy[] = JSON.parse(raw).filter((v: Vacancy) => !idSet.has(v.id));
-      localStorage.setItem(LOCAL_STORAGE_VACANCIES_KEY, JSON.stringify(list));
+    for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const list: Vacancy[] = JSON.parse(raw).filter((v: Vacancy) => !idSet.has(v.id));
+        localStorage.setItem(key, JSON.stringify(list));
+      }
     }
   } catch {}
 

@@ -1,24 +1,11 @@
 import { Vacancy } from '../types/job';
+import { parseValidDeadline } from './vacancyValidator';
 
 // Current reference date (dynamically checked against current time)
 export function isExpired(deadlineStr?: string): boolean {
-  if (!deadlineStr || deadlineStr === 'Not specified in the original vacancy') return false;
-  
-  const now = Date.now();
-  // Try parsing common date formats (YYYY-MM-DD, DD/MM/YYYY, Month DD, YYYY)
-  const parsed = Date.parse(deadlineStr);
-  if (isNaN(parsed)) {
-    // Check if regex matches YYYY-MM-DD
-    const match = deadlineStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (match) {
-      // Set end of that day (23:59:59)
-      const d = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]), 23, 59, 59);
-      return d.getTime() < now;
-    }
-    return false;
-  }
-  // If parsed has no hours/minutes, add 24 hours so it expires at end of day
-  return parsed + 24 * 60 * 60 * 1000 < now;
+  const parsed = parseValidDeadline(deadlineStr);
+  if (!parsed.hasValidDeadline) return true;
+  return parsed.isExpired;
 }
 
 export function getDaysLeft(deadlineStr?: string): {
@@ -27,25 +14,16 @@ export function getDaysLeft(deadlineStr?: string): {
   expired: boolean;
   daysLeft: number;
 } {
-  if (!deadlineStr || deadlineStr === 'Not specified in the original vacancy') {
-    return { text: 'Open / Ongoing', urgent: false, expired: false, daysLeft: 999 };
+  const parsed = parseValidDeadline(deadlineStr);
+  if (!parsed.hasValidDeadline || !parsed.parsedDate) {
+    return { text: 'No Valid Deadline', urgent: false, expired: true, daysLeft: -1 };
   }
 
-  const parsed = Date.parse(deadlineStr);
-  let targetTime = parsed;
-  if (isNaN(parsed)) {
-    const match = deadlineStr.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (match) {
-      targetTime = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]), 23, 59, 59).getTime();
-    } else {
-      return { text: deadlineStr, urgent: false, expired: false, daysLeft: 999 };
-    }
-  }
-
+  const targetTime = parsed.parsedDate.getTime();
   const now = Date.now();
   const diffDays = Math.ceil((targetTime - now) / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) {
+  if (diffDays < 0 || parsed.isExpired) {
     return { text: 'Expired', urgent: false, expired: true, daysLeft: diffDays };
   }
   if (diffDays === 0) {

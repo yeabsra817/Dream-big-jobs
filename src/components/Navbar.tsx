@@ -166,27 +166,23 @@ export const Navbar: React.FC<Props> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-[0_2px_12px_rgba(11,19,43,0.06)]">
-      {/* Subtle Official Dim-Light Top Bar — Optional Download Application (Phone & Computer) */}
+      {/* Official Top Bar — Optional Download Application (Phone & Computer) */}
       {!isStandaloneApp && !dismissedInstallStrip && (onOpenDownloadApplication || onInstallApp || onOpenIosInstallGuide) && (
-        <div className="bg-[#0B132B] text-slate-300 border-b border-white/[0.07]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-9 flex items-center justify-between gap-2">
+        <div className="bg-gradient-to-r from-[#0B132B] via-[#132959] to-[#0B132B] text-slate-200 border-b border-amber-400/25">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-10 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
                 onClick={handleDownloadAppClick}
-                className="group inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.10] hover:border-emerald-400/35 text-[11px] font-semibold tracking-wide text-slate-200/90 hover:text-white transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/60"
-                title="Download HopelandJobs application for Phone or Computer"
+                className="group inline-flex items-center gap-2 px-3.5 py-1 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] text-xs font-extrabold tracking-tight transition-all cursor-pointer shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 whitespace-nowrap"
+                title="Optional: Download HopelandJobs application for Phone or Computer"
               >
-                <span
-                  aria-hidden="true"
-                  className="w-1.5 h-1.5 rounded-full bg-emerald-400/75 shadow-[0_0_8px_rgba(74,222,128,0.65)] animate-pulse shrink-0"
-                />
-                <Download className="w-3 h-3 text-emerald-300/85 group-hover:text-emerald-300 shrink-0" />
-                <span className="truncate">Download Application</span>
-                <span className="hidden sm:inline text-slate-400 font-normal">
-                  • Phone &amp; Computer
-                </span>
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Download App · አፑን ያውርዱ</span>
               </button>
+              <span className="hidden md:inline text-xs font-semibold text-emerald-200 truncate">
+                Phone &amp; Computer · Optional · ፈጣን የስራ ማሳወቂያ
+              </span>
             </div>
 
             <button
@@ -194,7 +190,7 @@ export const Navbar: React.FC<Props> = ({
               onClick={() => setDismissedInstallStrip(true)}
               aria-label="Hide download bar"
               title="Hide for now"
-              className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.06] transition-colors cursor-pointer shrink-0"
+              className="p-1 rounded-md text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -326,34 +322,48 @@ export const Navbar: React.FC<Props> = ({
               </button>
             )}
 
-            {/* User / Account Icon with Clean Dropdown */}
+            {/* Clean Guest Optional Login / Register Buttons on Desktop, or Account Dropdown when signed in */}
+            {!isLoggedIn ? (
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth?.('signin')}
+                  className="min-h-[40px] px-4 py-2 rounded-xl text-sm font-bold text-[#0B132B] border border-slate-300 hover:border-[#0B132B] hover:bg-slate-50 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuth?.('signup')}
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#059669] hover:from-[#15803D] hover:to-[#047857] text-white text-sm font-extrabold transition-all shadow-sm shadow-emerald-600/25 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Register
+                </button>
+              </div>
+            ) : (
             <div ref={dropdownRef} className="relative">
               <button
                 type="button"
                 onClick={() => setAccountDropdownOpen((prev) => !prev)}
                 aria-haspopup="menu"
                 aria-expanded={accountDropdownOpen}
-                aria-label={isLoggedIn ? 'Account menu' : 'Login or Register'}
+                aria-label="Account menu"
                 className="min-h-[40px] inline-flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[#0B132B] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
               >
-                {isLoggedIn && userProfile?.photoUrl ? (
+                {userProfile?.photoUrl ? (
                   <img
                     src={userProfile.photoUrl}
                     alt={displayName}
                     referrerPolicy="no-referrer"
                     className="w-7 h-7 rounded-full object-cover"
                   />
-                ) : isLoggedIn ? (
+                ) : (
                   <div className="w-7 h-7 rounded-full bg-[#16A34A] text-white flex items-center justify-center text-xs font-bold">
                     {displayInitials}
                   </div>
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-white border border-slate-200 text-[#0B132B] flex items-center justify-center">
-                    <User className="w-4 h-4" />
-                  </div>
                 )}
                 <span className="hidden md:inline text-sm font-semibold text-[#0B132B] max-w-[120px] truncate whitespace-nowrap">
-                  {isLoggedIn ? displayName : 'Account'}
+                  {displayName}
                 </span>
                 <ChevronDown
                   className={`w-4 h-4 text-slate-500 transition-transform duration-150 ${
@@ -522,6 +532,7 @@ export const Navbar: React.FC<Props> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Hamburger Menu Button on Mobile (Right) */}
             <button
@@ -581,27 +592,32 @@ export const Navbar: React.FC<Props> = ({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2.5 pb-2">
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenAuth?.('signin');
-                  setMobileMenuOpen(false);
-                }}
-                className="min-h-[44px] py-2.5 text-center text-sm font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0B132B] cursor-pointer"
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenAuth?.('signup');
-                  setMobileMenuOpen(false);
-                }}
-                className="min-h-[44px] py-2.5 text-center text-sm font-semibold rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white cursor-pointer"
-              >
-                Register
-              </button>
+            <div className="space-y-1.5 pb-2">
+              <p className="text-[11px] font-medium text-slate-500 px-1">
+                Optional Account · አማራጭ አካውንት
+              </p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenAuth?.('signin');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="min-h-[44px] py-2.5 text-center text-sm font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0B132B] border border-slate-300 cursor-pointer whitespace-nowrap"
+                >
+                  Login · ይግቡ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenAuth?.('signup');
+                    setMobileMenuOpen(false);
+                  }}
+                  className="min-h-[44px] py-2.5 text-center text-sm font-extrabold rounded-xl bg-gradient-to-r from-[#16A34A] to-[#059669] hover:from-[#15803D] hover:to-[#047857] text-white shadow-sm cursor-pointer whitespace-nowrap"
+                >
+                  Register · ይመዝገቡ
+                </button>
+              </div>
             </div>
           )}
 
@@ -731,18 +747,14 @@ export const Navbar: React.FC<Props> = ({
                   handleDownloadAppClick();
                   setMobileMenuOpen(false);
                 }}
-                className="w-full min-h-[44px] flex items-center justify-center gap-2 bg-[#0B132B] hover:bg-slate-800 text-slate-100 font-semibold text-sm py-2.5 rounded-xl border border-slate-700 cursor-pointer"
+                className="w-full min-h-[46px] flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] font-extrabold text-sm py-2.5 rounded-xl shadow-sm cursor-pointer whitespace-nowrap"
               >
-                <span
-                  aria-hidden="true"
-                  className="w-2 h-2 rounded-full bg-emerald-400/80 shadow-[0_0_8px_rgba(74,222,128,0.65)]"
-                />
                 {canShowIosInstallGuide && !canInstallApp ? (
-                  <Share className="w-4 h-4 text-emerald-400" />
+                  <Share className="w-4 h-4 shrink-0" />
                 ) : (
-                  <Download className="w-4 h-4 text-emerald-400" />
+                  <Download className="w-4 h-4 shrink-0" />
                 )}
-                <span>Download Application</span>
+                <span>Download App (Optional) · አፑን ያውርዱ</span>
               </button>
             )}
             <a

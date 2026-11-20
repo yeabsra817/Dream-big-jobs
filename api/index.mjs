@@ -1,10 +1,11 @@
 // serverApp.ts
 import * as path2 from "path";
-import * as fs from "fs";
+import * as fs2 from "fs";
 import * as crypto from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
+import * as fs from "fs";
 
 // src/utils/recommendationCore.ts
 var EDUCATION_RANK = {
@@ -271,20 +272,39 @@ var PROFESSION_FAMILIES = [
       /\bnurs(?:e|ing)\b/i,
       /\bdoctor\b/i,
       /\bphysician\b/i,
+      /\bgeneral practitioner\b/i,
       /\bmedical\b/i,
       /\bclinical\b/i,
-      /\bpharmac(?:y|ist)\b/i,
-      /\blab(?:oratory)? technologist\b/i,
+      /\bpharmac(?:y|ist|eutical)\b/i,
+      /\bdruggist\b/i,
+      /\blab(?:oratory)? (?:technologist|technician|scientist)\b/i,
       /\bmidwif(?:e|ery)\b/i,
       /\bhospital\b/i,
-      /\bdent(?:al|ist)\b/i,
+      /\bclinic\b/i,
+      /\bdent(?:al|ist|istry)\b/i,
       /\bcaregiver\b/i,
       /\belderly care\b/i,
       /\bhealthcare\b/i,
       /\bhealth care\b/i,
       /\bsurgeon\b/i,
-      /\bphysiotherap(?:y|ist)\b/i
+      /\bsurgery\b/i,
+      /\bphysiotherap(?:y|ist)\b/i,
+      /\banesthes(?:ia|iologist|tist)\b/i,
+      /\bradiolog(?:y|ist|rapher)\b/i,
+      /\bsonograph(?:y|er)\b/i,
+      /\boptometr(?:y|ist)\b/i,
+      /\bophthalmolog(?:y|ist)\b/i,
+      /\bpediatric(?:s|ian)?\b/i,
+      /\bgynecolog(?:y|ist)\b/i,
+      /\bobstetric(?:s|ian)?\b/i,
+      /\bpsychiatr(?:y|ist)\b/i,
+      /\bparamedic\b/i,
+      /\bemergency medicine\b/i,
+      /\bhealth officer\b/i,
+      /\bhealth extension\b/i,
+      /\bbiomedical\b/i
     ],
+    excludePattern: /\b(veterinar(?:y|ian)\s+(?:surgeon|doctor|clinic|medicine|health)|(?:animal|livestock)\s+(?:health|hospital|clinic|surgery))\b/i,
     relatedIds: ["healthcare_public", "ngo_humanitarian"]
   },
   {
@@ -297,41 +317,83 @@ var PROFESSION_FAMILIES = [
       /\bepidemiolog(?:y|ist)\b/i,
       /\benvironmental health\b/i,
       /\bhealth coordinator\b/i,
-      /\bhealth officer\b/i
+      /\bhealth officer\b/i,
+      /\bhealth management\b/i,
+      /\bmental health\b/i,
+      /\bpsycholog(?:y|ist)\b/i,
+      /\bimmunization\b/i,
+      /\bmaternal health\b/i
     ],
     relatedIds: ["healthcare_clinical", "ngo_humanitarian", "wash"]
   },
   {
     id: "engineering_civil",
-    label: "Civil & Construction",
+    label: "Civil & Construction Engineering",
     patterns: [
       /\bcivil engineer(?:ing)?\b/i,
       /\bconstruction\b/i,
       /\barchitect(?:ure|ural)?\b/i,
-      /\bstructural engineer\b/i,
+      /\bstructural engineer(?:ing)?\b/i,
+      /\bgeotechnical\b/i,
       /\bquantity survey(?:or|ing)\b/i,
       /\bsite engineer\b/i,
+      /\boffice engineer\b/i,
+      /\bresident engineer\b/i,
       /\broad engineer\b/i,
+      /\bhighway engineer\b/i,
+      /\bbridge engineer\b/i,
+      /\bland survey(?:or|ing)\b/i,
       /\burban plan(?:ner|ning)\b/i,
-      /\bautocad\b/i
+      /\bautocad\b/i,
+      /\brevit\b/i,
+      /\betabs\b/i,
+      /\bcontract administration\b/i
     ],
-    relatedIds: ["wash", "engineering_electromech", "project_management", "skilled_trades"]
+    relatedIds: ["wash", "engineering_electromech", "engineering_specialized", "project_management", "skilled_trades"]
   },
   {
     id: "engineering_electromech",
     label: "Electrical & Mechanical Engineering",
     patterns: [
       /\belectrical engineer(?:ing)?\b/i,
+      /\belectronics engineer(?:ing)?\b/i,
       /\bmechanical engineer(?:ing)?\b/i,
       /\belectromechanical\b/i,
       /\bindustrial engineer(?:ing)?\b/i,
+      /\bautomotive engineer(?:ing)?\b/i,
       /\bmaintenance engineer\b/i,
       /\bplant engineer\b/i,
       /\bhvac\b/i,
+      /\bmep engineer\b/i,
       /\bmechatronics\b/i,
-      /\bpower engineer\b/i
+      /\bpower engineer(?:ing)?\b/i,
+      /\bpower systems?\b/i,
+      /\bplc\b/i,
+      /\bscada\b/i,
+      /\bsolar engineer\b/i,
+      /\brenewable energy\b/i
     ],
-    relatedIds: ["engineering_civil", "manufacturing_ops", "skilled_trades", "telecom", "it_software"]
+    relatedIds: ["engineering_civil", "engineering_specialized", "manufacturing_ops", "skilled_trades", "telecom", "it_software"]
+  },
+  {
+    id: "engineering_specialized",
+    label: "Chemical, Mining, Biomedical & Specialized Engineering",
+    patterns: [
+      /\bchemical engineer(?:ing)?\b/i,
+      /\bprocess engineer(?:ing)?\b/i,
+      /\bbiomedical engineer(?:ing)?\b/i,
+      /\bmining engineer(?:ing)?\b/i,
+      /\bgeolog(?:y|ist)\b/i,
+      /\btextile engineer(?:ing)?\b/i,
+      /\bagricultural engineer(?:ing)?\b/i,
+      /\benvironmental engineer(?:ing)?\b/i,
+      /\bwater resources? engineer(?:ing)?\b/i,
+      /\bsanitary engineer(?:ing)?\b/i,
+      /\bpetroleum engineer(?:ing)?\b/i,
+      /\baerospace engineer(?:ing)?\b/i,
+      /\bgis specialist\b/i
+    ],
+    relatedIds: ["engineering_civil", "engineering_electromech", "wash", "manufacturing_ops", "agriculture_env"]
   },
   {
     id: "manufacturing_ops",
@@ -518,6 +580,26 @@ var PROFESSION_FAMILIES = [
     relatedIds: ["ngo_humanitarian", "manufacturing_ops"]
   },
   {
+    id: "media_creative",
+    label: "Media, Design & Communications",
+    patterns: [
+      /\bjournalis(?:m|t)\b/i,
+      /\breporter\b/i,
+      /\beditor\b/i,
+      /\bgraphic design(?:er)?\b/i,
+      /\bvideo editor\b/i,
+      /\bphotograph(?:y|er)\b/i,
+      /\bcommunications? officer\b/i,
+      /\bcopywriter\b/i,
+      /\bcontent creator\b/i,
+      /\bsocial media\b/i,
+      /\btranslat(?:or|ion)\b/i,
+      /\binterpreter\b/i,
+      /\bbroadcast\b/i
+    ],
+    relatedIds: ["sales_marketing", "ngo_humanitarian", "it_software"]
+  },
+  {
     id: "skilled_trades",
     label: "Skilled Trades & Driving",
     patterns: [
@@ -565,10 +647,14 @@ var SECTOR_ALIAS_GROUPS = [
   { label: "manufacturing", keywords: ["manufacturing", "factory", "industrial", "plant", "production", "textile", "brewery", "cement", "pharmaceutical manufacturing"] },
   { label: "private", keywords: ["private", "corporate", "company", "plc", "share company", "enterprise", "telecom", "safaricom", "logistics", "supply chain", "procurement", "sales", "marketing", "human resource", "administration"] },
   { label: "it", keywords: ["software", "developer", "engineer", "it ", "technology", "data", "network", "cyber", "devops", "ict"] },
-  { label: "health", keywords: ["medical", "health", "hospital", "clinic", "nurse", "doctor", "pharmacist", "public health", "nutrition"] },
+  { label: "health", keywords: ["medical", "health", "healthcare", "hospital", "clinic", "nurse", "nursing", "doctor", "physician", "pharmacist", "pharmacy", "midwife", "laboratory", "radiology", "anesthesia", "dental", "optometry", "public health", "nutrition", "biomedical"] },
   { label: "finance", keywords: ["accounting", "finance", "auditor", "audit", "tax", "cpa", "acca", "ifrs"] },
   { label: "education", keywords: ["education", "university", "college", "teacher", "lecturer", "instructor", "academic"] },
-  { label: "engineering", keywords: ["civil", "construction", "electrical", "mechanical", "architect", "surveyor", "site engineer"] },
+  { label: "engineering", keywords: ["engineering", "engineer", "civil", "construction", "electrical", "mechanical", "electromechanical", "chemical", "industrial", "biomedical", "mining", "geologist", "architect", "surveyor", "site engineer", "structural", "autocad", "hvac", "mep"] },
+  { label: "agriculture", keywords: ["agriculture", "agricultural", "agronomy", "agronomist", "veterinary", "veterinarian", "livestock", "horticulture", "forestry", "agribusiness", "food security", "environment"] },
+  { label: "legal", keywords: ["legal", "lawyer", "attorney", "compliance", "regulatory", "paralegal", "law"] },
+  { label: "media", keywords: ["journalism", "journalist", "media", "communications", "graphic design", "editor", "translator", "broadcast"] },
+  { label: "logistics", keywords: ["logistics", "supply chain", "procurement", "warehouse", "freight", "customs", "fleet", "driver"] },
   { label: "other", keywords: ["other", "general", "all sector", "any sector", "multi-sector"] }
 ];
 function extractSectorTags(text) {
@@ -581,27 +667,143 @@ function extractSectorTags(text) {
   }
   return found;
 }
+function isRegisteredUserProfile(profile) {
+  return Boolean(profile && typeof profile.uid === "string" && profile.uid.trim().length > 0);
+}
+function parseSalaryMaxEtb(salaryText) {
+  if (!salaryText) return null;
+  const text = String(salaryText).trim();
+  if (!text || /(not stated|not specified|negotiable|attractive|company scale|as per|competitive)/i.test(text) && !/\d/.test(text)) {
+    return null;
+  }
+  if (/(\$|usd|eur|€|gbp|£)/i.test(text) && !/(etb|birr)/i.test(text)) {
+    return null;
+  }
+  const matches = text.match(/\d[\d,]*(?:\.\d+)?/g);
+  if (!matches || matches.length === 0) return null;
+  const nums = matches.map((m) => parseFloat(m.replace(/,/g, ""))).filter((n) => Number.isFinite(n) && n >= 500 && n <= 1e7);
+  if (nums.length === 0) return null;
+  return Math.max(...nums);
+}
+function getActiveAdditionalIndicators(profile) {
+  if (!profile || !Array.isArray(profile.additionalRequirements)) return [];
+  return Array.from(
+    new Set(
+      profile.additionalRequirements.map((r) => String(r || "").trim()).filter((r) => r.length >= 2)
+    )
+  );
+}
+function doesIndicatorMatchText(indicatorRaw, fullTextLower) {
+  const ind = indicatorRaw.trim().toLowerCase();
+  if (!ind) return true;
+  if (fullTextLower.includes(ind)) return true;
+  if (ind === "bsc" || ind === "b.sc" || ind === "ba" || ind === "bachelor" || ind === "bachelor's") {
+    if (/\b(bachelor|bsc|b\.?sc|ba\b|b\.?eng|b\.?tech|first degree|degree)\b/i.test(fullTextLower)) return true;
+  }
+  if (ind === "msc" || ind === "m.sc" || ind === "mba" || ind === "master" || ind === "master's") {
+    if (/\b(master|msc|m\.?sc|mba|mph|ma\b|postgraduate)\b/i.test(fullTextLower)) return true;
+  }
+  if (ind === "ngo" || ind === "ingo") {
+    if (/\b(ngo|ingo|humanitarian|united nations|unicef|undp|wfp|unhcr|save the children|world vision|care|oxfam|irc)\b/i.test(fullTextLower)) {
+      return true;
+    }
+  }
+  if (ind === "remote" || ind === "work from home" || ind === "wfh") {
+    if (/\b(remote|work from home|wfh|telecommute|anywhere)\b/i.test(fullTextLower)) return true;
+  }
+  const words = ind.split(/[^a-z0-9+]+/).filter((w) => w.length >= 2 && !/^(and|or|the|for|in|of|to|with|at|on)$/.test(w));
+  if (words.length >= 2 && words.every((w) => fullTextLower.includes(w))) {
+    return true;
+  }
+  return false;
+}
+function evaluateStrictUserIndicators(profile, jobContext) {
+  if (!isRegisteredUserProfile(profile)) {
+    return { hasStrictIndicators: false, passes: true, matchedIndicators: [], failedIndicators: [] };
+  }
+  const fullTextLower = (jobContext.fullText || "").toLowerCase();
+  const jobLocLower = (jobContext.location || "").toLowerCase();
+  const jobTypeLower = (jobContext.employmentType || "").toLowerCase();
+  const matchedIndicators = [];
+  const failedIndicators = [];
+  let hasStrict = false;
+  const customIndicators = getActiveAdditionalIndicators(profile);
+  if (customIndicators.length > 0) {
+    hasStrict = true;
+    for (const ind of customIndicators) {
+      if (doesIndicatorMatchText(ind, fullTextLower)) {
+        matchedIndicators.push(ind);
+      } else {
+        failedIndicators.push(`Missing indicator: "${ind}"`);
+      }
+    }
+  }
+  const prefLoc = (profile.preferredWorkLocation || "").trim();
+  if (profile.strictLocationMatch && prefLoc && !/^(any|all|any location|all ethiopia)$/i.test(prefLoc)) {
+    hasStrict = true;
+    const prefLower = prefLoc.toLowerCase();
+    const cityToken = prefLower.split(/[\s,(/]+/)[0] || prefLower;
+    const isRemoteJob = /\b(remote|anywhere)\b/i.test(jobLocLower) || /\bremote\b/i.test(jobTypeLower);
+    const locMatches = prefLower.includes("remote") ? isRemoteJob : jobLocLower.includes(prefLower) || cityToken.length >= 3 && jobLocLower.includes(cityToken);
+    if (locMatches) {
+      matchedIndicators.push(`Location: ${prefLoc}`);
+    } else {
+      failedIndicators.push(`Location does not match ${prefLoc}`);
+    }
+  }
+  const prefType = (profile.preferredEmploymentType || "Any").trim();
+  if (profile.strictEmploymentTypeMatch && prefType && prefType !== "Any") {
+    hasStrict = true;
+    const prefTypeLower = prefType.toLowerCase();
+    const typeMatches = jobTypeLower.includes(prefTypeLower) || prefTypeLower === "remote" && /\b(remote|work from home)\b/i.test(fullTextLower) || prefTypeLower === "internship" && /\b(intern|internship|trainee|graduate trainee)\b/i.test(fullTextLower) || prefTypeLower === "full-time" && /\b(full[- ]?time|permanent)\b/i.test(jobTypeLower);
+    if (typeMatches) {
+      matchedIndicators.push(`Job Type: ${prefType}`);
+    } else {
+      failedIndicators.push(`Employment type is not ${prefType}`);
+    }
+  }
+  const minSalary = parseSalaryMaxEtb(profile.minimumSalaryEtb);
+  if (minSalary !== null && minSalary > 0) {
+    hasStrict = true;
+    const jobMaxSalary = parseSalaryMaxEtb(jobContext.salary);
+    if (jobMaxSalary !== null) {
+      if (jobMaxSalary >= minSalary) {
+        matchedIndicators.push(`Salary \u2265 ${minSalary.toLocaleString()} ETB`);
+      } else {
+        failedIndicators.push(`Salary (${jobMaxSalary.toLocaleString()} ETB) below minimum ${minSalary.toLocaleString()} ETB`);
+      }
+    }
+  }
+  return {
+    hasStrictIndicators: hasStrict,
+    passes: failedIndicators.length === 0,
+    matchedIndicators,
+    failedIndicators
+  };
+}
 function hasProfileExperienceSignals(profile) {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   return Boolean(
-    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || Array.isArray(profile.previousPositions) && profile.previousPositions.some((p) => p.trim().length >= 2) || Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0 || Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || "").trim().length >= 2)
+    Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || Array.isArray(profile.previousPositions) && profile.previousPositions.some((p) => p.trim().length >= 2) || Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0 || Array.isArray(profile.education) && profile.education.some((e) => (e.fieldOfStudy || "").trim().length >= 2) || getActiveAdditionalIndicators(profile).length > 0
   );
 }
 function getProfileExperienceText(profile) {
-  const expEntriesText = (profile.experience || []).map((e) => `${e.jobTitle || ""} ${e.companyName || ""} ${e.responsibilities || ""}`).join(" ");
+  const expEntriesText = (profile.experience || []).map((e) => `${e.jobTitle || ""} ${e.companyName || ""} ${e.responsibilities || ""} ${e.achievements || ""}`).join(" ");
   const prevPosText = (profile.previousPositions || []).join(" ");
   const primaryExperienceText = [
     expEntriesText,
     profile.currentPosition || "",
+    profile.desiredJobTitle || "",
+    profile.customProfessionOrCategory || "",
     prevPosText,
     ...profile.areasOfExpertise || [],
     ...profile.skills || []
   ].filter(Boolean).join(" ");
   const secondaryProfileText = [
-    profile.desiredJobTitle || "",
     profile.preferredIndustry || "",
     ...profile.preferredSectors || [],
     ...profile.professionalInterests || [],
+    ...profile.additionalRequirements || [],
     ...(profile.education || []).map((e) => `${e.fieldOfStudy || ""} ${e.qualification || ""}`),
     ...(profile.certifications || []).map((c) => `${c.name || ""}`)
   ].filter(Boolean).join(" ");
@@ -611,7 +813,7 @@ function getProfileExperienceText(profile) {
     allText: `${primaryExperienceText} ${secondaryProfileText}`.trim()
   };
 }
-function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requiredExperienceText) {
+function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requiredExperienceText, strictContext) {
   const empty = {
     isMatch: false,
     matchType: "none",
@@ -621,7 +823,20 @@ function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requ
     matchedJobDomains: [],
     meetsYearsRequirement: true
   };
-  if (!profile || !hasProfileExperienceSignals(profile)) return empty;
+  if (!isRegisteredUserProfile(profile) || !hasProfileExperienceSignals(profile)) return empty;
+  const fullSearchText = `${jobCoreText} ${jobBroadText} ${strictContext?.location || ""} ${strictContext?.employmentType || ""} ${strictContext?.salary || ""}`;
+  const strictEval = evaluateStrictUserIndicators(profile, {
+    fullText: fullSearchText,
+    location: strictContext?.location,
+    employmentType: strictContext?.employmentType,
+    salary: strictContext?.salary
+  });
+  if (!strictEval.passes) {
+    return {
+      ...empty,
+      failedIndicators: strictEval.failedIndicators
+    };
+  }
   const userExpYears = getProfileExplicitExperienceYears(profile);
   const reqYears = parseMinRequiredYears(requiredExperienceText);
   const meetsYearsRequirement = reqYears === null || userExpYears >= reqYears;
@@ -635,6 +850,10 @@ function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requ
   const tokens = tokenizeProfileKeywords(profile);
   const jobLower = `${jobCoreText} ${jobBroadText}`.toLowerCase();
   const matchedTitleTokens = tokens.titleTokens.filter((t) => jobLower.includes(t));
+  const matchedCustomProfTokens = tokens.customProfessionTokens.filter((t) => jobLower.includes(t));
+  const matchedCustomPhrase = tokens.customProfessionPhrase.length >= 3 && jobLower.includes(tokens.customProfessionPhrase);
+  const matchedExpRespTokens = tokens.experienceResponsibilityTokens.filter((t) => jobLower.includes(t));
+  const matchedStudyTokens = tokens.studyTokens.filter((t) => jobLower.includes(t));
   const matchedSkillTokens = Array.from(
     /* @__PURE__ */ new Set([
       ...tokens.skillTokens.filter((s) => s.length >= 2 && jobLower.includes(s)),
@@ -658,21 +877,29 @@ function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requ
   let matchType = "none";
   let score = 0;
   let badgeLabel = "";
-  if (directFamilies.length > 0 || matchedTitleTokens.length > 0 || matchedSkillTokens.length >= 2) {
+  const hasCustomIndicatorsMatched = getActiveAdditionalIndicators(profile).length > 0 && strictEval.matchedIndicators.length > 0;
+  if (directFamilies.length > 0 || matchedCustomPhrase || matchedCustomProfTokens.length > 0 || matchedTitleTokens.length > 0 || matchedSkillTokens.length >= 2 || matchedExpRespTokens.length >= 2) {
     matchType = "direct";
-    const primaryLabel = directFamilies[0]?.label || profile.currentPosition || profile.areasOfExpertise?.[0] || "Your Experience";
-    score = 72 + Math.min(18, directFamilies.length * 10) + Math.min(15, matchedTitleTokens.length * 6) + Math.min(12, matchedSkillTokens.length * 4);
-    badgeLabel = `Matches ${primaryLabel} Experience`;
+    const primaryLabel = (matchedCustomPhrase || matchedCustomProfTokens.length > 0 ? profile.customProfessionOrCategory : "") || directFamilies[0]?.label || profile.currentPosition || profile.desiredJobTitle || profile.areasOfExpertise?.[0] || "Your Experience";
+    score = 72 + Math.min(18, directFamilies.length * 10) + Math.min(16, (matchedTitleTokens.length + matchedCustomProfTokens.length) * 6) + Math.min(12, matchedSkillTokens.length * 4) + Math.min(8, matchedExpRespTokens.length * 3) + (matchedCustomPhrase ? 10 : 0);
+    badgeLabel = `Matches ${primaryLabel}`;
   } else if (bestRelatedPair) {
     matchType = "related";
-    score = 58 + Math.min(10, matchedSkillTokens.length * 4) + Math.min(8, matchedTitleTokens.length * 4);
+    score = 58 + Math.min(10, matchedSkillTokens.length * 4) + Math.min(8, matchedTitleTokens.length * 4) + Math.min(6, matchedStudyTokens.length * 3);
     badgeLabel = `Related Field: ${bestRelatedPair.user.label} \u2192 ${bestRelatedPair.job.label}`;
-  } else if (matchedSkillTokens.length === 1) {
+  } else if (matchedSkillTokens.length === 1 || matchedStudyTokens.length > 0) {
     matchType = "related";
-    score = 46;
-    badgeLabel = `Related Skill: ${matchedSkillTokens[0]}`;
+    score = 48 + Math.min(10, matchedStudyTokens.length * 5);
+    badgeLabel = matchedSkillTokens[0] ? `Matches Skill: ${matchedSkillTokens[0]}` : `Matches Education: ${matchedStudyTokens[0]}`;
+  } else if (hasCustomIndicatorsMatched) {
+    matchType = "direct";
+    score = 74;
+    badgeLabel = `Matches Your Indicators (${strictEval.matchedIndicators.slice(0, 2).join(", ")})`;
   }
   if (matchType === "none") return empty;
+  if (strictEval.matchedIndicators.length > 0) {
+    score += Math.min(12, strictEval.matchedIndicators.length * 4);
+  }
   if (meetsYearsRequirement) {
     score += 12;
   } else if (yearsGap <= 2) {
@@ -690,20 +917,29 @@ function assessExperienceAgainstJobText(profile, jobCoreText, jobBroadText, requ
     matchedUserDomains: userFamilies.map((f) => f.label),
     matchedJobDomains: jobFamilies.map((f) => f.label),
     meetsYearsRequirement,
-    yearsWarning
+    yearsWarning,
+    matchedIndicators: strictEval.matchedIndicators
   };
 }
 function assessVacancyExperienceMatch(profile, v) {
   const skillsArr = Array.isArray(v.requiredSkills) ? v.requiredSkills : v.requiredSkills ? [String(v.requiredSkills)] : [];
   const respArr = Array.isArray(v.responsibilities) ? v.responsibilities : v.responsibilities ? [String(v.responsibilities)] : [];
   const coreText = `${v.title || ""} ${v.category || ""} ${v.requiredFieldOfStudy || ""} ${skillsArr.join(" ")}`;
-  const broadText = `${coreText} ${v.organization || ""} ${v.description || ""} ${respArr.join(" ")}`;
-  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears);
+  const broadText = `${coreText} ${v.organization || ""} ${v.description || ""} ${respArr.join(" ")} ${v.educationQualification || ""} ${v.specialRequirements || ""}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, v.experienceYears, {
+    location: v.location,
+    employmentType: v.employmentType,
+    salary: v.salary
+  });
 }
 function assessInternationalJobExperienceMatch(profile, ij) {
   const coreText = `${ij.jobTitle || ""} ${ij.category || ""} ${ij.requiredEducation || ""}`;
-  const broadText = `${coreText} ${ij.employerOrProgramme || ""} ${ij.visaSponsorshipInfo || ""} ${ij.officialApplicationInstructions || ""}`;
-  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience);
+  const broadText = `${coreText} ${ij.employerOrProgramme || ""} ${ij.country || ""} ${ij.location || ""} ${ij.visaSponsorshipInfo || ""} ${ij.officialApplicationInstructions || ""}`;
+  return assessExperienceAgainstJobText(profile, coreText, broadText, ij.requiredExperience, {
+    location: `${ij.location || ""} ${ij.country || ""}`.trim(),
+    employmentType: ij.category,
+    salary: ij.salary
+  });
 }
 function tokenizeProfileKeywords(profile) {
   const stopWords = /* @__PURE__ */ new Set([
@@ -720,17 +956,64 @@ function tokenizeProfileKeywords(profile) {
     "officer",
     "staff",
     "job",
+    "jobs",
+    "work",
+    "working",
     "senior",
     "junior",
     "assistant",
     "associate",
+    "manager",
+    "director",
+    "supervisor",
+    "coordinator",
+    "specialist",
+    "analyst",
+    "consultant",
+    "advisor",
+    "executive",
+    "head",
+    "lead",
+    "chief",
+    "expert",
+    "professional",
+    "engineer",
+    "engineering",
     "general",
     "service",
     "services",
     "company",
     "sector",
+    "sectors",
     "private",
-    "public"
+    "public",
+    "other",
+    "team",
+    "daily",
+    "responsible",
+    "responsibilities",
+    "managed",
+    "managing",
+    "support",
+    "supporting",
+    "years",
+    "year",
+    "experience",
+    "degree",
+    "bachelor",
+    "master",
+    "diploma",
+    "certificate",
+    "bsc",
+    "msc",
+    "mba",
+    "mph",
+    "phd",
+    "tvet",
+    "associate",
+    "postgraduate",
+    "undergraduate",
+    "ethiopia"
   ]);
   const splitClean = (values) => Array.from(
     new Set(
@@ -739,23 +1022,31 @@ function tokenizeProfileKeywords(profile) {
   );
   const preferredSectorsRaw = [
     profile.preferredIndustry || "",
+    profile.customProfessionOrCategory || "",
     profile.staffDepartmentOrSector || "",
     ...profile.preferredSectors || [],
     ...profile.professionalInterests || []
   ].filter(Boolean);
+  const customProfessionPhrase = (profile.customProfessionOrCategory || "").trim().toLowerCase();
   return {
     titleTokens: splitClean([
       profile.currentPosition || "",
       profile.desiredJobTitle || "",
+      profile.customProfessionOrCategory || "",
       ...profile.previousPositions || [],
       ...(profile.experience || []).map((e) => e.jobTitle || "")
     ]),
+    experienceResponsibilityTokens: splitClean(
+      (profile.experience || []).map((e) => `${e.responsibilities || ""} ${e.achievements || ""}`)
+    ),
+    customProfessionPhrase,
+    customProfessionTokens: splitClean([profile.customProfessionOrCategory || ""]),
     skillTokens: (profile.skills || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseTokens: (profile.areasOfExpertise || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     expertiseWordTokens: splitClean([...profile.areasOfExpertise || [], ...profile.skills || []]),
     interestTokens: (profile.professionalInterests || []).map((s) => s.trim().toLowerCase()).filter(Boolean),
     certTokens: (profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`.trim().toLowerCase()).filter(Boolean),
-    studyTokens: splitClean((profile.education || []).map((e) => `${e.fieldOfStudy} ${e.qualification}`)),
+    studyTokens: splitClean((profile.education || []).map((e) => e.fieldOfStudy || "")),
     preferredSectorTags: extractSectorTags(preferredSectorsRaw.join(" ")),
     preferredSectorsRaw: preferredSectorsRaw.map((s) => s.toLowerCase())
   };
@@ -785,21 +1076,21 @@ function detectMissingMandatoryLicenses(requiredText, profile) {
   return missing;
 }
 function hasSufficientProfileForRecommendations(profile) {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   return Boolean(
-    profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.skills && profile.skills.length > 0 || profile.areasOfExpertise && profile.areasOfExpertise.length > 0 || profile.education && profile.education.length > 0 || profile.experience && profile.experience.length > 0 || profile.noExperience === true || profile.yearsOfExperience && profile.yearsOfExperience.trim().length > 0 || profile.professionalInterests && profile.professionalInterests.length > 0 || profile.preferredSectors && profile.preferredSectors.length > 0 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2
+    profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2 || profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2 || profile.skills && profile.skills.length > 0 || profile.areasOfExpertise && profile.areasOfExpertise.length > 0 || profile.education && profile.education.length > 0 || profile.experience && profile.experience.length > 0 || profile.professionalInterests && profile.professionalInterests.length > 0 || profile.preferredSectors && profile.preferredSectors.length > 0 || profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || getActiveAdditionalIndicators(profile).length > 0
   );
 }
 function hasCompletedMandatoryPreferences(profile) {
-  if (!profile) return false;
+  if (!isRegisteredUserProfile(profile)) return false;
   const hasExperienceStatus = Boolean(
-    profile.noExperience === true || Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2
+    profile.noExperience === true || Array.isArray(profile.experience) && profile.experience.length > 0 || profile.currentPosition && profile.currentPosition.trim().length >= 2 || profile.desiredJobTitle && profile.desiredJobTitle.trim().length >= 2
   );
   const hasYearsOfExperience = Boolean(
     profile.noExperience === true || profile.yearsOfExperience && /\d/.test(profile.yearsOfExperience)
   );
   const hasJobExpertise = Boolean(
-    Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0
+    Array.isArray(profile.areasOfExpertise) && profile.areasOfExpertise.length > 0 || Array.isArray(profile.skills) && profile.skills.length > 0 || profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2 || getActiveAdditionalIndicators(profile).length > 0
   );
   return hasExperienceStatus && hasYearsOfExperience && hasJobExpertise;
 }
@@ -819,7 +1110,7 @@ function isVerifiedActiveVacancy(v) {
   return true;
 }
 function computeStaffOpportunityRecommendations(profile, domesticVacancies, internationalJobs = [], scholarships = [], limit = 30) {
-  if (!hasSufficientProfileForRecommendations(profile)) {
+  if (!isRegisteredUserProfile(profile) || !hasSufficientProfileForRecommendations(profile)) {
     return [];
   }
   if (profile.accountStatus === "suspended") {
@@ -832,9 +1123,16 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
   const userLocation = `${profile.preferredWorkLocation || ""} ${profile.locationCity || ""} ${profile.locationRegion || ""}`.toLowerCase();
   for (const v of domesticVacancies || []) {
     if (!isVerifiedActiveVacancy(v)) continue;
-    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(" ")} ${v.description} ${(v.responsibilities || []).join(" ")} ${v.specialRequirements || ""}`.toLowerCase();
-    const combinedText = `${roleAndReqText} ${v.organization} ${v.category}`.toLowerCase();
+    const roleAndReqText = `${v.title} ${v.requiredFieldOfStudy} ${(v.requiredSkills || []).join(" ")} ${v.description} ${(v.responsibilities || []).join(" ")} ${v.educationQualification || ""} ${v.specialRequirements || ""}`.toLowerCase();
+    const combinedText = `${roleAndReqText} ${v.organization} ${v.category} ${v.location} ${v.employmentType || ""} ${v.salary || ""}`.toLowerCase();
     const vacSectorTags = extractSectorTags(`${v.category} ${v.title} ${v.organization} ${v.description} ${v.isWashNgo ? "wash" : ""}`);
+    const strictEval = evaluateStrictUserIndicators(profile, {
+      fullText: combinedText,
+      location: v.location,
+      employmentType: v.employmentType,
+      salary: v.salary
+    });
+    if (!strictEval.passes) continue;
     const missingMandatory = [];
     const reqYears = parseMinRequiredYears(v.experienceYears);
     if (reqYears !== null && reqYears > userExpYears) {
@@ -910,6 +1208,15 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += 8;
       reasons.push(`Preferred location: ${v.location}`);
     }
+    if (strictEval.matchedIndicators.length > 0) {
+      score += Math.min(28, strictEval.matchedIndicators.length * 10);
+      reasons.push(`Meets your indicators: ${strictEval.matchedIndicators.slice(0, 3).join(", ")}`);
+    }
+    const matchedExpResp = tokens.experienceResponsibilityTokens.filter((w) => roleAndReqText.includes(w));
+    if (matchedExpResp.length >= 2) {
+      score += Math.min(18, matchedExpResp.length * 6);
+      reasons.push(`Experience background: ${matchedExpResp.slice(0, 3).join(", ")}`);
+    }
     const expAssessment = assessVacancyExperienceMatch(profile, v);
     if (expAssessment.isMatch && expAssessment.matchType === "direct") {
       score += 24;
@@ -918,7 +1225,8 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
       score += 22;
       reasons.push(expAssessment.badgeLabel);
     }
-    const hasDirectDomainFit = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedStudy.length > 0 || matchedCerts.length > 0 || expAssessment.isMatch;
+    const hasCustomIndicatorFit = getActiveAdditionalIndicators(profile).length > 0 && strictEval.matchedIndicators.length > 0;
+    const hasDirectDomainFit = matchedTitleWords.length > 0 || matchedSkills.length > 0 || matchedExpResp.length >= 2 || matchedStudy.length > 0 || matchedCerts.length > 0 || expAssessment.isMatch || hasCustomIndicatorFit;
     const hasRelevantMatch = hasDirectDomainFit || Boolean(matchedSectorTag || directSectorMatch);
     if (!hasRelevantMatch || score < 24 || reasons.length === 0) continue;
     if (reqYears !== null && reqYears - userExpYears > 5) continue;
@@ -962,9 +1270,20 @@ function computeStaffOpportunityRecommendations(profile, domesticVacancies, inte
     }
     const licenseGaps = detectMissingMandatoryLicenses(`${ij.jobTitle} ${ij.requiredEducation}`, profile);
     missingMandatory.push(...licenseGaps);
-    const combinedText = `${ij.jobTitle} ${ij.category} ${ij.requiredEducation} ${ij.employerOrProgramme} ${ij.country} ${ij.languageRequirements}`.toLowerCase();
+    const combinedText = `${ij.jobTitle} ${ij.category} ${ij.requiredEducation} ${ij.employerOrProgramme} ${ij.country} ${ij.location} ${ij.languageRequirements} ${ij.visaSponsorshipInfo || ""}`.toLowerCase();
+    const strictEval = evaluateStrictUserIndicators(profile, {
+      fullText: combinedText,
+      location: `${ij.location}, ${ij.country}`,
+      employmentType: ij.category,
+      salary: ij.salary
+    });
+    if (!strictEval.passes) continue;
     let score = 0;
     const reasons = [];
+    if (strictEval.matchedIndicators.length > 0) {
+      score += Math.min(24, strictEval.matchedIndicators.length * 10);
+      reasons.push(`Meets your indicators: ${strictEval.matchedIndicators.slice(0, 3).join(", ")}`);
+    }
     const matchedTitle = tokens.titleTokens.filter((t) => combinedText.includes(t));
     if (matchedTitle.length > 0) {
       score += Math.min(35, matchedTitle.length * 14);
@@ -1140,7 +1459,7 @@ function evaluateMandatoryProfileCompletion(profile) {
     missingSections.push("Job Expertise & Core Skills");
   }
   const hasIndustry = Boolean(
-    profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0
+    profile.preferredIndustry && profile.preferredIndustry.trim().length >= 2 || profile.customProfessionOrCategory && profile.customProfessionOrCategory.trim().length >= 2 || Array.isArray(profile.preferredSectors) && profile.preferredSectors.length > 0
   );
   if (hasIndustry) {
     score += 15;
@@ -1178,11 +1497,16 @@ var DEFAULT_JOB_SEEKER_PROFILE = {
   employmentStatus: "unemployed",
   desiredJobTitle: "",
   preferredIndustry: "",
+  customProfessionOrCategory: "",
   preferredSectors: [],
   yearsOfExperience: "",
   expectedSalaryEtb: "",
-  preferredEmploymentType: "Full-time",
-  preferredWorkLocation: "Addis Ababa",
+  minimumSalaryEtb: "",
+  preferredEmploymentType: "Any",
+  preferredWorkLocation: "Any Location",
+  strictLocationMatch: false,
+  strictEmploymentTypeMatch: false,
+  additionalRequirements: [],
   skills: [],
   areasOfExpertise: [],
   professionalInterests: [],
@@ -1279,6 +1603,378 @@ function buildTop3MobilePushPayload(params) {
     employer: capped[0]?.organization || "Hopeland Jobs",
     category: "3-Day Top Recommended Jobs",
     timestamp: nowMs
+  };
+}
+
+// src/utils/vacancyValidator.ts
+var PLACEHOLDER_REGEX = /^(?:not\s+specified(?:\s+in\s+the\s+(?:accessible\s+)?original\s+vacancy)?|not\s+stated(?:\s+in\s+the\s+(?:accessible\s+)?official\s+announcement)?|not\s+mentioned|not\s+available|not\s+disclosed|not\s+provided|none|nil|n\/?a|tbd|tba|unknown|unspecified|various|untitled(?:\s+vacancy)?|job\s+vacancy|open\s+position|ethiopian\s+organization|company|employer|confidential|open\s+until\s+filled|until\s+filled|ongoing|rolling|asap|as\s+soon\s+as\s+possible|continuous|open|no\s+deadline|-+|—+|\.+)$/i;
+var GENERIC_INSTRUCTIONS_BOILERPLATE_REGEX = /^(?:submit\s+application(?:\s+by\s+email\s+or\s+in\s+person)?\s+as\s+indicated\s+in\s+(?:the\s+)?vacancy\s+description|please\s+follow\s+employer\s+instructions\s+carefully|apply\s+directly|apply\s+now|see\s+description|refer\s+to\s+(?:the\s+)?(?:vacancy|job)\s+description|interested\s+and\s+qualified\s+applicants\s+should\s+submit\s+their\s+credentials\s+following\s+the\s+official\s+application\s+link\s+or\s+contact\s+details\s+provided\s+above)\.?$/i;
+var OWN_SITE_URL_REGEX = /(?:hopelandjobs\.tech|dreambigjobs|healmorin\.com|localhost|127\.0\.0\.1|t\.me\/dreambigjobsethiopia)/i;
+var MONTH_NAME_MAP = {
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11
+};
+function stripEdgePunctuation(val) {
+  return String(val || "").trim().replace(/^[\s\-–—:;,.•*]+|[\s\-–—:;,.]+$/g, "").trim();
+}
+function isMeaningfulVacancyValue(val) {
+  const cleaned = stripEdgePunctuation(val);
+  if (!cleaned) return false;
+  return !PLACEHOLDER_REGEX.test(cleaned);
+}
+function parseValidDeadline(deadline) {
+  const raw = String(deadline || "").trim();
+  const cleaned = stripEdgePunctuation(
+    raw.replace(/^(?:application\s+)?(?:deadline|closing\s+date|apply\s+before|closes?\s+on|due\s+date)\s*[:\-–—]?\s*/i, "").replace(/(\d{1,2})(?:st|nd|rd|th)\b/gi, "$1")
+  );
+  if (!cleaned || PLACEHOLDER_REGEX.test(cleaned)) {
+    return {
+      hasValidDeadline: false,
+      parsedDate: null,
+      normalizedText: "",
+      isExpired: false
+    };
+  }
+  if (/\b(?:not\s+specified|not\s+stated|not\s+mentioned|not\s+available|open\s+until\s+filled|until\s+filled|ongoing|rolling|as\s+soon\s+as\s+possible|asap|tbd|tba|no\s+deadline|continuous)\b/i.test(
+    cleaned
+  )) {
+    return {
+      hasValidDeadline: false,
+      parsedDate: null,
+      normalizedText: "",
+      isExpired: false
+    };
+  }
+  let year = 0;
+  let monthIdx = -1;
+  let day = 0;
+  const isoMatch = cleaned.match(/\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (isoMatch) {
+    year = parseInt(isoMatch[1], 10);
+    monthIdx = parseInt(isoMatch[2], 10) - 1;
+    day = parseInt(isoMatch[3], 10);
+  }
+  if (year === 0) {
+    const dmyText = cleaned.match(
+      /\b(\d{1,2})\s+([A-Za-z]{3,9})[.,]?\s*,?\s*(\d{4})\b/
+    );
+    if (dmyText) {
+      const m = MONTH_NAME_MAP[dmyText[2].toLowerCase()];
+      if (m !== void 0) {
+        day = parseInt(dmyText[1], 10);
+        monthIdx = m;
+        year = parseInt(dmyText[3], 10);
+      }
+    }
+  }
+  if (year === 0) {
+    const mdyText = cleaned.match(
+      /\b([A-Za-z]{3,9})[.,]?\s+(\d{1,2})\s*,?\s*(\d{4})\b/
+    );
+    if (mdyText) {
+      const m = MONTH_NAME_MAP[mdyText[1].toLowerCase()];
+      if (m !== void 0) {
+        monthIdx = m;
+        day = parseInt(mdyText[2], 10);
+        year = parseInt(mdyText[3], 10);
+      }
+    }
+  }
+  if (year === 0) {
+    const dmyNum = cleaned.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b/);
+    if (dmyNum) {
+      const first = parseInt(dmyNum[1], 10);
+      const second = parseInt(dmyNum[2], 10);
+      year = parseInt(dmyNum[3], 10);
+      if (first > 12 && second <= 12) {
+        day = first;
+        monthIdx = second - 1;
+      } else if (second > 12 && first <= 12) {
+        monthIdx = first - 1;
+        day = second;
+      } else {
+        day = first;
+        monthIdx = second - 1;
+      }
+    }
+  }
+  let parsedDate = null;
+  if (year >= 2020 && year <= 2100 && monthIdx >= 0 && monthIdx <= 11 && day >= 1 && day <= 31) {
+    const candidate = new Date(year, monthIdx, day, 23, 59, 59, 999);
+    if (!Number.isNaN(candidate.getTime()) && candidate.getFullYear() === year && candidate.getMonth() === monthIdx && candidate.getDate() === day) {
+      parsedDate = candidate;
+    }
+  } else {
+    if (/\b20\d{2}\b/.test(cleaned)) {
+      const ts = Date.parse(cleaned);
+      if (!Number.isNaN(ts)) {
+        const d = new Date(ts);
+        if (d.getFullYear() >= 2020 && d.getFullYear() <= 2100) {
+          d.setHours(23, 59, 59, 999);
+          parsedDate = d;
+        }
+      }
+    }
+  }
+  if (!parsedDate) {
+    return {
+      hasValidDeadline: false,
+      parsedDate: null,
+      normalizedText: "",
+      isExpired: false
+    };
+  }
+  const isExpired = Date.now() > parsedDate.getTime();
+  return {
+    hasValidDeadline: true,
+    parsedDate,
+    normalizedText: cleaned,
+    isExpired
+  };
+}
+function hasValidVacancyDeadline(vacancy) {
+  if (!vacancy) return false;
+  return parseValidDeadline(vacancy.applicationDeadline).hasValidDeadline;
+}
+function isValidExternalApplyUrl(raw) {
+  const s = String(raw || "").trim().replace(/[),.;]+$/, "");
+  if (!s || !isMeaningfulVacancyValue(s)) return void 0;
+  if (!/^https?:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?:\/\S*)?$/i.test(s)) {
+    return void 0;
+  }
+  if (OWN_SITE_URL_REGEX.test(s)) return void 0;
+  return s;
+}
+function extractExternalUrlFromText(text) {
+  const matches = String(text || "").match(/https?:\/\/[^\s"'<>)\]]+/gi);
+  if (!matches) return void 0;
+  for (const m of matches) {
+    const valid = isValidExternalApplyUrl(m);
+    if (valid) return valid;
+  }
+  return void 0;
+}
+function extractValidEmail(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return void 0;
+  const match = s.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (!match) return void 0;
+  const email = match[0].toLowerCase();
+  if (/example\.com|test\.com|nexusitsoultion@gmail\.com/i.test(email)) return void 0;
+  return match[0];
+}
+var PHYSICAL_ADDRESS_SIGNAL_REGEX = /\b(?:p\.?\s*o\.?\s*box|po\s*box|head\s*office|hr\s*(?:office|department|dept)|human\s*resource(?:s)?\s*(?:office|department)|branch\s*office|district\s*office|regional\s*office|in[\s-]?person|physically|physical\s+address|walk[\s-]?in|floor|room\s*(?:no\.?|#)?\s*\d*|building|bldg|tower|plaza|compound|campus|sub[\s-]?city|woreda|kebele|street|road|avenue|bole|kazanchis|piassa|mexico|sarbet|megenagna|gerji|kotebe|akaki|kality|kirkos|arada|yeka|lemi\s*kura|gullele|lideta|kolfe|nifas\s*silk|airport|hospital|university|college|ministry|bureau|office\s+no)\b/i;
+function isBareGenericCityOnly(val) {
+  const cleaned = stripEdgePunctuation(val).toLowerCase();
+  return /^(?:addis\s+ababa(?:\s*,\s*ethiopia)?|ethiopia|hawassa|adama|dire\s+dawa|bahir\s+dar|mekelle|jimma|gondar|bishoftu|dessie|jigjiga|harar|arba\s+minch|shashemene|remote(?:\s*\/\s*ethiopia)?|various|multiple\s+locations)$/.test(
+    cleaned
+  );
+}
+function extractDirectEmployerChannels(vacancy) {
+  if (!vacancy) return { valid: false, channels: [] };
+  const channels = [];
+  const directUrl = isValidExternalApplyUrl(vacancy.applicationUrl) || isValidExternalApplyUrl(vacancy.directApplicationUrl) || extractExternalUrlFromText(vacancy.applicationInstructions) || extractExternalUrlFromText(vacancy.contactInfo);
+  if (directUrl) {
+    channels.push("link");
+  }
+  const directEmail = extractValidEmail(vacancy.applicationEmail) || extractValidEmail(vacancy.applicationInstructions) || extractValidEmail(vacancy.contactInfo);
+  if (directEmail) {
+    channels.push("email");
+  }
+  let physicalAddress;
+  const explicitPhysical = stripEdgePunctuation(vacancy.physicalAddress);
+  if (explicitPhysical && explicitPhysical.length >= 6 && isMeaningfulVacancyValue(explicitPhysical) && !isBareGenericCityOnly(explicitPhysical)) {
+    physicalAddress = explicitPhysical;
+  } else {
+    const methodLower = String(vacancy.applicationMethod || "").toLowerCase();
+    const isPhysicalMethod = /in[\s-]?person|physical|postal|mail/i.test(methodLower);
+    const contactClean = stripEdgePunctuation(vacancy.contactInfo);
+    const instrClean = stripEdgePunctuation(vacancy.applicationInstructions);
+    if (contactClean && isMeaningfulVacancyValue(contactClean) && !isBareGenericCityOnly(contactClean) && (PHYSICAL_ADDRESS_SIGNAL_REGEX.test(contactClean) || isPhysicalMethod && contactClean.length >= 10)) {
+      physicalAddress = contactClean;
+    } else if (instrClean && isMeaningfulVacancyValue(instrClean) && !GENERIC_INSTRUCTIONS_BOILERPLATE_REGEX.test(instrClean) && PHYSICAL_ADDRESS_SIGNAL_REGEX.test(instrClean) && instrClean.length >= 12) {
+      physicalAddress = instrClean;
+    }
+  }
+  if (physicalAddress) {
+    channels.push("physical");
+  }
+  return {
+    valid: channels.length > 0,
+    channels,
+    directUrl,
+    directEmail,
+    physicalAddress
+  };
+}
+function hasVacancyRequirements(vacancy) {
+  if (!vacancy) return false;
+  if (isMeaningfulVacancyValue(vacancy.educationQualification) && String(vacancy.educationQualification).trim().length >= 3) {
+    return true;
+  }
+  if (isMeaningfulVacancyValue(vacancy.requiredFieldOfStudy) && String(vacancy.requiredFieldOfStudy).trim().length >= 3) {
+    return true;
+  }
+  if (isMeaningfulVacancyValue(vacancy.experienceYears) && String(vacancy.experienceYears).trim().length >= 2) {
+    return true;
+  }
+  if (Array.isArray(vacancy.requiredSkills) && vacancy.requiredSkills.some((s) => isMeaningfulVacancyValue(s) && String(s).trim().length >= 2)) {
+    return true;
+  }
+  if (isMeaningfulVacancyValue(vacancy.specialRequirements) && String(vacancy.specialRequirements).trim().length >= 5) {
+    return true;
+  }
+  const desc = stripEdgePunctuation(vacancy.description);
+  if (desc.length >= 45 && isMeaningfulVacancyValue(desc) && /\b(?:degree|diploma|bachelor|master|bsc|ba\b|msc|mba|phd|tvet|level\s+[iv1-5]|qualification|requirement|experience|years?|skills?|proficiency|certification|license|competenc|background|knowledge|focus\s*:)/i.test(
+    desc
+  )) {
+    return true;
+  }
+  return false;
+}
+function hasVacancyMethodToApply(vacancy) {
+  if (!vacancy) return false;
+  const method = stripEdgePunctuation(vacancy.applicationMethod);
+  const instructions = stripEdgePunctuation(vacancy.applicationInstructions);
+  const hasRealMethod = Boolean(method && isMeaningfulVacancyValue(method));
+  const hasRealInstructions = Boolean(
+    instructions && instructions.length >= 8 && isMeaningfulVacancyValue(instructions) && !GENERIC_INSTRUCTIONS_BOILERPLATE_REGEX.test(instructions)
+  );
+  return hasRealMethod && hasRealInstructions;
+}
+function isInvalidHeaderOnlyTitle(title, org) {
+  const t = stripEdgePunctuation(title).toLowerCase();
+  const o = stripEdgePunctuation(org).toLowerCase();
+  if (!t || t.length < 3) return true;
+  if (/\bjob\s+vacancies\b|\bvacancies\s*[–—-]\s*ethiopia\b|^vacancy\s+announcement\s*\d*$/i.test(t)) {
+    return true;
+  }
+  if (t === o && /\bvacancies\b|\bjobs\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+function validateVacancyStrict(vacancy, options) {
+  const missingFields = [];
+  const reasons = [];
+  if (!vacancy || typeof vacancy !== "object") {
+    return {
+      valid: false,
+      hasValidDeadline: false,
+      isExpired: false,
+      missingFields: [
+        "Position / Job Title",
+        "Employer Name",
+        "Application Deadline",
+        "Requirements",
+        "Method to Apply",
+        "Employer Direct Link, Email, or Physical Address"
+      ],
+      reasons: ["Vacancy data is empty."],
+      channels: []
+    };
+  }
+  const title = stripEdgePunctuation(vacancy.title);
+  const org = stripEdgePunctuation(vacancy.organization);
+  if (!title || !isMeaningfulVacancyValue(title) || isInvalidHeaderOnlyTitle(title, org)) {
+    missingFields.push("Position / Job Title");
+    reasons.push("Position / Job Title is missing or invalid.");
+  }
+  if (!org || org.length < 2 || !isMeaningfulVacancyValue(org)) {
+    missingFields.push("Employer Name");
+    reasons.push("Employer / Organization Name is missing.");
+  }
+  const deadlineInfo = parseValidDeadline(vacancy.applicationDeadline);
+  if (!deadlineInfo.hasValidDeadline) {
+    missingFields.push("Application Deadline");
+    reasons.push(
+      "Application Deadline is missing or not a valid calendar date (jobs without a real deadline are never allowed and are permanently deleted)."
+    );
+  } else if (!options?.allowExpired && deadlineInfo.isExpired) {
+    missingFields.push("Open Future Deadline (Current deadline expired)");
+    reasons.push(`Application Deadline (${vacancy.applicationDeadline}) has already expired.`);
+  }
+  if (!hasVacancyRequirements(vacancy)) {
+    missingFields.push("Requirements (Education, Experience, or Skills)");
+    reasons.push("Job requirements (qualification, experience, field of study, or skills) are missing.");
+  }
+  if (!hasVacancyMethodToApply(vacancy)) {
+    missingFields.push("Method to Apply & Instructions");
+    reasons.push("Method to apply and clear application instructions are missing.");
+  }
+  const channelCheck = extractDirectEmployerChannels(vacancy);
+  if (!channelCheck.valid) {
+    missingFields.push("Employer Direct Link, Email, or Physical Address");
+    reasons.push(
+      "At least one direct employer apply channel is required (official employer direct URL, employer email address, or physical submission address)."
+    );
+  }
+  return {
+    valid: missingFields.length === 0,
+    hasValidDeadline: deadlineInfo.hasValidDeadline,
+    isExpired: deadlineInfo.isExpired,
+    missingFields,
+    reasons,
+    channels: channelCheck.channels
+  };
+}
+function partitionVacanciesByDeadline(vacancies) {
+  const withDeadline = [];
+  const withoutDeadline = [];
+  for (const v of vacancies || []) {
+    if (hasValidVacancyDeadline(v)) {
+      withDeadline.push(v);
+    } else {
+      withoutDeadline.push(v);
+    }
+  }
+  return { withDeadline, withoutDeadline };
+}
+function validateTelegramPostContentStrict(plainText) {
+  const text = String(plainText || "");
+  const violations = [];
+  if (/https?:\/\/\S+/i.test(text) || /\bwww\.[^\s]+/i.test(text) || /\bt\.me\/\S+/i.test(text)) {
+    violations.push("Contains a URL or web link in Telegram post text.");
+  }
+  if (/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(text)) {
+    violations.push("Contains an email address in Telegram post text.");
+  }
+  if (/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|et|tech|io|co|gov|edu|info)(?:\/\S*)?/i.test(text)) {
+    violations.push("Contains a website domain in Telegram post text.");
+  }
+  if (/(?:\+251[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3,4}|\b0[19]\d[\s-]?\d{3}[\s-]?\d{4}\b)/.test(text)) {
+    violations.push("Contains a phone number in Telegram post text.");
+  }
+  if (/\b(?:how\s+to\s+apply\s*:|application\s+method\s*:|method\s+to\s+apply\s*:|apply\s+via\s*:|send\s+(?:your\s+)?cv\s+to|submit\s+in\s+person|p\.?\s*o\.?\s*box\s*\d+)\b/i.test(
+    text
+  )) {
+    violations.push("Contains application method or submission instructions in Telegram post text.");
+  }
+  return {
+    safe: violations.length === 0,
+    violations
   };
 }
 
@@ -1416,13 +2112,57 @@ function registerUserNotificationAndAnalyticsRoutes(ctx) {
       return null;
     }
   }
+  let vacanciesCatalogMemCache = null;
+  let vacanciesCatalogMtimeMs = 0;
   function loadVacanciesCatalog() {
-    const list = loadJsonFileSafe(VACANCIES_CATALOG_FILE, []);
-    return Array.isArray(list) ? list : [];
+    try {
+      if (fs.existsSync(VACANCIES_CATALOG_FILE)) {
+        const stat = fs.statSync(VACANCIES_CATALOG_FILE);
+        if (vacanciesCatalogMemCache && stat.mtimeMs === vacanciesCatalogMtimeMs) {
+          return vacanciesCatalogMemCache;
+        }
+        const rawList2 = loadJsonFileSafe(VACANCIES_CATALOG_FILE, []);
+        const safeRaw = Array.isArray(rawList2) ? rawList2 : [];
+        const { withDeadline: withDeadline2, withoutDeadline } = partitionVacanciesByDeadline(safeRaw);
+        if (withoutDeadline.length > 0) {
+          console.warn(
+            `[HOPELAND AUTO-PURGE] Permanently deleting ${withoutDeadline.length} vacancy(ies) with no valid deadline from server catalog.`
+          );
+          try {
+            ensureRuntimeDataDir();
+            writeJsonFileAtomic(VACANCIES_CATALOG_FILE, withDeadline2);
+            vacanciesCatalogMtimeMs = fs.statSync(VACANCIES_CATALOG_FILE).mtimeMs;
+          } catch {
+            vacanciesCatalogMtimeMs = stat.mtimeMs;
+          }
+        } else {
+          vacanciesCatalogMtimeMs = stat.mtimeMs;
+        }
+        vacanciesCatalogMemCache = withDeadline2;
+        return vacanciesCatalogMemCache;
+      }
+    } catch {
+    }
+    if (vacanciesCatalogMemCache) return vacanciesCatalogMemCache;
+    const rawList = loadJsonFileSafe(VACANCIES_CATALOG_FILE, []);
+    const { withDeadline } = partitionVacanciesByDeadline(Array.isArray(rawList) ? rawList : []);
+    vacanciesCatalogMemCache = withDeadline;
+    return vacanciesCatalogMemCache;
   }
   function saveVacanciesCatalog(list) {
+    const safeList = Array.isArray(list) ? list.filter((v) => hasValidVacancyDeadline(v)) : [];
     ensureRuntimeDataDir();
-    writeJsonFileAtomic(VACANCIES_CATALOG_FILE, list);
+    writeJsonFileAtomic(VACANCIES_CATALOG_FILE, safeList);
+    vacanciesCatalogMemCache = safeList;
+    try {
+      vacanciesCatalogMtimeMs = fs.statSync(VACANCIES_CATALOG_FILE).mtimeMs;
+    } catch {
+      vacanciesCatalogMtimeMs = Date.now();
+    }
+  }
+  try {
+    loadVacanciesCatalog();
+  } catch {
   }
   function loadAllRecommendations() {
     const data = loadJsonFileSafe(USER_RECOMMENDATIONS_FILE, {});
@@ -3275,6 +4015,13 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       syncedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
   });
+  app.get("/api/vacancies", (_req, res) => {
+    const list = loadVacanciesCatalog().filter((v) => v && v.status === "published" && hasValidVacancyDeadline(v)).sort(
+      (a, b) => new Date(b.publishedAt || b.createdAt || 0).getTime() - new Date(a.publishedAt || a.createdAt || 0).getTime()
+    );
+    res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=60");
+    res.json({ success: true, total: list.length, vacancies: list });
+  });
   app.get("/api/vacancies/:id", (req, res) => {
     const rawId = decodeURIComponent(String(req.params.id || "")).trim();
     if (!rawId) {
@@ -3283,12 +4030,13 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     }
     const list = loadVacanciesCatalog();
     const found = list.find(
-      (v) => v && v.status === "published" && (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
+      (v) => v && v.status === "published" && hasValidVacancyDeadline(v) && (String(v.id) === rawId || String(v.id).toLowerCase() === rawId.toLowerCase())
     );
     if (!found) {
       res.status(404).json({ error: "Vacancy not found" });
       return;
     }
+    res.setHeader("Cache-Control", "public, max-age=20, stale-while-revalidate=60");
     res.json({ success: true, vacancy: found });
   });
   app.post("/api/vacancies/sync", async (req, res) => {
@@ -3325,8 +4073,28 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     );
     let newlyPublishedOrUpdatedId = changedVacancyId || "";
     let resolvedChangeType = changeType;
+    const deletedNoDeadlineIds = [];
+    const rejectedIncomplete = [];
     for (const item of incomingList) {
       if (!item?.id) continue;
+      if (!hasValidVacancyDeadline(item)) {
+        map.delete(item.id);
+        changedSet.delete(String(item.id));
+        deletedNoDeadlineIds.push(String(item.id));
+        continue;
+      }
+      if (mode !== "seed_if_empty" && item.status === "published") {
+        const validation = validateVacancyStrict(item, { allowExpired: false });
+        if (!validation.valid) {
+          changedSet.delete(String(item.id));
+          rejectedIncomplete.push({
+            id: String(item.id),
+            title: String(item.title || "Untitled"),
+            missingFields: validation.missingFields
+          });
+          continue;
+        }
+      }
       const prev = map.get(item.id);
       if (!prev && item.status === "published") {
         changedSet.add(item.id);
@@ -3343,7 +4111,7 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       }
       map.set(item.id, item);
     }
-    const merged = Array.from(map.values());
+    const merged = Array.from(map.values()).filter((v) => hasValidVacancyDeadline(v));
     saveVacanciesCatalog(merged);
     const changedIds = Array.from(changedSet);
     let notificationsDispatched = 0;
@@ -3381,6 +4149,8 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     res.json({
       success: true,
       total: merged.length,
+      deletedNoDeadlineIds,
+      rejectedIncomplete,
       backgroundMatchingTriggered: true,
       notifiedUsersCount,
       notificationsDispatched,
@@ -4461,8 +5231,8 @@ async function buildExpressApp() {
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
   const UPLOADS_DIR = path2.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
-    if (!fs.existsSync(UPLOADS_DIR)) {
-      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs2.existsSync(UPLOADS_DIR)) {
+      fs2.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
   } catch {
   }
@@ -4650,21 +5420,21 @@ async function buildExpressApp() {
       let title = titleMatch ? titleMatch[1].trim() : "";
       if (!title) {
         const titleLine = lines.find(
-          (l) => /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista|coordinator|teller|analyst)/i.test(l)
+          (l) => /(?:officer|manager|expert|assistant|director|specialist|engineer|developer|accountant|auditor|receptionist|waiter|waitress|cashier|clerk|driver|operator|nurse|doctor|pharmacist|chef|barista|coordinator|teller|analyst|technician|supervisor|consultant|advisor|lecturer|teacher|midwife|lawyer)/i.test(l)
         );
-        title = titleLine || lines[0] || "Job Vacancy";
+        title = titleLine || "";
       }
       title = title.replace(/^[-*•\d\.\)\s]+/, "").replace(/[:;-]+$/, "").trim();
       const orgMatch = block.match(/(?:Organization|Employer|Hiring Organization|Company|Bank|Hotel)\s*:\s*([^\n\r]+)/i);
       let organization = orgMatch ? orgMatch[1].trim() : "";
       if (!organization) {
         const orgLine = lines.find(
-          (l) => /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|unhcr|wfp|msf|oxfam|save the children|world vision|care|plan international|icrc|irc|mercy corps|plc|p\.l\.c|share company|s\.c\.?|association|ngo|hospital|clinic|university|college|corporation|enterprise)/i.test(l) && l !== title
+          (l) => /(?:hotel|guest house|resort|bank|microfinance|embassy|unicef|undp|unhcr|wfp|msf|oxfam|save the children|world vision|care|plan international|icrc|irc|mercy corps|plc|p\.l\.c|share company|s\.c\.?|association|ngo|hospital|clinic|university|college|corporation|enterprise|authority|ministry|foundation|agency|institute)/i.test(l) && l !== title
         );
-        organization = orgLine || (lines.length > 1 && lines[0] !== title ? lines[0] : "Ethiopian Organization");
+        organization = orgLine || "";
       }
       organization = organization.replace(/^[-*•\d\.\)\s]+/, "").replace(/[:;-]+$/, "").trim();
-      const locMatch = block.match(/(?:Location|Place of Work|Duty Station|Address)\s*:\s*([^\n\r]+)/i);
+      const locMatch = block.match(/(?:Location|Place of Work|Duty Station|Work Location)\s*:\s*([^\n\r]+)/i);
       let location = locMatch ? locMatch[1].trim() : "";
       if (!location) {
         if (/bole|addis ababa|sheger|finfinne/i.test(block)) location = "Addis Ababa";
@@ -4680,47 +5450,48 @@ async function buildExpressApp() {
         else if (/remote/i.test(block)) location = "Remote / Ethiopia";
         else location = "Addis Ababa, Ethiopia";
       }
-      const deadlineMatch = block.match(/(?:Deadline|Closing Date|Apply before|Application Deadline)\s*:\s*([^\n\r]+)/i);
-      const deadline = deadlineMatch ? deadlineMatch[1].trim() : "Not specified in the original vacancy";
-      const salaryMatch = block.match(/(?:Salary|Remuneration|Pay)\s*:\s*([^\n\r]+)/i);
-      const salary = salaryMatch ? salaryMatch[1].trim() : "Attractive / Per Company Scale";
-      const expMatch = block.match(/(?:Experience|Work Experience)\s*:\s*([^\n\r]+)/i);
-      const experienceYears = expMatch ? expMatch[1].trim() : "Not specified in the original vacancy";
-      const eduMatch = block.match(/(?:Education|Qualification|Qualifications|Educational Background)\s*:\s*([^\n\r]+)/i);
-      const educationQualification = eduMatch ? eduMatch[1].trim() : "Not specified in the original vacancy";
-      const fieldMatch = block.match(/(?:Field of Study|Discipline|Major)\s*:\s*([^\n\r]+)/i);
-      const requiredFieldOfStudy = fieldMatch ? fieldMatch[1].trim() : educationQualification;
-      const respMatch = block.match(/(?:Responsibilities|Duties|Job Description|Overview)\s*:\s*([^\n\r]+)/i);
+      const deadlineMatch = block.match(/(?:Application\s+Deadline|Deadline|Closing\s+Date|Apply\s+before|Closes?\s+on|Due\s+Date)\s*:\s*([^\n\r]+)/i);
+      const deadline = deadlineMatch ? deadlineMatch[1].trim() : "";
+      const salaryMatch = block.match(/(?:Salary|Remuneration|Pay|Compensation)\s*:\s*([^\n\r]+)/i);
+      const salary = salaryMatch ? salaryMatch[1].trim() : "";
+      const expMatch = block.match(/(?:Work\s+Experience|Experience)\s*:\s*([^\n\r]+)/i);
+      const experienceYears = expMatch ? expMatch[1].trim() : "";
+      const eduMatch = block.match(/(?:Education|Qualification|Qualifications|Educational\s+Background|Minimum\s+Requirements?|Requirements?|Eligibility)\s*:\s*([^\n\r]+)/i);
+      const educationQualification = eduMatch ? eduMatch[1].trim() : "";
+      const fieldMatch = block.match(/(?:Field\s+of\s+Study|Discipline|Major)\s*:\s*([^\n\r]+)/i);
+      const requiredFieldOfStudy = fieldMatch ? fieldMatch[1].trim() : "";
+      const specialReqMatch = block.match(/(?:Special\s+Requirements?|Other\s+Requirements?|Skills|Competencies)\s*:\s*([^\n\r]+)/i);
+      const specialRequirements = specialReqMatch ? specialReqMatch[1].trim() : "";
+      const respMatch = block.match(/(?:Responsibilities|Duties|Job\s+Description|Overview)\s*:\s*([^\n\r]+)/i);
       const responsibilities = respMatch ? [respMatch[1].trim()] : [];
       const emailMatch = block.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
       const applicationEmail = emailMatch ? emailMatch[1] : "";
       const urlMatch = block.match(/(https?:\/\/[^\s\)]+)/i);
-      const applicationUrl = urlMatch ? urlMatch[1] : "";
-      const methodMatch = block.match(/(?:Application Method|How to Apply|Apply Via)\s*:\s*([^\n\r]+)/i);
-      let applicationMethod = "Online / In-Person";
+      const applicationUrl = urlMatch ? urlMatch[1].replace(/[),.;]+$/, "") : "";
+      const physicalMatch = block.match(/(?:Physical\s+Address|Submission\s+Address|Office\s+Address|Address|In[\s-]?Person\s+Address|Postal\s+Address|P\.?\s*O\.?\s*Box)\s*:\s*([^\n\r]+)/i);
+      const poBoxInlineMatch = block.match(/(P\.?\s*O\.?\s*Box\s*[:#]?\s*[A-Za-z0-9\-\s,\/]{2,60})/i);
+      const physicalAddress = physicalMatch ? physicalMatch[1].trim() : poBoxInlineMatch ? poBoxInlineMatch[1].trim() : "";
+      const methodMatch = block.match(/(?:Application\s+Method|Method\s+to\s+Apply|How\s+to\s+Apply|Apply\s+Via|Application\s+Instructions?)\s*:\s*([^\n\r]+)/i);
+      let applicationMethod = "";
       if (applicationUrl) applicationMethod = "Online URL";
       else if (applicationEmail) applicationMethod = "Email";
-      else if (/in person|physical|head office/i.test(block)) applicationMethod = "In-Person / Physical";
-      const applicationInstructions = methodMatch ? methodMatch[1].trim() : applicationUrl ? `Apply online at ${applicationUrl}` : applicationEmail ? `Send CV to ${applicationEmail}` : "Submit application as indicated in vacancy description.";
+      else if (physicalAddress || /\b(?:in[\s-]?person|physically|head\s+office|hr\s+office|walk[\s-]?in|p\.?\s*o\.?\s*box)\b/i.test(block)) {
+        applicationMethod = /p\.?\s*o\.?\s*box|postal|mail/i.test(physicalAddress || block) ? "Postal / Mail" : "In-Person / Physical";
+      } else if (methodMatch) {
+        applicationMethod = "Other";
+      }
+      const applicationInstructions = methodMatch ? methodMatch[1].trim() : applicationUrl ? `Apply directly via official employer link: ${applicationUrl}` : applicationEmail ? `Send your application and CV directly to ${applicationEmail}` : physicalAddress ? `Submit your application in person / by post to: ${physicalAddress}` : "";
       const phoneMatch = block.match(/(?:\+251\s*\d{1,3}[\s-]?\d{3}[\s-]?\d{3,4}|09\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
-      const contactInfo = phoneMatch ? `Phone: ${phoneMatch[0]}` : locMatch ? locMatch[1].trim() : location;
+      const contactInfo = physicalAddress || (phoneMatch ? `Phone: ${phoneMatch[0]}` : "");
       const category = inferEthiopianCategory(title, organization, block);
       const draftObj = {
         title,
         organization,
         category,
-        description: block,
-        responsibilities,
-        requiredFieldOfStudy
-      };
-      return {
-        title,
-        organization,
-        category,
         location,
         employmentType: /contract/i.test(block) ? "Contract" : /part[\s-]?time/i.test(block) ? "Part-time" : /intern/i.test(block) ? "Internship" : "Full-time",
-        vacanciesCount: "Not specified in the original vacancy",
-        jobGrade: "Not specified in the original vacancy",
+        vacanciesCount: "",
+        jobGrade: "",
         salary,
         educationQualification,
         requiredFieldOfStudy,
@@ -4732,18 +5503,23 @@ async function buildExpressApp() {
         applicationMethod,
         applicationEmail,
         applicationUrl,
+        physicalAddress,
         applicationInstructions,
         applicationDeadline: deadline,
         contactInfo,
         languageRequirements: "English and Amharic",
-        ageRequirements: "Not specified in the original vacancy",
-        genderRequirements: "Not specified in the original vacancy",
-        specialRequirements: "Not specified in the original vacancy",
-        referenceNumber: "",
-        missingFields: [],
+        ageRequirements: "",
+        genderRequirements: "",
+        specialRequirements,
+        referenceNumber: ""
+      };
+      const strictCheck = validateVacancyStrict(draftObj, { allowExpired: false });
+      return {
+        ...draftObj,
+        missingFields: strictCheck.missingFields,
         broadCategory: classifyBroadCategoryServer(draftObj),
         isWashNgo: isWashNgoVacancyServer(draftObj),
-        isExpired: isVacancyDeadlineExpiredServer(deadline)
+        isExpired: strictCheck.isExpired
       };
     });
   }
@@ -4757,13 +5533,14 @@ async function buildExpressApp() {
       const smartPreSplit = parseVacanciesSmartFallback(text);
       const useDirectBatchEngine = smartPreSplit.length >= 12;
       const systemInstruction = `You are the specialized vacancy extraction parser for HOPELAND JOBS in Ethiopia.
-The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, and employers.
+The website owner personally collected this pasted vacancy text from Ethiopian banks, embassies, NGOs, hotels, tourism firms, healthcare, engineering, and other employers.
 
-CRITICAL INSTRUCTIONS:
+CRITICAL STRICT RULES:
 1. Detect every single separate vacancy in the text (support 50, 100 or more vacancies without dropping any).
-2. NEVER invent fake vacancies, imaginary organizations, or synthetic URLs. Preserve all real details faithfully.
-3. If any field was not specified in the pasted text, you MUST output: "Not specified in the original vacancy".
-4. Assign every vacancy to EXACTLY ONE of the following 16 approved categories:
+2. NEVER invent, guess, or fabricate a deadline, employer name, job title, requirements, application method, application instructions, URL, email, or physical address if it is NOT explicitly present in the pasted text.
+3. If any field is NOT explicitly present in the pasted text, output an empty string "" (DO NOT invent placeholders or boilerplate text).
+4. Extract exact employer direct apply channels faithfully into applicationUrl, applicationEmail, and physicalAddress (office/in-person/P.O. Box submission address).
+5. Assign every vacancy to EXACTLY ONE of the following 17 approved categories:
    - "Banking and Financial Institutions"
    - "Microfinance Institutions"
    - "Embassy and Diplomatic Jobs"
@@ -4780,7 +5557,8 @@ CRITICAL INSTRUCTIONS:
    - "Accounting and Finance"
    - "Internships and Graduate Trainee Programs"
    - "Remote and International Jobs"
-5. Return a clean, structured JSON array conforming to the specified responseSchema.`;
+   - "Other Sectors and Professions"
+6. Return a clean, structured JSON array conforming to the specified responseSchema.`;
       const prompt = `Please parse all individual vacancies from the following text:
 
 ${text}`;
@@ -4803,17 +5581,17 @@ ${text}`;
                   items: {
                     type: Type.OBJECT,
                     properties: {
-                      title: { type: Type.STRING, description: "Official Job Title" },
-                      organization: { type: Type.STRING, description: "Organization / Company Name" },
-                      category: { type: Type.STRING, description: "One of the exact 16 categories" },
-                      location: { type: Type.STRING, description: "Ethiopian location or Remote" },
+                      title: { type: Type.STRING, description: "Official Job Title (empty string if absent)" },
+                      organization: { type: Type.STRING, description: "Employer / Organization Name (empty string if absent)" },
+                      category: { type: Type.STRING, description: "One of the exact 17 categories" },
+                      location: { type: Type.STRING, description: "Ethiopian city/location or Remote" },
                       employmentType: { type: Type.STRING, description: "Full-time, Part-time, Contract, Permanent, Internship, Remote, Other" },
-                      vacanciesCount: { type: Type.STRING, description: "Number of vacancies or Not specified" },
+                      vacanciesCount: { type: Type.STRING, description: "Number of vacancies if stated" },
                       jobGrade: { type: Type.STRING, description: "Job grade or level if stated" },
-                      salary: { type: Type.STRING, description: "Salary in ETB or attractive / company scale" },
-                      educationQualification: { type: Type.STRING, description: "Degree, Diploma, Masters, etc." },
-                      requiredFieldOfStudy: { type: Type.STRING, description: "Field of study required" },
-                      experienceYears: { type: Type.STRING, description: "Required years of experience" },
+                      salary: { type: Type.STRING, description: "Salary if explicitly stated, else empty string" },
+                      educationQualification: { type: Type.STRING, description: "Required education/qualification (empty string if absent)" },
+                      requiredFieldOfStudy: { type: Type.STRING, description: "Field of study required (empty string if absent)" },
+                      experienceYears: { type: Type.STRING, description: "Required years of experience (empty string if absent)" },
                       requiredSkills: {
                         type: Type.ARRAY,
                         items: { type: Type.STRING },
@@ -4830,16 +5608,17 @@ ${text}`;
                         items: { type: Type.STRING },
                         description: "Required documents to apply"
                       },
-                      applicationMethod: { type: Type.STRING, description: "Online URL, Email, In-Person / Physical, Postal / Mail, or Other" },
-                      applicationEmail: { type: Type.STRING, description: "Employer application email if provided" },
-                      applicationUrl: { type: Type.STRING, description: "Employer application link if provided" },
-                      applicationInstructions: { type: Type.STRING, description: "How to apply instructions" },
-                      applicationDeadline: { type: Type.STRING, description: "Deadline date or duration" },
-                      contactInfo: { type: Type.STRING, description: "Phone, address, or PO Box" },
+                      applicationMethod: { type: Type.STRING, description: "Online URL, Email, In-Person / Physical, Postal / Mail, or empty string if not stated" },
+                      applicationEmail: { type: Type.STRING, description: "Employer direct application email if provided, else empty string" },
+                      applicationUrl: { type: Type.STRING, description: "Employer direct application link if provided, else empty string" },
+                      physicalAddress: { type: Type.STRING, description: "Employer physical office or P.O. Box submission address if provided, else empty string" },
+                      applicationInstructions: { type: Type.STRING, description: "Exact how to apply instructions from text (empty string if absent)" },
+                      applicationDeadline: { type: Type.STRING, description: "Exact calendar deadline date from text (empty string if absent)" },
+                      contactInfo: { type: Type.STRING, description: "Phone, office address, or PO Box if stated" },
                       languageRequirements: { type: Type.STRING, description: "Language skills required" },
                       ageRequirements: { type: Type.STRING, description: "Age criteria if officially specified" },
                       genderRequirements: { type: Type.STRING, description: "Gender criteria if officially specified" },
-                      specialRequirements: { type: Type.STRING, description: "Special certifications or licenses" },
+                      specialRequirements: { type: Type.STRING, description: "Special certifications, licenses, or extra requirements" },
                       referenceNumber: { type: Type.STRING, description: "Job code or announcement reference number" },
                       missingFields: {
                         type: Type.ARRAY,
@@ -4877,55 +5656,58 @@ ${text}`;
       const formattedVacancies = rawVacancies.map((item, idx) => {
         const id = `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`;
         const resolvedCategory = item.category || inferEthiopianCategory(item.title || "", item.organization || "", item.description || "");
-        const enrichedObj = {
-          ...item,
-          category: resolvedCategory
-        };
-        const isExpired = isVacancyDeadlineExpiredServer(item.applicationDeadline);
-        return {
+        const normalizedItem = {
           id,
-          title: item.title || "Untitled Vacancy",
-          organization: item.organization || "Not specified in the original vacancy",
+          title: String(item.title || "").trim(),
+          organization: String(item.organization || "").trim(),
           category: resolvedCategory,
-          location: item.location || "Addis Ababa",
+          location: String(item.location || "").trim() || "Addis Ababa",
           employmentType: item.employmentType || "Full-time",
-          vacanciesCount: item.vacanciesCount || "Not specified in the original vacancy",
-          jobGrade: item.jobGrade || "Not specified in the original vacancy",
-          salary: item.salary || "Not specified in the original vacancy",
-          educationQualification: item.educationQualification || "Not specified in the original vacancy",
-          requiredFieldOfStudy: item.requiredFieldOfStudy || "Not specified in the original vacancy",
-          experienceYears: item.experienceYears || "Not specified in the original vacancy",
+          vacanciesCount: String(item.vacanciesCount || "").trim(),
+          jobGrade: String(item.jobGrade || "").trim(),
+          salary: String(item.salary || "").trim(),
+          educationQualification: String(item.educationQualification || "").trim(),
+          requiredFieldOfStudy: String(item.requiredFieldOfStudy || "").trim(),
+          experienceYears: String(item.experienceYears || "").trim(),
           requiredSkills: Array.isArray(item.requiredSkills) ? item.requiredSkills : [],
-          description: item.description || "Not specified in the original vacancy",
+          description: String(item.description || "").trim(),
           responsibilities: Array.isArray(item.responsibilities) ? item.responsibilities : [],
           requiredDocuments: Array.isArray(item.requiredDocuments) ? item.requiredDocuments : ["CV", "Relevant Credentials"],
-          applicationMethod: item.applicationMethod || "Online URL",
-          applicationEmail: item.applicationEmail || "",
-          applicationUrl: item.applicationUrl || "",
-          applicationInstructions: item.applicationInstructions || "Please follow employer instructions carefully.",
-          applicationDeadline: item.applicationDeadline || "Not specified in the original vacancy",
-          contactInfo: item.contactInfo || "Not specified in the original vacancy",
-          languageRequirements: item.languageRequirements || "English and Amharic",
-          ageRequirements: item.ageRequirements || "Not specified in the original vacancy",
-          genderRequirements: item.genderRequirements || "Not specified in the original vacancy",
-          specialRequirements: item.specialRequirements || "Not specified in the original vacancy",
-          referenceNumber: item.referenceNumber || "",
-          status: isExpired ? "expired" : "pending_review",
+          applicationMethod: String(item.applicationMethod || "").trim(),
+          applicationEmail: String(item.applicationEmail || "").trim(),
+          applicationUrl: String(item.applicationUrl || "").trim(),
+          physicalAddress: String(item.physicalAddress || "").trim(),
+          applicationInstructions: String(item.applicationInstructions || "").trim(),
+          applicationDeadline: String(item.applicationDeadline || "").trim(),
+          contactInfo: String(item.contactInfo || "").trim(),
+          languageRequirements: String(item.languageRequirements || "").trim() || "English and Amharic",
+          ageRequirements: String(item.ageRequirements || "").trim(),
+          genderRequirements: String(item.genderRequirements || "").trim(),
+          specialRequirements: String(item.specialRequirements || "").trim(),
+          referenceNumber: String(item.referenceNumber || "").trim()
+        };
+        const strictCheck = validateVacancyStrict(normalizedItem, { allowExpired: false });
+        return {
+          ...normalizedItem,
+          status: strictCheck.isExpired ? "expired" : "pending_review",
           featured: false,
           viewsCount: 0,
           sharesCount: 0,
           createdAt: now,
           updatedAt: now,
           isAiParsed: true,
-          missingFields: Array.isArray(item.missingFields) ? item.missingFields : [],
-          broadCategory: classifyBroadCategoryServer(enrichedObj),
-          isWashNgo: isWashNgoVacancyServer(enrichedObj),
-          isExpired
+          missingFields: strictCheck.missingFields,
+          strictValidationPassed: strictCheck.valid,
+          broadCategory: classifyBroadCategoryServer(normalizedItem),
+          isWashNgo: isWashNgoVacancyServer(normalizedItem),
+          isExpired: strictCheck.isExpired
         };
       });
       res.json({
         success: true,
         totalDetected: formattedVacancies.length,
+        validCount: formattedVacancies.filter((v) => v.strictValidationPassed).length,
+        rejectedIncompleteCount: formattedVacancies.filter((v) => !v.strictValidationPassed).length,
         vacancies: formattedVacancies,
         engine: engineUsed
       });
@@ -4934,20 +5716,27 @@ ${text}`;
       try {
         const fallbackList = parseVacanciesSmartFallback(req.body.text || "");
         const now = (/* @__PURE__ */ new Date()).toISOString();
-        const formatted = fallbackList.map((item, idx) => ({
-          ...item,
-          id: `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-          status: item.isExpired ? "expired" : "pending_review",
-          featured: false,
-          viewsCount: 0,
-          sharesCount: 0,
-          createdAt: now,
-          updatedAt: now,
-          isAiParsed: true
-        }));
+        const formatted = fallbackList.map((item, idx) => {
+          const strictCheck = validateVacancyStrict(item, { allowExpired: false });
+          return {
+            ...item,
+            id: `job_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+            status: strictCheck.isExpired ? "expired" : "pending_review",
+            featured: false,
+            viewsCount: 0,
+            sharesCount: 0,
+            createdAt: now,
+            updatedAt: now,
+            isAiParsed: true,
+            missingFields: strictCheck.missingFields,
+            strictValidationPassed: strictCheck.valid
+          };
+        });
         res.json({
           success: true,
           totalDetected: formatted.length,
+          validCount: formatted.filter((v) => v.strictValidationPassed).length,
+          rejectedIncompleteCount: formatted.filter((v) => !v.strictValidationPassed).length,
           vacancies: formatted,
           engine: "smart fallback"
         });
@@ -5194,8 +5983,22 @@ ${text}`;
     try {
       const { candidates = [], existingVacancies = [] } = req.body;
       const duplicatesReport = [];
+      const rejectedIncomplete = [];
       const validCandidates = [];
       candidates.forEach((cand, idx) => {
+        const strictCheck = validateVacancyStrict(cand, { allowExpired: false });
+        if (!strictCheck.valid) {
+          rejectedIncomplete.push({
+            id: cand.id || `rej_${Date.now()}_${idx}`,
+            title: cand.title || "(Missing Position)",
+            organization: cand.organization || "(Missing Employer)",
+            applicationDeadline: cand.applicationDeadline || "(No Deadline)",
+            missingFields: strictCheck.missingFields,
+            reasons: strictCheck.reasons,
+            candidateData: cand
+          });
+          return;
+        }
         let isDup = false;
         let matchedVacancy = null;
         let reason = "";
@@ -5241,6 +6044,7 @@ ${text}`;
             candidateData: cand
           });
         } else {
+          cand.missingFields = [];
           validCandidates.push(cand);
         }
       });
@@ -5248,15 +6052,17 @@ ${text}`;
         totalDetected: candidates.length,
         successfullyOrganized: validCandidates.length,
         duplicatesDetected: duplicatesReport.length,
-        missingInfoCount: validCandidates.filter((v) => v.missingFields && v.missingFields.length > 0).length,
+        rejectedIncompleteCount: rejectedIncomplete.length,
+        missingInfoCount: rejectedIncomplete.length,
         readyForReview: validCandidates.length,
-        readyForPublication: validCandidates.filter((v) => v.title && v.organization && v.category).length
+        readyForPublication: validCandidates.length
       };
       res.json({
         success: true,
         stats,
         validCandidates,
-        duplicatesReport
+        duplicatesReport,
+        rejectedIncomplete
       });
     } catch (error) {
       console.error("Duplicate detection error:", error);
@@ -5411,7 +6217,7 @@ ${text}`;
         mutated = true;
       }
     }
-    if (mutated || !fs.existsSync(DEVELOPER_AUTH_FILE)) {
+    if (mutated || !fs2.existsSync(DEVELOPER_AUTH_FILE)) {
       writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
     }
     return store;
@@ -5547,23 +6353,23 @@ ${text}`;
   function ensureRuntimeDataDir() {
     const dataDir = path2.join(RUNTIME_BASE_DIR, "data");
     try {
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+      if (!fs2.existsSync(dataDir)) {
+        fs2.mkdirSync(dataDir, { recursive: true });
       }
-      if (!fs.existsSync(BACKUPS_DIR)) {
-        fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+      if (!fs2.existsSync(BACKUPS_DIR)) {
+        fs2.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
       const bundledDataDir = path2.join(process.cwd(), "data");
-      if (path2.resolve(dataDir) !== path2.resolve(bundledDataDir) && fs.existsSync(bundledDataDir)) {
-        const entries = fs.readdirSync(bundledDataDir);
+      if (path2.resolve(dataDir) !== path2.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
+        const entries = fs2.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
           const srcPath = path2.join(bundledDataDir, file);
           const destPath = path2.join(dataDir, file);
-          if (!fs.existsSync(destPath)) {
+          if (!fs2.existsSync(destPath)) {
             try {
-              if (fs.statSync(srcPath).isFile()) {
-                fs.copyFileSync(srcPath, destPath);
+              if (fs2.statSync(srcPath).isFile()) {
+                fs2.copyFileSync(srcPath, destPath);
               }
             } catch {
             }
@@ -5576,8 +6382,8 @@ ${text}`;
   }
   function loadJsonFileSafe(filePath, fallback) {
     try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, "utf-8");
+      if (fs2.existsSync(filePath)) {
+        const raw = fs2.readFileSync(filePath, "utf-8");
         if (raw && raw.trim()) {
           return JSON.parse(raw);
         }
@@ -5590,8 +6396,8 @@ ${text}`;
     try {
       ensureRuntimeDataDir();
       const tmpPath = `${filePath}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-      fs.renameSync(tmpPath, filePath);
+      fs2.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+      fs2.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
       console.warn(`Notice: Failed writing ${path2.basename(filePath)}:`, e);
@@ -5673,13 +6479,13 @@ ${text}`;
   function loadPersistedSettings() {
     try {
       let settings = {};
-      if (fs.existsSync(SETTINGS_FILE)) {
-        const raw = fs.readFileSync(SETTINGS_FILE, "utf-8");
+      if (fs2.existsSync(SETTINGS_FILE)) {
+        const raw = fs2.readFileSync(SETTINGS_FILE, "utf-8");
         settings = JSON.parse(raw) || {};
       }
-      if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
+      if (fs2.existsSync(TELEGRAM_CONFIG_FILE)) {
         try {
-          const tgRaw = fs.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
+          const tgRaw = fs2.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
           const tgData = JSON.parse(tgRaw);
           if (tgData?.telegramBotToken) {
             settings.telegramBotToken = tgData.telegramBotToken;
@@ -5755,8 +6561,8 @@ ${text}`;
       if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId || merged.botInstructions !== void 0 || merged.botLastVerifiedAt !== void 0) {
         let existingTg = {};
         try {
-          if (fs.existsSync(TELEGRAM_CONFIG_FILE)) {
-            existingTg = JSON.parse(fs.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
+          if (fs2.existsSync(TELEGRAM_CONFIG_FILE)) {
+            existingTg = JSON.parse(fs2.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
           }
         } catch {
         }
@@ -5816,14 +6622,12 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path2.join(process.cwd(), "firebase-applet-config.json"),
-      path2.join(__dirname, "firebase-applet-config.json"),
-      path2.join(__dirname, "..", "firebase-applet-config.json")
+      path2.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
-        if (fs.existsSync(p)) {
-          const parsed = JSON.parse(fs.readFileSync(p, "utf8"));
+        if (fs2.existsSync(p)) {
+          const parsed = JSON.parse(fs2.readFileSync(p, "utf8"));
           if (parsed?.projectId) {
             return {
               projectId: String(parsed.projectId),
@@ -5839,6 +6643,56 @@ ${text}`;
       firestoreDatabaseId: "ai-studio-dreambigjobs-b797042c-4a25-436e-8ecd-223397ea813f"
     };
   }
+  function detectImageDimensions(buf, mimeType) {
+    try {
+      if (!buf || buf.length < 24) return null;
+      if (buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71 && buf.length >= 24) {
+        return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+      }
+      if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") {
+        const chunk = buf.subarray(12, 16).toString("ascii");
+        if (chunk === "VP8X" && buf.length >= 30) {
+          const width = 1 + (buf[24] | buf[25] << 8 | buf[26] << 16);
+          const height = 1 + (buf[27] | buf[28] << 8 | buf[29] << 16);
+          return { width, height };
+        }
+        if (chunk === "VP8L" && buf.length >= 25) {
+          const b0 = buf[21];
+          const b1 = buf[22];
+          const b2 = buf[23];
+          const b3 = buf[24];
+          const width = 1 + ((b1 & 63) << 8 | b0);
+          const height = 1 + ((b3 & 15) << 10 | b2 << 2 | (b1 & 192) >> 6);
+          return { width, height };
+        }
+        if (chunk === "VP8 " && buf.length >= 30) {
+          const width = buf.readUInt16LE(26) & 16383;
+          const height = buf.readUInt16LE(28) & 16383;
+          return { width, height };
+        }
+      }
+      if (buf[0] === 255 && buf[1] === 216) {
+        let offset = 2;
+        while (offset + 9 < buf.length) {
+          if (buf[offset] !== 255) break;
+          const marker = buf[offset + 1];
+          const segLen = buf.readUInt16BE(offset + 2);
+          if (marker >= 192 && marker <= 195 || marker >= 197 && marker <= 199 || marker >= 201 && marker <= 203 || marker >= 205 && marker <= 207) {
+            const height = buf.readUInt16BE(offset + 5);
+            const width = buf.readUInt16BE(offset + 7);
+            return { width, height };
+          }
+          if (segLen < 2) break;
+          offset += 2 + segLen;
+        }
+      }
+      if (mimeType === "image/svg+xml") {
+        return { width: 512, height: 512 };
+      }
+    } catch {
+    }
+    return null;
+  }
   async function getLiveBrandLogoState() {
     const persisted = loadPersistedSettings() || {};
     const diskUpdatedAt = String(persisted.appLogoUpdatedAt || persisted.updatedAt || "");
@@ -5852,23 +6706,21 @@ ${text}`;
     if (!cachedFirestoreBrandLogo || now - cachedFirestoreBrandLogo.fetchedAt > 20 * 1e3) {
       try {
         const cfg = readFirebaseClientConfigServer();
-        if (cfg?.projectId) {
-          const dbId = encodeURIComponent(cfg.firestoreDatabaseId || "(default)");
-          const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/${dbId}/documents/siteSettings/general`;
-          const resp = await fetch(url, { signal: AbortSignal.timeout(3e3) });
-          if (resp.ok) {
-            const docJson = await resp.json();
-            const f = docJson?.fields || {};
-            cachedFirestoreBrandLogo = {
-              appLogoUrl: String(f.appLogoUrl?.stringValue || "").trim(),
-              appLogo512Url: String(f.appLogo512Url?.stringValue || "").trim(),
-              appLogoMaskable512Url: String(f.appLogoMaskable512Url?.stringValue || "").trim(),
-              appLogoUpdatedAt: String(
-                f.appLogoUpdatedAt?.stringValue || f.updatedAt?.stringValue || ""
-              ).trim(),
-              fetchedAt: now
-            };
-          }
+        const dbId = encodeURIComponent(cfg.firestoreDatabaseId || "(default)");
+        const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/${dbId}/documents/siteSettings/general`;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(3500) });
+        if (resp.ok) {
+          const docJson = await resp.json();
+          const f = docJson?.fields || {};
+          cachedFirestoreBrandLogo = {
+            appLogoUrl: String(f.appLogoUrl?.stringValue || "").trim(),
+            appLogo512Url: String(f.appLogo512Url?.stringValue || "").trim(),
+            appLogoMaskable512Url: String(f.appLogoMaskable512Url?.stringValue || "").trim(),
+            appLogoUpdatedAt: String(
+              f.appLogoUpdatedAt?.stringValue || f.updatedAt?.stringValue || ""
+            ).trim(),
+            fetchedAt: now
+          };
         }
       } catch {
       }
@@ -5930,7 +6782,7 @@ ${text}`;
       path2.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
-      if (fs.existsSync(p)) {
+      if (fs2.existsSync(p)) {
         res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.sendFile(p);
         return;
@@ -5965,16 +6817,63 @@ ${text}`;
       crypto.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
-    const inferIconMime = (src) => {
-      const s = String(src || "");
-      if (s.startsWith("data:image/jpeg")) return "image/jpeg";
-      if (s.startsWith("data:image/webp")) return "image/webp";
-      if (s.startsWith("data:image/svg+xml")) return "image/svg+xml";
-      return "image/png";
-    };
-    const type192 = inferIconMime(brand.appLogoUrl);
-    const type512 = inferIconMime(brand.appLogo512Url || brand.appLogoUrl);
-    const typeMaskable = inferIconMime(brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl);
+    const manifestIcons = [];
+    const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
+    const asset512 = await resolveCustomAppLogoAsset(brand.appLogo512Url || brand.appLogoUrl);
+    const assetMaskable = await resolveCustomAppLogoAsset(
+      brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl
+    );
+    if (asset192 || asset512) {
+      const dims192 = asset192 ? detectImageDimensions(asset192.buffer, asset192.mimeType) : null;
+      const dims512 = asset512 ? detectImageDimensions(asset512.buffer, asset512.mimeType) : null;
+      const dimsMask = assetMaskable ? detectImageDimensions(assetMaskable.buffer, assetMaskable.mimeType) : null;
+      if (asset192 && dims192 && dims192.width >= 144 && dims192.height >= 144) {
+        manifestIcons.push({
+          src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
+          sizes: `${dims192.width}x${dims192.height}`,
+          type: asset192.mimeType,
+          purpose: "any"
+        });
+      }
+      if (asset512 && dims512 && dims512.width >= 144 && dims512.height >= 144 && (!dims192 || dims512.width !== dims192.width || dims512.height !== dims192.height)) {
+        manifestIcons.push({
+          src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
+          sizes: `${dims512.width}x${dims512.height}`,
+          type: asset512.mimeType,
+          purpose: "any"
+        });
+      }
+      if (assetMaskable && dimsMask && dimsMask.width >= 144 && dimsMask.height >= 144) {
+        manifestIcons.push({
+          src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
+          sizes: `${dimsMask.width}x${dimsMask.height}`,
+          type: assetMaskable.mimeType,
+          purpose: "maskable"
+        });
+      }
+    }
+    if (manifestIcons.length === 0) {
+      manifestIcons.push(
+        {
+          src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable"
+        }
+      );
+    }
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.json({
@@ -5987,29 +6886,11 @@ ${text}`;
       display: "standalone",
       display_override: ["window-controls-overlay", "standalone"],
       orientation: "any",
+      prefer_related_applications: false,
       background_color: "#FBFBFA",
       theme_color: "#0B132B",
       categories: ["business", "productivity", "employment"],
-      icons: [
-        {
-          src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
-          sizes: "192x192",
-          type: type192,
-          purpose: "any"
-        },
-        {
-          src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
-          sizes: "512x512",
-          type: type512,
-          purpose: "any"
-        },
-        {
-          src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
-          sizes: "512x512",
-          type: typeMaskable,
-          purpose: "maskable"
-        }
-      ]
+      icons: manifestIcons
     });
   }
   app.get("/api/app-logo", async (_req, res) => {
@@ -6330,8 +7211,8 @@ ${text}`;
   const JOB_APPLICATIONS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
-      if (fs.existsSync(USER_PROFILES_FILE)) {
-        const raw = fs.readFileSync(USER_PROFILES_FILE, "utf-8");
+      if (fs2.existsSync(USER_PROFILES_FILE)) {
+        const raw = fs2.readFileSync(USER_PROFILES_FILE, "utf-8");
         return JSON.parse(raw) || {};
       }
     } catch {
@@ -6375,6 +7256,11 @@ ${text}`;
       experience: Array.isArray(safeIncoming.experience) ? safeIncoming.experience : existing?.experience || [],
       documents: Array.isArray(safeIncoming.documents) ? safeIncoming.documents : existing?.documents || [],
       preferredSectors: Array.isArray(safeIncoming.preferredSectors) ? safeIncoming.preferredSectors : existing?.preferredSectors || (safeIncoming.preferredIndustry ? [safeIncoming.preferredIndustry] : []),
+      customProfessionOrCategory: typeof safeIncoming.customProfessionOrCategory === "string" ? safeIncoming.customProfessionOrCategory : existing?.customProfessionOrCategory || "",
+      additionalRequirements: Array.isArray(safeIncoming.additionalRequirements) ? safeIncoming.additionalRequirements : existing?.additionalRequirements || [],
+      strictLocationMatch: typeof safeIncoming.strictLocationMatch === "boolean" ? safeIncoming.strictLocationMatch : Boolean(existing?.strictLocationMatch),
+      strictEmploymentTypeMatch: typeof safeIncoming.strictEmploymentTypeMatch === "boolean" ? safeIncoming.strictEmploymentTypeMatch : Boolean(existing?.strictEmploymentTypeMatch),
+      minimumSalaryEtb: typeof safeIncoming.minimumSalaryEtb === "string" ? safeIncoming.minimumSalaryEtb : existing?.minimumSalaryEtb || "",
       createdAt: existing?.createdAt || safeIncoming.createdAt || nowIso,
       updatedAt: nowIso
     };
@@ -6384,8 +7270,8 @@ ${text}`;
   }
   function loadJobApplications() {
     try {
-      if (fs.existsSync(JOB_APPLICATIONS_FILE)) {
-        const raw = fs.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
+      if (fs2.existsSync(JOB_APPLICATIONS_FILE)) {
+        const raw = fs2.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
         return JSON.parse(raw) || [];
       }
     } catch {
@@ -6587,7 +7473,7 @@ ${text}`;
       }
       const safeName = `${Date.now()}_${path2.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const filePath = path2.join(UPLOADS_DIR, safeName);
-      fs.writeFileSync(filePath, buffer);
+      fs2.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
         success: true,
@@ -7272,8 +8158,8 @@ ${text}`;
       items: []
     };
     try {
-      if (fs.existsSync(TELEGRAM_QUEUE_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
+      if (fs2.existsSync(TELEGRAM_QUEUE_FILE)) {
+        const parsed = JSON.parse(fs2.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
         return {
           queueState: parsed?.queueState || defaultState,
           publishedRecords: parsed?.publishedRecords || {}
@@ -7286,15 +8172,15 @@ ${text}`;
   function saveTelegramQueueDisk(data) {
     try {
       ensureRuntimeDataDir();
-      fs.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
+      fs2.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_queue.json:", e);
     }
   }
   function loadTelegramLogsDisk() {
     try {
-      if (fs.existsSync(TELEGRAM_LOGS_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
+      if (fs2.existsSync(TELEGRAM_LOGS_FILE)) {
+        const parsed = JSON.parse(fs2.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
         if (Array.isArray(parsed?.logs)) return parsed.logs;
       }
     } catch {
@@ -7311,7 +8197,7 @@ ${text}`;
       ensureRuntimeDataDir();
       const logs = loadTelegramLogsDisk();
       const updated = [full, ...logs].slice(0, 500);
-      fs.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
+      fs2.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_logs.json:", e);
     }
@@ -7334,8 +8220,8 @@ ${text}`;
   }
   function isMeaningfulField(val) {
     const s = String(val || "").trim();
-    if (!s) return false;
-    return !/^not specified(?:\s+in\s+the\s+original\s+vacancy)?$|^not stated$|^n\/a$|^none$/i.test(s);
+    if (!s || s === "-" || s === "\u2014") return false;
+    return !/^(?:not specified(?:\s+in\s+the\s+original\s+vacancy)?|not stated|not mentioned|not available|not disclosed|unknown|tbd|n\/a|none)$/i.test(s);
   }
   function normalizeWebsiteDomain(domainOrUrl) {
     const raw = (domainOrUrl || "").trim();
@@ -7407,220 +8293,56 @@ ${nextPlain.replace(/^🟢(?:\s*⭐)?\s*WASH[^\n]*\s*/i, "")}`;
     };
   }
   function stripUrlsAndEmailsForTelegram(text) {
-    return String(text || "").replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.[^\s]+/gi, "").replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "").replace(/\s{2,}/g, " ").trim();
-  }
-  function buildTelegramAmharicPromoHtml(_baseUrl) {
-    return `\u{1F4E2} <b>\u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!</b>
-
-\u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
-
-\u2705 \u1260\u1290\u1343 \u12A0\u12AB\u12CD\u1295\u1275 \u12ED\u12AD\u1348\u1271\u1362
-\u2705 \u12E8\u130D\u120D \u1355\u122E\u134B\u12ED\u120D\u12CE\u1295 \u1219\u1209 \u1260\u1219\u1209 \u12ED\u1219\u1209\u1362
-\u2705 \u12E8\u1235\u122B \u134D\u120B\u130E\u1275\u12CE\u1295 \u12ED\u121D\u1228\u1321\u1362
-\u2705 \u12E8\u12F5\u1228\u1308\u1339\u1295 \u121B\u1233\u12C8\u1242\u12EB \u12EB\u1265\u1229 (Enable Notifications)\u1362
-
-\u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
-
-\u{1F447} <b>\u12DD\u122D\u12DD\u122D \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12A5\u1293 \u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!</b>`;
-  }
-  function buildTelegramAmharicPromoPlain(_baseUrl) {
-    return `\u{1F4E2} \u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!
-
-\u1260\u12E8\u1240\u1291 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u121B\u1235\u1273\u12C8\u1242\u12EB\u12CE\u127D\u1295 \u1260\u1240\u1325\u1273 \u1208\u121B\u130D\u1298\u1275 \u12A0\u1201\u1291\u1291 \u1260\u12F5\u1228\u1308\u133B\u127D\u1295 \u12ED\u1218\u12DD\u1308\u1261!
-
-\u2705 \u1260\u1290\u1343 \u12A0\u12AB\u12CD\u1295\u1275 \u12ED\u12AD\u1348\u1271\u1362
-\u2705 \u12E8\u130D\u120D \u1355\u122E\u134B\u12ED\u120D\u12CE\u1295 \u1219\u1209 \u1260\u1219\u1209 \u12ED\u1219\u1209\u1362
-\u2705 \u12E8\u1235\u122B \u134D\u120B\u130E\u1275\u12CE\u1295 \u12ED\u121D\u1228\u1321\u1362
-\u2705 \u12E8\u12F5\u1228\u1308\u1339\u1295 \u121B\u1233\u12C8\u1242\u12EB \u12EB\u1265\u1229 (Enable Notifications)\u1362
-
-\u{1F514} \u12A8\u12DA\u12EB\u121D \u12A8\u134D\u120B\u130E\u1275\u12CE \u130B\u122D \u12E8\u121A\u12DB\u1218\u12F1 \u12A0\u12F3\u12F2\u1235 \u12E8\u1235\u122B \u12A5\u12F5\u120E\u127D\u1295 \u1260\u12E8\u1240\u1291 \u12EB\u130D\u1299!
-
-\u{1F447} \u12DD\u122D\u12DD\u122D \u1218\u1228\u1303 \u1208\u121B\u12E8\u1275 \u12A5\u1293 \u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!`;
-  }
-  function formatCategoryHashtagServer(category) {
-    const c = String(category || "").trim().toLowerCase();
-    if (!c) return "#Vacancy";
-    if (c.includes("health")) return "#HealthCare";
-    if (c.includes("banking")) return "#BankingAndFinance";
-    if (c.includes("microfinance")) return "#Microfinance";
-    if (c.includes("ngo")) return "#NGO";
-    if (c.includes("embassy")) return "#EmbassyAndDiplomatic";
-    if (c.includes("it and technology") || c.includes("technology")) return "#ITAndTechnology";
-    if (c.includes("accounting")) return "#AccountingAndFinance";
-    if (c.includes("engineering")) return "#EngineeringAndConstruction";
-    if (c.includes("education")) return "#Education";
-    if (c.includes("hospitality") || c.includes("hotel")) return "#HotelAndHospitality";
-    if (c.includes("tourism")) return "#TourismAndTravel";
-    if (c.includes("government")) return "#Government";
-    if (c.includes("insurance")) return "#Insurance";
-    if (c.includes("internship") || c.includes("trainee")) return "#GraduateTrainee";
-    if (c.includes("remote")) return "#RemoteJobs";
-    if (c.includes("private")) return "#PrivateCompanies";
-    const words = String(category || "").replace(/[^a-zA-Z0-9\s]/g, " ").split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1));
-    return words.length > 0 ? `#${words.join("")}` : "#Vacancy";
-  }
-  function deriveCareerLevelServer(vacancy) {
-    if (isMeaningfulField(vacancy?.jobGrade)) {
-      return truncateText(vacancy.jobGrade, 60);
-    }
-    const expText = String(vacancy?.experienceYears || "").trim();
-    const titleText = String(vacancy?.title || "").toLowerCase();
-    const combined = `${expText.toLowerCase()} ${titleText}`;
-    const numMatch = expText.match(/(\d+)/);
-    const minYears = numMatch ? Number(numMatch[1]) : null;
-    if (/\b(intern|trainee|fresh|graduate|entry)\b/i.test(combined) || minYears === 0) {
-      return "Entry Level (0-1 year)";
-    }
-    if (/\b(director|head|chief|manager|principal|senior|lead)\b/i.test(titleText) || minYears !== null && minYears >= 5) {
-      return expText ? `Senior (${truncateText(expText, 30)})` : "Senior (5-8 years)";
-    }
-    if (minYears !== null && minYears >= 3) {
-      return expText ? `Mid Level (${truncateText(expText, 30)})` : "Mid Level (3-5 years)";
-    }
-    if (minYears !== null && minYears >= 1) {
-      return expText ? `Junior (${truncateText(expText, 30)})` : "Junior (1-3 years)";
-    }
-    return "Mid Level";
-  }
-  function formatDeadlineDisplayServer(deadline) {
-    const s = String(deadline || "").trim();
-    if (!s || !isMeaningfulField(s)) return "";
-    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-      const d = new Date(s);
-      if (!Number.isNaN(d.getTime())) {
-        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      }
-    }
-    return truncateText(s, 60);
-  }
-  function buildRequirementsBulletLinesServer(vacancy, compactForCaption = false) {
-    const bullets = [];
-    const pushClean = (line) => {
-      const cleaned = stripUrlsAndEmailsForTelegram(line).replace(/^[•\-\*]\s*/, "").trim();
-      if (!cleaned || cleaned.length < 3) return;
-      if (!bullets.some((b) => b.toLowerCase() === cleaned.toLowerCase())) {
-        bullets.push(truncateText(cleaned, compactForCaption ? 120 : 210));
-      }
-    };
-    if (isMeaningfulField(vacancy?.educationQualification)) {
-      const edu = stripUrlsAndEmailsForTelegram(vacancy.educationQualification);
-      const field = isMeaningfulField(vacancy?.requiredFieldOfStudy) ? ` in ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}` : "";
-      pushClean(`${edu}${field}`);
-    } else if (isMeaningfulField(vacancy?.requiredFieldOfStudy)) {
-      pushClean(`Field of Study: ${stripUrlsAndEmailsForTelegram(vacancy.requiredFieldOfStudy)}`);
-    }
-    if (isMeaningfulField(vacancy?.experienceYears)) {
-      pushClean(`Minimum ${stripUrlsAndEmailsForTelegram(vacancy.experienceYears)} relevant experience`);
-    }
-    if (Array.isArray(vacancy?.requiredSkills) && vacancy.requiredSkills.length > 0) {
-      const skillsList = vacancy.requiredSkills.map((s) => stripUrlsAndEmailsForTelegram(String(s || ""))).filter(Boolean);
-      if (skillsList.length > 0) {
-        pushClean(`Required Competencies & Skills: ${skillsList.slice(0, compactForCaption ? 4 : 8).join(", ")}`);
-      }
-    }
-    if (isMeaningfulField(vacancy?.specialRequirements)) {
-      pushClean(vacancy.specialRequirements);
-    }
-    if (!compactForCaption && isMeaningfulField(vacancy?.description)) {
-      const descLines = String(vacancy.description).split(/\n+/).map((l) => l.trim()).filter((l) => l.length >= 12 && !/apply|http|www\.|@|how to apply/i.test(l));
-      for (const line of descLines.slice(0, 2)) {
-        pushClean(line);
-      }
-    }
-    if (bullets.length === 0) {
-      pushClean(
-        `${truncateText(vacancy?.title || "Position", 80)} \u2014 ${truncateText(vacancy?.category || "Relevant qualification", 80)}`
-      );
-    }
-    return bullets.slice(0, compactForCaption ? 3 : 6);
+    return String(text || "").replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.[^\s]+/gi, "").replace(/\bt\.me\/\S+/gi, "").replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "").replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|et|tech|io|co|gov|edu|info)(?:\/\S*)?/gi, "").replace(/(?:\+251[\s-]?\d{2,3}[\s-]?\d{3}[\s-]?\d{3,4}|\b0[19]\d[\s-]?\d{3}[\s-]?\d{4}\b)/g, "").replace(/\b(?:how\s+to\s+apply\s*:|application\s+method\s*:|method\s+to\s+apply\s*:|apply\s+via\s*:|send\s+(?:your\s+)?cv\s+to|submit\s+in\s+person|p\.?\s*o\.?\s*box\s*\d+)\b/gi, "").replace(/\s{2,}/g, " ").trim();
   }
   function buildTelegramJobHtml(vacancy, _domainOrUrl = "www.hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia", compactForCaption = false) {
-    const orgName = escapeHtml(truncateText(vacancy.organization || "Employer", 140));
-    const orgAmharic = vacancy.organizationAmharic ? ` (${escapeHtml(truncateText(vacancy.organizationAmharic, 80))})` : "";
-    const positionTitle = escapeHtml(truncateText(vacancy.title || "Various Positions", 180));
-    const categoryHashtag = escapeHtml(formatCategoryHashtagServer(vacancy.category));
-    const careerLevel = escapeHtml(deriveCareerLevelServer(vacancy));
-    const deadlineDisplay = escapeHtml(formatDeadlineDisplayServer(vacancy.applicationDeadline));
-    const infoLines = [];
-    infoLines.push(`<b>Categories:</b> ${categoryHashtag}`);
-    if (isMeaningfulField(vacancy.location)) {
-      infoLines.push(`<b>Location:</b> ${escapeHtml(truncateText(vacancy.location, 100))}`);
-    }
-    if (deadlineDisplay) {
-      infoLines.push(`<b>Deadline:</b> ${deadlineDisplay}`);
-    }
-    infoLines.push(`<b>Career Level:</b> ${careerLevel}`);
-    infoLines.push(
-      `<b>Number of people required:</b> ${isMeaningfulField(vacancy.vacanciesCount) ? escapeHtml(truncateText(vacancy.vacanciesCount, 40)) : "1"}`
-    );
-    const bulletLines = buildRequirementsBulletLinesServer(vacancy, compactForCaption);
-    const reqBulletsHtml = bulletLines.map((b) => `\u2022 ${escapeHtml(b)}`).join("\n");
+    const cleanOrg2 = stripUrlsAndEmailsForTelegram(vacancy?.organization || "") || "Employer";
+    const cleanTitle2 = stripUrlsAndEmailsForTelegram(vacancy?.title || "") || "Open Position";
+    const cleanSalary = isMeaningfulField(vacancy?.salary) ? stripUrlsAndEmailsForTelegram(vacancy.salary) : "";
+    const cleanCity = isMeaningfulField(vacancy?.location) ? stripUrlsAndEmailsForTelegram(vacancy.location) : "";
+    const orgName = escapeHtml(truncateText(cleanOrg2, 140));
+    const positionTitle = escapeHtml(truncateText(cleanTitle2, 180));
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 <b>WASH JOB</b>\n\n" : "";
-    const coreText = `${washPrefix}<b>${positionTitle}</b>
-<i>at ${orgName}${orgAmharic}</i>
-
-${infoLines.join("\n\n")}
-
-<b>Requirements:</b>
-${reqBulletsHtml}`;
-    const promoHtml = buildTelegramAmharicPromoHtml();
-    const fullText = `${coreText}
-
-${promoHtml}`;
-    const maxAllowed = compactForCaption ? 1e3 : 4e3;
-    if (fullText.length <= maxAllowed) return fullText;
-    if (compactForCaption) {
-      const compactPromo = `\u{1F4E2} <b>\u12A0\u1295\u12F5\u121D \u12E8\u1235\u122B \u12A5\u12F5\u120D \u12A5\u1295\u12F3\u12EB\u1218\u120D\u1325\u12CE!</b>
-\u{1F447} <b>\u1208\u121B\u1218\u120D\u12A8\u1275 \u12A8\u1273\u127D \xABApply Now\xBB \u12E8\u121A\u1208\u12CD\u1295 \u12ED\u132B\u1291!</b>`;
-      const budget = Math.max(250, maxAllowed - compactPromo.length - 4);
-      const trimmedCore = coreText.length > budget ? `${coreText.slice(0, budget)}\u2026` : coreText;
-      return `${trimmedCore}
-
-${compactPromo}`;
+    const lines = [
+      `\u{1F3E2} <b>Employer:</b> ${orgName}`,
+      `\u{1F4BC} <b>Position:</b> ${positionTitle}`
+    ];
+    if (cleanSalary) {
+      lines.push(`\u{1F4B0} <b>Salary:</b> ${escapeHtml(truncateText(cleanSalary, 100))}`);
     }
-    const maxCore = Math.max(400, 3980 - promoHtml.length);
-    return `${coreText.slice(0, maxCore)}\u2026
+    if (cleanCity) {
+      lines.push(`\u{1F4CD} <b>City of Work:</b> ${escapeHtml(truncateText(cleanCity, 100))}`);
+    }
+    const footer = "Full vacancy details are inside our website. Tap <b>Apply Now</b> below.";
+    const fullText = `${washPrefix}${lines.join("\n")}
 
-${promoHtml}`;
+${footer}`;
+    const maxAllowed = compactForCaption ? 1e3 : 4e3;
+    return fullText.length <= maxAllowed ? fullText : `${fullText.slice(0, maxAllowed - 1)}\u2026`;
   }
   function buildTelegramJobPlainText(vacancy, _domainOrUrl = "www.hopelandjobs.tech", _channel = "@DreamBigJobsEthiopia") {
-    const orgName = truncateText(vacancy.organization || "Employer", 140);
-    const orgAmharic = vacancy.organizationAmharic ? ` (${truncateText(vacancy.organizationAmharic, 80)})` : "";
-    const positionTitle = truncateText(vacancy.title || "Various Positions", 180);
-    const categoryHashtag = formatCategoryHashtagServer(vacancy.category);
-    const careerLevel = deriveCareerLevelServer(vacancy);
-    const deadlineDisplay = formatDeadlineDisplayServer(vacancy.applicationDeadline);
-    const infoLines = [];
-    infoLines.push(`Categories: ${categoryHashtag}`);
-    if (isMeaningfulField(vacancy.location)) {
-      infoLines.push(`Location: ${truncateText(vacancy.location, 100)}`);
-    }
-    if (deadlineDisplay) {
-      infoLines.push(`Deadline: ${deadlineDisplay}`);
-    }
-    infoLines.push(`Career Level: ${careerLevel}`);
-    infoLines.push(
-      `Number of people required: ${isMeaningfulField(vacancy.vacanciesCount) ? truncateText(vacancy.vacanciesCount, 40) : "1"}`
-    );
-    const bulletLines = buildRequirementsBulletLinesServer(vacancy, false);
-    const reqBulletsPlain = bulletLines.map((b) => `\u2022 ${b}`).join("\n");
+    const cleanOrg2 = stripUrlsAndEmailsForTelegram(vacancy?.organization || "") || "Employer";
+    const cleanTitle2 = stripUrlsAndEmailsForTelegram(vacancy?.title || "") || "Open Position";
+    const cleanSalary = isMeaningfulField(vacancy?.salary) ? stripUrlsAndEmailsForTelegram(vacancy.salary) : "";
+    const cleanCity = isMeaningfulField(vacancy?.location) ? stripUrlsAndEmailsForTelegram(vacancy.location) : "";
+    const orgName = truncateText(cleanOrg2, 140);
+    const positionTitle = truncateText(cleanTitle2, 180);
     const washPrefix = isWashNgoVacancyServer(vacancy) ? "\u{1F7E2}\u2B50 WASH JOB\n\n" : "";
-    const coreText = `${washPrefix}${positionTitle}
-at ${orgName}${orgAmharic}
+    const lines = [
+      `Employer: ${orgName}`,
+      `Position: ${positionTitle}`
+    ];
+    if (cleanSalary) {
+      lines.push(`Salary: ${truncateText(cleanSalary, 100)}`);
+    }
+    if (cleanCity) {
+      lines.push(`City of Work: ${truncateText(cleanCity, 100)}`);
+    }
+    const footer = "Full vacancy details are inside our website. Tap Apply Now below.";
+    const fullText = `${washPrefix}${lines.join("\n")}
 
-${infoLines.join("\n\n")}
-
-Requirements:
-${reqBulletsPlain}`;
-    const promoPlain = buildTelegramAmharicPromoPlain();
-    const fullText = `${coreText}
-
-${promoPlain}`;
-    if (fullText.length <= 4e3) return fullText;
-    const maxCore = Math.max(400, 3980 - promoPlain.length);
-    return `${coreText.slice(0, maxCore)}\u2026
-
-${promoPlain}`;
+${footer}`;
+    return fullText.length <= 4e3 ? fullText : `${fullText.slice(0, 3999)}\u2026`;
   }
   async function sendTelegramVacancyMessage(token, channel, vacancy, domainOrUrl, dryRun = false, fallbackChannelId, options) {
     const persisted = loadPersistedSettings() || {};
@@ -7641,6 +8363,17 @@ ${promoPlain}`;
     }
     const htmlMsg = washCheck.html;
     const plainMsg = washCheck.plainText;
+    const contentAudit = validateTelegramPostContentStrict(plainMsg);
+    if (!contentAudit.safe) {
+      return {
+        ok: false,
+        error: `Blocked by Strict Telegram Policy (links and apply methods must only appear inside website): ${contentAudit.violations.join(" ")}`,
+        formattedMessage: htmlMsg,
+        formattedPlain: plainMsg,
+        isWashNgo: washCheck.isWashNgo,
+        hasWashLabel: washCheck.hasWashLabel
+      };
+    }
     if (dryRun) {
       return {
         ok: true,
@@ -7725,7 +8458,7 @@ ${promoPlain}`;
         chat_id: targetChatId,
         text: htmlMsg,
         parse_mode: "HTML",
-        disable_web_page_preview: false,
+        disable_web_page_preview: true,
         ...replyMarkup ? { reply_markup: replyMarkup } : {}
       });
       if (data?.ok) {
@@ -7740,7 +8473,7 @@ ${promoPlain}`;
           const fallbackData = await callTelegramSend("sendMessage", {
             chat_id: targetChatId,
             text: plainMsg,
-            disable_web_page_preview: false,
+            disable_web_page_preview: true,
             ...replyMarkup ? { reply_markup: replyMarkup } : {}
           });
           if (fallbackData?.ok) {
@@ -7822,23 +8555,12 @@ ${promoPlain}`;
     }
   }
   function isVacancyDeadlineExpiredServer(deadline) {
-    if (!deadline) return false;
-    const trimmed = String(deadline).trim();
-    if (!trimmed || /open|ongoing|rolling|until filled|not specified|not stated/i.test(trimmed)) return false;
-    const parsed = Date.parse(trimmed);
-    if (Number.isNaN(parsed)) return false;
-    const deadlineEnd = new Date(parsed);
-    deadlineEnd.setHours(23, 59, 59, 999);
-    return Date.now() > deadlineEnd.getTime();
+    const parsed = parseValidDeadline(deadline);
+    if (!parsed.hasValidDeadline) return false;
+    return parsed.isExpired;
   }
   function hasOfficialApplicationMethodServer(v) {
-    const url = String(v?.applicationUrl || v?.directApplicationUrl || "").trim();
-    const email = String(v?.applicationEmail || "").trim();
-    const inst = String(v?.applicationInstructions || v?.officialApplicationInstructions || "").trim();
-    if (/^https?:\/\/\S+/i.test(url)) return true;
-    if (email.includes("@")) return true;
-    if (inst && !/^not specified|^not stated|^n\/a$/i.test(inst) && inst.length >= 10) return true;
-    return false;
+    return extractDirectEmployerChannels(v).valid;
   }
   function isBankingVacancyServer(v) {
     return isBankingVacancyServerCore(v);
@@ -7882,11 +8604,12 @@ ${promoPlain}`;
     if (["draft", "rejected", "archived", "duplicate", "expired"].includes(status)) {
       return { allowed: false, reason: `Cannot broadcast vacancy with status "${vacancy.status}". Only verified open vacancies may be posted.` };
     }
-    if (isVacancyDeadlineExpiredServer(vacancy.applicationDeadline)) {
-      return { allowed: false, reason: `Blocked: Application deadline (${vacancy.applicationDeadline}) has already expired.` };
-    }
-    if (!hasOfficialApplicationMethodServer(vacancy)) {
-      return { allowed: false, reason: "Blocked: Vacancy is missing a verified official application method (link, email, or official instructions)." };
+    const strictCheck = validateVacancyStrict(vacancy, { allowExpired: false });
+    if (!strictCheck.valid) {
+      return {
+        allowed: false,
+        reason: `Blocked: Vacancy is incomplete and cannot be posted to Telegram. Missing: ${strictCheck.missingFields.join(", ")}.`
+      };
     }
     const mode = overrideMode || settings?.telegramDistributionMode || "all_jobs";
     if (mode === "banking_only" && (!isBankingVacancyServer(vacancy) || isNgoVacancyServer(vacancy))) {
@@ -8237,6 +8960,7 @@ ${promoPlain}`;
         channelName || persisted.telegramChannelName || persisted.telegramChannelId || "@DreamBigJobsEthiopia"
       ).chatId;
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      const resolvedMode = distributionMode || persisted.telegramDistributionMode || "all_jobs";
       const items = vacancies.map((v) => {
         const existingRec = !forceRetry && v?.id ? store.publishedRecords[String(v.id)] : void 0;
         if ((v?.telegramPublished || existingRec) && !forceRetry) {
@@ -8249,6 +8973,26 @@ ${promoPlain}`;
             attempts: 1,
             telegramMessageId: existingRec?.telegramMessageId || v.telegramMessageId,
             publishedAt: existingRec?.publishedAt || v.telegramPublishedAt || nowIso,
+            updatedAt: nowIso,
+            vacancy: v
+          };
+        }
+        const preGate = evaluateTelegramPublishEligibilityServer(
+          v,
+          persisted,
+          Boolean(forceRetry),
+          v?.contentType,
+          resolvedMode
+        );
+        if (!preGate.allowed && !preGate.alreadyPublished) {
+          return {
+            vacancyId: String(v?.id || `invalid_${Date.now()}`),
+            title: String(v?.title || "Incomplete Vacancy"),
+            organization: String(v?.organization || "Missing Employer"),
+            category: v?.category,
+            status: "failed",
+            attempts: 1,
+            error: preGate.reason || "Blocked: Vacancy failed mandatory requirements check.",
             updatedAt: nowIso,
             vacancy: v
           };
@@ -8768,21 +9512,21 @@ ${promoPlain}`;
   };
   function loadStoredData() {
     try {
-      if (!fs.existsSync(ANALYTICS_DIR)) {
-        fs.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs2.existsSync(ANALYTICS_DIR)) {
+        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      if (fs.existsSync(ANALYTICS_FILE)) {
-        const raw = fs.readFileSync(ANALYTICS_FILE, "utf-8");
+      if (fs2.existsSync(ANALYTICS_FILE)) {
+        const raw = fs2.readFileSync(ANALYTICS_FILE, "utf-8");
         analyticsEvents = JSON.parse(raw);
       } else {
         analyticsEvents = [];
       }
-      if (fs.existsSync(BUSINESS_BI_FILE)) {
-        const raw = fs.readFileSync(BUSINESS_BI_FILE, "utf-8");
+      if (fs2.existsSync(BUSINESS_BI_FILE)) {
+        const raw = fs2.readFileSync(BUSINESS_BI_FILE, "utf-8");
         businessBiData = { ...businessBiData, ...JSON.parse(raw) };
       }
-      if (fs.existsSync(GSC_CONFIG_FILE)) {
-        const raw = fs.readFileSync(GSC_CONFIG_FILE, "utf-8");
+      if (fs2.existsSync(GSC_CONFIG_FILE)) {
+        const raw = fs2.readFileSync(GSC_CONFIG_FILE, "utf-8");
         gscConfigData = { ...gscConfigData, ...JSON.parse(raw) };
       }
     } catch (err) {
@@ -8791,33 +9535,33 @@ ${promoPlain}`;
   }
   function persistAnalyticsEvents() {
     try {
-      if (!fs.existsSync(ANALYTICS_DIR)) {
-        fs.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs2.existsSync(ANALYTICS_DIR)) {
+        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
       if (analyticsEvents.length > 5e4) {
         analyticsEvents = analyticsEvents.slice(analyticsEvents.length - 5e4);
       }
-      fs.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
+      fs2.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
     } catch (err) {
       console.warn("Analytics persistence error:", err);
     }
   }
   function persistBusinessBi() {
     try {
-      if (!fs.existsSync(ANALYTICS_DIR)) {
-        fs.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs2.existsSync(ANALYTICS_DIR)) {
+        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
+      fs2.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
     } catch (err) {
       console.warn("Business BI persistence error:", err);
     }
   }
   function persistGscConfig() {
     try {
-      if (!fs.existsSync(ANALYTICS_DIR)) {
-        fs.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs2.existsSync(ANALYTICS_DIR)) {
+        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
+      fs2.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
     } catch (err) {
       console.warn("GSC config persistence error:", err);
     }
@@ -9854,8 +10598,8 @@ Respond with a JSON object adhering to this schema:
   const AUTO_APPLY_DATA_FILE = path2.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
-      if (fs.existsSync(AUTO_APPLY_DATA_FILE)) {
-        const raw = fs.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
+      if (fs2.existsSync(AUTO_APPLY_DATA_FILE)) {
+        const raw = fs2.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
         return JSON.parse(raw);
       }
     } catch (e) {
@@ -9866,8 +10610,8 @@ Respond with a JSON object adhering to this schema:
   function savePersistedAutoApplyData(data) {
     try {
       const dir = path2.dirname(AUTO_APPLY_DATA_FILE);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+      if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
+      fs2.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Notice: Could not save auto_apply_data.json:", e);
@@ -10912,7 +11656,7 @@ Return strict JSON:
 - responsibilities: array of 5 clear, realistic job duty bullet points
 - requiredSkills: array of 5 key skills required for this role
 - applicationInstructions: polite, accurate instructions telling candidates how to prepare and submit via official employer channels
-- telegramCaption: clean, engaging Telegram channel summary (with emojis and hashtags like #EthiopiaJobs) under 350 characters`;
+- telegramCaption: clean, concise English Telegram summary ONLY containing Employer, Position, and City of Work (STRICT RULE: NEVER include URLs, links, emails, phone numbers, physical addresses, or method of applying in telegramCaption \u2014 tell readers to tap Apply Now to view details inside the website)`;
       let aiResult = null;
       try {
         const response = await ai.models.generateContent({
@@ -10959,10 +11703,20 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
             "Attention to Detail"
           ],
           applicationInstructions: "Interested and qualified candidates should submit their updated CV, application letter, and supporting educational and work experience credentials through the official employer channel before the closing date.",
-          telegramCaption: `\u{1F4BC} ${title} at ${organization}
-\u{1F4CD} ${location} | \u{1F3F7}\uFE0F ${category}
-Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
+          telegramCaption: `\u{1F3E2} Employer: ${stripUrlsAndEmailsForTelegram(organization)}
+\u{1F4BC} Position: ${stripUrlsAndEmailsForTelegram(title)}
+\u{1F4CD} City of Work: ${stripUrlsAndEmailsForTelegram(location)}
+
+Full vacancy details are inside our website. Tap Apply Now below.`
         };
+      } else if (aiResult.telegramCaption) {
+        const cleanedCap = stripUrlsAndEmailsForTelegram(aiResult.telegramCaption);
+        const capCheck = validateTelegramPostContentStrict(cleanedCap);
+        aiResult.telegramCaption = capCheck.safe ? cleanedCap : `\u{1F3E2} Employer: ${stripUrlsAndEmailsForTelegram(organization)}
+\u{1F4BC} Position: ${stripUrlsAndEmailsForTelegram(title)}
+\u{1F4CD} City of Work: ${stripUrlsAndEmailsForTelegram(location)}
+
+Full vacancy details are inside our website. Tap Apply Now below.`;
       }
       res.json({
         ...aiResult,
@@ -11089,8 +11843,8 @@ Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
       lastCycleSummary: "Initializing automatic 30-second research scheduler..."
     };
     try {
-      if (fs.existsSync(INTERNATIONAL_DATA_FILE)) {
-        const raw = fs.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
+      if (fs2.existsSync(INTERNATIONAL_DATA_FILE)) {
+        const raw = fs2.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         const jobs = (Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : []).map((j) => ({
           ...j,
@@ -11136,10 +11890,10 @@ Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
   }
   function savePersistedInternationalData(data) {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      const prev = fs.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
+      if (!fs2.existsSync(DATA_DIR)) fs2.mkdirSync(DATA_DIR, { recursive: true });
+      const prev = fs2.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
         try {
-          return JSON.parse(fs.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
+          return JSON.parse(fs2.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
         } catch {
           return {};
         }
@@ -11149,7 +11903,7 @@ Apply now on HOPELAND JOBS! #EthiopiaJobs #HopelandJobs`
         ...data,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      fs.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
+      fs2.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Could not save international_data.json:", e);
@@ -13777,10 +14531,10 @@ Return strict JSON:
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
-      const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
+      const files = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
         const fullPath = path2.join(BACKUPS_DIR, filename);
-        const stat = fs.statSync(fullPath);
+        const stat = fs2.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
           id: parsed.id || filename.replace(/\.json$/, ""),
@@ -13847,9 +14601,9 @@ Return strict JSON:
     const fullPath = path2.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
-      const autoFiles = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
+      const autoFiles = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs.unlinkSync(path2.join(BACKUPS_DIR, old));
+        fs2.unlinkSync(path2.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -13861,7 +14615,7 @@ Return strict JSON:
       summary: `Created ${trigger} persistent database backup (${payload.counts.staffProfiles} profiles, ${payload.counts.applications} apps)`,
       severity: "info"
     });
-    const stat = fs.existsSync(fullPath) ? fs.statSync(fullPath) : { size: 0 };
+    const stat = fs2.existsSync(fullPath) ? fs2.statSync(fullPath) : { size: 0 };
     return {
       id,
       filename,
@@ -13876,8 +14630,8 @@ Return strict JSON:
     let writable = false;
     try {
       const probeFile = path2.join(RUNTIME_BASE_DIR, "data", ".write_probe");
-      fs.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
-      fs.unlinkSync(probeFile);
+      fs2.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
+      fs2.unlinkSync(probeFile);
       writable = true;
     } catch {
     }
@@ -13892,12 +14646,12 @@ Return strict JSON:
     const backups = listPersistentBackups();
     const unackAlerts = notifs.filter((n) => !n.acknowledged).length;
     const filesPresent = {
-      site_settings: fs.existsSync(SETTINGS_FILE),
-      telegram_config: fs.existsSync(TELEGRAM_CONFIG_FILE),
-      user_profiles: fs.existsSync(USER_PROFILES_FILE),
-      job_applications: fs.existsSync(JOB_APPLICATIONS_FILE),
-      international_data: fs.existsSync(INTERNATIONAL_DATA_FILE),
-      analytics_events: fs.existsSync(ANALYTICS_FILE)
+      site_settings: fs2.existsSync(SETTINGS_FILE),
+      telegram_config: fs2.existsSync(TELEGRAM_CONFIG_FILE),
+      user_profiles: fs2.existsSync(USER_PROFILES_FILE),
+      job_applications: fs2.existsSync(JOB_APPLICATIONS_FILE),
+      international_data: fs2.existsSync(INTERNATIONAL_DATA_FILE),
+      analytics_events: fs2.existsSync(ANALYTICS_FILE)
     };
     const botStatus = !token ? "UNCONFIGURED" : botHealth.status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
     const gaId = settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;

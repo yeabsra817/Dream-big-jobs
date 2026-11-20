@@ -8,7 +8,7 @@
   ],
   "functions": {
     "api/index.mjs": {
-      "includeFiles": "data/*.json"
+      "includeFiles": "{data/*.json,public/*.png,firebase-applet-config.json}"
     }
   },
   "rewrites": [

@@ -223,7 +223,10 @@ export const AdminDashboard: React.FC<Props> = ({
     const runGlobalHealSweep = async () => {
       try {
         const result = runAutonomousVacancyHealing(vacancies);
-        if (result.changedCount > 0) {
+        if (result.deletedNoDeadlineIds.length > 0 && onBatchDeleteVacancies) {
+          await onBatchDeleteVacancies(result.deletedNoDeadlineIds);
+        }
+        if (result.changedCount > result.deletedNoDeadlineIds.length && result.healedVacancies.length > 0) {
           await onBatchSaveVacancies(result.healedVacancies);
         }
       } catch (err) {
@@ -236,7 +239,7 @@ export const AdminDashboard: React.FC<Props> = ({
 
     const interval = setInterval(runGlobalHealSweep, 8000);
     return () => clearInterval(interval);
-  }, [vacancies, onBatchSaveVacancies]);
+  }, [vacancies, onBatchSaveVacancies, onBatchDeleteVacancies]);
 
   // Evaluated alerts for badge & bell
   const evaluatedAlerts = useMemo(

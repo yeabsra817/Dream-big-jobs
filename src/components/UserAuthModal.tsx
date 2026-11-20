@@ -213,77 +213,101 @@ export const UserAuthModal: React.FC<Props> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-950/85 flex min-h-full items-center justify-center p-3 sm:p-6"
+      className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-950/75 backdrop-blur-xs flex min-h-full items-center justify-center p-3 sm:p-6 font-['Plus_Jakarta_Sans','Noto_Sans_Ethiopic',sans-serif]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden relative my-auto animate-in fade-in"
+        className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden relative my-auto animate-in fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with Hopeland branding */}
         <div className="bg-[#0B132B] text-white p-6 relative">
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+            className="absolute top-4 right-4 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 mb-2">
-            <AppBrandLogo logoUrl={appLogoUrl} size="sm" variant="amber" />
-            <span className="font-extrabold text-sm tracking-wide text-white">
-              HOPELAND <span className="text-amber-400">JOBS</span>
+          <div className="flex items-center gap-2.5 mb-3">
+            <AppBrandLogo logoUrl={appLogoUrl} size="sm" variant="green" />
+            <span className="font-extrabold text-sm tracking-tight text-white">
+              Hopeland<span className="text-[#4ADE80]">Jobs</span>
             </span>
           </div>
 
-          <h2 className="text-xl sm:text-2xl font-black text-white">
-            {mode === 'signup' ? 'Register Permanent Staff & Career Profile' : 'Welcome Back'}
+          <h2 className="text-xl sm:text-2xl font-bold text-white leading-snug pr-8">
+            {mode === 'signup' ? 'Create Your Free Account' : 'Welcome Back'}
           </h2>
-          <p className="text-xs text-slate-300 mt-1">
+          <p className="text-xs sm:text-sm font-semibold text-emerald-300 mt-1">
             {mode === 'signup'
-              ? 'Create your permanent Hopeland profile with Google — saved securely across sessions and server restarts.'
-              : 'Sign in with Google to access your permanent staff profile, tailored opportunities, and applications.'}
+              ? 'ነፃ አካውንት ይክፈቱ (ሙሉ በሙሉ አማራጭ ነው)'
+              : 'ወደ አካውንትዎ ይግቡ (ሙሉ በሙሉ አማራጭ ነው)'}
+          </p>
+          <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+            {mode === 'signup'
+              ? 'Optional free account — unlock personalized job matches, phone-bar alerts, and fast 1-click applications.'
+              : 'Sign in with Google to access your saved CV, job alerts, and matched opportunities.'}
           </p>
         </div>
 
         {/* Informational Message Banner if provided */}
         {message && (
-          <div className="bg-amber-50 px-6 py-2.5 border-b border-amber-200 flex items-center gap-2 text-xs font-bold text-amber-900">
-            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="bg-emerald-50 px-6 py-2.5 border-b border-emerald-200 flex items-center gap-2 text-xs font-semibold text-emerald-900">
+            <Sparkles className="w-4 h-4 text-[#16A34A] shrink-0" />
             <span>{message}</span>
           </div>
         )}
 
-        <div className="p-6 sm:p-7 space-y-5">
-          {/* Account benefits summary */}
-          <div className="rounded-2xl bg-slate-50 border border-slate-200/80 p-4 space-y-2.5">
+        <div className="p-6 space-y-5">
+          {/* Bilingual Account Benefits Summary */}
+          <div className="rounded-xl bg-[#FBFBFA] border border-slate-200 p-4 space-y-3">
+            <p className="text-xs font-bold text-[#0B132B]">
+              Benefits of Registering · የመመዝገብ ጥቅሞች
+            </p>
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Permanent Cloud Profile:</strong> Role, expertise, certifications, and CVs remain saved across all logins.
-              </span>
+              <Briefcase className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-[#0B132B]">
+                  Experience-Matched Local &amp; Visa Jobs First
+                </p>
+                <p className="text-slate-600">
+                  ከሙያዎ እና ከልምድዎ ጋር የሚስማሙ ስራዎችን በቅድሚያ ያግኙ።
+                </p>
+              </div>
             </div>
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
-              <Briefcase className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Eligible Opportunity Matching:</strong> Automatic job &amp; scholarship recommendations strictly matched to your profile.
-              </span>
+              <ShieldCheck className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-[#0B132B]">
+                  Phone-Bar Alerts &amp; Top-3 Job Reminders
+                </p>
+                <p className="text-slate-600">
+                  አዳዲስ ስራዎች ሲወጡ ቀጥታ በስልክ ባር ማሳወቂያ ይደርስዎታል።
+                </p>
+              </div>
             </div>
             <div className="flex items-start gap-2.5 text-xs text-slate-700">
-              <FileCheck2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>10GB Document Vault:</strong> Store your CV &amp; certificates for fast 1-click applications.
-              </span>
+              <FileCheck2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-[#0B132B]">
+                  Saved CV Vault &amp; Application Tracking
+                </p>
+                <p className="text-slate-600">
+                  ሲቪዎን አስቀምጠው በ1 ንክኪ ያመልክቱ፤ ስራዎችንም ያስቀምጡ።
+                </p>
+              </div>
             </div>
           </div>
 
           {/* Feedback messages */}
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs space-y-2.5">
-              <div className="font-bold flex items-start gap-2.5">
+              <div className="font-semibold flex items-start gap-2.5">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
@@ -295,7 +319,7 @@ export const UserAuthModal: React.FC<Props> = ({
                     type="button"
                     onClick={handleDirectGisAuth}
                     disabled={loading}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-slate-50 border border-rose-200 text-[#0B132B] font-bold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-slate-50 border border-rose-200 text-[#0B132B] font-semibold text-[11px] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-[#16A34A]" />
                     <span>Direct Google Sign-In</span>
@@ -305,7 +329,7 @@ export const UserAuthModal: React.FC<Props> = ({
                       href={window.location.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-[11px] transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#0B132B] hover:bg-slate-800 text-white font-semibold text-[11px] transition-colors"
                     >
                       <ExternalLink className="w-3.5 h-3.5 text-[#4ADE80]" />
                       <span>Open in New Tab</span>
@@ -317,51 +341,61 @@ export const UserAuthModal: React.FC<Props> = ({
           )}
 
           {successMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-start gap-2.5">
+            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-start gap-2.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
           )}
 
           {/* Google One-Click Auth Button */}
-          <button
-            type="button"
-            onClick={handleGoogleAuth}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-xl border-2 border-slate-300 hover:border-amber-400 bg-white hover:bg-amber-50/40 transition-all font-extrabold text-sm text-slate-900 shadow-sm cursor-pointer disabled:opacity-50"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>
-              {loading
-                ? 'Connecting to Google...'
-                : mode === 'signup'
-                  ? 'Sign Up with Google'
-                  : 'Continue with Google'}
-            </span>
-          </button>
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={handleGoogleAuth}
+              disabled={loading}
+              className="w-full min-h-[46px] flex items-center justify-center gap-3 py-3 px-4 rounded-xl border-2 border-[#0B132B] hover:border-[#16A34A] bg-white hover:bg-emerald-50/40 transition-all font-bold text-sm text-[#0B132B] shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>
+                {loading
+                  ? 'Connecting to Google...'
+                  : mode === 'signup'
+                    ? 'Register Free with Google · በGoogle ይመዝገቡ'
+                    : 'Login with Google · በGoogle ይግቡ'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full min-h-[42px] py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+            >
+              Continue Browsing Without Account · ያለ አካውንት መቀጠል
+            </button>
+          </div>
 
           {/* Toggle context between Sign In / Sign Up */}
-          <div className="pt-3 text-center text-xs text-slate-600 border-t border-slate-100 space-y-1.5">
+          <div className="pt-3 text-center text-xs text-slate-600 border-t border-slate-100 space-y-1">
             {mode === 'signin' ? (
               <p>
-                New to Hopeland Jobs?{' '}
+                New to HopelandJobs?{' '}
                 <button
                   type="button"
                   onClick={() => {
@@ -369,9 +403,9 @@ export const UserAuthModal: React.FC<Props> = ({
                     setSuccessMsg(null);
                     setMode('signup');
                   }}
-                  className="font-extrabold text-amber-600 hover:text-amber-700 underline"
+                  className="font-bold text-[#16A34A] hover:text-[#15803D] underline cursor-pointer"
                 >
-                  Register with Google
+                  Register Free · ይመዝገቡ
                 </button>
               </p>
             ) : (
@@ -384,15 +418,12 @@ export const UserAuthModal: React.FC<Props> = ({
                     setSuccessMsg(null);
                     setMode('signin');
                   }}
-                  className="font-extrabold text-amber-600 hover:text-amber-700 underline"
+                  className="font-bold text-[#16A34A] hover:text-[#15803D] underline cursor-pointer"
                 >
-                  Sign In with Google
+                  Login · ይግቡ
                 </button>
               </p>
             )}
-            <p className="text-[11px] text-slate-400">
-              Accounts are created and verified exclusively via Google Authentication.
-            </p>
           </div>
         </div>
       </div>

@@ -82,7 +82,7 @@ export const Footer: React.FC<Props> = ({
               Top Sectors
             </h4>
             <ul className="space-y-2.5 text-xs text-slate-300">
-              {OFFICIAL_CATEGORIES.slice(0, 6).map((cat) => (
+              {OFFICIAL_CATEGORIES.slice(0, 9).map((cat) => (
                 <li key={cat.id}>
                   <button
                     type="button"
@@ -103,7 +103,7 @@ export const Footer: React.FC<Props> = ({
               More Sectors
             </h4>
             <ul className="space-y-2.5 text-xs text-slate-300">
-              {OFFICIAL_CATEGORIES.slice(6, 12).map((cat) => (
+              {OFFICIAL_CATEGORIES.slice(9).map((cat) => (
                 <li key={cat.id}>
                   <button
                     type="button"

@@ -114,58 +114,183 @@ export const JobApplicationModal: React.FC<Props> = ({
 
   if (!isOpen || !vacancy) return null;
 
-  // If not logged in, prompt user to sign in or create an account
+  // If not logged in, let the visitor apply directly without an account OR optionally sign in/register
   if (!currentUser) {
+    const hasPortalUrl = Boolean(vacancy.applicationUrl && vacancy.applicationUrl.startsWith('http'));
+    const hasApplyEmail = Boolean(vacancy.applicationEmail && vacancy.applicationEmail.includes('@'));
+    const hasInstructions = Boolean(
+      vacancy.applicationInstructions && vacancy.applicationInstructions.trim().length > 0
+    );
+
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-        <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden text-center p-6 sm:p-8 space-y-5">
-          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-900 flex items-center justify-center mx-auto shadow-inner">
-            <User className="w-8 h-8 text-amber-700" />
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-xl font-black text-slate-900">
-              Sign In to Apply
-            </h3>
-            <p className="text-xs text-slate-600 leading-relaxed max-w-xs mx-auto">
-              To apply for <strong className="text-slate-900">{vacancy.title}</strong> at{' '}
-              <strong className="text-slate-900">{vacancy.organization}</strong>, please sign in or create your free Hopeland Jobs job seeker account.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-2 text-xs text-slate-600">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>One-click apply with your stored CV and credentials</span>
+      <div
+        className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 font-['Plus_Jakarta_Sans','Noto_Sans_Ethiopic',sans-serif]"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden my-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="bg-[#0B132B] text-white px-6 py-5 flex items-start justify-between gap-4">
+            <div className="space-y-1 min-w-0">
+              <p className="text-xs font-semibold text-[#4ADE80]">
+                Account Optional · ያለ ምዝገባ ማመልከት ይችላሉ
+              </p>
+              <h3 className="text-lg sm:text-xl font-bold text-white leading-snug">
+                Apply for {vacancy.title}
+              </h3>
+              <p className="text-xs text-slate-300 truncate">
+                {vacancy.organization} · {vacancy.location}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Live tracking of your application review status</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Direct application record with the verified employer</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 pt-2">
             <button
-              onClick={() => {
-                onClose();
-                onNeedAuth();
-              }}
-              className="w-full py-3 rounded-xl bg-[#0B132B] hover:bg-amber-400 hover:text-slate-950 text-white font-extrabold text-xs transition-colors shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>Continue to Sign In / Register</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <button
+              type="button"
               onClick={onClose}
-              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              aria-label="Close application dialog"
+              className="p-2 min-h-[40px] min-w-[40px] rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
             >
-              Cancel
+              <X className="w-4 h-4" />
             </button>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* Direct Apply Without Account */}
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-bold text-[#0B132B]">
+                  Apply Directly (No Login Required)
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  ያለ ምንም ምዝገባ ወይም ሎጊን በቀጥታ ወደ ቀጣሪው ድርጅት ያመልክቱ።
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {hasPortalUrl && (
+                  <a
+                    href={vacancy.applicationUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      trackAnalyticsEvent('click_apply_link', {
+                        jobId: vacancy.id,
+                        jobTitle: vacancy.title,
+                        organization: vacancy.organization,
+                        category: vacancy.category,
+                        applyUrl: vacancy.applicationUrl,
+                        applyMethod: 'Guest Direct Portal',
+                      });
+                    }}
+                    className="w-full min-h-[44px] px-4 py-3 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors shadow-xs"
+                  >
+                    <span>Apply on Official Employer Portal · በቀጥታ ያመልክቱ</span>
+                    <ArrowRight className="w-4 h-4 shrink-0" />
+                  </a>
+                )}
+
+                {hasApplyEmail && (
+                  <a
+                    href={`mailto:${vacancy.applicationEmail}?subject=${encodeURIComponent(
+                      `Application for ${vacancy.title}`
+                    )}`}
+                    onClick={() => {
+                      trackAnalyticsEvent('click_apply_link', {
+                        jobId: vacancy.id,
+                        jobTitle: vacancy.title,
+                        organization: vacancy.organization,
+                        category: vacancy.category,
+                        applyUrl: vacancy.applicationEmail,
+                        applyMethod: 'Guest Direct Email',
+                      });
+                    }}
+                    className={`w-full min-h-[44px] px-4 py-3 rounded-xl font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors ${
+                      hasPortalUrl
+                        ? 'bg-slate-50 hover:bg-slate-100 text-[#0B132B] border border-slate-200'
+                        : 'bg-[#16A34A] hover:bg-[#15803D] text-white shadow-xs'
+                    }`}
+                  >
+                    <Mail className="w-4 h-4 shrink-0" />
+                    <span className="truncate">
+                      Email Application: {vacancy.applicationEmail}
+                    </span>
+                  </a>
+                )}
+
+                {hasInstructions && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed space-y-1">
+                    <p className="font-bold text-[#0B132B]">
+                      How to Apply · የማመልከቻ መመሪያ
+                    </p>
+                    <p className="whitespace-pre-line">{vacancy.applicationInstructions}</p>
+                    {vacancy.contactInfo && (
+                      <p className="text-slate-600 pt-1">
+                        <strong>Contact:</strong> {vacancy.contactInfo}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Optional Account Benefits (English & Amharic) */}
+            <div className="pt-4 border-t border-slate-200 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-[#16A34A]">
+                  Optional · አማራጭ
+                </p>
+                <h4 className="text-sm font-bold text-[#0B132B]">
+                  Or Sign In / Register Free for Easier Applying
+                </h4>
+                <p className="text-xs text-slate-600">
+                  በነፃ ቢመዘገቡ የሚያገኟቸው ተጨማሪ ጥቅሞች፦
+                </p>
+              </div>
+
+              <ul className="space-y-2 text-xs text-slate-700 bg-[#FBFBFA] p-3.5 rounded-xl border border-slate-200/80">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                  <span>
+                    <strong>1-Click Apply with Saved CV</strong> · ሲቪዎን አስቀምጠው በፍጥነት ያመልክቱ
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Experience-Matched Job Alerts</strong> · ከሙያዎ ጋር የሚስማሙ ስራዎች በስልክ ባር ማሳወቂያ
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Track Every Application</strong> · ያመለከቱባቸውን ስራዎች በአንድ ቦታ ይከታተሉ
+                  </span>
+                </li>
+              </ul>
+
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onNeedAuth();
+                  }}
+                  className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <span>Login / Register Free · ይግቡ / ይመዝገቡ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  Close · ዝጋ
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

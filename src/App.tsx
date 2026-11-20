@@ -53,6 +53,7 @@ import {
 } from './types/international';
 import {
   fetchPublishedVacancies,
+  fetchPublishedVacanciesFromServerFast,
   fetchVacancyById,
   fetchAllVacanciesAdmin,
   saveVacancy,
@@ -99,6 +100,11 @@ import {
 } from './lib/firebase';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { isExpired, getDaysLeft } from './utils/helpers';
+import {
+  hasValidVacancyDeadline,
+  partitionVacanciesByDeadline,
+  validateVacancyStrict,
+} from './utils/vacancyValidator';
 import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
 import { Navbar } from './components/Navbar';
@@ -157,6 +163,7 @@ import { NotificationPermissionModal } from './components/NotificationPermission
 import { AmharicSignupPromoModal } from './components/AmharicSignupPromoModal';
 import { PWAInstallPromptModal } from './components/PWAInstallPromptModal';
 import { AppDownloadReminderBanner } from './components/AppDownloadReminderBanner';
+import { OptionalBenefitsShowcase } from './components/OptionalBenefitsShowcase';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import {
   fetchCustomerVisitCount,
@@ -168,19 +175,21 @@ import {
 } from './lib/aiService';
 import { CustomerVisitCountSummary, CustomerVisitAiInsight } from './types/analytics';
 
-// Lazy-loaded secondary pages & modals (reduces initial JS bundle & speeds up navigation)
-const CategoryView = lazy(() => import('./components/CategoryView').then((m) => ({ default: m.CategoryView })));
-const LocationJobsView = lazy(() => import('./components/LocationJobsView').then((m) => ({ default: m.LocationJobsView })));
-const AllCategoriesView = lazy(() => import('./components/AllCategoriesView').then((m) => ({ default: m.AllCategoriesView })));
+// Eagerly imported high-frequency public views & modals for 0ms instant navigation & link opening
+import { CategoryView } from './components/CategoryView';
+import { LocationJobsView } from './components/LocationJobsView';
+import { AllCategoriesView } from './components/AllCategoriesView';
+import { VacancyDetailModal } from './components/VacancyDetailModal';
+import { UserAuthModal } from './components/UserAuthModal';
+import { JobApplicationModal } from './components/JobApplicationModal';
+
+// Lazy-loaded heavier secondary views (preloaded quietly right after mount)
 const InternationalJobsView = lazy(() => import('./components/InternationalJobsView').then((m) => ({ default: m.InternationalJobsView })));
 const ImmigrationResidenceView = lazy(() => import('./components/ImmigrationResidenceView').then((m) => ({ default: m.ImmigrationResidenceView })));
 const ScholarshipsView = lazy(() => import('./components/ScholarshipsView').then((m) => ({ default: m.ScholarshipsView })));
 const SavedJobsDrawer = lazy(() => import('./components/SavedJobsDrawer').then((m) => ({ default: m.SavedJobsDrawer })));
-const VacancyDetailModal = lazy(() => import('./components/VacancyDetailModal').then((m) => ({ default: m.VacancyDetailModal })));
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
 const AdminAuthModal = lazy(() => import('./components/admin/AdminAuthModal').then((m) => ({ default: m.AdminAuthModal })));
-const UserAuthModal = lazy(() => import('./components/UserAuthModal').then((m) => ({ default: m.UserAuthModal })));
-const JobApplicationModal = lazy(() => import('./components/JobApplicationModal').then((m) => ({ default: m.JobApplicationModal })));
 const JobSeekerDashboard = lazy(() => import('./components/JobSeekerDashboard').then((m) => ({ default: m.JobSeekerDashboard })));
 
 const PageLoader = () => (
@@ -227,11 +236,30 @@ export default function App() {
   const [researchHistory, setResearchHistory] = useState<ResearchHistoryRun[]>([]);
   const [verificationLogs, setVerificationLogs] = useState<VerificationReportItem[]>([]);
 
-  // Navigation & View State
+  // Navigation & View State (synchronously hydrate deep-linked job from cache for 0ms link opening)
   const [selectedCategory, setSelectedCategory] = useState<CategoryMeta | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-  const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(null);
-  const [isTelegramApplyArrival, setIsTelegramApplyArrival] = useState(false);
+  const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
+    const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
+    const targetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
+    if (!targetId) return null;
+    const cached = getCachedPublishedVacancies();
+    return (
+      cached.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()) || null
+    );
+  });
+  const [isTelegramApplyArrival, setIsTelegramApplyArrival] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    return (
+      urlParams.get('apply') === '1' ||
+      urlParams.get('action') === 'apply' ||
+      urlParams.get('utm_source') === 'telegram'
+    );
+  });
   const [isAdminView, setIsAdminView] = useState(false);
   const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
   const [activeExpansionView, setActiveExpansionView] = useState<
@@ -326,8 +354,8 @@ export default function App() {
   // Language
   const [language, setLanguage] = useState<'en' | 'am'>('en');
 
-  // Loading
-  const [loading, setLoading] = useState(true);
+  // Loading — immediately false if localStorage already hydrated vacancies
+  const [loading, setLoading] = useState<boolean>(() => getCachedPublishedVacancies().length === 0);
 
   // Customer Visit Count & AI Features State
   const [visitStats, setVisitStats] = useState<CustomerVisitCountSummary | null>(null);
@@ -441,116 +469,148 @@ export default function App() {
       }
     });
 
-    async function loadData() {
+    // 1. IMMEDIATELY handle URL flags & deep-linked job URL at t=0 (never wait for full DB scans!)
+    let deepLinkTargetId: string | undefined;
+    let deepLinkArrivedFromTelegram = false;
+    let deepLinkApplyAction = false;
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('enablePush') === '1' && !isRunningInEmbeddedIframe()) {
+        enablePushRequestedRef.current = true;
+        clearNotificationPromptDismissal();
+        urlParams.delete('enablePush');
+        const cleanQuery = urlParams.toString();
+        const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+      if (urlParams.get('installApp') === '1' && !isRunningInEmbeddedIframe()) {
+        urlParams.delete('installApp');
+        const cleanQuery = urlParams.toString();
+        const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+        setIsMinuteInstallReminderOpen(true);
+      }
+      if (urlParams.get('view') === 'top-recommendations') {
+        pendingOpenTopRecsRef.current = true;
+        const notifIdFromUrl = urlParams.get('notificationId');
+        if (notifIdFromUrl) pendingNotifReadIdRef.current = notifIdFromUrl;
+      }
+      const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
+      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
+      deepLinkTargetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
+      deepLinkArrivedFromTelegram = urlParams.get('utm_source') === 'telegram';
+      deepLinkApplyAction =
+        urlParams.get('apply') === '1' ||
+        urlParams.get('action') === 'apply' ||
+        deepLinkArrivedFromTelegram;
+
+      if (deepLinkTargetId) {
+        fetchVacancyById(deepLinkTargetId)
+          .then((found) => {
+            if (!found) return;
+            setSelectedVacancy((prev) => prev || found);
+            setIsTelegramApplyArrival(deepLinkApplyAction);
+            document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+            trackAnalyticsEvent('vacancy_view', {
+              jobId: found.id,
+              jobTitle: found.title,
+              organization: found.organization,
+              category: found.category,
+              path: `/jobs/${encodeURIComponent(found.id)}`,
+            });
+            if (deepLinkArrivedFromTelegram) {
+              trackAnalyticsEvent('click_telegram_link', {
+                jobId: found.id,
+                jobTitle: found.title,
+                organization: found.organization,
+                category: found.category,
+                path: `/jobs/${encodeURIComponent(found.id)}`,
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    }
+
+    // 2. Fast same-origin RAM cache hydration for first-time visitors (renders jobs in ~15ms)
+    if (getCachedPublishedVacancies().length === 0) {
+      fetchPublishedVacanciesFromServerFast()
+        .then((fastList) => {
+          if (fastList.length > 0) {
+            setVacancies((prev) => (prev.length === 0 ? fastList : prev));
+            setLoading(false);
+            if (deepLinkTargetId) {
+              const found = fastList.find(
+                (v) => v.id === deepLinkTargetId || v.id.toLowerCase() === deepLinkTargetId!.toLowerCase()
+              );
+              if (found) {
+                setSelectedVacancy((prev) => prev || found);
+                setIsTelegramApplyArrival(deepLinkApplyAction);
+                document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 3. Load live site settings & published vacancies first (never blocked by secondary datasets)
+    async function loadPrimaryData() {
       try {
-        const [
-          loadedSettings,
-          loadedVacancies,
-          loadedIntlJobs,
-          loadedPathways,
-          loadedScholarships,
-        ] = await Promise.all([
+        const [loadedSettings, loadedVacancies] = await Promise.all([
           getSiteSettings(),
           fetchPublishedVacancies(),
-          fetchInternationalJobs(false),
-          fetchImmigrationPathways(false),
-          fetchExperienceScholarships(false),
         ]);
         setSiteSettings(loadedSettings);
-        setVacancies(loadedVacancies);
-        setInternationalJobs(loadedIntlJobs);
-        setImmigrationPathways(loadedPathways);
-        setExperienceScholarships(loadedScholarships);
-
-        // Seed server-side vacancy catalog if empty so matching engine always has verified jobs
-        syncVacanciesToServerCatalog(loadedVacancies, { mode: 'seed_if_empty' });
+        if (loadedVacancies.length > 0) {
+          setVacancies(loadedVacancies);
+          // Seed server-side vacancy catalog if empty so matching engine & fast API stay warm
+          syncVacanciesToServerCatalog(loadedVacancies, { mode: 'seed_if_empty' });
+        }
 
         // Ensure Always-On GA4 measurement ID from siteSettings is initialized
         if (loadedSettings.gaTrackingEnabled !== false) {
           initGoogleAnalytics4(loadedSettings.gaMeasurementId || 'G-KH6X73105S', false);
         }
 
-        // Check URL parameter or path for direct job link (from Telegram / WhatsApp / Social shares)
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('enablePush') === '1' && !isRunningInEmbeddedIframe()) {
-            enablePushRequestedRef.current = true;
-            clearNotificationPromptDismissal();
-            urlParams.delete('enablePush');
-            const cleanQuery = urlParams.toString();
-            const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
-            window.history.replaceState({}, '', cleanUrl);
-          }
-          if (urlParams.get('installApp') === '1' && !isRunningInEmbeddedIframe()) {
-            urlParams.delete('installApp');
-            const cleanQuery = urlParams.toString();
-            const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
-            window.history.replaceState({}, '', cleanUrl);
-            setIsMinuteInstallReminderOpen(true);
-          }
-          if (urlParams.get('view') === 'top-recommendations') {
-            pendingOpenTopRecsRef.current = true;
-            const notifIdFromUrl = urlParams.get('notificationId');
-            if (notifIdFromUrl) pendingNotifReadIdRef.current = notifIdFromUrl;
-          }
-          const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
-          const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
-          const targetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
-          const arrivedFromTelegram = urlParams.get('utm_source') === 'telegram';
-          const applyAction =
-            urlParams.get('apply') === '1' ||
-            urlParams.get('action') === 'apply' ||
-            arrivedFromTelegram;
-
-          if (targetId) {
-            let found = loadedVacancies.find(
-              (v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()
-            );
-            if (!found) {
-              const fetchedOne = await fetchVacancyById(targetId).catch(() => null);
-              if (fetchedOne) found = fetchedOne;
-            }
-            if (found) {
-              setSelectedVacancy(found);
-              setIsTelegramApplyArrival(applyAction);
-              document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
-              trackAnalyticsEvent('vacancy_view', {
-                jobId: found.id,
-                jobTitle: found.title,
-                organization: found.organization,
-                category: found.category,
-                path: `/jobs/${encodeURIComponent(found.id)}`,
-                gaMeasurementId: loadedSettings.gaMeasurementId,
-              });
-              if (arrivedFromTelegram) {
-                trackAnalyticsEvent('click_telegram_link', {
-                  jobId: found.id,
-                  jobTitle: found.title,
-                  organization: found.organization,
-                  category: found.category,
-                  path: `/jobs/${encodeURIComponent(found.id)}`,
-                  gaMeasurementId: loadedSettings.gaMeasurementId,
-                });
-              }
-            }
+        // Fallback deep-link match if single-doc fetch didn't resolve yet
+        if (deepLinkTargetId) {
+          const found = loadedVacancies.find(
+            (v) => v.id === deepLinkTargetId || v.id.toLowerCase() === deepLinkTargetId!.toLowerCase()
+          );
+          if (found) {
+            setSelectedVacancy((prev) => prev || found);
+            setIsTelegramApplyArrival(deepLinkApplyAction);
+            document.title = `${found.title} at ${found.organization} | HOPELAND JOBS`;
           }
         }
       } catch (err) {
-        console.warn('Initial data load error:', err);
+        console.warn('Initial primary data load error:', err);
       } finally {
         setLoading(false);
       }
     }
-    loadData();
+    loadPrimaryData();
 
-    // Background idle prefetch for frequently visited public chunks
+    // 4. Load secondary international/immigration/scholarship datasets asynchronously in background
+    Promise.all([
+      fetchInternationalJobs(false).catch(() => []),
+      fetchImmigrationPathways(false).catch(() => []),
+      fetchExperienceScholarships(false).catch(() => []),
+    ]).then(([loadedIntlJobs, loadedPathways, loadedScholarships]) => {
+      setInternationalJobs(loadedIntlJobs);
+      setImmigrationPathways(loadedPathways);
+      setExperienceScholarships(loadedScholarships);
+    });
+
+    // Background idle prefetch for remaining lazy secondary views (350ms after mount)
     const prefetchTimer = setTimeout(() => {
-      import('./components/AllCategoriesView');
-      import('./components/CategoryView');
-      import('./components/LocationJobsView');
-      import('./components/VacancyDetailModal');
-      import('./components/UserAuthModal');
-    }, 1200);
+      import('./components/InternationalJobsView');
+      import('./components/ImmigrationResidenceView');
+      import('./components/ScholarshipsView');
+      import('./components/JobSeekerDashboard');
+      import('./components/SavedJobsDrawer');
+    }, 350);
 
     // Handle return from Google signInWithRedirect (mobile browsers where popups are blocked)
     getRedirectResult(auth)
@@ -775,24 +835,7 @@ export default function App() {
                   }
                   return;
                 }
-
-                if (!isAmharicSignupPromoDismissed()) {
-                  alreadyPromptedThisLoginRef.current = true;
-                  setIsNotificationModalOpen(false);
-                  setIsAmharicPromoOpen(true);
-                  return;
-                }
-
-                if (
-                  status.shouldShowPopup &&
-                  status.reason !== 'already_active' &&
-                  status.reason !== 'dismissed_cooldown' &&
-                  status.reason !== 'unsupported'
-                ) {
-                  alreadyPromptedThisLoginRef.current = true;
-                  setNotificationModalReason(status.reason);
-                  setIsNotificationModalOpen(true);
-                }
+                // Login, registration, and app download are 100% optional — do not interrupt visitors with an arrival popup.
               } catch {}
             }, 900);
           }
@@ -1021,11 +1064,17 @@ export default function App() {
             }
           }
           if (all.length > 0) {
-            // Autonomous healing sweep: immediately archives expired listings and standardizes categories
+            // Autonomous healing sweep: permanently deletes vacancies without deadlines, archives expired listings, and standardizes categories
             const healed = runAutonomousVacancyHealing(all);
-            if (healed.changedCount > 0) {
+            if (healed.deletedNoDeadlineIds.length > 0) {
+              deleteBatchVacancies(healed.deletedNoDeadlineIds).catch(() => {});
+              deleteVacanciesFromServerCatalog(healed.deletedNoDeadlineIds);
+            }
+            if (healed.changedCount > 0 || healed.deletedNoDeadlineIds.length > 0) {
               setVacancies(healed.healedVacancies);
-              saveBatchVacancies(healed.healedVacancies);
+              if (healed.healedVacancies.length > 0) {
+                saveBatchVacancies(healed.healedVacancies);
+              }
               syncVacanciesToServerCatalog(healed.healedVacancies, { mode: 'replace' });
             } else {
               setVacancies(all);
@@ -1084,7 +1133,7 @@ export default function App() {
     OFFICIAL_CATEGORIES.forEach((c) => map.set(c.name, 0));
 
     vacancies.forEach((v) => {
-      if (v.status === 'published' && !isExpired(v.applicationDeadline)) {
+      if (v.status === 'published' && hasValidVacancyDeadline(v) && !isExpired(v.applicationDeadline)) {
         const current = map.get(v.category) || 0;
         map.set(v.category, current + 1);
       }
@@ -1094,12 +1143,12 @@ export default function App() {
 
   // Total active vacancies count across all sectors
   const totalActiveVacancies = useMemo(() => {
-    return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline)).length;
+    return vacancies.filter((v) => v.status === 'published' && hasValidVacancyDeadline(v) && !isExpired(v.applicationDeadline)).length;
   }, [vacancies]);
 
   // Active published vacancies list
   const publishedVacancies = useMemo(() => {
-    return vacancies.filter((v) => v.status === 'published' && !isExpired(v.applicationDeadline));
+    return vacancies.filter((v) => v.status === 'published' && hasValidVacancyDeadline(v) && !isExpired(v.applicationDeadline));
   }, [vacancies]);
 
   // Filtered Ethiopian showcase companies when browsing/searching in Companies tab
@@ -1154,16 +1203,25 @@ export default function App() {
     });
   }, [publishedVacancies, heroSearch, heroLocation, heroSector, heroEmploymentType]);
 
-  const hasExpSignals = useMemo(() => hasProfileExperienceSignals(userProfile), [userProfile]);
+  // Strict registered-only profile for real matching (never fake-match unregistered guests)
+  const registeredProfile = useMemo(
+    () => (currentUser && userProfile && userProfile.uid ? userProfile : null),
+    [currentUser, userProfile]
+  );
+
+  const hasExpSignals = useMemo(
+    () => hasProfileExperienceSignals(registeredProfile),
+    [registeredProfile]
+  );
 
   const vacancyExperienceMap = useMemo(() => {
     const map = new Map<string, ExperienceMatchAssessment>();
-    if (!hasExpSignals) return map;
+    if (!hasExpSignals || !registeredProfile) return map;
     publishedVacancies.forEach((v) => {
-      map.set(v.id, assessVacancyExperienceMatch(userProfile, v));
+      map.set(v.id, assessVacancyExperienceMatch(registeredProfile, v));
     });
     return map;
-  }, [publishedVacancies, userProfile, hasExpSignals]);
+  }, [publishedVacancies, registeredProfile, hasExpSignals]);
 
   const localExperienceMatchedVacancies = useMemo(() => {
     if (!hasExpSignals) return [];
@@ -1337,17 +1395,17 @@ export default function App() {
     }
   };
 
-  // Personalized recommendations across all verified sectors using shared engine
+  // Personalized recommendations across all verified sectors using shared engine (registered users ONLY)
   const recommendedVacancies = useMemo(() => {
-    if (!userProfile) return [];
+    if (!registeredProfile) return [];
     return computeStaffOpportunityRecommendations(
-      userProfile,
+      registeredProfile,
       publishedVacancies,
       [],
       [],
       30
     );
-  }, [publishedVacancies, userProfile]);
+  }, [publishedVacancies, registeredProfile]);
 
   // Continuous 24/7 Search Bar Activity Tracking
   useEffect(() => {
@@ -1526,6 +1584,26 @@ export default function App() {
 
   // Admin Actions
   const handleSaveVacancy = async (updated: Vacancy) => {
+    // STRICT RULE 1: Any vacancy without a real calendar deadline is permanently deleted
+    if (!hasValidVacancyDeadline(updated)) {
+      setVacancies((prev) => prev.filter((v) => v.id !== updated.id));
+      await deleteVacancy(updated.id).catch(() => {});
+      deleteVacanciesFromServerCatalog([updated.id]);
+      throw new Error(
+        `Vacancy "${updated.title || 'Untitled'}" has no valid application deadline and has been permanently deleted.`
+      );
+    }
+
+    // STRICT RULE 2: Publishing requires all 6 mandatory fields
+    if (updated.status === 'published') {
+      const check = validateVacancyStrict(updated, { allowExpired: false });
+      if (!check.valid) {
+        throw new Error(
+          `Cannot publish "${updated.title || 'Untitled'}". Missing mandatory fields: ${check.missingFields.join(', ')}.`
+        );
+      }
+    }
+
     const existing = vacancies.find((v) => v.id === updated.id);
     setVacancies((prev) => {
       const exists = prev.some((v) => v.id === updated.id);
@@ -1544,15 +1622,37 @@ export default function App() {
   };
 
   const handleBatchSaveVacancies = async (newVacancies: Vacancy[]) => {
+    const { withDeadline, withoutDeadline } = partitionVacanciesByDeadline(newVacancies);
+
+    // Permanently delete any vacancy in batch that lacks a real calendar deadline
+    if (withoutDeadline.length > 0) {
+      const badIds = withoutDeadline.map((v) => v.id).filter(Boolean);
+      if (badIds.length > 0) {
+        setVacancies((prev) => prev.filter((v) => !badIds.includes(v.id)));
+        await deleteBatchVacancies(badIds).catch(() => {});
+        deleteVacanciesFromServerCatalog(badIds);
+      }
+    }
+
+    // Block incomplete vacancies from being published
+    const validVacancies = withDeadline.filter((v) => {
+      if (v.status === 'published') {
+        return validateVacancyStrict(v, { allowExpired: false }).valid;
+      }
+      return true;
+    });
+
+    if (validVacancies.length === 0) return;
+
     setVacancies((prev) => {
       const map = new Map(prev.map((v) => [v.id, v]));
-      newVacancies.forEach((v) => map.set(v.id, v));
+      validVacancies.forEach((v) => map.set(v.id, v));
       return Array.from(map.values());
     });
-    await saveBatchVacancies(newVacancies);
-    const publishedIds = newVacancies.filter((v) => v.status === 'published').map((v) => v.id);
+    await saveBatchVacancies(validVacancies);
+    const publishedIds = validVacancies.filter((v) => v.status === 'published').map((v) => v.id);
     await syncAllUsersFromFirestoreToServer(adminEmail || undefined);
-    await syncVacanciesToServerCatalog(newVacancies, {
+    await syncVacanciesToServerCatalog(validVacancies, {
       mode: 'merge',
       changedVacancyId: publishedIds[0],
       changedVacancyIds: publishedIds,
@@ -1588,6 +1688,24 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
+    // Permanently delete if no valid deadline
+    if (!hasValidVacancyDeadline(updated)) {
+      await handleDeleteVacancy(id);
+      throw new Error(
+        `Vacancy "${updated.title || 'Untitled'}" had no valid deadline and was permanently deleted.`
+      );
+    }
+
+    // Block publishing if any of the 6 mandatory fields are missing
+    if (status === 'published') {
+      const check = validateVacancyStrict(updated, { allowExpired: false });
+      if (!check.valid) {
+        throw new Error(
+          `Cannot publish "${updated.title || 'Untitled'}". Missing mandatory fields: ${check.missingFields.join(', ')}.`
+        );
+      }
+    }
+
     setVacancies((prev) => prev.map((v) => (v.id === id ? updated : v)));
     try {
       await saveVacancy(updated);
@@ -1601,6 +1719,7 @@ export default function App() {
       void maybeAutoPublishVacancyToTelegram(updated, target);
     } catch (err) {
       console.warn('Update vacancy status note:', err);
+      throw err;
     }
   };
 
@@ -1624,32 +1743,40 @@ export default function App() {
   const handleRestoreDuplicate = async (report: DuplicateReportItem) => {
     const restoredVacancy: Vacancy = {
       id: `restored_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      title: report.candidateTitle,
-      organization: report.candidateOrg,
+      title: report.candidateTitle || '',
+      organization: report.candidateOrg || '',
       category: report.candidateData.category || 'Private Companies',
       location: report.candidateData.location || 'Addis Ababa',
       employmentType: report.candidateData.employmentType || 'Full-time',
-      vacanciesCount: report.candidateData.vacanciesCount || 'Not specified',
-      salary: report.candidateData.salary || 'Not specified',
-      educationQualification: report.candidateData.educationQualification || 'Not specified',
-      requiredFieldOfStudy: report.candidateData.requiredFieldOfStudy || 'Not specified',
-      experienceYears: report.candidateData.experienceYears || 'Not specified',
+      vacanciesCount: report.candidateData.vacanciesCount || '',
+      salary: report.candidateData.salary || '',
+      educationQualification: report.candidateData.educationQualification || '',
+      requiredFieldOfStudy: report.candidateData.requiredFieldOfStudy || '',
+      experienceYears: report.candidateData.experienceYears || '',
       requiredSkills: report.candidateData.requiredSkills || [],
-      description: report.candidateData.description || 'Restored duplicate entry.',
+      description: report.candidateData.description || '',
       responsibilities: report.candidateData.responsibilities || [],
       requiredDocuments: report.candidateData.requiredDocuments || ['CV', 'Cover Letter'],
-      applicationMethod: report.candidateData.applicationMethod || 'Online URL',
+      applicationMethod: (report.candidateData.applicationMethod || '') as Vacancy['applicationMethod'],
       applicationUrl: report.candidateData.applicationUrl || '',
       applicationEmail: report.candidateData.applicationEmail || '',
-      applicationInstructions: report.candidateData.applicationInstructions || 'Apply directly.',
-      applicationDeadline: report.candidateData.applicationDeadline || '2026-11-30',
-      contactInfo: report.candidateData.contactInfo || 'Not specified',
+      physicalAddress: report.candidateData.physicalAddress || '',
+      applicationInstructions: report.candidateData.applicationInstructions || '',
+      applicationDeadline: report.candidateData.applicationDeadline || '',
+      contactInfo: report.candidateData.contactInfo || '',
       status: 'pending_review',
       viewsCount: 0,
       sharesCount: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    const strictCheck = validateVacancyStrict(restoredVacancy, { allowExpired: true });
+    if (!strictCheck.hasValidDeadline) {
+      await deleteDuplicateReport(report.id);
+      setDuplicateReports((prev) => prev.filter((r) => r.id !== report.id));
+      throw new Error('Cannot restore duplicate: vacancy has no valid application deadline.');
+    }
 
     await saveVacancy(restoredVacancy);
     await updateDuplicateReportStatus(report.id, 'restored');
@@ -1662,9 +1789,10 @@ export default function App() {
     settings?: SiteSettings;
     duplicateReports?: DuplicateReportItem[];
   }) => {
-    await saveBatchVacancies(data.vacancies);
+    const cleanVacancies = (data.vacancies || []).filter((v) => hasValidVacancyDeadline(v));
+    await saveBatchVacancies(cleanVacancies);
     if (data.settings) await saveSiteSettings(data.settings);
-    setVacancies(data.vacancies);
+    setVacancies(cleanVacancies);
     if (data.settings) setSiteSettings(data.settings);
     if (data.duplicateReports) setDuplicateReports(data.duplicateReports);
   };
@@ -1778,7 +1906,8 @@ export default function App() {
     setAnalyticsUserId(null);
   }, []);
 
-  // Dynamically sync developer's App Logo to favicon, Apple Touch Icon, and Web Manifest via API endpoints
+  // Dynamically sync developer's App Logo to favicon and Apple Touch Icon
+  // (Keep <link rel="manifest"> static in index.html so Chromium never cancels beforeinstallprompt!)
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const versionTag = encodeURIComponent(
@@ -1786,16 +1915,12 @@ export default function App() {
     );
     const dynamicFavicon = `/api/pwa-icon/favicon-32x32.png?v=${versionTag}`;
     const dynamicAppleIcon = `/api/pwa-icon/apple-touch-icon.png?v=${versionTag}`;
-    const dynamicManifest = `/api/manifest.webmanifest?v=${versionTag}`;
 
     const faviconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (faviconLink) faviconLink.href = dynamicFavicon;
 
     const appleLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     if (appleLink) appleLink.href = dynamicAppleIcon;
-
-    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (manifestLink) manifestLink.href = dynamicManifest;
   }, [
     siteSettings.appLogoUrl,
     siteSettings.appLogo512Url,
@@ -1966,7 +2091,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBFBFA] flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#FBFBFA] flex flex-col font-['Plus_Jakarta_Sans','Noto_Sans_Ethiopic',sans-serif]">
       {/* Navigation Bar */}
       <Navbar
         siteSettings={siteSettings}
@@ -2087,7 +2212,7 @@ export default function App() {
             <InternationalJobsView
               jobs={internationalJobs}
               onBack={() => handleOpenExpansionView(null)}
-              userProfile={userProfile}
+              userProfile={registeredProfile}
               onOpenAuth={() => {
                 setUserAuthModalMode('signin');
                 setIsUserAuthModalOpen(true);
@@ -2114,80 +2239,84 @@ export default function App() {
           </Suspense>
         ) : isAllCategoriesView ? (
           /* DEDICATED FULL CATEGORIES DIRECTORY */
-          <Suspense fallback={<PageLoader />}>
-            <AllCategoriesView
-              categories={OFFICIAL_CATEGORIES}
-              vacancies={vacancies}
-              onBack={() => setIsAllCategoriesView(false)}
-              onSelectCategory={(cat) => {
-                setIsAllCategoriesView(false);
-                setSelectedCategory(cat);
-                window.scrollTo({ top: 0, behavior: 'auto' });
-              }}
-            />
-          </Suspense>
+          <AllCategoriesView
+            categories={OFFICIAL_CATEGORIES}
+            vacancies={vacancies}
+            onBack={() => setIsAllCategoriesView(false)}
+            onSelectCategory={(cat) => {
+              setIsAllCategoriesView(false);
+              setSelectedCategory(cat);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
+          />
         ) : selectedLocation ? (
           /* DEDICATED LOCATION VACANCY PAGE */
-          <Suspense fallback={<PageLoader />}>
-            <LocationJobsView
-              initialLocation={selectedLocation}
-              vacancies={vacancies}
-              onBack={() => {
-                setSelectedLocation(null);
-                window.scrollTo({ top: 0, behavior: 'auto' });
-              }}
-              onSelectVacancy={handleSelectVacancy}
-              savedJobIds={savedJobIds}
-              onToggleSaveJob={handleToggleSaveJob}
-              telegramUrl={siteSettings.telegramChannelUrl}
-              userProfile={userProfile}
-              onOpenAuth={() => {
-                setUserAuthModalMode('signin');
-                setIsUserAuthModalOpen(true);
-              }}
-              onOpenProfile={() => {
-                setJobSeekerInitialTab('professional');
-                setIsJobSeekerDashboardOpen(true);
-              }}
-            />
-          </Suspense>
+          <LocationJobsView
+            initialLocation={selectedLocation}
+            vacancies={vacancies}
+            onBack={() => {
+              setSelectedLocation(null);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
+            onSelectVacancy={handleSelectVacancy}
+            savedJobIds={savedJobIds}
+            onToggleSaveJob={handleToggleSaveJob}
+            telegramUrl={siteSettings.telegramChannelUrl}
+            userProfile={registeredProfile}
+            onOpenAuth={() => {
+              setUserAuthModalMode('signin');
+              setIsUserAuthModalOpen(true);
+            }}
+            onOpenProfile={() => {
+              setJobSeekerInitialTab('professional');
+              setIsJobSeekerDashboardOpen(true);
+            }}
+          />
         ) : selectedCategory ? (
           /* DEDICATED CATEGORY VACANCY PAGE */
-          <Suspense fallback={<PageLoader />}>
-            <CategoryView
-              category={selectedCategory}
-              vacancies={vacancies}
-              onBack={() => {
-                setSelectedCategory(null);
-                window.scrollTo({ top: 0, behavior: 'auto' });
-              }}
-              onSelectVacancy={handleSelectVacancy}
-              savedJobIds={savedJobIds}
-              onToggleSaveJob={handleToggleSaveJob}
-              onSelectLocation={handleSelectLocation}
-              telegramUrl={siteSettings.telegramChannelUrl}
-              userProfile={userProfile}
-            />
-          </Suspense>
+          <CategoryView
+            category={selectedCategory}
+            vacancies={vacancies}
+            onBack={() => {
+              setSelectedCategory(null);
+              window.scrollTo({ top: 0, behavior: 'auto' });
+            }}
+            onSelectVacancy={handleSelectVacancy}
+            savedJobIds={savedJobIds}
+            onToggleSaveJob={handleToggleSaveJob}
+            onSelectLocation={handleSelectLocation}
+            telegramUrl={siteSettings.telegramChannelUrl}
+            userProfile={registeredProfile}
+          />
         ) : (
           /* HOMEPAGE (Clean Ethiojobs-inspired HopelandJobs Layout) */
           <>
             {/* 1. CLEAN WHITE HERO & ROUNDED SEARCH SECTION */}
-            <section className="relative bg-white overflow-hidden pt-14 pb-16 sm:pt-24 sm:pb-24 px-4 sm:px-6 lg:px-8">
+            <section className="relative bg-white overflow-hidden pt-10 pb-14 sm:pt-16 sm:pb-20 px-4 sm:px-6 lg:px-8">
               {/* Subtle Illustrated Backdrop Graphic around edges, pure white center */}
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-55"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-50"
               >
                 <img
                   src={heroCareerBackdropImg}
                   alt=""
                   className="w-full h-full object-cover object-center"
                 />
-                <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/35 to-white" />
+                <div className="absolute inset-0 bg-gradient-to-b from-white/80 via-white/55 to-white" />
               </div>
 
               <div className="relative z-10 max-w-4xl mx-auto">
+                {/* Welcoming Bilingual Hero Headline */}
+                <div className="text-center max-w-2xl mx-auto mb-7 sm:mb-8 space-y-2">
+                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-[#0B132B] leading-[1.15] text-balance">
+                    Find Verified Jobs in Ethiopia &amp; Abroad
+                  </h1>
+                  <p className="text-sm sm:text-base font-semibold text-slate-700 leading-relaxed">
+                    በኢትዮጵያ እና በውጭ ሀገር የተረጋገጡ የስራ እድሎችን በቀላሉ ያግኙ
+                  </p>
+                </div>
+
                 {/* Clean minimal Jobs / Companies tabs above the search bar */}
                 <div
                   role="tablist"
@@ -2296,6 +2425,47 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* Bold Optional Quick Actions & Benefits Jump Row */}
+                <div className="mt-6 flex flex-col items-center gap-3">
+                  <p className="text-xs sm:text-[13px] font-semibold text-slate-700 text-center">
+                    No login required to browse or apply ·{' '}
+                    <span className="text-[#15803D] font-bold">ያለ ምዝገባ በነፃ ይጠቀሙ</span>
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2.5">
+                    {!currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAuthModalMode('signup');
+                          setIsUserAuthModalOpen(true);
+                        }}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-[#16A34A] to-[#059669] hover:from-[#15803D] hover:to-[#047857] text-white font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-emerald-600/20 cursor-pointer whitespace-nowrap"
+                      >
+                        Register Free · በነፃ ይመዝገቡ
+                      </button>
+                    )}
+                    {!isStandaloneApp && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadApplicationClick}
+                        className="min-h-[40px] px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#0B132B] font-extrabold text-xs sm:text-sm transition-all shadow-sm shadow-amber-500/25 cursor-pointer whitespace-nowrap"
+                      >
+                        Download App · አፑን ያውርዱ
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('optional-benefits-section');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="min-h-[40px] px-4 py-2 rounded-xl bg-[#0B132B] hover:bg-[#132959] text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+                    >
+                      Why Register &amp; Get the App? · ጥቅሞቹን ይመልከቱ
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -2572,15 +2742,15 @@ export default function App() {
               <div className="max-w-7xl mx-auto">
                 <div className="text-center max-w-2xl mx-auto mb-10">
                   <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
-                    Top Categories
+                    All Job Categories
                   </h2>
                   <p className="text-sm text-slate-500 mt-2">
-                    Explore verified Ethiopian career opportunities across banking, NGOs, diplomacy, IT, health, and corporate industries.
+                    Explore verified career opportunities across banking, healthcare &amp; medical, engineering &amp; construction, NGOs, IT, accounting, and all other professions.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-                  {OFFICIAL_CATEGORIES.slice(0, 12).map((cat) => {
+                  {OFFICIAL_CATEGORIES.map((cat) => {
                     const count = activeCountMap.get(cat.name) || 0;
                     return (
                       <button
@@ -2615,20 +2785,38 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setIsAllCategoriesView(true);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      window.scrollTo({ top: 0, behavior: 'auto' });
                     }}
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm shadow-xs transition-all cursor-pointer"
                   >
                     <LayoutGrid className="w-4 h-4" />
-                    <span>Explore All 16 Categories</span>
+                    <span>Filter &amp; Search All {OFFICIAL_CATEGORIES.length} Categories</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             </section>
 
-            {/* LOCAL JOBS FOR YOUR EXPERIENCE + SEE ALL TOGGLE (Rendered when signed in) */}
-            {userProfile && (
+            {/* 4B. OPTIONAL LOGIN, REGISTER & APP DOWNLOAD BENEFITS (ENGLISH & AMHARIC) */}
+            <OptionalBenefitsShowcase
+              appLogoUrl={siteSettings.appLogoUrl}
+              isLoggedIn={Boolean(currentUser || userProfile?.email)}
+              userDisplayName={userProfile?.fullName || currentUser?.displayName || currentUser?.email}
+              isStandaloneApp={isStandaloneApp}
+              isDesktop={isDesktopDevice}
+              onOpenAuth={(mode) => {
+                setUserAuthModalMode(mode);
+                setIsUserAuthModalOpen(true);
+              }}
+              onOpenDashboard={() => {
+                setJobSeekerInitialTab('overview');
+                setIsJobSeekerDashboardOpen(true);
+              }}
+              onDownloadApp={handleDownloadApplicationClick}
+            />
+
+            {/* LOCAL JOBS FOR YOUR EXPERIENCE + SEE ALL TOGGLE (Strictly Rendered ONLY when registered & signed in) */}
+            {registeredProfile ? (
               <section className="bg-white py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-100">
                 <div className="max-w-7xl mx-auto">
                   <div className="rounded-3xl p-6 sm:p-8 border border-emerald-200 bg-emerald-50/40 space-y-6">
@@ -2636,24 +2824,35 @@ export default function App() {
                       <div>
                         <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#16A34A] mb-1">
                           <Sparkles className="w-4 h-4" />
-                          <span>Experience-First Local Career Matches</span>
+                          <span>Real Profile-Verified Career Matches</span>
                         </div>
                         <h2 className="text-2xl font-bold text-[#0B132B]">
                           {homepageLocalMode === 'experience' && hasExpSignals
-                            ? 'Local Jobs Based on Your Experience'
+                            ? 'Jobs Matched to Your Exact Position, Experience & Requirements'
                             : 'All Local Jobs Across Ethiopia'}
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl leading-relaxed">
                           {hasExpSignals ? (
                             <>
-                              Prioritizing opportunities matching{' '}
+                              Real matching for{' '}
                               <strong className="text-[#15803D]">
-                                {userProfile.currentPosition || userProfile.desiredJobTitle || userProfile.preferredIndustry || 'your profession'}
+                                {registeredProfile.customProfessionOrCategory ||
+                                  registeredProfile.currentPosition ||
+                                  registeredProfile.desiredJobTitle ||
+                                  registeredProfile.preferredIndustry ||
+                                  'your profession'}
                               </strong>{' '}
-                              and closely related career fields first (e.g. Banking ↔ Finance).
+                              across all sectors (Health, Engineering, Banking, NGO, IT &amp; custom fields).
+                              {Array.isArray(registeredProfile.additionalRequirements) &&
+                                registeredProfile.additionalRequirements.length > 0 && (
+                                  <span className="block mt-1 font-semibold text-emerald-900">
+                                    Strict indicators active: ONLY showing jobs matching{' '}
+                                    {registeredProfile.additionalRequirements.join(', ')}.
+                                  </span>
+                                )}
                             </>
                           ) : (
-                            'Add your work experience & expertise to filter local jobs tailored to your profession and related fields first.'
+                            'Add your real job position, work experience, custom profession, or specific requirements so we can match ONLY real jobs that fit you.'
                           )}
                         </p>
                       </div>
@@ -2895,6 +3094,47 @@ export default function App() {
                         </div>
                       );
                     })()}
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="bg-white py-10 px-4 sm:px-6 lg:px-8 border-t border-slate-100">
+                <div className="max-w-7xl mx-auto">
+                  <div className="rounded-3xl p-6 sm:p-8 border-2 border-slate-200 bg-gradient-to-r from-slate-50 via-white to-emerald-50/60 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    <div className="space-y-1.5 max-w-2xl">
+                      <div className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#16A34A]">
+                        <Sparkles className="w-4 h-4" />
+                        <span>100% Real Matching · Zero Fake Matches</span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-extrabold text-[#0B132B]">
+                        Want Real Job Matching for Your Exact Position &amp; Requirements?
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        We never show fake or random matches to unregistered visitors. Sign in or create a free optional account, fill your real position, experience, profession (Health, Engineering, Banking, NGO, IT, or any unlisted field), and add strict must-have requirements — we will show you ONLY jobs that genuinely match.
+                      </p>
+                      <p className="text-xs text-emerald-900 font-semibold leading-relaxed">
+                        እውነተኛ የስራ ማዛመድ የሚሰራው መገለጫዎን (የስራ መደብ፣ ልምድ፣ እና ልዩ መስፈርቶችዎን) ሲሞሉ ብቻ ነው።
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserAuthModalMode('signup');
+                          setIsUserAuthModalOpen(true);
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-extrabold text-xs sm:text-sm shadow-sm transition-colors cursor-pointer"
+                      >
+                        Register &amp; Set Requirements
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectLocation('All')}
+                        className="px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-[#0B132B] border border-slate-300 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+                      >
+                        Browse All {publishedVacancies.length} Jobs
+                      </button>
+                    </div>
                   </div>
                 </div>
               </section>
