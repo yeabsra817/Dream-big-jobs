@@ -24,6 +24,8 @@ import {
   Layers,
   LayoutGrid,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Award,
   Zap,
   UserCheck,
@@ -262,6 +264,7 @@ export default function App() {
   });
   const [isAdminView, setIsAdminView] = useState(false);
   const [isAllCategoriesView, setIsAllCategoriesView] = useState(false);
+  const [showHomeCategories, setShowHomeCategories] = useState(false);
   const [activeExpansionView, setActiveExpansionView] = useState<
     'international-jobs' | 'immigration' | 'scholarships' | null
   >(() => {
@@ -2733,67 +2736,122 @@ export default function App() {
               </section>
             )}
 
-            {/* 4. TOP CATEGORIES SECTION (Light Grey #F5F7FA) */}
+            {/* 4. JOB CATEGORIES SECTION — Hidden by default; visitors can list them on demand */}
             <section
               id="categories-section"
-              aria-label="Top Categories"
-              className="bg-[#F5F7FA] py-14 sm:py-16 px-4 sm:px-6 lg:px-8 border-t border-slate-200/70"
+              aria-label="Job Categories"
+              className={`bg-[#F5F7FA] px-4 sm:px-6 lg:px-8 border-t border-slate-200/70 transition-colors ${
+                showHomeCategories ? 'py-12 sm:py-16' : 'py-6 sm:py-8'
+              }`}
             >
               <div className="max-w-7xl mx-auto">
-                <div className="text-center max-w-2xl mx-auto mb-10">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0B132B]">
-                    All Job Categories
-                  </h2>
-                  <p className="text-sm text-slate-500 mt-2">
-                    Explore verified career opportunities across banking, healthcare &amp; medical, engineering &amp; construction, NGOs, IT, accounting, and all other professions.
-                  </p>
+                <div
+                  className={`bg-white rounded-2xl border border-slate-200/80 px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                    showHomeCategories ? 'mb-8' : ''
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[#0B132B]">
+                      All Job Categories
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-slate-500 mt-1 tabular-nums">
+                      <span>{OFFICIAL_CATEGORIES.length} Sectors</span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {totalActiveVacancies} {totalActiveVacancies === 1 ? 'Open Job' : 'Open Jobs'}
+                      </span>
+                      <span aria-hidden="true" className="hidden sm:inline">·</span>
+                      <span className="hidden sm:inline">
+                        Banking, Healthcare, Engineering, NGOs, IT &amp; more
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowHomeCategories((prev) => !prev)}
+                      aria-expanded={showHomeCategories}
+                      aria-controls="home-categories-grid"
+                      className={`inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A] ${
+                        showHomeCategories
+                          ? 'bg-slate-100 hover:bg-slate-200 text-[#0B132B]'
+                          : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
+                      }`}
+                    >
+                      <LayoutGrid className="w-4 h-4 shrink-0" />
+                      <span>
+                        {showHomeCategories ? 'Hide Job Categories' : 'List All Job Categories'}
+                      </span>
+                      {showHomeCategories ? (
+                        <ChevronUp className="w-4 h-4 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 shrink-0" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-                  {OFFICIAL_CATEGORIES.map((cat) => {
-                    const count = activeCountMap.get(cat.name) || 0;
-                    return (
+                {showHomeCategories && (
+                  <>
+                    <div
+                      id="home-categories-grid"
+                      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5"
+                    >
+                      {OFFICIAL_CATEGORIES.map((cat) => {
+                        const count = activeCountMap.get(cat.name) || 0;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleSelectCategoryByName(cat.name)}
+                            className="group bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#16A34A] hover:shadow-md transition-all text-left flex items-start gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                          >
+                            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#16A34A] group-hover:bg-[#16A34A] group-hover:text-white transition-colors flex items-center justify-center shrink-0">
+                              <CategoryIcon iconName={cat.iconName} className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-bold text-[#0B132B] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug">
+                                {cat.name}
+                              </h3>
+                              {cat.amharicName && (
+                                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                  {cat.amharicName}
+                                </p>
+                              )}
+                              <p className="text-xs font-semibold text-slate-500 mt-1.5 tabular-nums">
+                                {count} {count === 1 ? 'Open Job' : 'Open Jobs'}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                       <button
-                        key={cat.id}
                         type="button"
-                        onClick={() => handleSelectCategoryByName(cat.name)}
-                        className="group bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#16A34A] hover:shadow-md transition-all text-left flex items-start gap-4 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]"
+                        onClick={() => {
+                          setIsAllCategoriesView(true);
+                          window.scrollTo({ top: 0, behavior: 'auto' });
+                        }}
+                        className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
                       >
-                        <div className="w-11 h-11 rounded-xl bg-emerald-50 text-[#16A34A] group-hover:bg-[#16A34A] group-hover:text-white transition-colors flex items-center justify-center shrink-0">
-                          <CategoryIcon iconName={cat.iconName} className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-sm font-bold text-[#0B132B] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug">
-                            {cat.name}
-                          </h3>
-                          {cat.amharicName && (
-                            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                              {cat.amharicName}
-                            </p>
-                          )}
-                          <p className="text-xs font-semibold text-slate-500 mt-1.5 tabular-nums">
-                            {count} {count === 1 ? 'Open Job' : 'Open Jobs'}
-                          </p>
-                        </div>
+                        <LayoutGrid className="w-4 h-4" />
+                        <span>Filter &amp; Search All {OFFICIAL_CATEGORIES.length} Categories</span>
+                        <ChevronRight className="w-4 h-4" />
                       </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-9 text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAllCategoriesView(true);
-                      window.scrollTo({ top: 0, behavior: 'auto' });
-                    }}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white hover:bg-[#16A34A] text-[#0B132B] hover:text-white border border-slate-200 hover:border-[#16A34A] font-semibold text-sm shadow-xs transition-all cursor-pointer"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                    <span>Filter &amp; Search All {OFFICIAL_CATEGORIES.length} Categories</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowHomeCategories(false)}
+                        className="inline-flex items-center gap-1.5 min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-200/70 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                        <span>Hide Categories</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
