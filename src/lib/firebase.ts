@@ -571,8 +571,56 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
     throw new Error('firestore_miss');
   })();
 
+  // Direct HTTPS Firestore REST lookup (works even on mobile networks where Firestore SDK WebChannel hangs)
+  const fromFirestoreRest = (async (): Promise<Vacancy> => {
+    const projectId = String((firebaseConfig as any)?.projectId || '').trim();
+    const databaseId = String((firebaseConfig as any)?.firestoreDatabaseId || '(default)').trim();
+    const apiKey = String((firebaseConfig as any)?.apiKey || '').trim();
+    if (!projectId) throw new Error('no_project_id');
+    const restUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(
+      projectId
+    )}/databases/${encodeURIComponent(databaseId)}/documents/vacancies/${encodeURIComponent(
+      cleanId
+    )}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''}`;
+    const res = await fetch(restUrl, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('fs_rest_miss');
+    const docJson = await res.json();
+    const fields = docJson?.fields;
+    if (!fields || typeof fields !== 'object') throw new Error('fs_rest_empty');
+    const decodeVal = (val: any): any => {
+      if (!val || typeof val !== 'object') return undefined;
+      if ('stringValue' in val) return String(val.stringValue);
+      if ('integerValue' in val) return Number(val.integerValue);
+      if ('doubleValue' in val) return Number(val.doubleValue);
+      if ('booleanValue' in val) return Boolean(val.booleanValue);
+      if ('nullValue' in val) return null;
+      if ('timestampValue' in val) return String(val.timestampValue);
+      if ('arrayValue' in val) {
+        return Array.isArray(val.arrayValue?.values)
+          ? val.arrayValue.values.map(decodeVal).filter((x: any) => x !== undefined)
+          : [];
+      }
+      if ('mapValue' in val) {
+        const out: Record<string, any> = {};
+        for (const [k, v] of Object.entries(val.mapValue?.fields || {})) {
+          const d = decodeVal(v);
+          if (d !== undefined) out[k] = d;
+        }
+        return out;
+      }
+      return undefined;
+    };
+    const decoded: Record<string, any> = { id: cleanId };
+    for (const [k, v] of Object.entries(fields)) {
+      const d = decodeVal(v);
+      if (d !== undefined) decoded[k] = d;
+    }
+    if (isDisplayableVacancy(decoded)) return decoded as Vacancy;
+    throw new Error('fs_rest_invalid');
+  })();
+
   try {
-    const winner = await Promise.any([fromServer, fromFirestore]);
+    const winner = await Promise.any([fromServer, fromFirestore, fromFirestoreRest]);
     if (isDisplayableVacancy(winner)) {
       saveVacancyToLocalCache(winner);
       return winner;
@@ -804,7 +852,7 @@ export async function syncLocalVacanciesToFirestoreCloud(
 
   const candidates = Array.from(map.values()).filter((v) => {
     if (v.status === 'published') {
-      return validateVacancyStrict(v, { allowExpired: false }).valid;
+      return validateVacancyStrict(v, { allowExpired: true }).valid;
     }
     return v.status !== 'draft' && v.status !== 'duplicate';
   });

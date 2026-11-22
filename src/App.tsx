@@ -250,12 +250,20 @@ export default function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
     const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
-    const targetId = jobId || (pathMatch?.[1] ? decodeURIComponent(pathMatch[1]) : undefined);
-    if (!targetId) return null;
+    let decodedPathId = '';
+    if (pathMatch?.[1]) {
+      try {
+        decodedPathId = decodeURIComponent(pathMatch[1]);
+      } catch {
+        decodedPathId = pathMatch[1];
+      }
+    }
+    const targetId = (jobId || decodedPathId).trim().replace(/[.,;!?)\]]+$/, '');
     const cached = getCachedPublishedVacancies();
-    return (
-      cached.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()) || null
-    );
+    const cachedMatch = targetId
+      ? cached.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()) || null
+      : null;
+    return cachedMatch || decodeTelegramVacancySnapshot(urlParams.get('v'));
   });
   const [isTelegramApplyArrival, setIsTelegramApplyArrival] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -338,6 +346,8 @@ export default function App() {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
     isDesktop: isDesktopDevice,
+    desktopOs,
+    isInAppBrowser,
     canShowIosInstallGuide,
     install: triggerNativeAppInstall,
   } = usePWAInstall();
@@ -499,7 +509,7 @@ export default function App() {
         const cleanQuery = urlParams.toString();
         const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
         window.history.replaceState({}, '', cleanUrl);
-        setIsMinuteInstallReminderOpen(true);
+        setIsInstallPopupOpen(true);
       }
       if (urlParams.get('view') === 'top-recommendations') {
         pendingOpenTopRecsRef.current = true;
@@ -4137,7 +4147,7 @@ export default function App() {
         onDirectDownload={handleDownloadApplicationClick}
         onDismiss={() => setIsMinuteInstallReminderOpen(false)}
       />
-      {/* Fallback Phone & Computer Application Download Guide (When Native Direct Install Is Unavailable) */}
+      {/* Phone & Computer Application Download Modal (Works on Android, iPhone, Windows, Mac & In-App Browsers) */}
       <PWAInstallPromptModal
         isOpen={isInstallPopupOpen && !isStandaloneApp}
         appLogoUrl={siteSettings.appLogoUrl}
@@ -4145,6 +4155,8 @@ export default function App() {
         canInstallNative={canInstallNativeApp}
         isIOS={canShowIosInstallGuide}
         isDesktop={isDesktopDevice}
+        desktopOs={desktopOs}
+        isInAppBrowser={isInAppBrowser}
         onInstallNative={triggerNativeAppInstall}
         onDismiss={() => setIsInstallPopupOpen(false)}
       />

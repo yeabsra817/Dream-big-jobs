@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronLeft,
   Bookmark,
@@ -26,6 +26,7 @@ import { getDaysLeft } from '../utils/helpers';
 import { CoverLetterAssistant } from './CoverLetterAssistant';
 import { trackAnalyticsEvent } from '../lib/analyticsTracker';
 import { askAiVacancyAssistant, VacancyAssistantAiResponse } from '../lib/aiService';
+import { encodeTelegramVacancySnapshot } from '../utils/telegramSnapshot';
 
 interface Props {
   vacancy: Vacancy;
@@ -170,10 +171,12 @@ export const VacancyDetailModal: React.FC<Props> = ({
   }, [autoFocusApply, vacancy.id]);
 
   const daysInfo = getDaysLeft(vacancy.applicationDeadline);
-  const currentUrl =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/jobs/${encodeURIComponent(vacancy.id)}`
-      : '';
+  const currentUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const base = `${window.location.origin}/jobs/${encodeURIComponent(vacancy.id)}`;
+    const snap = encodeTelegramVacancySnapshot(vacancy, 1300);
+    return snap ? `${base}?v=${snap}` : base;
+  }, [vacancy]);
 
   const locationTypeLabel =
     vacancy.employmentType === 'Remote' || /remote|work from home/i.test(vacancy.location || '')

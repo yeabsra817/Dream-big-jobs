@@ -1968,11 +1968,24 @@ async function handleDynamicIconResponse(res: Response, iconFile: string): Promi
       : brand.appLogoUrl || brand.appLogo512Url;
 
   const customAsset = await resolveCustomAppLogoAsset(preferredSource);
-  if (customAsset) {
-    res.setHeader('Content-Type', customAsset.mimeType);
-    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    res.send(customAsset.buffer);
-    return;
+  // Chromium WebAPK & iOS Safari strictly require genuine image/png icons matching declared sizes.
+  // Never serve image/webp or undersized images for PNG PWA/Apple icon slots.
+  if (customAsset && customAsset.mimeType === 'image/png') {
+    const dims = detectImageDimensions(customAsset.buffer, customAsset.mimeType);
+    const minRequired =
+      safeFile === 'pwa-512x512.png' || safeFile === 'pwa-maskable-512x512.png'
+        ? 512
+        : safeFile === 'pwa-192x192.png'
+        ? 192
+        : safeFile === 'apple-touch-icon.png'
+        ? 180
+        : 32;
+    if (dims && dims.width >= minRequired && dims.height >= minRequired) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+      res.send(customAsset.buffer);
+      return;
+    }
   }
   sendPublicFallbackIcon(res, safeFile);
 }
@@ -1989,80 +2002,75 @@ async function handleDynamicManifestResponse(_req: Request, res: Response): Prom
   );
   const querySuffix = `?v=${versionTag}`;
 
-  // Build spec-compliant icons array whose declared sizes & MIME types strictly match actual served bytes
-  // (Chromium rejects manifests and suppresses beforeinstallprompt if declared sizes != actual image size)
-  const manifestIcons: Array<{ src: string; sizes: string; type: string; purpose: string }> = [];
-
+  // Chromium (Android Chrome, Desktop Chrome, Edge, Samsung Internet) strictly requires:
+  // - At least one 192x192 image/png icon AND one 512x512 image/png icon
+  // - Exact declared sizes matching actual served PNG pixel dimensions
+  // Only use custom logo bytes when they are genuine image/png meeting each slot's minimum size;
+  // otherwise serve our verified static 192x192 & 512x512 PNG icons so beforeinstallprompt ALWAYS fires.
   const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
   const asset512 = await resolveCustomAppLogoAsset(brand.appLogo512Url || brand.appLogoUrl);
   const assetMaskable = await resolveCustomAppLogoAsset(
     brand.appLogoMaskable512Url || brand.appLogo512Url || brand.appLogoUrl
   );
 
-  if (asset192 || asset512) {
-    const dims192 = asset192 ? detectImageDimensions(asset192.buffer, asset192.mimeType) : null;
-    const dims512 = asset512 ? detectImageDimensions(asset512.buffer, asset512.mimeType) : null;
-    const dimsMask = assetMaskable
+  const dims192 =
+    asset192 && asset192.mimeType === 'image/png'
+      ? detectImageDimensions(asset192.buffer, asset192.mimeType)
+      : null;
+  const dims512 =
+    asset512 && asset512.mimeType === 'image/png'
+      ? detectImageDimensions(asset512.buffer, asset512.mimeType)
+      : null;
+  const dimsMask =
+    assetMaskable && assetMaskable.mimeType === 'image/png'
       ? detectImageDimensions(assetMaskable.buffer, assetMaskable.mimeType)
       : null;
 
-    if (asset192 && dims192 && dims192.width >= 144 && dims192.height >= 144) {
-      manifestIcons.push({
-        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
-        sizes: `${dims192.width}x${dims192.height}`,
-        type: asset192.mimeType,
-        purpose: 'any',
-      });
-    }
+  const hasValidCustom192 = Boolean(dims192 && dims192.width >= 192 && dims192.height >= 192);
+  const hasValidCustom512 = Boolean(dims512 && dims512.width >= 512 && dims512.height >= 512);
+  const hasValidCustomMask = Boolean(dimsMask && dimsMask.width >= 512 && dimsMask.height >= 512);
 
-    if (
-      asset512 &&
-      dims512 &&
-      dims512.width >= 144 &&
-      dims512.height >= 144 &&
-      (!dims192 || dims512.width !== dims192.width || dims512.height !== dims192.height)
-    ) {
-      manifestIcons.push({
-        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
-        sizes: `${dims512.width}x${dims512.height}`,
-        type: asset512.mimeType,
-        purpose: 'any',
-      });
-    }
-
-    if (assetMaskable && dimsMask && dimsMask.width >= 144 && dimsMask.height >= 144) {
-      manifestIcons.push({
-        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
-        sizes: `${dimsMask.width}x${dimsMask.height}`,
-        type: assetMaskable.mimeType,
-        purpose: 'maskable',
-      });
-    }
-  }
-
-  // Fallback to exact bundled 192x192 & 512x512 official PNGs if no valid custom icons resolved
-  if (manifestIcons.length === 0) {
-    manifestIcons.push(
-      {
-        src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
-        sizes: '192x192',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'any',
-      },
-      {
-        src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
-        sizes: '512x512',
-        type: 'image/png',
-        purpose: 'maskable',
-      }
-    );
-  }
+  const manifestIcons: Array<{ src: string; sizes: string; type: string; purpose: string }> = [
+    hasValidCustom192 && dims192
+      ? {
+          src: `/api/pwa-icon/pwa-192x192.png${querySuffix}`,
+          sizes: `${dims192.width}x${dims192.height}`,
+          type: 'image/png',
+          purpose: 'any',
+        }
+      : {
+          src: `/pwa-192x192.png${querySuffix}`,
+          sizes: '192x192',
+          type: 'image/png',
+          purpose: 'any',
+        },
+    hasValidCustom512 && dims512
+      ? {
+          src: `/api/pwa-icon/pwa-512x512.png${querySuffix}`,
+          sizes: `${dims512.width}x${dims512.height}`,
+          type: 'image/png',
+          purpose: 'any',
+        }
+      : {
+          src: `/pwa-512x512.png${querySuffix}`,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'any',
+        },
+    hasValidCustomMask && dimsMask
+      ? {
+          src: `/api/pwa-icon/pwa-maskable-512x512.png${querySuffix}`,
+          sizes: `${dimsMask.width}x${dimsMask.height}`,
+          type: 'image/png',
+          purpose: 'maskable',
+        }
+      : {
+          src: `/pwa-maskable-512x512.png${querySuffix}`,
+          sizes: '512x512',
+          type: 'image/png',
+          purpose: 'maskable',
+        },
+  ];
 
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -2107,6 +2115,152 @@ for (const iconFile of Array.from(ALLOWED_DYNAMIC_ICON_FILES)) {
 
 app.get('/manifest.webmanifest', async (req: Request, res: Response): Promise<void> => {
   await handleDynamicManifestResponse(req, res);
+});
+
+// Direct Downloadable Desktop App Launcher (Windows .url / macOS .webloc / Linux .desktop)
+// Ensures clicking Download on ANY computer browser (Firefox, Safari, Chrome, Edge) immediately starts a download.
+app.get('/api/download/desktop-app', (req: Request, res: Response): void => {
+  const osParam = String(req.query.os || '').toLowerCase().trim();
+  const ua = String(req.headers['user-agent'] || '').toLowerCase();
+  const targetOs =
+    osParam === 'mac' || osParam === 'macos'
+      ? 'mac'
+      : osParam === 'linux'
+      ? 'linux'
+      : osParam === 'windows' || osParam === 'win'
+      ? 'windows'
+      : ua.includes('macintosh') || ua.includes('mac os')
+      ? 'mac'
+      : ua.includes('linux')
+      ? 'linux'
+      : 'windows';
+
+  const persisted = loadPersistedSettings() || {};
+  const appOrigin = normalizeWebsiteDomain(persisted.customDomain || 'www.hopelandjobs.tech');
+  const launchUrl = `${appOrigin}/?source=desktop_app`;
+
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+  if (targetOs === 'mac') {
+    const webloc = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>URL</key>
+  <string>${launchUrl}</string>
+</dict>
+</plist>
+`;
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="HopelandJobs.webloc"');
+    res.send(webloc);
+    return;
+  }
+
+  if (targetOs === 'linux') {
+    const desktopEntry = `[Desktop Entry]
+Version=1.0
+Type=Link
+Name=HopelandJobs
+Comment=Verified Ethiopian & International Job Vacancies
+URL=${launchUrl}
+Icon=web-browser
+`;
+    res.setHeader('Content-Type', 'application/x-desktop; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="HopelandJobs.desktop"');
+    res.send(desktopEntry);
+    return;
+  }
+
+  // Windows native Internet Shortcut (.url)
+  const windowsUrlFile = `[InternetShortcut]\r\nURL=${launchUrl}\r\nIconIndex=0\r\nIconFile=${appOrigin}/favicon-32x32.png\r\n`;
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', 'attachment; filename="HopelandJobs.url"');
+  res.send(windowsUrlFile);
+});
+
+// Direct Downloadable iPhone / iPad WebClip Profile (.mobileconfig)
+// Triggers iOS native "Download Configuration Profile [Allow]" prompt to install a full-screen HopelandJobs icon.
+app.get('/api/download/ios-app-profile', (_req: Request, res: Response): void => {
+  const persisted = loadPersistedSettings() || {};
+  const appOrigin = normalizeWebsiteDomain(persisted.customDomain || 'www.hopelandjobs.tech');
+  const launchUrl = `${appOrigin}/?source=ios_app`;
+
+  let iconBase64 = '';
+  for (const candidate of [
+    path.join(process.cwd(), 'public', 'apple-touch-icon.png'),
+    path.join(process.cwd(), 'dist', 'apple-touch-icon.png'),
+    path.join(process.cwd(), 'public', 'pwa-192x192.png'),
+  ]) {
+    if (fs.existsSync(candidate)) {
+      try {
+        iconBase64 = fs.readFileSync(candidate).toString('base64');
+        break;
+      } catch {}
+    }
+  }
+
+  const iconXmlBlock = iconBase64
+    ? `\n      <key>Icon</key>\n      <data>${iconBase64}</data>`
+    : '';
+
+  const mobileConfig = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>FullScreen</key>
+      <true/>${iconXmlBlock}
+      <key>IgnoreManifestScope</key>
+      <false/>
+      <key>IsRemovable</key>
+      <true/>
+      <key>Label</key>
+      <string>HopelandJobs</string>
+      <key>PayloadDescription</key>
+      <string>Adds the HopelandJobs app icon to your iPhone or iPad Home Screen.</string>
+      <key>PayloadDisplayName</key>
+      <string>HopelandJobs App</string>
+      <key>PayloadIdentifier</key>
+      <string>tech.hopelandjobs.webclip.app</string>
+      <key>PayloadType</key>
+      <string>com.apple.webClip.managed</string>
+      <key>PayloadUUID</key>
+      <string>A1B2C3D4-5E6F-4789-8ABC-1234567890AB</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>Precomposed</key>
+      <true/>
+      <key>URL</key>
+      <string>${launchUrl}</string>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Install HopelandJobs on your iPhone or iPad for instant job alerts and fast access.</string>
+  <key>PayloadDisplayName</key>
+  <string>HopelandJobs App</string>
+  <key>PayloadIdentifier</key>
+  <string>tech.hopelandjobs.profile</string>
+  <key>PayloadOrganization</key>
+  <string>HopelandJobs</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>F1E2D3C4-B5A6-4789-9ABC-0987654321FE</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+`;
+
+  res.setHeader('Content-Type', 'application/x-apple-aspen-config; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="HopelandJobs-iPhone-App.mobileconfig"');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(mobileConfig);
 });
 
 // Universal Site Settings Endpoint (serves safe settings across sessions; never exposes raw TELEGRAM_BOT_TOKEN)

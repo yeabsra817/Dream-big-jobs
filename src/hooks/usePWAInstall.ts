@@ -5,6 +5,8 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+export type DesktopOsType = 'windows' | 'mac' | 'linux';
+
 export function detectIsIosDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
@@ -29,6 +31,21 @@ export function detectIsDesktopDevice(): boolean {
   return !detectIsIosDevice() && !detectIsAndroidDevice();
 }
 
+export function detectDesktopOs(): DesktopOsType {
+  if (typeof navigator === 'undefined') return 'windows';
+  const ua = (navigator.userAgent || '').toLowerCase();
+  const platform = ((navigator as any).platform || '').toLowerCase();
+  if (ua.includes('mac') || platform.includes('mac')) return 'mac';
+  if (ua.includes('linux') && !ua.includes('android')) return 'linux';
+  return 'windows';
+}
+
+export function detectIsInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /Telegram|FBAN|FBAV|Instagram|Line\/|Twitter|WhatsApp|; wv\)/i.test(ua);
+}
+
 declare global {
   interface Window {
     __hopelandDeferredInstallPrompt?: BeforeInstallPromptEvent | null;
@@ -46,6 +63,8 @@ export function usePWAInstall() {
   const [isIOS] = useState<boolean>(() => detectIsIosDevice());
   const [isAndroid] = useState<boolean>(() => detectIsAndroidDevice());
   const [isDesktop] = useState<boolean>(() => detectIsDesktopDevice());
+  const [desktopOs] = useState<DesktopOsType>(() => detectDesktopOs());
+  const [isInAppBrowser] = useState<boolean>(() => detectIsInAppBrowser());
 
   useEffect(() => {
     const checkStandalone = () => {
@@ -95,9 +114,26 @@ export function usePWAInstall() {
   }, []);
 
   const install = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
-    const promptEvent =
+    let promptEvent =
       deferredPrompt ||
       (typeof window !== 'undefined' ? window.__hopelandDeferredInstallPrompt : null);
+
+    // Briefly wait up to 700ms in case beforeinstallprompt is still arriving right after page load
+    if (!promptEvent && typeof window !== 'undefined' && !isIOS && !isInAppBrowser) {
+      promptEvent = await new Promise<BeforeInstallPromptEvent | null>((resolve) => {
+        let done = false;
+        const finish = (ev: BeforeInstallPromptEvent | null) => {
+          if (done) return;
+          done = true;
+          window.removeEventListener('hopeland-install-prompt-ready', onReady);
+          resolve(ev);
+        };
+        const onReady = () => finish(window.__hopelandDeferredInstallPrompt || null);
+        window.addEventListener('hopeland-install-prompt-ready', onReady, { once: true });
+        setTimeout(() => finish(window.__hopelandDeferredInstallPrompt || null), 700);
+      });
+    }
+
     if (!promptEvent) return 'unavailable';
     try {
       await promptEvent.prompt();
@@ -113,7 +149,7 @@ export function usePWAInstall() {
       setDeferredPrompt(null);
       return 'unavailable';
     }
-  }, [deferredPrompt]);
+  }, [deferredPrompt, isIOS, isInAppBrowser]);
 
   const hasPrompt = Boolean(
     deferredPrompt || (typeof window !== 'undefined' && window.__hopelandDeferredInstallPrompt)
@@ -124,9 +160,11 @@ export function usePWAInstall() {
     isIOS,
     isAndroid,
     isDesktop,
+    desktopOs,
+    isInAppBrowser,
     isInstallable: hasPrompt && !isInstalled,
     canShowIosInstallGuide: isIOS && !isInstalled,
-    canInstallApp: !isInstalled && (hasPrompt || isIOS),
+    canInstallApp: !isInstalled,
     install,
   };
 }
