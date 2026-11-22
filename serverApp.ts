@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
 import { registerGlobalOpportunitiesRoutes } from './serverGlobalOpportunities';
+import { registerWritingAssistantRoutes } from './serverWritingAssistant';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11381,6 +11382,11 @@ Return strict JSON:
     getRequesterUid,
     getRequesterEmail,
     appendAuditLog,
+    getAiClient,
+  });
+
+  registerWritingAssistantRoutes({
+    app,
     getAiClient,
   });
 

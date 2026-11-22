@@ -102,13 +102,13 @@
     "accountRole": "job_seeker",
     "experience": [
       {
-        "companyName": "Tsedey bank s.c",
-        "startDate": "March 2025",
-        "jobTitle": "Branch manager",
-        "isCurrent": false,
+        "id": "exp_1794827530267",
         "responsibilities": "",
+        "isCurrent": false,
         "endDate": "Present",
-        "id": "exp_1794827530267"
+        "companyName": "Tsedey bank s.c",
+        "jobTitle": "Branch manager",
+        "startDate": "March 2025"
       }
     ],
     "preferredIndustry": "Banking and Financial Institutions",
@@ -117,15 +117,15 @@
     "previousPositions": [],
     "gender": "Male",
     "jobPreferences": {
-      "internship": false,
-      "fullTime": true,
       "remote": false,
-      "contract": false,
+      "freshGraduate": true,
       "partTime": false,
-      "freshGraduate": true
+      "internship": false,
+      "contract": false,
+      "fullTime": true
     },
     "locationCity": "Addis Ababa",
-    "updatedAt": "2026-11-18T10:07:43.712Z",
+    "updatedAt": "2026-11-22T11:57:04.600Z",
     "locationRegion": "Addis Ababa",
     "preferredWorkLocation": "Addis Ababa",
     "phone": "+251924396566",
@@ -134,8 +134,8 @@
     "staffDepartmentOrSector": "Banking",
     "employmentStatus": "unemployed",
     "certifications": [],
-    "lastLoginAt": "2026-11-18T09:53:50.038Z",
-    "lastActiveAt": "2026-11-18T10:07:43.712Z",
+    "lastLoginAt": "2026-11-22T11:57:03.996Z",
+    "lastActiveAt": "2026-11-22T11:57:03.996Z",
     "noExperience": false,
     "profileStatus": "incomplete",
     "preferredSectors": [
@@ -162,12 +162,12 @@
     "education": [],
     "updatedAt": "2026-11-13T19:03:32.907Z",
     "jobPreferences": {
+      "partTime": false,
       "remote": false,
-      "fullTime": true,
       "contract": false,
+      "fullTime": true,
       "internship": false,
-      "freshGraduate": true,
-      "partTime": false
+      "freshGraduate": true
     },
     "preferredEmploymentType": "Full-time",
     "preferredIndustry": "Banking and Financial Institutions",
@@ -186,11 +186,11 @@
   },
   "XPuREoTPhvTyYsvB14L3JpptCV53": {
     "jobPreferences": {
-      "remote": false,
-      "freshGraduate": true,
-      "contract": false,
-      "fullTime": true,
       "internship": false,
+      "freshGraduate": true,
+      "remote": false,
+      "fullTime": true,
+      "contract": false,
       "partTime": false
     },
     "uid": "XPuREoTPhvTyYsvB14L3JpptCV53",
@@ -216,7 +216,7 @@
     "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJC_Wg2_Ief7gQOnbBlr9ensgL4R5U1ySkyiGMleWpY_P3Vog=s96-c",
     "authProvider": "google",
     "email": "nexusitsoultion@gmail.com",
-    "updatedAt": "2026-11-22T11:01:57.066Z",
+    "updatedAt": "2026-11-22T12:22:03.646Z",
     "phone": "",
     "locationCity": "Addis Ababa",
     "employmentStatus": "unemployed",
@@ -225,12 +225,12 @@
     "accountStatus": "active",
     "professionalInterests": [],
     "certifications": [],
-    "lastActiveAt": "2026-11-22T11:01:57.066Z",
+    "lastActiveAt": "2026-11-22T12:22:03.646Z",
     "areasOfExpertise": [],
     "previousPositions": [],
     "profileStatus": "incomplete",
     "noExperience": false,
-    "lastLoginAt": "2026-11-22T09:37:11.760Z",
+    "lastLoginAt": "2026-11-22T11:59:59.637Z",
     "preferredSectors": [
       "Banking and Financial Institutions"
     ],
@@ -250,12 +250,12 @@
     "updatedAt": "2026-11-14T12:06:18.183Z",
     "employmentStatus": "unemployed",
     "jobPreferences": {
+      "freshGraduate": true,
+      "remote": false,
       "partTime": false,
       "internship": false,
-      "remote": false,
-      "freshGraduate": true,
-      "fullTime": true,
-      "contract": false
+      "contract": false,
+      "fullTime": true
     },
     "profileCompletionPercentage": 20,
     "yearsOfExperience": "0-1 Years (Entry Level)",
@@ -283,11 +283,11 @@
   "H7wtgxkocOSFcfcHwZVj6JrLEGy1": {
     "jobPreferences": {
       "remote": false,
-      "freshGraduate": true,
-      "partTime": false,
       "contract": false,
+      "fullTime": true,
+      "freshGraduate": true,
       "internship": false,
-      "fullTime": true
+      "partTime": false
     },
     "expectedSalaryEtb": "",
     "staffDepartmentOrSector": "",
@@ -328,7 +328,7 @@
     "employmentStatus": "unemployed"
   },
   "fSf3qBTVTxNpO2OCjpPt9bNrViR2": {
-    "lastLoginAt": "2026-11-17T13:03:39.031Z",
+    "lastLoginAt": "2026-11-18T10:37:39.505Z",
     "expectedSalaryEtb": "",
     "certifications": [],
     "staffDepartmentOrSector": "",
@@ -338,11 +338,11 @@
     "preferredWorkLocation": "Addis Ababa",
     "professionalInterests": [],
     "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLHnLxI-4YBz-cWXAsiypXbhzzfEw1TRKASOw1h5BD43EvIxQ=s96-c",
-    "updatedAt": "2026-11-17T13:03:39.032Z",
+    "updatedAt": "2026-11-18T10:37:39.507Z",
     "documents": [],
     "phone": "",
     "preferredEmploymentType": "Full-time",
-    "lastActiveAt": "2026-11-17T13:03:39.031Z",
+    "lastActiveAt": "2026-11-18T10:37:39.505Z",
     "fullName": "Mekdes Yafet",
     "locationRegion": "Addis Ababa",
     "emailVerified": true,
@@ -361,12 +361,12 @@
     "skills": [],
     "profileStatus": "incomplete",
     "jobPreferences": {
-      "internship": false,
-      "contract": false,
       "remote": false,
       "fullTime": true,
+      "contract": false,
+      "partTime": false,
       "freshGraduate": true,
-      "partTime": false
+      "internship": false
     },
     "locationCity": "Addis Ababa",
     "yearsOfExperience": "",

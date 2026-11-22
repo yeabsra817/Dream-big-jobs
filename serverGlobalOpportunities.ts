@@ -23,14 +23,17 @@ import {
   SectorTag,
   UserOpportunityRecommendationRecord,
   UserSavedOpportunityRecord,
+  VerificationMonitoringSummary,
 } from './src/types/globalOpportunities';
 import {
   classifyFundingAndVisaTransparency,
   computeOpportunityFingerprint,
   computeVerificationOutcome,
   detectSectorsFromText,
+  evaluateMandatoryVisaCompliance,
   evaluateOpportunityDeadline,
   evaluateOpportunityForUser,
+  evaluateProfessionalRestrictionCompliance,
   isOpportunityActiveAndDisplayable,
   MINIMUM_FULL_DAYS_REMAINING,
 } from './src/utils/opportunityIntelligenceEngine';
@@ -1772,32 +1775,37 @@ async function fetchViaGeminiSearchGrounding(
   const todayIso = new Date().toISOString().slice(0, 10);
   const minDeadlineDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const jsonSchemaInstructions = `STRICT RULES:
-- Return ONLY real, currently open opportunities found in live Google Search results with an exact official HTTPS URL (.edu, .gov, .int, .org, official UN, World Bank, IMF, AfDB, university, bank, NGO, or official conference portal — NEVER blogs or third-party scholarship aggregators).
+  const jsonSchemaInstructions = `STRICT MANDATORY RULES:
+- Return ONLY real, currently open opportunities found in live Google Search results with an exact official HTTPS URL (.edu, .gov, .int, .org, official UN, World Bank, IMF, AfDB, university, bank, NGO, or official conference portal — NEVER blogs or third-party aggregators).
 - Every opportunity MUST have an exact verifiable future application deadline (YYYY-MM-DD) ON OR AFTER ${minDeadlineDate}.
+- MANDATORY VISA RULE:
+  * For employment: official recruitment documentation MUST explicitly confirm employer-sponsored work visa or work permit sponsorship.
+  * For scholarships, training, and conferences: sponsoring institution/organizer MUST explicitly confirm visa application fee coverage or visa sponsorship.
+  * REJECT invitation letter only, visa assistance without fee coverage, visa-free entry, self-paid visa fees, or unspecified visa funding.
+- STRICT PROFESSIONAL RESTRICTION:
+  * Scholarships, Professional Training, and Conferences MUST be strictly relevant to Banking & Finance (banking, finance, accounting, economics, microfinance, fintech, financial inclusion, banking management, financial regulation) OR WASH (water engineering, water resources, water supply, sanitation, hygiene, environmental health, wastewater, humanitarian WASH, climate-resilient water management).
 - Do NOT invent any opportunity, deadline, funding, or visa sponsorship. Use "Not Confirmed" if a detail is not explicitly stated on the official page.
-- Never confuse an invitation letter with visa sponsorship or free visa fees.
 - Return ONLY a valid JSON array (no markdown fences) with objects having exact keys:
   title, organization, category ("international_job" | "university_scholarship" | "professional_training" | "conference_summit" | "wash_opportunity"), country, location, summary, originalSourceUrl, officialApplicationUrl, deadlineDateRaw (YYYY-MM-DD), deadlineTimezone (IANA e.g. "UTC"), startDate, fundingSummary, visaSummary, applicationFee, eligibleNationalities (string[]), ethiopianEligible ("confirmed" | "likely_global" | "not_confirmed"), educationRequirement, experienceRequirement, minimumYearsExperience (number or null), requiredSkills (string[]), universityRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), companyRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), institutionalNominationRequired ("required" | "not_required" | "optional" | "not_confirmed"), directIndividualApplicationAllowed ("yes" | "no" | "not_confirmed").`;
 
   const allPrompts: Array<{ label: string; prompt: string }> = [
     {
-      label: 'Fully Funded Scholarships & Conferences',
+      label: 'Visa-Funded Banking & WASH Scholarships and Conferences',
       prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
-1. Fully funded University Scholarships accepting Ethiopian citizens with direct individual application (no mandatory university nomination), from official university or government portals (e.g., DAAD, Chevening, Fulbright, Erasmus+, Mastercard Foundation, government/university official sites).
-2. Fully funded International Conferences & Summits in Banking/Finance, Microfinance, Financial Inclusion, WASH/Water Security, Climate Change, Public Health, Sustainable Development, or AI/Tech allowing direct individual application.
+1. Fully funded University Scholarships strictly in Banking/Finance/Economics/Accounting/Microfinance/FinTech OR WASH/Water Engineering/Water Resources/Sanitation/Hygiene/Environmental Health accepting Ethiopian citizens with direct individual application AND explicitly confirming visa application fee coverage or visa sponsorship (e.g., Chevening, DAAD, Mastercard Foundation, World Bank JJ/WBGSP, IHE Delft, official university portals).
+2. Fully funded International Conferences & Summits strictly in Banking, Finance, Microfinance, FinTech, Water, Sanitation, Hygiene, or WASH explicitly confirming visa fee coverage or visa sponsorship.
 ${jsonSchemaInstructions}`,
     },
     {
-      label: 'Banking/Finance Jobs & Professional Trainings',
+      label: 'Visa-Sponsored Banking/Finance Jobs & Banking/WASH Trainings',
       prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
-1. International Banking and Finance Jobs offering employer-sponsored work visas, relocation assistance, or international recruitment (e.g., World Bank, IMF, AfDB, IFC, BIS, EIB, EBRD, ADB, commercial/central banks, fintechs).
-2. Fully funded or sponsored International Professional Training programs in Banking/Finance (central banking, digital banking, fintech, microfinance, financial inclusion, risk management) or WASH (water supply, sanitation, hygiene, wastewater, climate-resilient WASH) accepting individual applicants without mandatory company nomination.
+1. International Banking, Finance, Tech, Engineering, Healthcare, or Development Jobs explicitly confirming employer-sponsored work visa or work permit sponsorship in official recruitment documentation (e.g., World Bank, IMF, AfDB, IFC, BIS, EIB, EBRD, ADB, global banks, licensed UK/EU/Canadian sponsors).
+2. Fully funded International Professional Training programs strictly for Banking/Finance OR WASH professionals explicitly confirming visa application fee coverage or visa sponsorship and accepting independent applicants where permitted.
 ${jsonSchemaInstructions}`,
     },
     {
-      label: 'WASH International Jobs & Fellowships',
-      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN WASH (Water, Sanitation, and Hygiene) international jobs, internships, or fellowships with deadlines >= ${minDeadlineDate} from official UN and INGO portals (UNICEF, WHO, UN-Habitat, UNDP, World Bank, AfDB, IOM, IRC, WaterAid, Water.org, World Vision, Save the Children, IFRC, SIWI).
+      label: 'Visa-Sponsored WASH International Jobs & Fellowships',
+      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN WASH (Water, Sanitation, and Hygiene) international employment opportunities or fellowships with deadlines >= ${minDeadlineDate} from official UN and INGO portals (UNICEF, WHO, UN-Habitat, UNDP, World Bank, AfDB, IOM, IRC, WaterAid, Water.org, World Vision, Save the Children, IFRC, SIWI) that explicitly confirm work visa sponsorship or visa application fee coverage.
 ${jsonSchemaInstructions}`,
     },
   ];
@@ -1923,7 +1931,16 @@ ${jsonSchemaInstructions}`,
         });
       }
     } catch (err: any) {
-      errors.push(`Gemini Search Grounding (${sp.label}): ${err?.message || String(err)}`);
+      const rawMsg = String(err?.message || err || '');
+      const isQuotaOrRateLimit =
+        /\b(429|RESOURCE_EXHAUSTED|quota|rate[\s-]?limit)\b/i.test(rawMsg);
+      if (isQuotaOrRateLimit) {
+        errors.push(
+          'Gemini Search Grounding quota/rate limit reached (HTTP 429). Other official sources continued normally.'
+        );
+        break;
+      }
+      errors.push(`Gemini Search Grounding (${sp.label}): ${rawMsg.slice(0, 220)}`);
     }
   }
 
@@ -2204,7 +2221,34 @@ function buildOpportunityRecordFromCandidate(
     funding,
     eligibility,
     category: candidate.category,
+    title: candidate.title,
+    summary: candidate.summary,
+    organization: candidate.organization,
+    sectors: sectorInfo.sectors,
+    isBankingFinance: sectorInfo.isBankingFinance,
+    isWashDedicated,
+    officialSourceText: combinedCorpus,
   });
+
+  const visaAudit = evaluateMandatoryVisaCompliance(candidate.category, funding, combinedCorpus);
+  funding.visaMandatoryRulePassed = outcome.visaCompliancePassed;
+  if (!outcome.visaCompliancePassed) {
+    funding.visaRejectionReason = visaAudit.reason || outcome.rejectionReason || undefined;
+  }
+
+  if (!outcome.isPubliclyDisplayable && (applicationStatus === 'open' || applicationStatus === 'closing_soon')) {
+    applicationStatus = 'rejected';
+  }
+
+  const combinedNotes = [
+    liveCheck.notes,
+    deadlineEval.rejectionReason,
+    outcome.rejectionReason,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const isArchived = !outcome.isPubliclyDisplayable;
 
   const opportunity: GlobalOpportunity = {
     id: oppId,
@@ -2230,13 +2274,18 @@ function buildOpportunityRecordFromCandidate(
     hasVerifiedBadge: outcome.hasVerifiedBadge,
     httpStatusCode: liveCheck.httpStatus,
     robotsAllowed: liveCheck.robotsAllowed,
-    verificationNotes: deadlineEval.rejectionReason
-      ? `${liveCheck.notes} ${deadlineEval.rejectionReason}`
-      : liveCheck.notes,
+    verificationNotes: combinedNotes || 'Verified against official source.',
     sourceEvidenceSnippet: liveCheck.pageTextSnippet.slice(0, 340) || candidate.summary.slice(0, 340),
     funding,
     eligibility,
     deadline,
+    isArchived,
+    wasPreviouslyPublished: false,
+    archivedAt: isArchived ? nowIso : undefined,
+    rejectionCategory: outcome.rejectionCategory || undefined,
+    rejectionReason: outcome.rejectionReason || undefined,
+    visaCompliancePassed: outcome.visaCompliancePassed,
+    professionalRestrictionPassed: outcome.professionalRestrictionPassed,
     discoveredAt: nowIso,
     lastVerifiedAt: nowIso,
     updatedAt: nowIso,
@@ -2252,9 +2301,15 @@ function buildOpportunityRecordFromCandidate(
     robotsAllowed: liveCheck.robotsAllowed,
     passedUrlVerification: liveCheck.ok,
     passedDeadlineRule: deadlineEval.meetsMinimumThreeFullDays && !deadlineEval.isExpired,
+    passedVisaRule: outcome.visaCompliancePassed,
+    passedProfessionalRestriction: outcome.professionalRestrictionPassed,
     fullDaysRemaining: deadlineEval.valid ? deadlineEval.fullDaysRemaining : null,
     resultingStatus: outcome.verificationStatus,
-    checkedFieldsCount: 20,
+    rejectionCategory: outcome.rejectionCategory || undefined,
+    rejectionReason: outcome.rejectionReason || undefined,
+    actionTaken: outcome.isPubliclyDisplayable ? 'verified' : 'rejected',
+    evidenceExcerpt: opportunity.sourceEvidenceSnippet?.slice(0, 240) || undefined,
+    checkedFieldsCount: 24,
     notes: opportunity.verificationNotes,
     checkedAt: nowIso,
   };
@@ -2388,8 +2443,80 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
   let isDiscoveryRunning = false;
 
   /**
-   * Re-evaluates all stored deadlines against the mandatory >= 3 full days rule
-   * and purges expired/under-3-days items from active recommendations.
+   * Soft-deletes / archives an opportunity that failed post-publication verification,
+   * preserving the full audit record (exact reason, date, and verification evidence).
+   */
+  function archiveUnpublishedOpportunity(
+    opp: GlobalOpportunity,
+    store: GlobalOpportunitiesStore,
+    params: {
+      nowIso: string;
+      status: ApplicationLifecycleStatus;
+      verificationStatus: GlobalOpportunity['verificationStatus'];
+      rejectionCategory: NonNullable<GlobalOpportunity['rejectionCategory']>;
+      rejectionReason: string;
+      evidenceExcerpt?: string;
+      httpStatus?: number | null;
+      fullDaysRemaining?: number | null;
+      wasPublishedBefore: boolean;
+    }
+  ): void {
+    opp.applicationStatus = params.status;
+    opp.verificationStatus = params.verificationStatus;
+    opp.hasVerifiedBadge = false;
+    opp.isArchived = true;
+    opp.rejectionCategory = params.rejectionCategory;
+    opp.rejectionReason = params.rejectionReason;
+    opp.archivedAt = opp.archivedAt || params.nowIso;
+    if (params.wasPublishedBefore) {
+      opp.wasPreviouslyPublished = true;
+      opp.unpublishedAt = params.nowIso;
+    }
+    if (params.rejectionCategory === 'visa') {
+      opp.visaCompliancePassed = false;
+      opp.funding.visaMandatoryRulePassed = false;
+      opp.funding.visaRejectionReason = params.rejectionReason;
+    }
+    if (params.rejectionCategory === 'professional_restriction') {
+      opp.professionalRestrictionPassed = false;
+    }
+    opp.verificationNotes = params.rejectionReason;
+    opp.updatedAt = params.nowIso;
+
+    store.opportunity_verification_logs.unshift({
+      id: `vlog_unpub_${Date.now()}_${opp.id.slice(-6)}_${Math.random().toString(36).slice(2, 5)}`,
+      opportunityId: opp.id,
+      opportunityTitle: opp.title,
+      organization: opp.organization,
+      officialUrl: opp.officialApplicationUrl,
+      httpStatus: params.httpStatus ?? opp.httpStatusCode ?? null,
+      robotsAllowed: opp.robotsAllowed,
+      passedUrlVerification: params.rejectionCategory !== 'broken_link',
+      passedDeadlineRule: params.rejectionCategory !== 'deadline',
+      passedVisaRule: params.rejectionCategory !== 'visa',
+      passedProfessionalRestriction: params.rejectionCategory !== 'professional_restriction',
+      rejectionCategory: params.rejectionCategory,
+      rejectionReason: params.rejectionReason,
+      actionTaken: params.wasPublishedBefore
+        ? 'auto_unpublished'
+        : params.rejectionCategory === 'deadline'
+        ? 'expired'
+        : 'rejected',
+      fullDaysRemaining: params.fullDaysRemaining ?? opp.deadline.fullDaysRemaining,
+      resultingStatus: params.verificationStatus,
+      checkedFieldsCount: 20,
+      notes: params.rejectionReason,
+      evidenceExcerpt: (params.evidenceExcerpt || opp.sourceEvidenceSnippet || '').slice(0, 220),
+      checkedAt: params.nowIso,
+    });
+  }
+
+  /**
+   * Re-evaluates ALL stored & published opportunities against their official sources,
+   * mandatory visa sponsorship/fee coverage rules, Banking & WASH professional restrictions,
+   * organization authenticity, and the >= 3 full days deadline gate.
+   * Automatically unpublishes (soft-deletes/archives) any failing opportunity and removes it
+   * from public listings, searches, and personalized user recommendations.
    */
   async function runDeadlineAndLinkRecheck(
     trigger: DiscoveryJobLogRecord['trigger'],
@@ -2401,11 +2528,18 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
     let expiredPurgedCount = 0;
     let rejectedUnderThreeDaysCount = 0;
     let rejectedBrokenOrClosedCount = 0;
+    let rejectedDueToVisaCount = 0;
+    let rejectedDueToProfessionalRestrictionCount = 0;
+    let autoUnpublishedCount = 0;
+    let recheckedPublishedCount = 0;
     let verifiedAndActiveCount = 0;
     const errors: string[] = [];
 
     for (let i = 0; i < store.international_opportunities.length; i++) {
       const opp = store.international_opportunities[i];
+      const wasPublishedBefore = Boolean(opp.hasVerifiedBadge && !opp.isArchived);
+      if (wasPublishedBefore) recheckedPublishedCount++;
+
       const deadlineEval = evaluateOpportunityDeadline(
         opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
         opp.deadline.deadlineTimezone,
@@ -2422,17 +2556,9 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         lastCheckedAt: startedAt,
       };
 
-      if (deadlineEval.isExpired || !deadlineEval.meetsMinimumThreeFullDays) {
-        if (opp.hasVerifiedBadge) expiredPurgedCount++;
-        if (!deadlineEval.isExpired && !deadlineEval.meetsMinimumThreeFullDays) rejectedUnderThreeDaysCount++;
-        opp.applicationStatus = 'expired';
-        opp.verificationStatus = 'Expired';
-        opp.hasVerifiedBadge = false;
-        opp.updatedAt = startedAt;
-        continue;
-      }
-
-      if (checkLinksLive && opp.hasVerifiedBadge && i < 15) {
+      // 1. Live official link & source content recheck for published opportunities
+      let liveEvidenceText = opp.sourceEvidenceSnippet || '';
+      if (checkLinksLive && wasPublishedBefore && recheckedPublishedCount <= 25) {
         try {
           const live = await verifyUrlLive(
             opp.officialApplicationUrl,
@@ -2440,52 +2566,108 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
           );
           opp.httpStatusCode = live.httpStatus;
           opp.lastVerifiedAt = startedAt;
+          if (live.pageTextSnippet) {
+            liveEvidenceText = `${live.pageTextSnippet} ${opp.sourceEvidenceSnippet || ''}`;
+            opp.sourceEvidenceSnippet = live.pageTextSnippet.slice(0, 340);
+          }
+
           if (!live.ok || live.detectedClosedOrExpired) {
             rejectedBrokenOrClosedCount++;
-            opp.applicationStatus = live.detectedClosedOrExpired ? 'closed' : 'unverified';
-            opp.verificationStatus = live.detectedClosedOrExpired ? 'Expired' : 'Unverified';
-            opp.hasVerifiedBadge = false;
-            opp.verificationNotes = live.notes;
+            if (wasPublishedBefore) autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: startedAt,
+              status: live.detectedClosedOrExpired ? 'withdrawn' : 'rejected',
+              verificationStatus: live.detectedClosedOrExpired ? 'Expired' : 'Unverified',
+              rejectionCategory: live.detectedClosedOrExpired ? 'withdrawn' : 'broken_link',
+              rejectionReason: live.detectedClosedOrExpired
+                ? `Auto-unpublished: Official source indicates program is closed, cancelled, or withdrawn (${live.notes}).`
+                : `Auto-unpublished: Official application URL failed live verification (${live.notes}).`,
+              evidenceExcerpt: live.pageTextSnippet || live.notes,
+              httpStatus: live.httpStatus,
+              fullDaysRemaining: deadlineEval.fullDaysRemaining,
+              wasPublishedBefore,
+            });
+            continue;
           }
-          store.opportunity_verification_logs.unshift({
-            id: `vlog_${Date.now()}_${opp.id.slice(-6)}`,
-            opportunityId: opp.id,
-            opportunityTitle: opp.title,
-            organization: opp.organization,
-            officialUrl: opp.officialApplicationUrl,
-            httpStatus: live.httpStatus,
-            robotsAllowed: live.robotsAllowed,
-            passedUrlVerification: live.ok,
-            passedDeadlineRule: true,
-            fullDaysRemaining: deadlineEval.fullDaysRemaining,
-            resultingStatus: opp.verificationStatus,
-            checkedFieldsCount: 20,
-            notes: live.notes,
-            checkedAt: startedAt,
-          });
         } catch (err: any) {
           errors.push(`Link recheck error for ${opp.id}: ${err?.message || String(err)}`);
         }
       }
 
+      // 2. Deadline >= 3 full days check
+      if (deadlineEval.isExpired || !deadlineEval.meetsMinimumThreeFullDays) {
+        if (wasPublishedBefore) {
+          expiredPurgedCount++;
+          autoUnpublishedCount++;
+        }
+        if (!deadlineEval.isExpired && !deadlineEval.meetsMinimumThreeFullDays) rejectedUnderThreeDaysCount++;
+        if (wasPublishedBefore || !opp.isArchived) {
+          archiveUnpublishedOpportunity(opp, store, {
+            nowIso: startedAt,
+            status: 'expired',
+            verificationStatus: 'Expired',
+            rejectionCategory: 'deadline',
+            rejectionReason: deadlineEval.rejectionReason || 'Auto-unpublished: Fewer than 3 full days remaining or expired.',
+            evidenceExcerpt: liveEvidenceText,
+            fullDaysRemaining: deadlineEval.fullDaysRemaining,
+            wasPublishedBefore,
+          });
+        }
+        continue;
+      }
+
+      // 3. Re-verify Mandatory Visa Sponsorship / Visa Fee Coverage & Professional Restrictions & Authenticity
+      const urlAuthCheck = validateOfficialExternalUrl(opp.officialApplicationUrl);
+      const outcome = computeVerificationOutcome({
+        urlVerified: Boolean(opp.hasVerifiedBadge || (opp.httpStatusCode && opp.httpStatusCode < 400)),
+        organizationAuthentic: Boolean(opp.organizationAuthentic && urlAuthCheck.valid && urlAuthCheck.isOfficialDomain),
+        applicationStatus: deadlineEval.isClosingSoon ? 'closing_soon' : 'open',
+        deadlineEval,
+        funding: opp.funding,
+        eligibility: opp.eligibility,
+        category: opp.category,
+        title: opp.title,
+        summary: opp.summary,
+        organization: opp.organization,
+        sectors: opp.sectors,
+        isBankingFinance: opp.isBankingFinance,
+        isWashDedicated: opp.isWashDedicated,
+        officialSourceText: liveEvidenceText,
+      });
+
+      if (!outcome.isPubliclyDisplayable) {
+        if (outcome.rejectionCategory === 'visa') rejectedDueToVisaCount++;
+        if (outcome.rejectionCategory === 'professional_restriction') rejectedDueToProfessionalRestrictionCount++;
+        if (wasPublishedBefore) autoUnpublishedCount++;
+        if (wasPublishedBefore || !opp.isArchived) {
+          archiveUnpublishedOpportunity(opp, store, {
+            nowIso: startedAt,
+            status: outcome.rejectionCategory === 'visa' ? 'withdrawn' : 'rejected',
+            verificationStatus: outcome.verificationStatus,
+            rejectionCategory: outcome.rejectionCategory || 'visa',
+            rejectionReason:
+              outcome.rejectionReason ||
+              'Auto-unpublished: Failed mandatory verification check during scheduled 6-hour recheck.',
+            evidenceExcerpt: liveEvidenceText,
+            fullDaysRemaining: deadlineEval.fullDaysRemaining,
+            wasPublishedBefore,
+          });
+        }
+        continue;
+      }
+
       if (isOpportunityActiveAndDisplayable(opp, startedMs)) {
-        const outcome = computeVerificationOutcome({
-          urlVerified: opp.hasVerifiedBadge,
-          organizationAuthentic: opp.organizationAuthentic,
-          applicationStatus: deadlineEval.isClosingSoon ? 'closing_soon' : 'open',
-          deadlineEval,
-          funding: opp.funding,
-          eligibility: opp.eligibility,
-          category: opp.category,
-        });
         opp.applicationStatus = deadlineEval.isClosingSoon ? 'closing_soon' : 'open';
         opp.verificationStatus = outcome.verificationStatus;
-        opp.hasVerifiedBadge = outcome.hasVerifiedBadge;
-        if (opp.hasVerifiedBadge) verifiedAndActiveCount++;
+        opp.hasVerifiedBadge = true;
+        opp.isArchived = false;
+        opp.visaCompliancePassed = true;
+        opp.professionalRestrictionPassed = true;
+        verifiedAndActiveCount++;
       }
     }
 
-    // Automatically purge expired/inactive opportunities from cached recommendations
+    // Immediately remove any unpublished, rejected, or expired opportunities from cached recommendations
     const activeIdSet = new Set(
       store.international_opportunities
         .filter((o) => isOpportunityActiveAndDisplayable(o, startedMs))
@@ -2510,7 +2692,11 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       verifiedAndActiveCount,
       rejectedUnderThreeDaysCount,
       rejectedBrokenOrClosedCount,
+      rejectedDueToVisaCount,
+      rejectedDueToProfessionalRestrictionCount,
+      autoUnpublishedCount,
       expiredPurgedCount,
+      recheckedPublishedCount,
       errors,
     };
 
@@ -2773,7 +2959,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         }
       }
 
-      // Deduplicate & verify each candidate against the official URL and >= 3 full days rule
+      // Deduplicate & verify each candidate against official URL, mandatory visa rule, professional restrictions, and >= 3 full days rule
       const existingByFingerprint = new Map(
         store.international_opportunities.map((o) => [o.fingerprint, o])
       );
@@ -2781,6 +2967,10 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       let duplicatesSkipped = 0;
       let rejectedUnderThreeDaysCount = 0;
       let rejectedBrokenOrClosedCount = 0;
+      let rejectedDueToVisaCount = 0;
+      let rejectedDueToProfessionalRestrictionCount = 0;
+      let autoUnpublishedCount = 0;
+      let recheckedPublishedCount = 0;
 
       // Limit per-run live HTTP checks to keep response fast & polite to external servers
       const maxToVerify = Math.min(allCandidates.length, 65);
@@ -2827,15 +3017,35 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
           nowIso
         );
 
-        store.opportunity_verification_logs.unshift(verificationLog);
+        const prev = existingByFingerprint.get(fp);
+        const wasPublishedBefore = Boolean(prev && prev.hasVerifiedBadge && !prev.isArchived);
 
         if (!opportunity.hasVerifiedBadge) {
-          rejectedBrokenOrClosedCount++;
+          if (opportunity.rejectionCategory === 'visa') {
+            rejectedDueToVisaCount++;
+          } else if (opportunity.rejectionCategory === 'professional_restriction') {
+            rejectedDueToProfessionalRestrictionCount++;
+          } else if (opportunity.rejectionCategory === 'deadline') {
+            rejectedUnderThreeDaysCount++;
+          } else {
+            rejectedBrokenOrClosedCount++;
+          }
+
+          if (wasPublishedBefore) {
+            autoUnpublishedCount++;
+            opportunity.wasPreviouslyPublished = true;
+            opportunity.unpublishedAt = nowIso;
+            verificationLog.actionTaken = 'auto_unpublished';
+          }
         }
 
-        const prev = existingByFingerprint.get(fp);
+        store.opportunity_verification_logs.unshift(verificationLog);
+
         if (prev) {
           opportunity.discoveredAt = prev.discoveredAt;
+          if (prev.wasPreviouslyPublished) {
+            opportunity.wasPreviouslyPublished = true;
+          }
           const idx = store.international_opportunities.findIndex((o) => o.id === prev.id);
           if (idx >= 0) {
             store.international_opportunities[idx] = opportunity;
@@ -2847,10 +3057,16 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         }
       }
 
-      // Re-evaluate all existing stored opportunities for deadline expiration (< 3 full days)
+      // MANDATORY 6-HOUR RECHECK OF ALL EXISTING PUBLISHED OPPORTUNITIES:
+      // Rechecks deadlines, live official URLs, visa sponsorship/fee rules, and Banking/WASH professional restrictions.
+      // Any opportunity failing mandatory compliance is immediately soft-deleted/unpublished and archived with full audit reason.
       let expiredPurgedCount = 0;
       const nowFinalMs = Date.now();
+      const nowFinalIso = new Date(nowFinalMs).toISOString();
       for (const opp of store.international_opportunities) {
+        const wasPublishedBefore = Boolean(opp.hasVerifiedBadge && !opp.isArchived);
+        if (wasPublishedBefore) recheckedPublishedCount++;
+
         const dl = evaluateOpportunityDeadline(
           opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
           opp.deadline.deadlineTimezone,
@@ -2861,16 +3077,107 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         opp.deadline.meetsMinimumThreeFullDays = dl.meetsMinimumThreeFullDays;
         opp.deadline.isClosingSoon = dl.isClosingSoon;
         opp.deadline.isExpired = dl.isExpired;
-        opp.deadline.lastCheckedAt = new Date(nowFinalMs).toISOString();
+        opp.deadline.lastCheckedAt = nowFinalIso;
+
         if (dl.isExpired || !dl.meetsMinimumThreeFullDays) {
-          if (opp.hasVerifiedBadge) expiredPurgedCount++;
-          opp.applicationStatus = 'expired';
-          opp.verificationStatus = 'Expired';
-          opp.hasVerifiedBadge = false;
+          if (wasPublishedBefore) {
+            expiredPurgedCount++;
+            autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: nowFinalIso,
+              status: 'expired',
+              verificationStatus: 'Expired',
+              rejectionCategory: 'deadline',
+              rejectionReason: dl.rejectionReason || 'Auto-unpublished: Fewer than 3 full days remaining or deadline expired.',
+              fullDaysRemaining: dl.fullDaysRemaining,
+              wasPublishedBefore,
+            });
+          } else {
+            opp.applicationStatus = 'expired';
+            opp.verificationStatus = 'Expired';
+            opp.hasVerifiedBadge = false;
+            opp.isArchived = true;
+            opp.archivedAt = opp.archivedAt || nowFinalIso;
+            opp.rejectionCategory = opp.rejectionCategory || 'deadline';
+            opp.rejectionReason = opp.rejectionReason || dl.rejectionReason || 'Expired (< 3 full days remaining).';
+          }
+          continue;
+        }
+
+        // Enforce mandatory visa & professional restriction recheck on all previously stored records
+        if (wasPublishedBefore) {
+          // If this published record wasn't already freshly checked in this batch, recheck live URL (up to 15 per sweep)
+          let liveSnippet = opp.sourceEvidenceSnippet || '';
+          if (!batchFingerprints.has(opp.fingerprint) && recheckedPublishedCount <= 15) {
+            try {
+              const live = await verifyUrlLive(opp.officialApplicationUrl, opp.sourceId.startsWith('reliefweb_'));
+              opp.httpStatusCode = live.httpStatus;
+              opp.lastVerifiedAt = nowFinalIso;
+              if (live.pageTextSnippet) {
+                liveSnippet = `${live.pageTextSnippet} ${opp.sourceEvidenceSnippet || ''}`;
+                opp.sourceEvidenceSnippet = live.pageTextSnippet.slice(0, 340);
+              }
+              if (!live.ok || live.detectedClosedOrExpired) {
+                rejectedBrokenOrClosedCount++;
+                autoUnpublishedCount++;
+                archiveUnpublishedOpportunity(opp, store, {
+                  nowIso: nowFinalIso,
+                  status: live.detectedClosedOrExpired ? 'withdrawn' : 'rejected',
+                  verificationStatus: live.detectedClosedOrExpired ? 'Expired' : 'Unverified',
+                  rejectionCategory: live.detectedClosedOrExpired ? 'withdrawn' : 'broken_link',
+                  rejectionReason: live.detectedClosedOrExpired
+                    ? `Auto-unpublished during 6h recheck: Official page indicates program is closed or withdrawn (${live.notes}).`
+                    : `Auto-unpublished during 6h recheck: Official link failed verification (${live.notes}).`,
+                  evidenceExcerpt: live.pageTextSnippet || live.notes,
+                  httpStatus: live.httpStatus,
+                  fullDaysRemaining: dl.fullDaysRemaining,
+                  wasPublishedBefore: true,
+                });
+                continue;
+              }
+            } catch {
+              // Keep non-fatal network blip from deleting valid items unless explicitly closed/non-compliant
+            }
+          }
+
+          const recheckOutcome = computeVerificationOutcome({
+            urlVerified: true,
+            organizationAuthentic: opp.organizationAuthentic,
+            applicationStatus: dl.isClosingSoon ? 'closing_soon' : 'open',
+            deadlineEval: dl,
+            funding: opp.funding,
+            eligibility: opp.eligibility,
+            category: opp.category,
+            title: opp.title,
+            summary: opp.summary,
+            organization: opp.organization,
+            sectors: opp.sectors,
+            isBankingFinance: opp.isBankingFinance,
+            isWashDedicated: opp.isWashDedicated,
+            officialSourceText: liveSnippet,
+          });
+
+          if (!recheckOutcome.isPubliclyDisplayable) {
+            if (recheckOutcome.rejectionCategory === 'visa') rejectedDueToVisaCount++;
+            if (recheckOutcome.rejectionCategory === 'professional_restriction') rejectedDueToProfessionalRestrictionCount++;
+            autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: nowFinalIso,
+              status: recheckOutcome.rejectionCategory === 'visa' ? 'withdrawn' : 'rejected',
+              verificationStatus: recheckOutcome.verificationStatus,
+              rejectionCategory: recheckOutcome.rejectionCategory || 'visa',
+              rejectionReason:
+                recheckOutcome.rejectionReason ||
+                'Auto-unpublished during 6h recheck: Failed mandatory visa or professional restriction compliance.',
+              evidenceExcerpt: liveSnippet,
+              fullDaysRemaining: dl.fullDaysRemaining,
+              wasPublishedBefore: true,
+            });
+          }
         }
       }
 
-      // Keep store bounded cleanly (keep up to 250 active/recent verified opportunities)
+      // Keep store bounded cleanly (keep up to 250 active + archived audit records, prioritizing active first)
       store.international_opportunities = store.international_opportunities
         .sort((a, b) => {
           const aAct = isOpportunityActiveAndDisplayable(a, nowFinalMs) ? 1 : 0;
@@ -2899,9 +3206,8 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       store.user_opportunity_recommendations = nextRecs;
 
       const finishedAt = new Date().toISOString();
-      const isFailure =
-        (sourcesQueried === 0 && errors.length > 0) ||
-        (errors.length > 0 && activeVerified.length === 0 && allCandidates.length === 0);
+      // Note: strict visa/sector filtering legitimately rejects non-compliant candidates; that is a SUCCESSFUL compliance sweep, not a source failure!
+      const isFailure = sourcesQueried === 0 && errors.length > 0;
       const runStatus: DiscoveryJobLogRecord['status'] = isFailure
         ? 'failed'
         : errors.length > 0
@@ -2924,7 +3230,11 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         recommendationsUpdatedCount: nextRecs.length,
         rejectedUnderThreeDaysCount,
         rejectedBrokenOrClosedCount,
+        rejectedDueToVisaCount,
+        rejectedDueToProfessionalRestrictionCount,
+        autoUnpublishedCount,
         expiredPurgedCount,
+        recheckedPublishedCount,
         scheduledSlotEat: options?.scheduledSlotEat,
         attemptNumber: options?.attemptNumber ?? 1,
         maxAttempts: options?.maxAttempts ?? 1,
@@ -3077,7 +3387,18 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         attemptNumber: attempt,
         maxAttempts,
       });
-      if (lastLog.skippedOverlap || lastLog.status === 'success' || (lastLog.status === 'partial' && lastLog.verifiedAndActiveCount > 0)) {
+      const isQuotaOnlyPartial =
+        lastLog.status === 'partial' &&
+        lastLog.errors.length > 0 &&
+        lastLog.errors.every((e) => /\b(429|RESOURCE_EXHAUSTED|quota|rate[\s-]?limit)\b/i.test(e));
+
+      const partialCoreSucceeded =
+        lastLog.status === 'partial' &&
+        (lastLog.verifiedAndActiveCount > 0 ||
+          lastLog.candidatesDiscovered > 0 ||
+          isQuotaOnlyPartial);
+
+      if (lastLog.skippedOverlap || lastLog.status === 'success' || partialCoreSucceeded) {
         return lastLog;
       }
       if (attempt < maxAttempts) {
@@ -3357,15 +3678,62 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       return;
     }
     const store = loadStore();
+    const nowMs = Date.now();
+    const activeVerified = store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o, nowMs));
+    const archivedRecords = store.international_opportunities.filter((o) => !isOpportunityActiveAndDisplayable(o, nowMs));
+    const autoUnpublished = archivedRecords.filter((o) => Boolean(o.unpublishedAt || o.wasPreviouslyPublished));
+    const rejectedVisa = archivedRecords.filter((o) => o.rejectionCategory === 'visa');
+    const rejectedSector = archivedRecords.filter((o) => o.rejectionCategory === 'professional_restriction');
+    const expiredRecords = archivedRecords.filter(
+      (o) => o.rejectionCategory === 'deadline' || o.applicationStatus === 'expired' || o.verificationStatus === 'Expired'
+    );
+    const sourceFailuresCount = store.opportunity_sources.filter(
+      (s) => s.status === 'error' || s.status === 'degraded'
+    ).length;
+    const lastVerificationAt =
+      store.opportunity_verification_logs[0]?.checkedAt || store.discovery_job_logs[0]?.finishedAt || null;
+
+    const monitoringSummary: VerificationMonitoringSummary = {
+      totalDiscoveredAllTime: store.international_opportunities.length,
+      activeVerifiedCount: activeVerified.length,
+      totalRejectedCount: archivedRecords.length,
+      autoUnpublishedCount: autoUnpublished.length,
+      rejectedDueToVisaCount: rejectedVisa.length,
+      rejectedDueToProfessionalRestrictionCount: rejectedSector.length,
+      expiredCount: expiredRecords.length,
+      archivedRecordsCount: archivedRecords.length,
+      sourceFailuresCount,
+      lastVerificationAt,
+      lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt),
+    };
+
     res.json({
       success: true,
-      verificationLogs: store.opportunity_verification_logs.slice(0, 120),
+      verificationLogs: store.opportunity_verification_logs.slice(0, 150),
       discoveryJobLogs: store.discovery_job_logs.slice(0, 50),
       sources: store.opportunity_sources,
       schedulerInfo: buildSchedulerInfo(store),
+      monitoringSummary,
+      archivedOpportunities: archivedRecords.slice(0, 80).map((o) => ({
+        id: o.id,
+        title: o.title,
+        organization: o.organization,
+        category: o.category,
+        officialApplicationUrl: o.officialApplicationUrl,
+        applicationStatus: o.applicationStatus,
+        verificationStatus: o.verificationStatus,
+        rejectionCategory: o.rejectionCategory || (o.visaCompliancePassed === false ? 'visa' : 'other'),
+        rejectionReason: o.rejectionReason || o.verificationNotes,
+        visaSupportSummary: o.funding.visaSupportSummary,
+        evidenceExcerpt: (o.sourceEvidenceSnippet || '').slice(0, 220),
+        wasPreviouslyPublished: Boolean(o.wasPreviouslyPublished),
+        unpublishedAt: o.unpublishedAt || null,
+        archivedAt: o.archivedAt || o.updatedAt,
+        lastVerifiedAt: o.lastVerifiedAt,
+      })),
       totals: {
         stored: store.international_opportunities.length,
-        activeVerified: store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o)).length,
+        activeVerified: activeVerified.length,
         savedCount: store.user_saved_opportunities.length,
         recommendationsCount: store.user_opportunity_recommendations.length,
       },

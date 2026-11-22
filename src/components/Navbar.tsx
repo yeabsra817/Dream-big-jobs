@@ -23,6 +23,8 @@ import {
   Bell,
   Megaphone,
   ExternalLink,
+  FileEdit,
+  FileCheck2,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
 import {
@@ -52,6 +54,8 @@ interface Props {
   onOpenInternationalJobs?: () => void;
   onOpenImmigration?: () => void;
   onOpenScholarships?: () => void;
+  onOpenHumanizeText?: () => void;
+  onOpenHumanizeChecker?: () => void;
   onOpenAuth?: (mode: 'signin' | 'signup') => void;
   onOpenDashboard?: () => void;
   onSignOutUser?: () => void;
@@ -91,6 +95,8 @@ export const Navbar: React.FC<Props> = ({
   onOpenInternationalJobs,
   onOpenImmigration,
   onOpenScholarships,
+  onOpenHumanizeText,
+  onOpenHumanizeChecker,
   onOpenAuth,
   onOpenDashboard,
   onSignOutUser,
@@ -118,9 +124,11 @@ export const Navbar: React.FC<Props> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+  const [writingMenuOpen, setWritingMenuOpen] = useState(false);
   const [dismissedInstallStrip, setDismissedInstallStrip] = useState(false);
   const [dismissedAnnouncement, setDismissedAnnouncement] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const writingMenuRef = useRef<HTMLDivElement>(null);
   const siteContent = resolveSiteContent(siteSettings);
 
   const handleDownloadAppClick = () => {
@@ -147,10 +155,14 @@ export const Navbar: React.FC<Props> = ({
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setAccountDropdownOpen(false);
       }
+      if (writingMenuRef.current && !writingMenuRef.current.contains(e.target as Node)) {
+        setWritingMenuOpen(false);
+      }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setAccountDropdownOpen(false);
+        setWritingMenuOpen(false);
         setMobileMenuOpen(false);
       }
     };
@@ -308,6 +320,69 @@ export const Navbar: React.FC<Props> = ({
               >
                 International Opportunities
               </button>
+            )}
+            {(onOpenHumanizeText || onOpenHumanizeChecker) && (
+              <div ref={writingMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setWritingMenuOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={writingMenuOpen}
+                  className="inline-flex items-center gap-1 py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <span>Writing Tools</span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                      writingMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                {writingMenuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 mt-2 w-60 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5 z-50"
+                  >
+                    {onOpenHumanizeText && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setWritingMenuOpen(false);
+                          onOpenHumanizeText();
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer"
+                      >
+                        <FileEdit className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Humanize Text</p>
+                          <p className="text-xs font-normal text-slate-500">
+                            Refine CVs, cover letters &amp; essays
+                          </p>
+                        </div>
+                      </button>
+                    )}
+                    {onOpenHumanizeChecker && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setWritingMenuOpen(false);
+                          onOpenHumanizeChecker();
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer"
+                      >
+                        <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Humanize Checker</p>
+                          <p className="text-xs font-normal text-slate-500">
+                            Readability, tone &amp; quality report
+                          </p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
             <button
               type="button"
@@ -754,6 +829,34 @@ export const Navbar: React.FC<Props> = ({
             <FileText className="w-4 h-4 text-[#16A34A]" />
             <span>CV Assistance</span>
           </button>
+
+          {onOpenHumanizeText && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenHumanizeText();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <FileEdit className="w-4 h-4 text-[#16A34A]" />
+              <span>Humanize Text</span>
+            </button>
+          )}
+
+          {onOpenHumanizeChecker && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenHumanizeChecker();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <FileCheck2 className="w-4 h-4 text-[#16A34A]" />
+              <span>Humanize Checker</span>
+            </button>
+          )}
 
           {siteContent.showNavInternational && onOpenInternationalOpportunities && (
             <button

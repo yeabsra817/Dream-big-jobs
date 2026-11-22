@@ -40,7 +40,23 @@ export type FundingTransparencyCategory =
 
 export type RequirementBooleanStatus = 'required' | 'not_required' | 'optional' | 'not_confirmed';
 
-export type ApplicationLifecycleStatus = 'open' | 'closing_soon' | 'closed' | 'expired' | 'withdrawn' | 'unverified';
+export type ApplicationLifecycleStatus =
+  | 'open'
+  | 'closing_soon'
+  | 'closed'
+  | 'expired'
+  | 'withdrawn'
+  | 'rejected'
+  | 'unverified';
+
+export type OpportunityRejectionCategory =
+  | 'visa'
+  | 'professional_restriction'
+  | 'deadline'
+  | 'broken_link'
+  | 'withdrawn'
+  | 'eligibility'
+  | 'authenticity';
 
 export type SectorTag =
   | 'banking_finance'
@@ -69,9 +85,12 @@ export interface OpportunityFundingRecord {
     | 'visa_fees_funded'
     | 'visa_assistance_only'
     | 'invitation_letter_only'
+    | 'visa_free_not_sponsorship'
     | 'none'
     | 'not_confirmed';
   visaSupportSummary: string;
+  visaMandatoryRulePassed?: boolean;
+  visaRejectionReason?: string | null;
   relocationAssistance: 'yes' | 'partial' | 'no' | 'not_confirmed';
   applicationFee: string; // e.g., "None (Free)", "$50 USD", "Not Confirmed"
   stipendOrSalary?: string;
@@ -158,6 +177,16 @@ export interface GlobalOpportunity {
   eligibility: OpportunityEligibilityRecord;
   deadline: OpportunityDeadlineRecord;
 
+  // Soft-Deletion / Archival & Strict Audit Compliance
+  isArchived?: boolean;
+  wasPreviouslyPublished?: boolean;
+  unpublishedAt?: string | null;
+  archivedAt?: string | null;
+  rejectionCategory?: OpportunityRejectionCategory | null;
+  rejectionReason?: string | null;
+  visaCompliancePassed?: boolean;
+  professionalRestrictionPassed?: boolean;
+
   // Timestamps
   discoveredAt: string;
   lastVerifiedAt: string;
@@ -212,10 +241,16 @@ export interface OpportunityVerificationLogRecord {
   robotsAllowed: boolean;
   passedUrlVerification: boolean;
   passedDeadlineRule: boolean;
+  passedVisaRule?: boolean;
+  passedProfessionalRestriction?: boolean;
+  rejectionCategory?: OpportunityRejectionCategory | null;
+  rejectionReason?: string | null;
+  actionTaken?: 'verified' | 'rejected' | 'auto_unpublished' | 'expired';
   fullDaysRemaining: number | null;
   resultingStatus: GlobalVerificationStatus;
   checkedFieldsCount: number;
   notes: string;
+  evidenceExcerpt?: string;
   checkedAt: string;
 }
 
@@ -267,12 +302,30 @@ export interface DiscoveryJobLogRecord {
   recommendationsUpdatedCount?: number;
   rejectedUnderThreeDaysCount: number;
   rejectedBrokenOrClosedCount: number;
+  rejectedDueToVisaCount?: number;
+  rejectedDueToProfessionalRestrictionCount?: number;
+  autoUnpublishedCount?: number;
   expiredPurgedCount: number;
+  recheckedPublishedCount?: number;
   scheduledSlotEat?: string;
   attemptNumber?: number;
   maxAttempts?: number;
   skippedOverlap?: boolean;
   errors: string[];
+}
+
+export interface VerificationMonitoringSummary {
+  totalDiscoveredAllTime: number;
+  activeVerifiedCount: number;
+  totalRejectedCount: number;
+  autoUnpublishedCount: number;
+  rejectedDueToVisaCount: number;
+  rejectedDueToProfessionalRestrictionCount: number;
+  expiredCount: number;
+  archivedRecordsCount: number;
+  sourceFailuresCount: number;
+  lastVerificationAt: string | null;
+  lastVerificationAtEat: string | null;
 }
 
 export interface GlobalOpportunityWithMatch extends GlobalOpportunity {

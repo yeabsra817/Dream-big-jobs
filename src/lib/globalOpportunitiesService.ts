@@ -13,11 +13,31 @@ import {
   DiscoveryJobLogRecord,
   GlobalOpportunitiesApiResponse,
   GlobalOpportunity,
+  GlobalOpportunityCategory,
   GlobalOpportunitySubsection,
   OpportunitySourceRecord,
   OpportunityVerificationLogRecord,
   UserSavedOpportunityRecord,
+  VerificationMonitoringSummary,
 } from '../types/globalOpportunities';
+
+export interface ArchivedOpportunityAuditRecord {
+  id: string;
+  title: string;
+  organization: string;
+  category: GlobalOpportunityCategory;
+  officialApplicationUrl: string;
+  applicationStatus: string;
+  verificationStatus: string;
+  rejectionCategory: string;
+  rejectionReason: string;
+  visaSupportSummary: string;
+  evidenceExcerpt: string;
+  wasPreviouslyPublished: boolean;
+  unpublishedAt: string | null;
+  archivedAt: string;
+  lastVerifiedAt: string;
+}
 
 export interface GlobalOpportunitiesFilterParams {
   subsection?: GlobalOpportunitySubsection | 'all';
@@ -173,6 +193,8 @@ export async function fetchAdminGlobalOpportunityLogs(adminEmail?: string | null
   discoveryJobLogs: DiscoveryJobLogRecord[];
   sources: OpportunitySourceRecord[];
   schedulerInfo?: AutonomousSchedulerInfo;
+  monitoringSummary?: VerificationMonitoringSummary;
+  archivedOpportunities?: ArchivedOpportunityAuditRecord[];
   totals: {
     stored: number;
     activeVerified: number;

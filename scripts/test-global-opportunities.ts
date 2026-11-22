@@ -5,8 +5,10 @@ import {
   computeOpportunityFingerprint,
   computeVerificationOutcome,
   detectSectorsFromText,
+  evaluateMandatoryVisaCompliance,
   evaluateOpportunityDeadline,
   evaluateOpportunityForUser,
+  evaluateProfessionalRestrictionCompliance,
   isOpportunityActiveAndDisplayable,
   MINIMUM_FULL_DAYS_REMAINING,
   recommendOpportunitiesForUser,
@@ -196,16 +198,131 @@ async function main() {
     assert.equal(negated.visaSupportType, 'none');
   });
 
-  await runTest('Verification Gate: unverified URL or <3d opportunity NEVER receives Verified badge', () => {
+  await runTest('Mandatory Visa Filter: accepts employer-sponsored work visa & visa-fee-covered programs, REJECTS visa-free, invitation letter, assistance only, self-paid, unspecified, and withdrawn', () => {
+    // 1. Employment: Employer-sponsored work visa PASSES
+    const empPass = evaluateMandatoryVisaCompliance(
+      'international_job',
+      classifyFundingAndVisaTransparency({
+        visaSummary: 'Employer-sponsored work visa and work permit sponsorship confirmed by HR.',
+      })
+    );
+    assert.equal(empPass.passed, true);
+
+    // 2. Scholarship: Visa application fee coverage PASSES
+    const schPass = evaluateMandatoryVisaCompliance(
+      'university_scholarship',
+      classifyFundingAndVisaTransparency({
+        fundingSummary: 'Fully funded Banking & Finance MSc scholarship. Visa application fees are fully covered.',
+      })
+    );
+    assert.equal(schPass.passed, true);
+
+    // 3. REJECT: Visa-free entry (must NOT confuse with visa sponsorship)
+    const visaFree = classifyFundingAndVisaTransparency({
+      visaSummary: 'Visa-free entry for eligible passport holders.',
+    });
+    assert.equal(visaFree.visaSupportType, 'visa_free_not_sponsorship');
+    const visaFreeCheck = evaluateMandatoryVisaCompliance('conference_summit', visaFree);
+    assert.equal(visaFreeCheck.passed, false);
+    assert.ok(visaFreeCheck.reason?.toLowerCase().includes('visa-free'));
+
+    // 4. REJECT: Invitation letter only
+    const invOnly = evaluateMandatoryVisaCompliance(
+      'conference_summit',
+      classifyFundingAndVisaTransparency({
+        visaSummary: 'Organizers issue an official invitation letter for visa application.',
+      })
+    );
+    assert.equal(invOnly.passed, false);
+
+    // 5. REJECT: Visa assistance without fee coverage
+    const assistOnly = evaluateMandatoryVisaCompliance(
+      'professional_training',
+      classifyFundingAndVisaTransparency({
+        visaSummary: 'Participants receive visa assistance and guidance only.',
+      })
+    );
+    assert.equal(assistOnly.passed, false);
+
+    // 6. REJECT: Applicants must pay own visa fees / withdrawn sponsorship
+    const selfPaid = evaluateMandatoryVisaCompliance(
+      'university_scholarship',
+      classifyFundingAndVisaTransparency({
+        visaSummary: 'Applicants must pay their own visa application fees.',
+      })
+    );
+    assert.equal(selfPaid.passed, false);
+
+    // 7. REJECT: Official source contradicts claimed visa sponsorship (e.g., withdrawn post-publication)
+    const contradicted = evaluateMandatoryVisaCompliance(
+      'international_job',
+      {
+        visaSupportType: 'employer_sponsored_visa',
+        visaSupportSummary: 'Employer-sponsored work visa confirmed',
+      },
+      'Update: visa sponsorship is no longer available and has been withdrawn for this opening.'
+    );
+    assert.equal(contradicted.passed, false);
+
+    // 8. REJECT: Unspecified visa funding
+    const unspecified = evaluateMandatoryVisaCompliance(
+      'professional_training',
+      classifyFundingAndVisaTransparency({
+        fundingSummary: 'Fully funded training program.',
+      })
+    );
+    assert.equal(unspecified.passed, false);
+  });
+
+  await runTest('Professional Restrictions: Scholarships, Training & Conferences strictly restricted to Banking & Finance OR WASH; International Jobs retain existing categories', () => {
+    const bankSch = evaluateProfessionalRestrictionCompliance('university_scholarship', {
+      title: 'MSc in Banking, Microfinance and Financial Regulation',
+      summary: 'Graduate scholarship in central banking, fintech, and accounting.',
+    });
+    assert.equal(bankSch.passed, true);
+    assert.equal(bankSch.domain, 'banking_finance');
+
+    const washConf = evaluateProfessionalRestrictionCompliance('conference_summit', {
+      title: 'Global Water Supply, Sanitation and Climate-Resilient WASH Summit',
+      summary: 'International symposium on wastewater management and environmental health.',
+    });
+    assert.equal(washConf.passed, true);
+    assert.equal(washConf.domain, 'wash');
+
+    const unrelatedTraining = evaluateProfessionalRestrictionCompliance('professional_training', {
+      title: 'International Culinary Arts & Luxury Hospitality Leadership Workshop',
+      summary: 'Training for hotel managers and fine dining chefs.',
+    });
+    assert.equal(unrelatedTraining.passed, false);
+    assert.equal(unrelatedTraining.domain, 'restricted');
+
+    const unrelatedScholarship = evaluateProfessionalRestrictionCompliance('university_scholarship', {
+      title: 'Master of Fine Arts in Contemporary Sculpture',
+      summary: 'Studio arts and gallery curation scholarship.',
+    });
+    assert.equal(unrelatedScholarship.passed, false);
+
+    // International Jobs keep non-Banking/non-WASH categories (subject to mandatory employer visa sponsorship)
+    const intlTechJob = evaluateProfessionalRestrictionCompliance('international_job', {
+      title: 'Senior Cloud Infrastructure Engineer',
+      summary: 'Distributed systems engineering role with employer-sponsored work visa.',
+    });
+    assert.equal(intlTechJob.passed, true);
+    assert.equal(intlTechJob.domain, 'international_job_allowed');
+  });
+
+  await runTest('Verification Gate: unverified URL, <3d deadline, missing visa confirmation, or restricted profession NEVER receives Verified badge', () => {
     const dlOk = evaluateOpportunityDeadline(new Date(fixedNow + 10 * 86400_000).toISOString(), 'UTC', fixedNow);
     const unverified = computeVerificationOutcome({
       urlVerified: false,
       organizationAuthentic: true,
       applicationStatus: 'open',
       deadlineEval: dlOk,
-      funding: { fundingLevel: 'fully_funded', visaSupportType: 'none' },
+      funding: { fundingLevel: 'fully_funded', visaSupportType: 'visa_fees_funded', visaSupportSummary: 'Official visa fee coverage confirmed' },
       eligibility: { ethiopianEligible: 'confirmed' },
       category: 'university_scholarship',
+      title: 'Banking & Finance MSc Scholarship',
+      isBankingFinance: true,
     });
     assert.equal(unverified.hasVerifiedBadge, false);
     assert.equal(unverified.verificationStatus, 'Unverified');
@@ -217,12 +334,61 @@ async function main() {
       organizationAuthentic: true,
       applicationStatus: 'open',
       deadlineEval: dlShort,
-      funding: { fundingLevel: 'fully_funded', visaSupportType: 'none' },
+      funding: { fundingLevel: 'fully_funded', visaSupportType: 'visa_fees_funded', visaSupportSummary: 'Official visa fee coverage confirmed' },
       eligibility: { ethiopianEligible: 'confirmed' },
       category: 'university_scholarship',
+      title: 'Banking & Finance MSc Scholarship',
+      isBankingFinance: true,
     });
     assert.equal(shortRes.hasVerifiedBadge, false);
     assert.equal(shortRes.isPubliclyDisplayable, false);
+
+    // Fails mandatory visa rule even with live URL & >= 3 days
+    const noVisaRes = computeVerificationOutcome({
+      urlVerified: true,
+      organizationAuthentic: true,
+      applicationStatus: 'open',
+      deadlineEval: dlOk,
+      funding: { fundingLevel: 'fully_funded', visaSupportType: 'invitation_letter_only', visaSupportSummary: 'Invitation letter only' },
+      eligibility: { ethiopianEligible: 'confirmed' },
+      category: 'university_scholarship',
+      title: 'Banking & Finance MSc Scholarship',
+      isBankingFinance: true,
+    });
+    assert.equal(noVisaRes.isPubliclyDisplayable, false);
+    assert.equal(noVisaRes.rejectionCategory, 'visa');
+
+    // Fails professional restriction even with visa fees funded
+    const wrongDomainRes = computeVerificationOutcome({
+      urlVerified: true,
+      organizationAuthentic: true,
+      applicationStatus: 'open',
+      deadlineEval: dlOk,
+      funding: { fundingLevel: 'fully_funded', visaSupportType: 'visa_fees_funded', visaSupportSummary: 'Official visa fee coverage confirmed' },
+      eligibility: { ethiopianEligible: 'confirmed' },
+      category: 'professional_training',
+      title: 'Fashion Design & Textile Photography Bootcamp',
+      summary: 'Creative arts workshop.',
+    });
+    assert.equal(wrongDomainRes.isPubliclyDisplayable, false);
+    assert.equal(wrongDomainRes.rejectionCategory, 'professional_restriction');
+
+    // Passes ALL gates: live official URL, >=3d, visa fees funded, WASH scholarship
+    const fullPass = computeVerificationOutcome({
+      urlVerified: true,
+      organizationAuthentic: true,
+      applicationStatus: 'open',
+      deadlineEval: dlOk,
+      funding: { fundingLevel: 'fully_funded', visaSupportType: 'visa_fees_funded', visaSupportSummary: 'Official visa fee coverage confirmed' },
+      eligibility: { ethiopianEligible: 'confirmed' },
+      category: 'university_scholarship',
+      title: 'MSc in Water Supply, Sanitation and Hygiene (WASH) Engineering',
+      isWashDedicated: true,
+    });
+    assert.equal(fullPass.isPubliclyDisplayable, true);
+    assert.equal(fullPass.hasVerifiedBadge, true);
+    assert.equal(fullPass.visaCompliancePassed, true);
+    assert.equal(fullPass.professionalRestrictionPassed, true);
   });
 
   await runTest('Deduplication: produces identical fingerprints for normalized duplicate URLs/titles', () => {
@@ -323,6 +489,102 @@ async function main() {
     // recommendOpportunitiesForUser returns empty when all fail mandatory gates
     const list = recommendOpportunitiesForUser([seniorWash, euOnly, nomRequired], juniorProfile);
     assert.equal(list.length, 0);
+  });
+
+  await runTest('Strict Cross-Sector Profile Matching: NEVER recommends Banking training to WASH user or WASH training to Banking user', () => {
+    const bankingUser: JobSeekerProfile = {
+      ...DEFAULT_JOB_SEEKER_PROFILE,
+      uid: 'user_banker',
+      email: 'banker@example.com',
+      fullName: 'Selamawit Tesfaye',
+      desiredJobTitle: 'Senior Credit Risk Analyst',
+      preferredIndustry: 'Banking and Finance',
+      yearsOfExperience: '6 years',
+      skills: ['Credit Risk', 'IFRS 9', 'AML/CFT', 'Financial Analysis', 'Microfinance'],
+      education: [
+        {
+          id: 'ed_b1',
+          institution: 'Addis Ababa University',
+          qualification: 'MSc Degree',
+          fieldOfStudy: 'Accounting and Finance',
+          graduationYear: '2019',
+        },
+      ],
+    };
+
+    const washUser: JobSeekerProfile = {
+      ...DEFAULT_JOB_SEEKER_PROFILE,
+      uid: 'user_wash_only',
+      email: 'wash@example.com',
+      fullName: 'Dawit Bekele',
+      desiredJobTitle: 'Water Supply & Sanitation Engineer',
+      preferredIndustry: 'Water Resources & WASH',
+      yearsOfExperience: '5 years',
+      skills: ['Water Supply', 'Sanitation', 'Hygiene', 'Wastewater Management', 'EPANET'],
+      education: [
+        {
+          id: 'ed_w1',
+          institution: 'Arba Minch University',
+          qualification: 'BSc Degree',
+          fieldOfStudy: 'Water Supply and Environmental Engineering',
+          graduationYear: '2020',
+        },
+      ],
+    };
+
+    const bankingTraining = makeFixtureOpportunity({
+      id: 'gopp_bank_train',
+      title: 'Central Banking & Financial Regulation Executive Training',
+      organization: 'Bank for International Settlements',
+      category: 'professional_training',
+      sectors: ['banking_finance'],
+      isWashDedicated: false,
+      isBankingFinance: true,
+      summary: 'Executive training on banking regulation, microfinance supervision, and fintech oversight.',
+      funding: {
+        ...makeFixtureOpportunity().funding,
+        visaSupportType: 'visa_fees_funded',
+        visaSupportSummary: 'Official visa application fee coverage confirmed',
+      },
+      eligibility: {
+        ...makeFixtureOpportunity().eligibility,
+        requiredSkills: ['Banking', 'Financial Regulation', 'Credit Risk'],
+      },
+    });
+
+    const washTraining = makeFixtureOpportunity({
+      id: 'gopp_wash_train',
+      title: 'Climate-Resilient WASH & Wastewater Management Fellowship',
+      organization: 'IHE Delft',
+      category: 'professional_training',
+      sectors: ['wash'],
+      isWashDedicated: true,
+      isBankingFinance: false,
+      summary: 'Professional WASH training on water supply, sanitation, hygiene, and environmental health.',
+      funding: {
+        ...makeFixtureOpportunity().funding,
+        visaSupportType: 'visa_fees_funded',
+        visaSupportSummary: 'Official visa application fee coverage confirmed',
+      },
+      eligibility: {
+        ...makeFixtureOpportunity().eligibility,
+        requiredSkills: ['Water Supply', 'Sanitation', 'Hygiene'],
+      },
+    });
+
+    // Banking user -> Banking training PASSES, WASH training REJECTED
+    const bankOnBank = evaluateOpportunityForUser(bankingTraining, bankingUser);
+    const bankOnWash = evaluateOpportunityForUser(washTraining, bankingUser);
+    assert.equal(bankOnBank.eligible, true);
+    assert.equal(bankOnWash.eligible, false);
+    assert.ok(bankOnWash.disqualificationReasons.some((r) => /wash/i.test(r)));
+
+    // WASH user -> WASH training PASSES, Banking training REJECTED
+    const washOnWash = evaluateOpportunityForUser(washTraining, washUser);
+    const washOnBank = evaluateOpportunityForUser(bankingTraining, washUser);
+    assert.equal(washOnWash.eligible, true);
+    assert.equal(washOnBank.eligible, false);
+    assert.ok(washOnBank.disqualificationReasons.some((r) => /banking/i.test(r)));
   });
 
   await runTest('Sector Intelligence: detects Banking/Finance and WASH sectors accurately', () => {
@@ -517,13 +779,13 @@ async function main() {
       const overlapLog = body1.runLog.skippedOverlap ? body1.runLog : body2.runLog;
       assert.equal(overlapLog.skippedOverlap, true, 'Expected second concurrent scheduled execution to be safely skipped by overlap lock');
       assert.equal(primaryLog.trigger, 'github_actions_cron');
-      assert.ok(primaryLog.savedCount > 0, 'Expected savedCount > 0');
+      assert.ok(primaryLog.candidatesDiscovered > 0, 'Expected live official sources to discover candidates');
 
       console.log(
-        `   [Live Discovery Summary] trigger=${primaryLog.trigger}, sources=${primaryLog.sourcesQueried}, discovered=${primaryLog.candidatesDiscovered}, verified=${primaryLog.verifiedAndActiveCount}, saved=${primaryLog.savedCount}, excluded<3d=${primaryLog.rejectedUnderThreeDaysCount}, unverifiedOrClosed=${primaryLog.rejectedBrokenOrClosedCount}`
+        `   [Live Discovery Summary] trigger=${primaryLog.trigger}, sources=${primaryLog.sourcesQueried}, discovered=${primaryLog.candidatesDiscovered}, verified=${primaryLog.verifiedAndActiveCount}, rejectedVisa=${primaryLog.rejectedDueToVisaCount ?? 0}, rejectedProf=${primaryLog.rejectedDueToProfessionalRestrictionCount ?? 0}, autoUnpublished=${primaryLog.autoUnpublishedCount ?? 0}, excluded<3d=${primaryLog.rejectedUnderThreeDaysCount}`
       );
 
-      // Verify GET /api/global-opportunities strictly returns verified opportunities with >= 3 full days + Ethiopia Time schedulerInfo
+      // Verify GET /api/global-opportunities strictly returns verified opportunities with >= 3 full days + mandatory visa compliance
       const listRes = await fetch(`${baseUrl}/api/global-opportunities`);
       assert.equal(listRes.status, 200);
       const listBody: any = await listRes.json();
@@ -552,10 +814,85 @@ async function main() {
 
       for (const opp of listBody.opportunities) {
         assert.equal(opp.hasVerifiedBadge, true, `Unverified opp leaked into public API: ${opp.id}`);
+        assert.equal(opp.isArchived, false, `Archived opp leaked into public API: ${opp.id}`);
         assert.ok(opp.deadline.fullDaysRemaining >= 3, `Opp with <3 days leaked: ${opp.id}`);
         assert.ok(opp.officialApplicationUrl.startsWith('https://'), `Non-HTTPS URL leaked: ${opp.id}`);
+        assert.equal(
+          evaluateMandatoryVisaCompliance(opp.category, opp.funding).passed,
+          true,
+          `Non-visa-compliant opp leaked into public API: ${opp.id}`
+        );
+        assert.equal(
+          evaluateProfessionalRestrictionCompliance(opp.category, opp).passed,
+          true,
+          `Restricted-profession opp leaked into public API: ${opp.id}`
+        );
         assert.equal(isOpportunityActiveAndDisplayable(opp), true);
       }
+    });
+
+    // -----------------------------------------------------------------------
+    // 6. HUMANIZE TEXT & HUMANIZE CHECKER API TESTS
+    // -----------------------------------------------------------------------
+    await runTest('Writing API (Humanize Text): validates input, preserves technical terms, supports document types & styles', async () => {
+      const badRes = await fetch(`${baseUrl}/api/writing/humanize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Too short' }),
+      });
+      assert.equal(badRes.status, 400);
+
+      const sampleText =
+        "In today's fast-paced world, I am writing to express my keen interest in the WASH Water Engineer role. I utilized EPANET and GIS in order to facilitate the implementation of rural water supply projects, and I possess a strong background in IFRS budgeting and sanitation hygiene. Please do not hesitate to contact me at this point in time.";
+
+      const okRes = await fetch(`${baseUrl}/api/writing/humanize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: sampleText,
+          documentType: 'cover_letter',
+          style: 'concise',
+        }),
+      });
+      assert.equal(okRes.status, 200);
+      const data: any = await okRes.json();
+      assert.ok(typeof data.revisedText === 'string' && data.revisedText.length > 20);
+      assert.equal(data.documentType, 'cover_letter');
+      assert.equal(data.style, 'concise');
+      assert.ok(data.revisedText.includes('EPANET'), 'Expected technical term EPANET to be preserved');
+      assert.ok(data.revisedText.includes('IFRS'), 'Expected technical term IFRS to be preserved');
+      assert.ok(Array.isArray(data.improvementsApplied) && data.improvementsApplied.length > 0);
+      assert.ok(data.integrityNotice.toLowerCase().includes('never invents'));
+    });
+
+    await runTest('Writing API (Humanize Checker): detects readability, clichés, tone inconsistency, repetition, long sentences, alternatives, and ethical transparency notice', async () => {
+      const draft =
+        "Dear Sir, in today's fast-paced world, I'm super excited to delve deeply into this scholarship because I have tons of experience in microfinance and AML/CFT compliance and I believe that this program is of paramount importance due to the fact that it will allow me to strengthen banking regulation and financial inclusion systems across regional institutions while delivering measurable outcomes. I lead credit risk audits. I lead credit risk audits. I lead banking reviews. I lead financial reports.";
+
+      const res = await fetch(`${baseUrl}/api/writing/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: draft,
+          documentType: 'scholarship_application',
+        }),
+      });
+      assert.equal(res.status, 200);
+      const report: any = await res.json();
+      assert.ok(typeof report.overallQualityScore === 'number' && report.overallQualityScore >= 0 && report.overallQualityScore <= 100);
+      assert.ok(typeof report.metrics?.fleschReadingEase === 'number');
+      assert.ok(report.metrics.wordCount > 50);
+      assert.ok(Array.isArray(report.issues) && report.issues.length >= 3);
+      const issueCategories = new Set(report.issues.map((i: any) => i.category));
+      assert.ok(issueCategories.has('generic_expression') || issueCategories.has('unnatural_wording'));
+      assert.ok(issueCategories.has('overly_complicated'), 'Expected long sentence detection');
+      assert.ok(issueCategories.has('inconsistent_tone'), 'Expected inconsistent tone detection');
+      assert.ok(issueCategories.has('repetitive_sentence'), 'Expected repetitive sentence detection');
+      assert.ok(Array.isArray(report.alternatives) && report.alternatives.length >= 2);
+      assert.ok(typeof report.improvedVersion === 'string' && report.improvedVersion.includes('AML/CFT'));
+      // Ethical transparency verification: NEVER claims to detect AI authorship or bypass detectors
+      assert.ok(report.transparencyNotice.toLowerCase().includes('does not promise to bypass ai detectors'));
+      assert.ok(report.transparencyNotice.toLowerCase().includes('no automated detector can reliably prove'));
     });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

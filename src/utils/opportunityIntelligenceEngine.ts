@@ -272,7 +272,7 @@ export function classifyFundingAndVisaTransparency(input: {
   stipendOrSalary?: string;
 }): Omit<OpportunityFundingRecord, 'id' | 'opportunityId' | 'verifiedAt'> {
   const fundingText = `${input.fundingSummary || ''} ${input.fullText || ''}`.toLowerCase();
-  const visaText = `${input.visaSummary || ''} ${input.fullText || ''}`.toLowerCase();
+  const visaText = `${input.visaSummary || ''} ${input.fundingSummary || ''} ${input.fullText || ''}`.toLowerCase();
 
   const tags = new Set<FundingTransparencyCategory>();
 
@@ -319,14 +319,28 @@ export function classifyFundingAndVisaTransparency(input: {
       ? 'no'
       : 'not_confirmed');
 
-  // Strict Visa Sponsor vs Invitation Letter distinction
-  const hasEmployerSponsoredVisa =
-    /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|visa\s+sponsorship\s+(provided|available|offered)|work\s+permit\s+sponsorship|we\s+sponsor\s+work\s+visas?)\b/i.test(
+  // Strict Visa Sponsorship / Visa Fee Coverage vs Invitation Letter / Visa-Free / Self-Paid distinction
+  const hasContradictorySelfPaidOrWithdrawnVisa =
+    /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|without\s+visa\s+sponsorship|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|no\s+longer\s+offered|not\s+available|not\s+offered|withdrawn|discontinued|revoked|suspended)|applicants?\s+(?:must|are\s+responsible\s+to|should)\s+(?:pay|cover|bear)\s+(?:their\s+own\s+)?visa|visa\s+(?:application\s+)?fees?\s+(?:are\s+)?(?:not\s+covered|not\s+included|excluded|at\s+own\s+expense|paid\s+by\s+(?:the\s+)?applicant|self[\s-]funded)|responsible\s+for\s+(?:their\s+own\s+)?visa\s+(?:costs?|fees?)|must\s+have\s+right\s+to\s+work|already\s+authorized\s+to\s+work|national\s+position\s+only)\b/i.test(
       visaText
-    ) && !/\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|without\s+visa\s+sponsorship)\b/i.test(visaText);
+    );
+
+  const hasVisaFreeEntryOnly =
+    /\b(visa[\s-]free\s+(?:entry|access|travel|country)|no\s+visa\s+required\s+for\s+entry|visa\s+on\s+arrival)\b/i.test(
+      visaText
+    );
+
+  const hasEmployerSponsoredVisa =
+    !hasContradictorySelfPaidOrWithdrawnVisa &&
+    /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|work\s+permit\s+sponsorship|visa\s+sponsorship\s+(?:provided|available|offered|included|confirmed)|we\s+sponsor\s+(?:work\s+)?visas?|sponsors?\s+work\s+(?:visas?|permits?)|full\s+work\s+visa\s+sponsorship|company[\s-]sponsored\s+(?:work\s+)?visa|tier\s*2\s+sponsorship|skilled\s+worker\s+visa\s+sponsorship)\b/i.test(
+      visaText
+    );
 
   const hasVisaFeesFunded =
-    /\b(visa\s+fees?\s+(covered|paid|reimbursed|funded)|reimbursement\s+of\s+visa\s+fees?)\b/i.test(visaText);
+    !hasContradictorySelfPaidOrWithdrawnVisa &&
+    /\b(visa\s+(?:application\s+)?(?:fees?|costs?|expenses?)\s+(?:are\s+|will\s+be\s+)?(?:fully\s+)?(?:covered|paid|reimbursed|funded|waived\s+and\s+covered)|reimbursement\s+of\s+visa\s+(?:application\s+)?(?:fees?|costs?)|covers?\s+(?:all\s+)?visa\s+(?:application\s+)?(?:fees?|costs?|expenses?)|visa\s+fee\s+reimbursement|visa\s+cost\s+coverage|includes?\s+visa\s+(?:fees?|costs?|sponsorship)|visa\s+sponsorship\s+and\s+fees?\s+covered)\b/i.test(
+      visaText
+    );
 
   const hasInvitationLetterOnly =
     /\b(invitation\s+letter|visa\s+support\s+letter|letter\s+of\s+invitation)\b/i.test(visaText) &&
@@ -339,33 +353,31 @@ export function classifyFundingAndVisaTransparency(input: {
     !hasEmployerSponsoredVisa &&
     !hasVisaFeesFunded;
 
-  const hasNoVisaSupport =
-    /\b(no\s+visa\s+sponsorship|must\s+have\s+right\s+to\s+work|already\s+authorized\s+to\s+work|national\s+position\s+only)\b/i.test(
-      visaText
-    );
-
   let visaSupportType: OpportunityFundingRecord['visaSupportType'] = 'not_confirmed';
   let visaSupportSummary = 'Not Confirmed';
 
-  if (hasEmployerSponsoredVisa) {
+  if (hasContradictorySelfPaidOrWithdrawnVisa) {
+    visaSupportType = 'none';
+    visaSupportSummary = 'Rejected: No visa sponsorship / applicant must pay own visa fees / sponsorship withdrawn';
+  } else if (hasEmployerSponsoredVisa) {
     visaSupportType = 'employer_sponsored_visa';
-    visaSupportSummary = 'Employer-sponsored work visa / permit confirmed';
+    visaSupportSummary = 'Employer-sponsored work visa / permit officially confirmed';
     tags.add('Employer-sponsored visa');
   } else if (hasVisaFeesFunded) {
     visaSupportType = 'visa_fees_funded';
-    visaSupportSummary = 'Visa fee coverage confirmed (check official rules)';
+    visaSupportSummary = 'Official visa application fee coverage confirmed';
     tags.add('Visa fees funded');
+  } else if (hasVisaFreeEntryOnly) {
+    visaSupportType = 'visa_free_not_sponsorship';
+    visaSupportSummary = 'Visa-free entry mentioned (NOT visa sponsorship or visa fee coverage)';
   } else if (hasInvitationLetterOnly) {
     visaSupportType = 'invitation_letter_only';
-    visaSupportSummary = 'Invitation letter / visa application assistance only (NOT visa sponsorship)';
+    visaSupportSummary = 'Invitation letter only (does NOT qualify — no visa sponsorship or fee coverage)';
     tags.add('Visa application assistance only');
   } else if (hasVisaAssistanceOnly) {
     visaSupportType = 'visa_assistance_only';
-    visaSupportSummary = 'Visa application assistance only (no sponsorship or fee coverage confirmed)';
+    visaSupportSummary = 'Visa application assistance without fee coverage (does NOT qualify)';
     tags.add('Visa application assistance only');
-  } else if (hasNoVisaSupport) {
-    visaSupportType = 'none';
-    visaSupportSummary = 'No visa sponsorship confirmed';
   }
 
   if (explicitFullFunded && !explicitSelfFunded) tags.add('Fully funded');
@@ -425,6 +437,142 @@ export function classifyFundingAndVisaTransparency(input: {
 }
 
 /**
+ * MANDATORY VISA SPONSORSHIP & VISA-COST COVERAGE FILTER
+ * - Employment (international_job, wash_opportunity): MUST explicitly confirm employer-sponsored work visa / permit.
+ * - Scholarships, Training, Conferences: MUST explicitly confirm visa application fee coverage or visa sponsorship.
+ * - Strictly rejects invitation letter only, visa assistance without fee coverage, visa-free entry,
+ *   self-paid visa fees, unspecified visa funding, withdrawn sponsorship, or source contradictions.
+ */
+export function evaluateMandatoryVisaCompliance(
+  category: GlobalOpportunityCategory,
+  funding: Pick<OpportunityFundingRecord, 'visaSupportType' | 'visaSupportSummary' | 'evidenceExcerpt'>,
+  officialSourceText?: string
+): { passed: boolean; reason: string | null } {
+  const combinedText = `${funding.visaSupportSummary || ''} ${funding.evidenceExcerpt || ''} ${officialSourceText || ''}`;
+
+  // Reject immediately if official source text contradicts claimed visa coverage or indicates withdrawal
+  if (
+    /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|no\s+longer\s+offered|not\s+available|not\s+offered|withdrawn|discontinued|revoked|suspended)|applicants?\s+(?:must|are\s+responsible\s+to|should)\s+(?:pay|cover|bear)\s+(?:their\s+own\s+)?visa|visa\s+(?:application\s+)?fees?\s+(?:are\s+)?(?:not\s+covered|not\s+included|excluded|at\s+own\s+expense|paid\s+by\s+(?:the\s+)?applicant)|responsible\s+for\s+(?:their\s+own\s+)?visa\s+(?:costs?|fees?))\b/i.test(
+      combinedText
+    )
+  ) {
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): Official source states applicants must pay their own visa fees, no visa sponsorship is offered, or sponsorship was withdrawn.',
+    };
+  }
+
+  const isEmployment = category === 'international_job' || category === 'wash_opportunity';
+
+  if (funding.visaSupportType === 'visa_free_not_sponsorship') {
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): Visa-free entry does not qualify as official employer work visa sponsorship or visa fee coverage.',
+    };
+  }
+
+  if (funding.visaSupportType === 'invitation_letter_only') {
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): An invitation letter alone does not qualify — official visa fee coverage or visa sponsorship is required.',
+    };
+  }
+
+  if (funding.visaSupportType === 'visa_assistance_only') {
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): Visa application assistance without confirmed visa fee coverage does not qualify.',
+    };
+  }
+
+  if (funding.visaSupportType === 'none') {
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): No visa sponsorship or visa fee coverage confirmed (or applicants must pay own visa costs).',
+    };
+  }
+
+  if (isEmployment) {
+    if (funding.visaSupportType === 'employer_sponsored_visa') {
+      return { passed: true, reason: null };
+    }
+    return {
+      passed: false,
+      reason:
+        'Rejected (Visa Rule): Employment opportunity does not explicitly confirm employer-sponsored work visa or work permit sponsorship from official recruitment documentation.',
+    };
+  }
+
+  // Scholarships, Professional Training, International Conferences
+  if (
+    funding.visaSupportType === 'visa_fees_funded' ||
+    funding.visaSupportType === 'employer_sponsored_visa'
+  ) {
+    return { passed: true, reason: null };
+  }
+
+  return {
+    passed: false,
+    reason:
+      'Rejected (Visa Rule): Sponsoring institution or organizer does not explicitly confirm visa application fee coverage or visa sponsorship.',
+  };
+}
+
+/**
+ * STRICT PROFESSIONAL RESTRICTION FILTER
+ * - Scholarships, Professional Training, and Conferences MUST serve Banking & Finance OR WASH professionals exclusively.
+ * - International Jobs retain all existing professional categories (while still passing the mandatory visa sponsorship gate).
+ */
+export function evaluateProfessionalRestrictionCompliance(
+  category: GlobalOpportunityCategory,
+  input: {
+    title?: string;
+    summary?: string;
+    organization?: string;
+    sectors?: SectorTag[];
+    isBankingFinance?: boolean;
+    isWashDedicated?: boolean;
+  }
+): { passed: boolean; domain: 'banking_finance' | 'wash' | 'both' | 'international_job_allowed' | 'restricted'; reason: string | null } {
+  if (category === 'international_job' || category === 'wash_opportunity') {
+    return { passed: true, domain: 'international_job_allowed', reason: null };
+  }
+
+  const text = `${input.title || ''} ${input.summary || ''} ${input.organization || ''}`;
+  const detected = detectSectorsFromText(text);
+  const isBanking =
+    Boolean(input.isBankingFinance) ||
+    Boolean(input.sectors?.includes('banking_finance')) ||
+    detected.isBankingFinance;
+  const isWash =
+    Boolean(input.isWashDedicated) ||
+    Boolean(input.sectors?.includes('wash')) ||
+    detected.isWash;
+
+  if (isBanking && isWash) return { passed: true, domain: 'both', reason: null };
+  if (isBanking) return { passed: true, domain: 'banking_finance', reason: null };
+  if (isWash) return { passed: true, domain: 'wash', reason: null };
+
+  const label =
+    category === 'university_scholarship'
+      ? 'Scholarship'
+      : category === 'professional_training'
+      ? 'Professional Training'
+      : 'Conference / Summit';
+
+  return {
+    passed: false,
+    domain: 'restricted',
+    reason: `Rejected (Professional Restriction): ${label} is outside the permitted Banking & Finance and WASH professional domains.`,
+  };
+}
+
+/**
  * Computes exact verification status and Verified Badge eligibility.
  * Strict rule: ONLY opportunities that pass live official URL verification + >= 3 full days rule
  * can receive the Verified badge.
@@ -434,15 +582,36 @@ export function computeVerificationOutcome(params: {
   organizationAuthentic: boolean;
   applicationStatus: ApplicationLifecycleStatus;
   deadlineEval: DeadlineEvaluationResult;
-  funding: Pick<OpportunityFundingRecord, 'fundingLevel' | 'visaSupportType'>;
+  funding: Pick<OpportunityFundingRecord, 'fundingLevel' | 'visaSupportType' | 'visaSupportSummary' | 'evidenceExcerpt'>;
   eligibility: Pick<OpportunityEligibilityRecord, 'ethiopianEligible'>;
   category: GlobalOpportunityCategory;
+  title?: string;
+  summary?: string;
+  organization?: string;
+  sectors?: SectorTag[];
+  isBankingFinance?: boolean;
+  isWashDedicated?: boolean;
+  officialSourceText?: string;
 }): {
   verificationStatus: GlobalVerificationStatus;
   hasVerifiedBadge: boolean;
   isPubliclyDisplayable: boolean;
+  visaCompliancePassed: boolean;
+  professionalRestrictionPassed: boolean;
+  rejectionCategory: 'visa' | 'professional_restriction' | 'deadline' | 'broken_link' | 'withdrawn' | 'eligibility' | 'authenticity' | null;
+  rejectionReason: string | null;
 } {
   const { urlVerified, organizationAuthentic, applicationStatus, deadlineEval, funding, eligibility, category } = params;
+
+  const visaCheck = evaluateMandatoryVisaCompliance(category, funding, params.officialSourceText);
+  const profCheck = evaluateProfessionalRestrictionCompliance(category, {
+    title: params.title,
+    summary: params.summary,
+    organization: params.organization,
+    sectors: params.sectors,
+    isBankingFinance: params.isBankingFinance,
+    isWashDedicated: params.isWashDedicated,
+  });
 
   if (
     applicationStatus === 'expired' ||
@@ -454,23 +623,74 @@ export function computeVerificationOutcome(params: {
       verificationStatus: 'Expired',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: applicationStatus === 'withdrawn' || applicationStatus === 'closed' ? 'withdrawn' : 'deadline',
+      rejectionReason: deadlineEval.rejectionReason || `Opportunity is ${applicationStatus}.`,
     };
   }
 
-  if (!urlVerified || !organizationAuthentic || !deadlineEval.valid) {
+  if (!urlVerified || !organizationAuthentic) {
     return {
       verificationStatus: 'Unverified',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: !organizationAuthentic ? 'authenticity' : 'broken_link',
+      rejectionReason: !organizationAuthentic
+        ? 'Organization authenticity or official domain could not be verified.'
+        : 'Official application URL could not be verified live.',
     };
   }
 
-  // Mandatory 3-Full-Days Rule: never display if < 3 full days remain
-  if (!deadlineEval.meetsMinimumThreeFullDays) {
+  if (!deadlineEval.valid || !deadlineEval.meetsMinimumThreeFullDays) {
     return {
       verificationStatus: 'Expired',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: 'deadline',
+      rejectionReason: deadlineEval.rejectionReason || 'Opportunity has fewer than 3 full days remaining.',
+    };
+  }
+
+  if (eligibility.ethiopianEligible === 'excluded') {
+    return {
+      verificationStatus: 'Unverified',
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: 'eligibility',
+      rejectionReason: 'Excluded: Official source restricts eligibility against Ethiopian applicants.',
+    };
+  }
+
+  // MANDATORY VISA SPONSORSHIP / VISA-COST FILTER
+  if (!visaCheck.passed) {
+    return {
+      verificationStatus: 'Unverified',
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: false,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: 'visa',
+      rejectionReason: visaCheck.reason,
+    };
+  }
+
+  // MANDATORY PROFESSIONAL RESTRICTION FILTER (Banking & WASH exclusively for Scholarships, Training, Conferences)
+  if (!profCheck.passed) {
+    return {
+      verificationStatus: 'Unverified',
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: true,
+      professionalRestrictionPassed: false,
+      rejectionCategory: 'professional_restriction',
+      rejectionReason: profCheck.reason,
     };
   }
 
@@ -500,22 +720,30 @@ export function computeVerificationOutcome(params: {
     verificationStatus,
     hasVerifiedBadge: true,
     isPubliclyDisplayable: true,
+    visaCompliancePassed: true,
+    professionalRestrictionPassed: true,
+    rejectionCategory: null,
+    rejectionReason: null,
   };
 }
 
 /**
  * Checks whether an opportunity is eligible for active display on the website right now.
- * Re-evaluates the deadline against `nowMs` so stale records are immediately hidden.
+ * Enforces verified badge, non-archived status, mandatory visa compliance, professional restrictions,
+ * Ethiopian eligibility, and the >= 3 full days deadline gate.
  */
 export function isOpportunityActiveAndDisplayable(
   opp: GlobalOpportunity,
   nowMs: number = Date.now()
 ): boolean {
   if (!opp.hasVerifiedBadge) return false;
+  if (opp.isArchived === true) return false;
   if (
     opp.applicationStatus === 'closed' ||
     opp.applicationStatus === 'expired' ||
-    opp.applicationStatus === 'withdrawn'
+    opp.applicationStatus === 'withdrawn' ||
+    opp.applicationStatus === 'rejected' ||
+    opp.applicationStatus === 'unverified'
   ) {
     return false;
   }
@@ -523,6 +751,16 @@ export function isOpportunityActiveAndDisplayable(
     return false;
   }
   if (opp.eligibility.ethiopianEligible === 'excluded') {
+    return false;
+  }
+  // Enforce mandatory visa sponsorship / visa fee coverage filter live
+  const visaCheck = evaluateMandatoryVisaCompliance(opp.category, opp.funding, opp.sourceEvidenceSnippet);
+  if (!visaCheck.passed) {
+    return false;
+  }
+  // Enforce Banking & WASH professional restrictions for scholarships, training & conferences
+  const profCheck = evaluateProfessionalRestrictionCompliance(opp.category, opp);
+  if (!profCheck.passed) {
     return false;
   }
   const deadlineCheck = evaluateOpportunityDeadline(
@@ -890,6 +1128,48 @@ export function evaluateOpportunityForUser(
   const profileCorpus = buildProfileCorpus(profile);
   const profileDetected = detectSectorsFromText(profileCorpus);
 
+  // Gate 5: STRICT PROFESSIONAL SECTOR MATCHING
+  // Never recommend Banking & Finance programs to non-Banking professionals,
+  // and never recommend WASH programs to non-WASH professionals.
+  const isRestrictedCategory =
+    opportunity.category === 'university_scholarship' ||
+    opportunity.category === 'professional_training' ||
+    opportunity.category === 'conference_summit';
+
+  const oppIsBankingOnly =
+    (opportunity.isBankingFinance || opportunity.sectors.includes('banking_finance')) &&
+    !(opportunity.isWashDedicated || opportunity.sectors.includes('wash'));
+  const oppIsWashOnly =
+    (opportunity.isWashDedicated || opportunity.sectors.includes('wash')) &&
+    !(opportunity.isBankingFinance || opportunity.sectors.includes('banking_finance'));
+
+  if (isRestrictedCategory) {
+    if (oppIsBankingOnly && !profileDetected.isBankingFinance) {
+      disqualificationReasons.push(
+        'Strict professional match: Banking & Finance scholarships, trainings, and conferences are only recommended to users with verified Banking, Finance, Accounting, Economics, Microfinance, or FinTech qualifications/experience.'
+      );
+    } else if (oppIsWashOnly && !profileDetected.isWash) {
+      disqualificationReasons.push(
+        'Strict professional match: WASH scholarships, trainings, and conferences are only recommended to users with verified Water, Sanitation, Hygiene, Water Engineering, or Environmental Health qualifications/experience.'
+      );
+    } else if (!profileDetected.isBankingFinance && !profileDetected.isWash) {
+      disqualificationReasons.push(
+        'Strict professional match: Your profile does not list Banking/Finance or WASH qualifications or experience required for this program.'
+      );
+    }
+  } else {
+    // For International Jobs, also prevent recommending completely unrelated professions
+    const hasSectorOverlap = opportunity.sectors.some((s) => profileDetected.sectors.includes(s));
+    const oppTitleKeywords = extractMeaningfulKeywords(`${opportunity.title} ${opportunity.eligibility.requiredSkills.join(' ')}`);
+    const userKeywords = new Set(extractMeaningfulKeywords(profileCorpus));
+    const directSkillMatchCount = oppTitleKeywords.filter((kw) => userKeywords.has(kw)).length;
+    if (!hasSectorOverlap && directSkillMatchCount < 2) {
+      disqualificationReasons.push(
+        'Strict professional match: Role sector, occupation, and required skills do not match your professional profile.'
+      );
+    }
+  }
+
   let score = 0;
 
   // Sector alignment (high weight for Banking & Finance, WASH, Dev, Tech, Engineering, Health)
@@ -927,14 +1207,14 @@ export function evaluateOpportunityForUser(
     matchReasons.push('Direct alignment with your Banking, Microfinance & Finance specialization');
   }
 
-  // Skill & Keyword overlap
+  // Skill, Certification & Keyword overlap
   const oppText = `${opportunity.title} ${opportunity.summary} ${opportunity.eligibility.requiredSkills.join(' ')} ${opportunity.organization}`;
   const oppKeywords = extractMeaningfulKeywords(oppText);
   const profileKeywords = new Set(extractMeaningfulKeywords(profileCorpus));
   const overlappingKeywords = oppKeywords.filter((kw) => profileKeywords.has(kw));
   if (overlappingKeywords.length > 0) {
     score += Math.min(25, overlappingKeywords.length * 5);
-    matchReasons.push(`Matches skills & focus areas: ${overlappingKeywords.slice(0, 4).join(', ')}`);
+    matchReasons.push(`Matches skills & qualifications: ${overlappingKeywords.slice(0, 4).join(', ')}`);
   }
 
   // Experience & Education fit confirmation
@@ -959,9 +1239,13 @@ export function evaluateOpportunityForUser(
   if (opportunity.funding.fundingLevel === 'fully_funded') {
     score += 8;
     matchReasons.push('Confirmed Fully Funded program');
-  } else if (opportunity.funding.visaSupportType === 'employer_sponsored_visa') {
+  }
+  if (opportunity.funding.visaSupportType === 'employer_sponsored_visa') {
     score += 8;
-    matchReasons.push('Employer-sponsored work visa confirmed');
+    matchReasons.push('Employer-sponsored work visa officially confirmed');
+  } else if (opportunity.funding.visaSupportType === 'visa_fees_funded') {
+    score += 8;
+    matchReasons.push('Official visa application fee coverage confirmed');
   }
 
   if (
@@ -981,13 +1265,13 @@ export function evaluateOpportunityForUser(
   }
 
   const boundedScore = disqualificationReasons.length > 0 ? 0 : Math.min(100, Math.max(0, Math.round(score)));
-  const eligible = disqualificationReasons.length === 0 && boundedScore >= 25;
+  const eligible = disqualificationReasons.length === 0 && boundedScore >= 30;
 
   const eligibilitySummary =
     disqualificationReasons.length > 0
       ? `Not eligible: ${disqualificationReasons[0]}`
       : eligible
-      ? 'Meets verified eligibility criteria for your profile'
+      ? 'Meets verified visa, sector, and eligibility criteria for your profile'
       : 'Eligible, lower direct sector match with current profile';
 
   return {

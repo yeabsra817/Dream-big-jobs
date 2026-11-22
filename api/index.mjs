@@ -5574,7 +5574,7 @@ function computeOpportunityFingerprint(title, organization, officialApplicationU
 }
 function classifyFundingAndVisaTransparency(input) {
   const fundingText = `${input.fundingSummary || ""} ${input.fullText || ""}`.toLowerCase();
-  const visaText = `${input.visaSummary || ""} ${input.fullText || ""}`.toLowerCase();
+  const visaText = `${input.visaSummary || ""} ${input.fundingSummary || ""} ${input.fullText || ""}`.toLowerCase();
   const tags = /* @__PURE__ */ new Set();
   const explicitFullFunded = /\b(fully[\s-]funded|full[\s-]scholarship|100%\s*(funded|scholarship|covered)|all[\s-]expenses[\s-]paid|full[\s-]funding)\b/i.test(
     fundingText
@@ -5589,36 +5589,44 @@ function classifyFundingAndVisaTransparency(input) {
   const accommodationCovered = input.accommodationCovered || (/\b(accommodation\s+covered|housing\s+provided|hotel\s+covered|lodging\s+provided|living\s+allowance|full\s+board|monthly\s+stipend)\b/i.test(
     fundingText
   ) ? "yes" : /\bpartial\s+accommodation\b/i.test(fundingText) ? "partial" : /\b(accommodation\s+not\s+covered|own\s+accommodation)\b/i.test(fundingText) ? "no" : "not_confirmed");
-  const hasEmployerSponsoredVisa = /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|visa\s+sponsorship\s+(provided|available|offered)|work\s+permit\s+sponsorship|we\s+sponsor\s+work\s+visas?)\b/i.test(
-    visaText
-  ) && !/\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|without\s+visa\s+sponsorship)\b/i.test(visaText);
-  const hasVisaFeesFunded = /\b(visa\s+fees?\s+(covered|paid|reimbursed|funded)|reimbursement\s+of\s+visa\s+fees?)\b/i.test(visaText);
-  const hasInvitationLetterOnly = /\b(invitation\s+letter|visa\s+support\s+letter|letter\s+of\s+invitation)\b/i.test(visaText) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
-  const hasVisaAssistanceOnly = (/\b(visa\s+assistance|visa\s+guidance|support\s+with\s+visa\s+application)\b/i.test(visaText) || hasInvitationLetterOnly) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
-  const hasNoVisaSupport = /\b(no\s+visa\s+sponsorship|must\s+have\s+right\s+to\s+work|already\s+authorized\s+to\s+work|national\s+position\s+only)\b/i.test(
+  const hasContradictorySelfPaidOrWithdrawnVisa = /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|without\s+visa\s+sponsorship|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|no\s+longer\s+offered|not\s+available|not\s+offered|withdrawn|discontinued|revoked|suspended)|applicants?\s+(?:must|are\s+responsible\s+to|should)\s+(?:pay|cover|bear)\s+(?:their\s+own\s+)?visa|visa\s+(?:application\s+)?fees?\s+(?:are\s+)?(?:not\s+covered|not\s+included|excluded|at\s+own\s+expense|paid\s+by\s+(?:the\s+)?applicant|self[\s-]funded)|responsible\s+for\s+(?:their\s+own\s+)?visa\s+(?:costs?|fees?)|must\s+have\s+right\s+to\s+work|already\s+authorized\s+to\s+work|national\s+position\s+only)\b/i.test(
     visaText
   );
+  const hasVisaFreeEntryOnly = /\b(visa[\s-]free\s+(?:entry|access|travel|country)|no\s+visa\s+required\s+for\s+entry|visa\s+on\s+arrival)\b/i.test(
+    visaText
+  );
+  const hasEmployerSponsoredVisa = !hasContradictorySelfPaidOrWithdrawnVisa && /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|work\s+permit\s+sponsorship|visa\s+sponsorship\s+(?:provided|available|offered|included|confirmed)|we\s+sponsor\s+(?:work\s+)?visas?|sponsors?\s+work\s+(?:visas?|permits?)|full\s+work\s+visa\s+sponsorship|company[\s-]sponsored\s+(?:work\s+)?visa|tier\s*2\s+sponsorship|skilled\s+worker\s+visa\s+sponsorship)\b/i.test(
+    visaText
+  );
+  const hasVisaFeesFunded = !hasContradictorySelfPaidOrWithdrawnVisa && /\b(visa\s+(?:application\s+)?(?:fees?|costs?|expenses?)\s+(?:are\s+|will\s+be\s+)?(?:fully\s+)?(?:covered|paid|reimbursed|funded|waived\s+and\s+covered)|reimbursement\s+of\s+visa\s+(?:application\s+)?(?:fees?|costs?)|covers?\s+(?:all\s+)?visa\s+(?:application\s+)?(?:fees?|costs?|expenses?)|visa\s+fee\s+reimbursement|visa\s+cost\s+coverage|includes?\s+visa\s+(?:fees?|costs?|sponsorship)|visa\s+sponsorship\s+and\s+fees?\s+covered)\b/i.test(
+    visaText
+  );
+  const hasInvitationLetterOnly = /\b(invitation\s+letter|visa\s+support\s+letter|letter\s+of\s+invitation)\b/i.test(visaText) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
+  const hasVisaAssistanceOnly = (/\b(visa\s+assistance|visa\s+guidance|support\s+with\s+visa\s+application)\b/i.test(visaText) || hasInvitationLetterOnly) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
   let visaSupportType = "not_confirmed";
   let visaSupportSummary = "Not Confirmed";
-  if (hasEmployerSponsoredVisa) {
+  if (hasContradictorySelfPaidOrWithdrawnVisa) {
+    visaSupportType = "none";
+    visaSupportSummary = "Rejected: No visa sponsorship / applicant must pay own visa fees / sponsorship withdrawn";
+  } else if (hasEmployerSponsoredVisa) {
     visaSupportType = "employer_sponsored_visa";
-    visaSupportSummary = "Employer-sponsored work visa / permit confirmed";
+    visaSupportSummary = "Employer-sponsored work visa / permit officially confirmed";
     tags.add("Employer-sponsored visa");
   } else if (hasVisaFeesFunded) {
     visaSupportType = "visa_fees_funded";
-    visaSupportSummary = "Visa fee coverage confirmed (check official rules)";
+    visaSupportSummary = "Official visa application fee coverage confirmed";
     tags.add("Visa fees funded");
+  } else if (hasVisaFreeEntryOnly) {
+    visaSupportType = "visa_free_not_sponsorship";
+    visaSupportSummary = "Visa-free entry mentioned (NOT visa sponsorship or visa fee coverage)";
   } else if (hasInvitationLetterOnly) {
     visaSupportType = "invitation_letter_only";
-    visaSupportSummary = "Invitation letter / visa application assistance only (NOT visa sponsorship)";
+    visaSupportSummary = "Invitation letter only (does NOT qualify \u2014 no visa sponsorship or fee coverage)";
     tags.add("Visa application assistance only");
   } else if (hasVisaAssistanceOnly) {
     visaSupportType = "visa_assistance_only";
-    visaSupportSummary = "Visa application assistance only (no sponsorship or fee coverage confirmed)";
+    visaSupportSummary = "Visa application assistance without fee coverage (does NOT qualify)";
     tags.add("Visa application assistance only");
-  } else if (hasNoVisaSupport) {
-    visaSupportType = "none";
-    visaSupportSummary = "No visa sponsorship confirmed";
   }
   if (explicitFullFunded && !explicitSelfFunded) tags.add("Fully funded");
   if (tuitionCovered === "yes") tags.add("Tuition funded");
@@ -5652,27 +5660,151 @@ function classifyFundingAndVisaTransparency(input) {
     stipendOrSalary: input.stipendOrSalary?.trim() || void 0
   };
 }
+function evaluateMandatoryVisaCompliance(category, funding, officialSourceText) {
+  const combinedText = `${funding.visaSupportSummary || ""} ${funding.evidenceExcerpt || ""} ${officialSourceText || ""}`;
+  if (/\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|no\s+longer\s+offered|not\s+available|not\s+offered|withdrawn|discontinued|revoked|suspended)|applicants?\s+(?:must|are\s+responsible\s+to|should)\s+(?:pay|cover|bear)\s+(?:their\s+own\s+)?visa|visa\s+(?:application\s+)?fees?\s+(?:are\s+)?(?:not\s+covered|not\s+included|excluded|at\s+own\s+expense|paid\s+by\s+(?:the\s+)?applicant)|responsible\s+for\s+(?:their\s+own\s+)?visa\s+(?:costs?|fees?))\b/i.test(
+    combinedText
+  )) {
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): Official source states applicants must pay their own visa fees, no visa sponsorship is offered, or sponsorship was withdrawn."
+    };
+  }
+  const isEmployment = category === "international_job" || category === "wash_opportunity";
+  if (funding.visaSupportType === "visa_free_not_sponsorship") {
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): Visa-free entry does not qualify as official employer work visa sponsorship or visa fee coverage."
+    };
+  }
+  if (funding.visaSupportType === "invitation_letter_only") {
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): An invitation letter alone does not qualify \u2014 official visa fee coverage or visa sponsorship is required."
+    };
+  }
+  if (funding.visaSupportType === "visa_assistance_only") {
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): Visa application assistance without confirmed visa fee coverage does not qualify."
+    };
+  }
+  if (funding.visaSupportType === "none") {
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): No visa sponsorship or visa fee coverage confirmed (or applicants must pay own visa costs)."
+    };
+  }
+  if (isEmployment) {
+    if (funding.visaSupportType === "employer_sponsored_visa") {
+      return { passed: true, reason: null };
+    }
+    return {
+      passed: false,
+      reason: "Rejected (Visa Rule): Employment opportunity does not explicitly confirm employer-sponsored work visa or work permit sponsorship from official recruitment documentation."
+    };
+  }
+  if (funding.visaSupportType === "visa_fees_funded" || funding.visaSupportType === "employer_sponsored_visa") {
+    return { passed: true, reason: null };
+  }
+  return {
+    passed: false,
+    reason: "Rejected (Visa Rule): Sponsoring institution or organizer does not explicitly confirm visa application fee coverage or visa sponsorship."
+  };
+}
+function evaluateProfessionalRestrictionCompliance(category, input) {
+  if (category === "international_job" || category === "wash_opportunity") {
+    return { passed: true, domain: "international_job_allowed", reason: null };
+  }
+  const text = `${input.title || ""} ${input.summary || ""} ${input.organization || ""}`;
+  const detected = detectSectorsFromText(text);
+  const isBanking = Boolean(input.isBankingFinance) || Boolean(input.sectors?.includes("banking_finance")) || detected.isBankingFinance;
+  const isWash = Boolean(input.isWashDedicated) || Boolean(input.sectors?.includes("wash")) || detected.isWash;
+  if (isBanking && isWash) return { passed: true, domain: "both", reason: null };
+  if (isBanking) return { passed: true, domain: "banking_finance", reason: null };
+  if (isWash) return { passed: true, domain: "wash", reason: null };
+  const label = category === "university_scholarship" ? "Scholarship" : category === "professional_training" ? "Professional Training" : "Conference / Summit";
+  return {
+    passed: false,
+    domain: "restricted",
+    reason: `Rejected (Professional Restriction): ${label} is outside the permitted Banking & Finance and WASH professional domains.`
+  };
+}
 function computeVerificationOutcome(params) {
   const { urlVerified, organizationAuthentic, applicationStatus, deadlineEval, funding, eligibility, category } = params;
+  const visaCheck = evaluateMandatoryVisaCompliance(category, funding, params.officialSourceText);
+  const profCheck = evaluateProfessionalRestrictionCompliance(category, {
+    title: params.title,
+    summary: params.summary,
+    organization: params.organization,
+    sectors: params.sectors,
+    isBankingFinance: params.isBankingFinance,
+    isWashDedicated: params.isWashDedicated
+  });
   if (applicationStatus === "expired" || applicationStatus === "closed" || applicationStatus === "withdrawn" || deadlineEval.isExpired) {
     return {
       verificationStatus: "Expired",
       hasVerifiedBadge: false,
-      isPubliclyDisplayable: false
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: applicationStatus === "withdrawn" || applicationStatus === "closed" ? "withdrawn" : "deadline",
+      rejectionReason: deadlineEval.rejectionReason || `Opportunity is ${applicationStatus}.`
     };
   }
-  if (!urlVerified || !organizationAuthentic || !deadlineEval.valid) {
+  if (!urlVerified || !organizationAuthentic) {
     return {
       verificationStatus: "Unverified",
       hasVerifiedBadge: false,
-      isPubliclyDisplayable: false
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: !organizationAuthentic ? "authenticity" : "broken_link",
+      rejectionReason: !organizationAuthentic ? "Organization authenticity or official domain could not be verified." : "Official application URL could not be verified live."
     };
   }
-  if (!deadlineEval.meetsMinimumThreeFullDays) {
+  if (!deadlineEval.valid || !deadlineEval.meetsMinimumThreeFullDays) {
     return {
       verificationStatus: "Expired",
       hasVerifiedBadge: false,
-      isPubliclyDisplayable: false
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: "deadline",
+      rejectionReason: deadlineEval.rejectionReason || "Opportunity has fewer than 3 full days remaining."
+    };
+  }
+  if (eligibility.ethiopianEligible === "excluded") {
+    return {
+      verificationStatus: "Unverified",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: "eligibility",
+      rejectionReason: "Excluded: Official source restricts eligibility against Ethiopian applicants."
+    };
+  }
+  if (!visaCheck.passed) {
+    return {
+      verificationStatus: "Unverified",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: false,
+      professionalRestrictionPassed: profCheck.passed,
+      rejectionCategory: "visa",
+      rejectionReason: visaCheck.reason
+    };
+  }
+  if (!profCheck.passed) {
+    return {
+      verificationStatus: "Unverified",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: true,
+      professionalRestrictionPassed: false,
+      rejectionCategory: "professional_restriction",
+      rejectionReason: profCheck.reason
     };
   }
   let verificationStatus = "Verified and Open";
@@ -5692,18 +5824,31 @@ function computeVerificationOutcome(params) {
   return {
     verificationStatus,
     hasVerifiedBadge: true,
-    isPubliclyDisplayable: true
+    isPubliclyDisplayable: true,
+    visaCompliancePassed: true,
+    professionalRestrictionPassed: true,
+    rejectionCategory: null,
+    rejectionReason: null
   };
 }
 function isOpportunityActiveAndDisplayable(opp, nowMs = Date.now()) {
   if (!opp.hasVerifiedBadge) return false;
-  if (opp.applicationStatus === "closed" || opp.applicationStatus === "expired" || opp.applicationStatus === "withdrawn") {
+  if (opp.isArchived === true) return false;
+  if (opp.applicationStatus === "closed" || opp.applicationStatus === "expired" || opp.applicationStatus === "withdrawn" || opp.applicationStatus === "rejected" || opp.applicationStatus === "unverified") {
     return false;
   }
   if (opp.verificationStatus === "Expired" || opp.verificationStatus === "Unverified") {
     return false;
   }
   if (opp.eligibility.ethiopianEligible === "excluded") {
+    return false;
+  }
+  const visaCheck = evaluateMandatoryVisaCompliance(opp.category, opp.funding, opp.sourceEvidenceSnippet);
+  if (!visaCheck.passed) {
+    return false;
+  }
+  const profCheck = evaluateProfessionalRestrictionCompliance(opp.category, opp);
+  if (!profCheck.passed) {
     return false;
   }
   const deadlineCheck = evaluateOpportunityDeadline(
@@ -5993,6 +6138,34 @@ function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
   }
   const profileCorpus = buildProfileCorpus(profile);
   const profileDetected = detectSectorsFromText(profileCorpus);
+  const isRestrictedCategory = opportunity.category === "university_scholarship" || opportunity.category === "professional_training" || opportunity.category === "conference_summit";
+  const oppIsBankingOnly = (opportunity.isBankingFinance || opportunity.sectors.includes("banking_finance")) && !(opportunity.isWashDedicated || opportunity.sectors.includes("wash"));
+  const oppIsWashOnly = (opportunity.isWashDedicated || opportunity.sectors.includes("wash")) && !(opportunity.isBankingFinance || opportunity.sectors.includes("banking_finance"));
+  if (isRestrictedCategory) {
+    if (oppIsBankingOnly && !profileDetected.isBankingFinance) {
+      disqualificationReasons.push(
+        "Strict professional match: Banking & Finance scholarships, trainings, and conferences are only recommended to users with verified Banking, Finance, Accounting, Economics, Microfinance, or FinTech qualifications/experience."
+      );
+    } else if (oppIsWashOnly && !profileDetected.isWash) {
+      disqualificationReasons.push(
+        "Strict professional match: WASH scholarships, trainings, and conferences are only recommended to users with verified Water, Sanitation, Hygiene, Water Engineering, or Environmental Health qualifications/experience."
+      );
+    } else if (!profileDetected.isBankingFinance && !profileDetected.isWash) {
+      disqualificationReasons.push(
+        "Strict professional match: Your profile does not list Banking/Finance or WASH qualifications or experience required for this program."
+      );
+    }
+  } else {
+    const hasSectorOverlap = opportunity.sectors.some((s) => profileDetected.sectors.includes(s));
+    const oppTitleKeywords = extractMeaningfulKeywords(`${opportunity.title} ${opportunity.eligibility.requiredSkills.join(" ")}`);
+    const userKeywords = new Set(extractMeaningfulKeywords(profileCorpus));
+    const directSkillMatchCount = oppTitleKeywords.filter((kw) => userKeywords.has(kw)).length;
+    if (!hasSectorOverlap && directSkillMatchCount < 2) {
+      disqualificationReasons.push(
+        "Strict professional match: Role sector, occupation, and required skills do not match your professional profile."
+      );
+    }
+  }
   let score = 0;
   const sharedSectors = opportunity.sectors.filter((s) => profileDetected.sectors.includes(s));
   if (sharedSectors.length > 0) {
@@ -6029,7 +6202,7 @@ function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
   const overlappingKeywords = oppKeywords.filter((kw) => profileKeywords.has(kw));
   if (overlappingKeywords.length > 0) {
     score += Math.min(25, overlappingKeywords.length * 5);
-    matchReasons.push(`Matches skills & focus areas: ${overlappingKeywords.slice(0, 4).join(", ")}`);
+    matchReasons.push(`Matches skills & qualifications: ${overlappingKeywords.slice(0, 4).join(", ")}`);
   }
   if (typeof minYears === "number" && minYears > 0 && userYears >= minYears) {
     score += 10;
@@ -6049,9 +6222,13 @@ function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
   if (opportunity.funding.fundingLevel === "fully_funded") {
     score += 8;
     matchReasons.push("Confirmed Fully Funded program");
-  } else if (opportunity.funding.visaSupportType === "employer_sponsored_visa") {
+  }
+  if (opportunity.funding.visaSupportType === "employer_sponsored_visa") {
     score += 8;
-    matchReasons.push("Employer-sponsored work visa confirmed");
+    matchReasons.push("Employer-sponsored work visa officially confirmed");
+  } else if (opportunity.funding.visaSupportType === "visa_fees_funded") {
+    score += 8;
+    matchReasons.push("Official visa application fee coverage confirmed");
   }
   if (opportunity.eligibility.directIndividualApplicationAllowed === "yes" && opportunity.eligibility.universityRecommendationRequired !== "required" && opportunity.eligibility.companyRecommendationRequired !== "required") {
     score += 5;
@@ -6063,8 +6240,8 @@ function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
     matchReasons.push(`Located in your preferred destination (${opportunity.country})`);
   }
   const boundedScore = disqualificationReasons.length > 0 ? 0 : Math.min(100, Math.max(0, Math.round(score)));
-  const eligible = disqualificationReasons.length === 0 && boundedScore >= 25;
-  const eligibilitySummary = disqualificationReasons.length > 0 ? `Not eligible: ${disqualificationReasons[0]}` : eligible ? "Meets verified eligibility criteria for your profile" : "Eligible, lower direct sector match with current profile";
+  const eligible = disqualificationReasons.length === 0 && boundedScore >= 30;
+  const eligibilitySummary = disqualificationReasons.length > 0 ? `Not eligible: ${disqualificationReasons[0]}` : eligible ? "Meets verified visa, sector, and eligibility criteria for your profile" : "Eligible, lower direct sector match with current profile";
   return {
     id: `rec_${profile.uid}_${opportunity.id}`.slice(0, 128),
     userId: profile.uid,
@@ -7462,31 +7639,36 @@ async function fetchViaGeminiSearchGrounding(getAiClient, rotatingPassIndex = nu
   }
   const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const minDeadlineDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1e3).toISOString().slice(0, 10);
-  const jsonSchemaInstructions = `STRICT RULES:
-- Return ONLY real, currently open opportunities found in live Google Search results with an exact official HTTPS URL (.edu, .gov, .int, .org, official UN, World Bank, IMF, AfDB, university, bank, NGO, or official conference portal \u2014 NEVER blogs or third-party scholarship aggregators).
+  const jsonSchemaInstructions = `STRICT MANDATORY RULES:
+- Return ONLY real, currently open opportunities found in live Google Search results with an exact official HTTPS URL (.edu, .gov, .int, .org, official UN, World Bank, IMF, AfDB, university, bank, NGO, or official conference portal \u2014 NEVER blogs or third-party aggregators).
 - Every opportunity MUST have an exact verifiable future application deadline (YYYY-MM-DD) ON OR AFTER ${minDeadlineDate}.
+- MANDATORY VISA RULE:
+  * For employment: official recruitment documentation MUST explicitly confirm employer-sponsored work visa or work permit sponsorship.
+  * For scholarships, training, and conferences: sponsoring institution/organizer MUST explicitly confirm visa application fee coverage or visa sponsorship.
+  * REJECT invitation letter only, visa assistance without fee coverage, visa-free entry, self-paid visa fees, or unspecified visa funding.
+- STRICT PROFESSIONAL RESTRICTION:
+  * Scholarships, Professional Training, and Conferences MUST be strictly relevant to Banking & Finance (banking, finance, accounting, economics, microfinance, fintech, financial inclusion, banking management, financial regulation) OR WASH (water engineering, water resources, water supply, sanitation, hygiene, environmental health, wastewater, humanitarian WASH, climate-resilient water management).
 - Do NOT invent any opportunity, deadline, funding, or visa sponsorship. Use "Not Confirmed" if a detail is not explicitly stated on the official page.
-- Never confuse an invitation letter with visa sponsorship or free visa fees.
 - Return ONLY a valid JSON array (no markdown fences) with objects having exact keys:
   title, organization, category ("international_job" | "university_scholarship" | "professional_training" | "conference_summit" | "wash_opportunity"), country, location, summary, originalSourceUrl, officialApplicationUrl, deadlineDateRaw (YYYY-MM-DD), deadlineTimezone (IANA e.g. "UTC"), startDate, fundingSummary, visaSummary, applicationFee, eligibleNationalities (string[]), ethiopianEligible ("confirmed" | "likely_global" | "not_confirmed"), educationRequirement, experienceRequirement, minimumYearsExperience (number or null), requiredSkills (string[]), universityRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), companyRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), institutionalNominationRequired ("required" | "not_required" | "optional" | "not_confirmed"), directIndividualApplicationAllowed ("yes" | "no" | "not_confirmed").`;
   const allPrompts = [
     {
-      label: "Fully Funded Scholarships & Conferences",
+      label: "Visa-Funded Banking & WASH Scholarships and Conferences",
       prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
-1. Fully funded University Scholarships accepting Ethiopian citizens with direct individual application (no mandatory university nomination), from official university or government portals (e.g., DAAD, Chevening, Fulbright, Erasmus+, Mastercard Foundation, government/university official sites).
-2. Fully funded International Conferences & Summits in Banking/Finance, Microfinance, Financial Inclusion, WASH/Water Security, Climate Change, Public Health, Sustainable Development, or AI/Tech allowing direct individual application.
+1. Fully funded University Scholarships strictly in Banking/Finance/Economics/Accounting/Microfinance/FinTech OR WASH/Water Engineering/Water Resources/Sanitation/Hygiene/Environmental Health accepting Ethiopian citizens with direct individual application AND explicitly confirming visa application fee coverage or visa sponsorship (e.g., Chevening, DAAD, Mastercard Foundation, World Bank JJ/WBGSP, IHE Delft, official university portals).
+2. Fully funded International Conferences & Summits strictly in Banking, Finance, Microfinance, FinTech, Water, Sanitation, Hygiene, or WASH explicitly confirming visa fee coverage or visa sponsorship.
 ${jsonSchemaInstructions}`
     },
     {
-      label: "Banking/Finance Jobs & Professional Trainings",
+      label: "Visa-Sponsored Banking/Finance Jobs & Banking/WASH Trainings",
       prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
-1. International Banking and Finance Jobs offering employer-sponsored work visas, relocation assistance, or international recruitment (e.g., World Bank, IMF, AfDB, IFC, BIS, EIB, EBRD, ADB, commercial/central banks, fintechs).
-2. Fully funded or sponsored International Professional Training programs in Banking/Finance (central banking, digital banking, fintech, microfinance, financial inclusion, risk management) or WASH (water supply, sanitation, hygiene, wastewater, climate-resilient WASH) accepting individual applicants without mandatory company nomination.
+1. International Banking, Finance, Tech, Engineering, Healthcare, or Development Jobs explicitly confirming employer-sponsored work visa or work permit sponsorship in official recruitment documentation (e.g., World Bank, IMF, AfDB, IFC, BIS, EIB, EBRD, ADB, global banks, licensed UK/EU/Canadian sponsors).
+2. Fully funded International Professional Training programs strictly for Banking/Finance OR WASH professionals explicitly confirming visa application fee coverage or visa sponsorship and accepting independent applicants where permitted.
 ${jsonSchemaInstructions}`
     },
     {
-      label: "WASH International Jobs & Fellowships",
-      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN WASH (Water, Sanitation, and Hygiene) international jobs, internships, or fellowships with deadlines >= ${minDeadlineDate} from official UN and INGO portals (UNICEF, WHO, UN-Habitat, UNDP, World Bank, AfDB, IOM, IRC, WaterAid, Water.org, World Vision, Save the Children, IFRC, SIWI).
+      label: "Visa-Sponsored WASH International Jobs & Fellowships",
+      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN WASH (Water, Sanitation, and Hygiene) international employment opportunities or fellowships with deadlines >= ${minDeadlineDate} from official UN and INGO portals (UNICEF, WHO, UN-Habitat, UNDP, World Bank, AfDB, IOM, IRC, WaterAid, Water.org, World Vision, Save the Children, IFRC, SIWI) that explicitly confirm work visa sponsorship or visa application fee coverage.
 ${jsonSchemaInstructions}`
     }
   ];
@@ -7808,8 +7990,29 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     deadlineEval,
     funding,
     eligibility,
-    category: candidate.category
+    category: candidate.category,
+    title: candidate.title,
+    summary: candidate.summary,
+    organization: candidate.organization,
+    sectors: sectorInfo.sectors,
+    isBankingFinance: sectorInfo.isBankingFinance,
+    isWashDedicated,
+    officialSourceText: combinedCorpus
   });
+  const visaAudit = evaluateMandatoryVisaCompliance(candidate.category, funding, combinedCorpus);
+  funding.visaMandatoryRulePassed = outcome.visaCompliancePassed;
+  if (!outcome.visaCompliancePassed) {
+    funding.visaRejectionReason = visaAudit.reason || outcome.rejectionReason || void 0;
+  }
+  if (!outcome.isPubliclyDisplayable && (applicationStatus === "open" || applicationStatus === "closing_soon")) {
+    applicationStatus = "rejected";
+  }
+  const combinedNotes = [
+    liveCheck.notes,
+    deadlineEval.rejectionReason,
+    outcome.rejectionReason
+  ].filter(Boolean).join(" ");
+  const isArchived = !outcome.isPubliclyDisplayable;
   const opportunity = {
     id: oppId,
     fingerprint,
@@ -7834,11 +8037,18 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     hasVerifiedBadge: outcome.hasVerifiedBadge,
     httpStatusCode: liveCheck.httpStatus,
     robotsAllowed: liveCheck.robotsAllowed,
-    verificationNotes: deadlineEval.rejectionReason ? `${liveCheck.notes} ${deadlineEval.rejectionReason}` : liveCheck.notes,
+    verificationNotes: combinedNotes || "Verified against official source.",
     sourceEvidenceSnippet: liveCheck.pageTextSnippet.slice(0, 340) || candidate.summary.slice(0, 340),
     funding,
     eligibility,
     deadline,
+    isArchived,
+    wasPreviouslyPublished: false,
+    archivedAt: isArchived ? nowIso : void 0,
+    rejectionCategory: outcome.rejectionCategory || void 0,
+    rejectionReason: outcome.rejectionReason || void 0,
+    visaCompliancePassed: outcome.visaCompliancePassed,
+    professionalRestrictionPassed: outcome.professionalRestrictionPassed,
     discoveredAt: nowIso,
     lastVerifiedAt: nowIso,
     updatedAt: nowIso
@@ -7853,9 +8063,15 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     robotsAllowed: liveCheck.robotsAllowed,
     passedUrlVerification: liveCheck.ok,
     passedDeadlineRule: deadlineEval.meetsMinimumThreeFullDays && !deadlineEval.isExpired,
+    passedVisaRule: outcome.visaCompliancePassed,
+    passedProfessionalRestriction: outcome.professionalRestrictionPassed,
     fullDaysRemaining: deadlineEval.valid ? deadlineEval.fullDaysRemaining : null,
     resultingStatus: outcome.verificationStatus,
-    checkedFieldsCount: 20,
+    rejectionCategory: outcome.rejectionCategory || void 0,
+    rejectionReason: outcome.rejectionReason || void 0,
+    actionTaken: outcome.isPubliclyDisplayable ? "verified" : "rejected",
+    evidenceExcerpt: opportunity.sourceEvidenceSnippet?.slice(0, 240) || void 0,
+    checkedFieldsCount: 24,
     notes: opportunity.verificationNotes,
     checkedAt: nowIso
   };
@@ -7972,6 +8188,51 @@ function registerGlobalOpportunitiesRoutes(deps) {
     writeJsonFileAtomic(STORE_FILE, store);
   }
   let isDiscoveryRunning = false;
+  function archiveUnpublishedOpportunity(opp, store, params) {
+    opp.applicationStatus = params.status;
+    opp.verificationStatus = params.verificationStatus;
+    opp.hasVerifiedBadge = false;
+    opp.isArchived = true;
+    opp.rejectionCategory = params.rejectionCategory;
+    opp.rejectionReason = params.rejectionReason;
+    opp.archivedAt = opp.archivedAt || params.nowIso;
+    if (params.wasPublishedBefore) {
+      opp.wasPreviouslyPublished = true;
+      opp.unpublishedAt = params.nowIso;
+    }
+    if (params.rejectionCategory === "visa") {
+      opp.visaCompliancePassed = false;
+      opp.funding.visaMandatoryRulePassed = false;
+      opp.funding.visaRejectionReason = params.rejectionReason;
+    }
+    if (params.rejectionCategory === "professional_restriction") {
+      opp.professionalRestrictionPassed = false;
+    }
+    opp.verificationNotes = params.rejectionReason;
+    opp.updatedAt = params.nowIso;
+    store.opportunity_verification_logs.unshift({
+      id: `vlog_unpub_${Date.now()}_${opp.id.slice(-6)}_${Math.random().toString(36).slice(2, 5)}`,
+      opportunityId: opp.id,
+      opportunityTitle: opp.title,
+      organization: opp.organization,
+      officialUrl: opp.officialApplicationUrl,
+      httpStatus: params.httpStatus ?? opp.httpStatusCode ?? null,
+      robotsAllowed: opp.robotsAllowed,
+      passedUrlVerification: params.rejectionCategory !== "broken_link",
+      passedDeadlineRule: params.rejectionCategory !== "deadline",
+      passedVisaRule: params.rejectionCategory !== "visa",
+      passedProfessionalRestriction: params.rejectionCategory !== "professional_restriction",
+      rejectionCategory: params.rejectionCategory,
+      rejectionReason: params.rejectionReason,
+      actionTaken: params.wasPublishedBefore ? "auto_unpublished" : params.rejectionCategory === "deadline" ? "expired" : "rejected",
+      fullDaysRemaining: params.fullDaysRemaining ?? opp.deadline.fullDaysRemaining,
+      resultingStatus: params.verificationStatus,
+      checkedFieldsCount: 20,
+      notes: params.rejectionReason,
+      evidenceExcerpt: (params.evidenceExcerpt || opp.sourceEvidenceSnippet || "").slice(0, 220),
+      checkedAt: params.nowIso
+    });
+  }
   async function runDeadlineAndLinkRecheck(trigger, checkLinksLive = false) {
     const startedMs = Date.now();
     const startedAt = new Date(startedMs).toISOString();
@@ -7979,10 +8240,16 @@ function registerGlobalOpportunitiesRoutes(deps) {
     let expiredPurgedCount = 0;
     let rejectedUnderThreeDaysCount = 0;
     let rejectedBrokenOrClosedCount = 0;
+    let rejectedDueToVisaCount = 0;
+    let rejectedDueToProfessionalRestrictionCount = 0;
+    let autoUnpublishedCount = 0;
+    let recheckedPublishedCount = 0;
     let verifiedAndActiveCount = 0;
     const errors = [];
     for (let i = 0; i < store.international_opportunities.length; i++) {
       const opp = store.international_opportunities[i];
+      const wasPublishedBefore = Boolean(opp.hasVerifiedBadge && !opp.isArchived);
+      if (wasPublishedBefore) recheckedPublishedCount++;
       const deadlineEval = evaluateOpportunityDeadline(
         opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
         opp.deadline.deadlineTimezone,
@@ -7997,16 +8264,8 @@ function registerGlobalOpportunitiesRoutes(deps) {
         isExpired: deadlineEval.isExpired,
         lastCheckedAt: startedAt
       };
-      if (deadlineEval.isExpired || !deadlineEval.meetsMinimumThreeFullDays) {
-        if (opp.hasVerifiedBadge) expiredPurgedCount++;
-        if (!deadlineEval.isExpired && !deadlineEval.meetsMinimumThreeFullDays) rejectedUnderThreeDaysCount++;
-        opp.applicationStatus = "expired";
-        opp.verificationStatus = "Expired";
-        opp.hasVerifiedBadge = false;
-        opp.updatedAt = startedAt;
-        continue;
-      }
-      if (checkLinksLive && opp.hasVerifiedBadge && i < 15) {
+      let liveEvidenceText = opp.sourceEvidenceSnippet || "";
+      if (checkLinksLive && wasPublishedBefore && recheckedPublishedCount <= 25) {
         try {
           const live = await verifyUrlLive(
             opp.officialApplicationUrl,
@@ -8014,47 +8273,93 @@ function registerGlobalOpportunitiesRoutes(deps) {
           );
           opp.httpStatusCode = live.httpStatus;
           opp.lastVerifiedAt = startedAt;
+          if (live.pageTextSnippet) {
+            liveEvidenceText = `${live.pageTextSnippet} ${opp.sourceEvidenceSnippet || ""}`;
+            opp.sourceEvidenceSnippet = live.pageTextSnippet.slice(0, 340);
+          }
           if (!live.ok || live.detectedClosedOrExpired) {
             rejectedBrokenOrClosedCount++;
-            opp.applicationStatus = live.detectedClosedOrExpired ? "closed" : "unverified";
-            opp.verificationStatus = live.detectedClosedOrExpired ? "Expired" : "Unverified";
-            opp.hasVerifiedBadge = false;
-            opp.verificationNotes = live.notes;
+            if (wasPublishedBefore) autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: startedAt,
+              status: live.detectedClosedOrExpired ? "withdrawn" : "rejected",
+              verificationStatus: live.detectedClosedOrExpired ? "Expired" : "Unverified",
+              rejectionCategory: live.detectedClosedOrExpired ? "withdrawn" : "broken_link",
+              rejectionReason: live.detectedClosedOrExpired ? `Auto-unpublished: Official source indicates program is closed, cancelled, or withdrawn (${live.notes}).` : `Auto-unpublished: Official application URL failed live verification (${live.notes}).`,
+              evidenceExcerpt: live.pageTextSnippet || live.notes,
+              httpStatus: live.httpStatus,
+              fullDaysRemaining: deadlineEval.fullDaysRemaining,
+              wasPublishedBefore
+            });
+            continue;
           }
-          store.opportunity_verification_logs.unshift({
-            id: `vlog_${Date.now()}_${opp.id.slice(-6)}`,
-            opportunityId: opp.id,
-            opportunityTitle: opp.title,
-            organization: opp.organization,
-            officialUrl: opp.officialApplicationUrl,
-            httpStatus: live.httpStatus,
-            robotsAllowed: live.robotsAllowed,
-            passedUrlVerification: live.ok,
-            passedDeadlineRule: true,
-            fullDaysRemaining: deadlineEval.fullDaysRemaining,
-            resultingStatus: opp.verificationStatus,
-            checkedFieldsCount: 20,
-            notes: live.notes,
-            checkedAt: startedAt
-          });
         } catch (err) {
           errors.push(`Link recheck error for ${opp.id}: ${err?.message || String(err)}`);
         }
       }
+      if (deadlineEval.isExpired || !deadlineEval.meetsMinimumThreeFullDays) {
+        if (wasPublishedBefore) {
+          expiredPurgedCount++;
+          autoUnpublishedCount++;
+        }
+        if (!deadlineEval.isExpired && !deadlineEval.meetsMinimumThreeFullDays) rejectedUnderThreeDaysCount++;
+        if (wasPublishedBefore || !opp.isArchived) {
+          archiveUnpublishedOpportunity(opp, store, {
+            nowIso: startedAt,
+            status: "expired",
+            verificationStatus: "Expired",
+            rejectionCategory: "deadline",
+            rejectionReason: deadlineEval.rejectionReason || "Auto-unpublished: Fewer than 3 full days remaining or expired.",
+            evidenceExcerpt: liveEvidenceText,
+            fullDaysRemaining: deadlineEval.fullDaysRemaining,
+            wasPublishedBefore
+          });
+        }
+        continue;
+      }
+      const urlAuthCheck = validateOfficialExternalUrl(opp.officialApplicationUrl);
+      const outcome = computeVerificationOutcome({
+        urlVerified: Boolean(opp.hasVerifiedBadge || opp.httpStatusCode && opp.httpStatusCode < 400),
+        organizationAuthentic: Boolean(opp.organizationAuthentic && urlAuthCheck.valid && urlAuthCheck.isOfficialDomain),
+        applicationStatus: deadlineEval.isClosingSoon ? "closing_soon" : "open",
+        deadlineEval,
+        funding: opp.funding,
+        eligibility: opp.eligibility,
+        category: opp.category,
+        title: opp.title,
+        summary: opp.summary,
+        organization: opp.organization,
+        sectors: opp.sectors,
+        isBankingFinance: opp.isBankingFinance,
+        isWashDedicated: opp.isWashDedicated,
+        officialSourceText: liveEvidenceText
+      });
+      if (!outcome.isPubliclyDisplayable) {
+        if (outcome.rejectionCategory === "visa") rejectedDueToVisaCount++;
+        if (outcome.rejectionCategory === "professional_restriction") rejectedDueToProfessionalRestrictionCount++;
+        if (wasPublishedBefore) autoUnpublishedCount++;
+        if (wasPublishedBefore || !opp.isArchived) {
+          archiveUnpublishedOpportunity(opp, store, {
+            nowIso: startedAt,
+            status: outcome.rejectionCategory === "visa" ? "withdrawn" : "rejected",
+            verificationStatus: outcome.verificationStatus,
+            rejectionCategory: outcome.rejectionCategory || "visa",
+            rejectionReason: outcome.rejectionReason || "Auto-unpublished: Failed mandatory verification check during scheduled 6-hour recheck.",
+            evidenceExcerpt: liveEvidenceText,
+            fullDaysRemaining: deadlineEval.fullDaysRemaining,
+            wasPublishedBefore
+          });
+        }
+        continue;
+      }
       if (isOpportunityActiveAndDisplayable(opp, startedMs)) {
-        const outcome = computeVerificationOutcome({
-          urlVerified: opp.hasVerifiedBadge,
-          organizationAuthentic: opp.organizationAuthentic,
-          applicationStatus: deadlineEval.isClosingSoon ? "closing_soon" : "open",
-          deadlineEval,
-          funding: opp.funding,
-          eligibility: opp.eligibility,
-          category: opp.category
-        });
         opp.applicationStatus = deadlineEval.isClosingSoon ? "closing_soon" : "open";
         opp.verificationStatus = outcome.verificationStatus;
-        opp.hasVerifiedBadge = outcome.hasVerifiedBadge;
-        if (opp.hasVerifiedBadge) verifiedAndActiveCount++;
+        opp.hasVerifiedBadge = true;
+        opp.isArchived = false;
+        opp.visaCompliancePassed = true;
+        opp.professionalRestrictionPassed = true;
+        verifiedAndActiveCount++;
       }
     }
     const activeIdSet = new Set(
@@ -8078,7 +8383,11 @@ function registerGlobalOpportunitiesRoutes(deps) {
       verifiedAndActiveCount,
       rejectedUnderThreeDaysCount,
       rejectedBrokenOrClosedCount,
+      rejectedDueToVisaCount,
+      rejectedDueToProfessionalRestrictionCount,
+      autoUnpublishedCount,
       expiredPurgedCount,
+      recheckedPublishedCount,
       errors
     };
     store.discovery_job_logs.unshift(jobLog);
@@ -8301,6 +8610,10 @@ function registerGlobalOpportunitiesRoutes(deps) {
       let duplicatesSkipped = 0;
       let rejectedUnderThreeDaysCount = 0;
       let rejectedBrokenOrClosedCount = 0;
+      let rejectedDueToVisaCount = 0;
+      let rejectedDueToProfessionalRestrictionCount = 0;
+      let autoUnpublishedCount = 0;
+      let recheckedPublishedCount = 0;
       const maxToVerify = Math.min(allCandidates.length, 65);
       for (let i = 0; i < maxToVerify; i++) {
         const candidate = allCandidates[i];
@@ -8338,13 +8651,31 @@ function registerGlobalOpportunitiesRoutes(deps) {
           liveCheck,
           nowIso
         );
-        store.opportunity_verification_logs.unshift(verificationLog);
-        if (!opportunity.hasVerifiedBadge) {
-          rejectedBrokenOrClosedCount++;
-        }
         const prev = existingByFingerprint.get(fp);
+        const wasPublishedBefore = Boolean(prev && prev.hasVerifiedBadge && !prev.isArchived);
+        if (!opportunity.hasVerifiedBadge) {
+          if (opportunity.rejectionCategory === "visa") {
+            rejectedDueToVisaCount++;
+          } else if (opportunity.rejectionCategory === "professional_restriction") {
+            rejectedDueToProfessionalRestrictionCount++;
+          } else if (opportunity.rejectionCategory === "deadline") {
+            rejectedUnderThreeDaysCount++;
+          } else {
+            rejectedBrokenOrClosedCount++;
+          }
+          if (wasPublishedBefore) {
+            autoUnpublishedCount++;
+            opportunity.wasPreviouslyPublished = true;
+            opportunity.unpublishedAt = nowIso;
+            verificationLog.actionTaken = "auto_unpublished";
+          }
+        }
+        store.opportunity_verification_logs.unshift(verificationLog);
         if (prev) {
           opportunity.discoveredAt = prev.discoveredAt;
+          if (prev.wasPreviouslyPublished) {
+            opportunity.wasPreviouslyPublished = true;
+          }
           const idx = store.international_opportunities.findIndex((o) => o.id === prev.id);
           if (idx >= 0) {
             store.international_opportunities[idx] = opportunity;
@@ -8357,7 +8688,10 @@ function registerGlobalOpportunitiesRoutes(deps) {
       }
       let expiredPurgedCount = 0;
       const nowFinalMs = Date.now();
+      const nowFinalIso = new Date(nowFinalMs).toISOString();
       for (const opp of store.international_opportunities) {
+        const wasPublishedBefore = Boolean(opp.hasVerifiedBadge && !opp.isArchived);
+        if (wasPublishedBefore) recheckedPublishedCount++;
         const dl = evaluateOpportunityDeadline(
           opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
           opp.deadline.deadlineTimezone,
@@ -8368,12 +8702,92 @@ function registerGlobalOpportunitiesRoutes(deps) {
         opp.deadline.meetsMinimumThreeFullDays = dl.meetsMinimumThreeFullDays;
         opp.deadline.isClosingSoon = dl.isClosingSoon;
         opp.deadline.isExpired = dl.isExpired;
-        opp.deadline.lastCheckedAt = new Date(nowFinalMs).toISOString();
+        opp.deadline.lastCheckedAt = nowFinalIso;
         if (dl.isExpired || !dl.meetsMinimumThreeFullDays) {
-          if (opp.hasVerifiedBadge) expiredPurgedCount++;
-          opp.applicationStatus = "expired";
-          opp.verificationStatus = "Expired";
-          opp.hasVerifiedBadge = false;
+          if (wasPublishedBefore) {
+            expiredPurgedCount++;
+            autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: nowFinalIso,
+              status: "expired",
+              verificationStatus: "Expired",
+              rejectionCategory: "deadline",
+              rejectionReason: dl.rejectionReason || "Auto-unpublished: Fewer than 3 full days remaining or deadline expired.",
+              fullDaysRemaining: dl.fullDaysRemaining,
+              wasPublishedBefore
+            });
+          } else {
+            opp.applicationStatus = "expired";
+            opp.verificationStatus = "Expired";
+            opp.hasVerifiedBadge = false;
+            opp.isArchived = true;
+            opp.archivedAt = opp.archivedAt || nowFinalIso;
+            opp.rejectionCategory = opp.rejectionCategory || "deadline";
+            opp.rejectionReason = opp.rejectionReason || dl.rejectionReason || "Expired (< 3 full days remaining).";
+          }
+          continue;
+        }
+        if (wasPublishedBefore) {
+          let liveSnippet = opp.sourceEvidenceSnippet || "";
+          if (!batchFingerprints.has(opp.fingerprint) && recheckedPublishedCount <= 15) {
+            try {
+              const live = await verifyUrlLive(opp.officialApplicationUrl, opp.sourceId.startsWith("reliefweb_"));
+              opp.httpStatusCode = live.httpStatus;
+              opp.lastVerifiedAt = nowFinalIso;
+              if (live.pageTextSnippet) {
+                liveSnippet = `${live.pageTextSnippet} ${opp.sourceEvidenceSnippet || ""}`;
+                opp.sourceEvidenceSnippet = live.pageTextSnippet.slice(0, 340);
+              }
+              if (!live.ok || live.detectedClosedOrExpired) {
+                rejectedBrokenOrClosedCount++;
+                autoUnpublishedCount++;
+                archiveUnpublishedOpportunity(opp, store, {
+                  nowIso: nowFinalIso,
+                  status: live.detectedClosedOrExpired ? "withdrawn" : "rejected",
+                  verificationStatus: live.detectedClosedOrExpired ? "Expired" : "Unverified",
+                  rejectionCategory: live.detectedClosedOrExpired ? "withdrawn" : "broken_link",
+                  rejectionReason: live.detectedClosedOrExpired ? `Auto-unpublished during 6h recheck: Official page indicates program is closed or withdrawn (${live.notes}).` : `Auto-unpublished during 6h recheck: Official link failed verification (${live.notes}).`,
+                  evidenceExcerpt: live.pageTextSnippet || live.notes,
+                  httpStatus: live.httpStatus,
+                  fullDaysRemaining: dl.fullDaysRemaining,
+                  wasPublishedBefore: true
+                });
+                continue;
+              }
+            } catch {
+            }
+          }
+          const recheckOutcome = computeVerificationOutcome({
+            urlVerified: true,
+            organizationAuthentic: opp.organizationAuthentic,
+            applicationStatus: dl.isClosingSoon ? "closing_soon" : "open",
+            deadlineEval: dl,
+            funding: opp.funding,
+            eligibility: opp.eligibility,
+            category: opp.category,
+            title: opp.title,
+            summary: opp.summary,
+            organization: opp.organization,
+            sectors: opp.sectors,
+            isBankingFinance: opp.isBankingFinance,
+            isWashDedicated: opp.isWashDedicated,
+            officialSourceText: liveSnippet
+          });
+          if (!recheckOutcome.isPubliclyDisplayable) {
+            if (recheckOutcome.rejectionCategory === "visa") rejectedDueToVisaCount++;
+            if (recheckOutcome.rejectionCategory === "professional_restriction") rejectedDueToProfessionalRestrictionCount++;
+            autoUnpublishedCount++;
+            archiveUnpublishedOpportunity(opp, store, {
+              nowIso: nowFinalIso,
+              status: recheckOutcome.rejectionCategory === "visa" ? "withdrawn" : "rejected",
+              verificationStatus: recheckOutcome.verificationStatus,
+              rejectionCategory: recheckOutcome.rejectionCategory || "visa",
+              rejectionReason: recheckOutcome.rejectionReason || "Auto-unpublished during 6h recheck: Failed mandatory visa or professional restriction compliance.",
+              evidenceExcerpt: liveSnippet,
+              fullDaysRemaining: dl.fullDaysRemaining,
+              wasPublishedBefore: true
+            });
+          }
         }
       }
       store.international_opportunities = store.international_opportunities.sort((a, b) => {
@@ -8395,7 +8809,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
       }
       store.user_opportunity_recommendations = nextRecs;
       const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
-      const isFailure = sourcesQueried === 0 && errors.length > 0 || errors.length > 0 && activeVerified.length === 0 && allCandidates.length === 0;
+      const isFailure = sourcesQueried === 0 && errors.length > 0;
       const runStatus = isFailure ? "failed" : errors.length > 0 ? "partial" : "success";
       const jobLog = {
         id: `djob_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -8413,7 +8827,11 @@ function registerGlobalOpportunitiesRoutes(deps) {
         recommendationsUpdatedCount: nextRecs.length,
         rejectedUnderThreeDaysCount,
         rejectedBrokenOrClosedCount,
+        rejectedDueToVisaCount,
+        rejectedDueToProfessionalRestrictionCount,
+        autoUnpublishedCount,
         expiredPurgedCount,
+        recheckedPublishedCount,
         scheduledSlotEat: options?.scheduledSlotEat,
         attemptNumber: options?.attemptNumber ?? 1,
         maxAttempts: options?.maxAttempts ?? 1,
@@ -8784,15 +9202,59 @@ function registerGlobalOpportunitiesRoutes(deps) {
       return;
     }
     const store = loadStore();
+    const nowMs = Date.now();
+    const activeVerified = store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o, nowMs));
+    const archivedRecords = store.international_opportunities.filter((o) => !isOpportunityActiveAndDisplayable(o, nowMs));
+    const autoUnpublished = archivedRecords.filter((o) => Boolean(o.unpublishedAt || o.wasPreviouslyPublished));
+    const rejectedVisa = archivedRecords.filter((o) => o.rejectionCategory === "visa");
+    const rejectedSector = archivedRecords.filter((o) => o.rejectionCategory === "professional_restriction");
+    const expiredRecords = archivedRecords.filter(
+      (o) => o.rejectionCategory === "deadline" || o.applicationStatus === "expired" || o.verificationStatus === "Expired"
+    );
+    const sourceFailuresCount = store.opportunity_sources.filter(
+      (s) => s.status === "error" || s.status === "degraded"
+    ).length;
+    const lastVerificationAt = store.opportunity_verification_logs[0]?.checkedAt || store.discovery_job_logs[0]?.finishedAt || null;
+    const monitoringSummary = {
+      totalDiscoveredAllTime: store.international_opportunities.length,
+      activeVerifiedCount: activeVerified.length,
+      totalRejectedCount: archivedRecords.length,
+      autoUnpublishedCount: autoUnpublished.length,
+      rejectedDueToVisaCount: rejectedVisa.length,
+      rejectedDueToProfessionalRestrictionCount: rejectedSector.length,
+      expiredCount: expiredRecords.length,
+      archivedRecordsCount: archivedRecords.length,
+      sourceFailuresCount,
+      lastVerificationAt,
+      lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt)
+    };
     res.json({
       success: true,
-      verificationLogs: store.opportunity_verification_logs.slice(0, 120),
+      verificationLogs: store.opportunity_verification_logs.slice(0, 150),
       discoveryJobLogs: store.discovery_job_logs.slice(0, 50),
       sources: store.opportunity_sources,
       schedulerInfo: buildSchedulerInfo(store),
+      monitoringSummary,
+      archivedOpportunities: archivedRecords.slice(0, 80).map((o) => ({
+        id: o.id,
+        title: o.title,
+        organization: o.organization,
+        category: o.category,
+        officialApplicationUrl: o.officialApplicationUrl,
+        applicationStatus: o.applicationStatus,
+        verificationStatus: o.verificationStatus,
+        rejectionCategory: o.rejectionCategory || (o.visaCompliancePassed === false ? "visa" : "other"),
+        rejectionReason: o.rejectionReason || o.verificationNotes,
+        visaSupportSummary: o.funding.visaSupportSummary,
+        evidenceExcerpt: (o.sourceEvidenceSnippet || "").slice(0, 220),
+        wasPreviouslyPublished: Boolean(o.wasPreviouslyPublished),
+        unpublishedAt: o.unpublishedAt || null,
+        archivedAt: o.archivedAt || o.updatedAt,
+        lastVerifiedAt: o.lastVerifiedAt
+      })),
       totals: {
         stored: store.international_opportunities.length,
-        activeVerified: store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o)).length,
+        activeVerified: activeVerified.length,
         savedCount: store.user_saved_opportunities.length,
         recommendationsCount: store.user_opportunity_recommendations.length
       }
@@ -8970,6 +9432,876 @@ function registerGlobalOpportunitiesRoutes(deps) {
     runDeadlineAndLinkRecheck,
     loadStore
   };
+}
+
+// src/utils/writingQualityAnalyzer.ts
+var WRITING_DOCUMENT_TYPES = [
+  { id: "cv", label: "CV / Resume", guidance: "Action-oriented, factual, concise achievement statements." },
+  { id: "cover_letter", label: "Cover Letter", guidance: "Direct, tailored, authentic employer-focused prose." },
+  { id: "job_application", label: "Job Application", guidance: "Clear responses connecting real experience to role requirements." },
+  { id: "scholarship_application", label: "Scholarship Application", guidance: "Focused academic purpose, impact, and grounded career goals." },
+  { id: "training_application", label: "Training Application", guidance: "Practical learning objectives and workplace application." },
+  { id: "conference_application", label: "Conference Application", guidance: "Relevant professional contribution and domain engagement." },
+  { id: "professional_email", label: "Professional Email", guidance: "Polite, direct, respectful, and easy to act on." },
+  { id: "personal_statement", label: "Personal Statement", guidance: "Genuine personal narrative grounded in verifiable milestones." },
+  { id: "motivation_letter", label: "Motivation Letter", guidance: "Clear motivation linking background, program fit, and goals." }
+];
+var WRITING_STYLES = [
+  { id: "professional", label: "Professional", description: "Clear, direct, confident workplace prose." },
+  { id: "natural_conversational", label: "Natural and conversational", description: "Warm, human, readable without stiff phrasing." },
+  { id: "academic", label: "Academic", description: "Structured, precise, evidence-minded phrasing." },
+  { id: "formal", label: "Formal", description: "Polished, respectful tone without contractions." },
+  { id: "concise", label: "Concise", description: "Tight, high-clarity sentences with filler removed." }
+];
+var ETHICAL_TRANSPARENCY_NOTICE = "Writing-Quality Transparency: Humanize Checker evaluates real editorial quality \u2014 readability, natural phrasing, tone consistency, repetition, and sentence clarity. No automated detector can reliably prove whether text was written by a human or by AI, and this tool does not promise to bypass AI detectors or guarantee any detector score.";
+var INTEGRITY_PRESERVATION_NOTICE = "Factual Integrity Policy: Humanize Text improves clarity, tone, and flow while preserving your original meaning and technical terminology. It never invents qualifications, job titles, dates, or experience.";
+var PHRASE_REPLACEMENT_RULES = [
+  {
+    pattern: /\bin today['’]s fast-paced (?:world|environment|landscape|digital era)\b/gi,
+    replacement: "today",
+    conciseReplacement: "today",
+    formalReplacement: "in the current environment",
+    category: "generic_expression",
+    reason: "Overused clich\xE9 opener that adds little concrete meaning."
+  },
+  {
+    pattern: /\bdelve(?:s|d|ing)?\s+(?:deeply\s+)?into\b/gi,
+    replacement: "examine",
+    conciseReplacement: "review",
+    formalReplacement: "examine",
+    category: "unnatural_wording",
+    reason: "Overused stiff verb; plain verbs read more naturally."
+  },
+  {
+    pattern: /\bserve(?:s|d)?\s+as\s+a\s+testament\s+to\b/gi,
+    replacement: "demonstrates",
+    conciseReplacement: "shows",
+    formalReplacement: "demonstrates",
+    category: "generic_expression",
+    reason: "Inflated phrasing that can be stated directly."
+  },
+  {
+    pattern: /\ba\s+rich\s+tapestry\s+of\b/gi,
+    replacement: "a wide range of",
+    conciseReplacement: "various",
+    formalReplacement: "a broad range of",
+    category: "unnatural_wording",
+    reason: "Florid metaphor that feels unnatural in professional applications."
+  },
+  {
+    pattern: /\bof\s+paramount\s+importance\b/gi,
+    replacement: "essential",
+    conciseReplacement: "critical",
+    formalReplacement: "essential",
+    category: "generic_expression",
+    reason: "Wordy emphasis phrase; a direct adjective is stronger."
+  },
+  {
+    pattern: /\bpassionate\s+and\s+results-driven\b/gi,
+    replacement: "dedicated and results-focused",
+    conciseReplacement: "results-focused",
+    formalReplacement: "committed and results-focused",
+    category: "generic_expression",
+    reason: "Generic resume clich\xE9; specific, grounded phrasing sounds more authentic."
+  },
+  {
+    pattern: /\bleveraging\s+synergies\b/gi,
+    replacement: "coordinating strengths",
+    conciseReplacement: "working together",
+    formalReplacement: "coordinating across teams",
+    category: "generic_expression",
+    reason: "Corporate buzzword that obscures what was actually done."
+  },
+  {
+    pattern: /\bin\s+order\s+to\b/gi,
+    replacement: "to",
+    conciseReplacement: "to",
+    formalReplacement: "to",
+    category: "unnatural_wording",
+    reason: "Unnecessary filler words before an infinitive."
+  },
+  {
+    pattern: /\bdue\s+to\s+the\s+fact\s+that\b/gi,
+    replacement: "because",
+    conciseReplacement: "because",
+    formalReplacement: "because",
+    category: "unnatural_wording",
+    reason: "Wordy connector that slows down the sentence."
+  },
+  {
+    pattern: /\bat\s+this\s+point\s+in\s+time\b/gi,
+    replacement: "currently",
+    conciseReplacement: "now",
+    formalReplacement: "currently",
+    category: "unnatural_wording",
+    reason: "Padded phrasing; a single word conveys the same meaning."
+  },
+  {
+    pattern: /\bwith\s+regard\s+to\b/gi,
+    replacement: "regarding",
+    conciseReplacement: "about",
+    formalReplacement: "regarding",
+    category: "unnatural_wording",
+    reason: "Can be tightened for cleaner flow."
+  },
+  {
+    pattern: /\bplease\s+do\s+not\s+hesitate\s+to\s+contact\s+me\b/gi,
+    replacement: "please feel free to contact me",
+    conciseReplacement: "please contact me",
+    formalReplacement: "please contact me if you need further information",
+    category: "generic_expression",
+    reason: "Formulaic email closing that can sound fresher and more direct."
+  },
+  {
+    pattern: /\bi\s+am\s+writing\s+to\s+express\s+my\s+(?:keen|strong|deep|enthusiastic)\s+interest\s+in\b/gi,
+    replacement: "I am applying for",
+    conciseReplacement: "I am applying for",
+    formalReplacement: "I am writing to apply for",
+    category: "generic_expression",
+    reason: "Standard template opener; direct openings engage reviewers faster."
+  },
+  {
+    pattern: /\bpossess(?:es|ed|ing)?\s+a\s+(?:strong|solid|deep|extensive)\s+background\s+in\b/gi,
+    replacement: "have strong experience in",
+    conciseReplacement: "have experience in",
+    formalReplacement: "bring substantial experience in",
+    category: "unnatural_wording",
+    reason: '"Possess a background" sounds stiff compared to "have experience".'
+  },
+  {
+    pattern: /\butilize(?:s|d|ing)?\b/gi,
+    replacement: "use",
+    conciseReplacement: "use",
+    formalReplacement: "apply",
+    category: "unnatural_wording",
+    reason: 'Simple verbs like "use" or "apply" read more clearly than "utilize".'
+  },
+  {
+    pattern: /\bfacilitate\s+the\s+implementation\s+of\b/gi,
+    replacement: "help implement",
+    conciseReplacement: "implement",
+    formalReplacement: "support the implementation of",
+    category: "unnatural_wording",
+    reason: "Heavy nominalization slows reading comprehension."
+  },
+  {
+    pattern: /\ba\s+myriad\s+of\b/gi,
+    replacement: "many",
+    conciseReplacement: "many",
+    formalReplacement: "numerous",
+    category: "unnatural_wording",
+    reason: "Overly dramatic phrasing for standard professional writing."
+  },
+  {
+    pattern: /\bnavigat(?:e|ing|ed)\s+the\s+complexities\s+of\b/gi,
+    replacement: "manage",
+    conciseReplacement: "handle",
+    formalReplacement: "manage the complexities of",
+    category: "generic_expression",
+    reason: "Stock phrase often used instead of stating the concrete action."
+  },
+  {
+    pattern: /\bproven\s+track\s+record\s+of\s+success\s+in\b/gi,
+    replacement: "consistent record in",
+    conciseReplacement: "experience in",
+    formalReplacement: "demonstrated record in",
+    category: "generic_expression",
+    reason: "Heavily overused resume clich\xE9."
+  },
+  {
+    pattern: /\bseamless(?:ly)?\s+integrat(?:e|ed|ing|ion)\b/gi,
+    replacement: "smoothly integrate",
+    conciseReplacement: "integrate",
+    formalReplacement: "effectively integrate",
+    category: "generic_expression",
+    reason: '"Seamlessly" is an overused filler adverb.'
+  },
+  {
+    pattern: /\bfurthermore,\s+moreover,\b/gi,
+    replacement: "In addition,",
+    conciseReplacement: "Also,",
+    formalReplacement: "Furthermore,",
+    category: "unnatural_wording",
+    reason: "Stacked transitions feel robotic and redundant."
+  },
+  {
+    pattern: /\bit\s+is\s+worth\s+noting\s+that\b/gi,
+    replacement: "notably,",
+    conciseReplacement: "",
+    formalReplacement: "notably,",
+    category: "unnatural_wording",
+    reason: "Throat-clearing phrase that delays the main point."
+  },
+  {
+    pattern: /\bmoreover,\s+it\s+is\s+important\s+to\s+highlight\s+that\b/gi,
+    replacement: "In addition,",
+    conciseReplacement: "Also,",
+    formalReplacement: "Additionally,",
+    category: "unnatural_wording",
+    reason: "Wordy transition that pads the sentence without adding information."
+  }
+];
+var INFORMAL_MARKERS = /\b(gonna|wanna|kinda|sorta|awesome|super\s+excited|stuff|things|tons\s+of|cool|hey\s+there|btw|fyi|lots\s+of|pretty\s+much|totally)\b/gi;
+var STIFF_FORMAL_MARKERS = /\b(heretofore|aforementioned|herein|whereby|notwithstanding|pursuant\s+to|endeavor\s+to|hitherto|henceforth|commence|peruse)\b/gi;
+var CONTRACTION_EXPANSIONS = [
+  [/\bI'm\b/g, "I am"],
+  [/\bI've\b/g, "I have"],
+  [/\bI'll\b/g, "I will"],
+  [/\bI'd\b/g, "I would"],
+  [/\bdon't\b/gi, "do not"],
+  [/\bdoesn't\b/gi, "does not"],
+  [/\bdidn't\b/gi, "did not"],
+  [/\bcan't\b/gi, "cannot"],
+  [/\bwon't\b/gi, "will not"],
+  [/\bisn't\b/gi, "is not"],
+  [/\baren't\b/gi, "are not"],
+  [/\bwasn't\b/gi, "was not"],
+  [/\bweren't\b/gi, "were not"],
+  [/\bwe're\b/gi, "we are"],
+  [/\bwe've\b/gi, "we have"],
+  [/\bit's\b/gi, "it is"],
+  [/\bthat's\b/gi, "that is"]
+];
+var CONVERSATIONAL_CONTRACTIONS = [
+  [/\bI am\b/g, "I'm"],
+  [/\bI have\b/g, "I've"],
+  [/\bdo not\b/g, "don't"],
+  [/\bdoes not\b/g, "doesn't"],
+  [/\bcannot\b/g, "can't"],
+  [/\bwill not\b/g, "won't"],
+  [/\bwe are\b/g, "we're"]
+];
+function matchCapitalization(source, replacement) {
+  if (!replacement) return "";
+  if (!source) return replacement;
+  if (source === source.toUpperCase() && source.length > 1) {
+    return replacement.toUpperCase();
+  }
+  if (source[0] === source[0].toUpperCase()) {
+    return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+  }
+  return replacement;
+}
+function extractPreservedTechnicalTerms(text) {
+  const found = /* @__PURE__ */ new Set();
+  const acronymMatches = text.match(/\b[A-Z]{2,}(?:[/-][A-Z0-9]{2,})?\b/g) || [];
+  for (const term of acronymMatches) {
+    if (!["IN", "ON", "AT", "TO", "OF", "OR", "AND", "THE", "FOR", "WITH"].includes(term)) {
+      found.add(term);
+    }
+  }
+  const domainPatterns = [
+    /\b(?:IFRS|GAAP|Basel\s+III|AML\/CFT|KYC|SWIFT|SAP|ERP|Power\s+BI|Python|SQL|AutoCAD|EPANET|GIS|QGIS|ArcGIS)\b/gi,
+    /\b(?:credit\s+risk|treasury\s+management|financial\s+modeling|internal\s+audit|microfinance|fintech|capital\s+markets|regulatory\s+compliance)\b/gi,
+    /\b(?:water\s+supply|sanitation\s+and\s+hygiene|wastewater\s+treatment|hydrogeology|water\s+quality\s+testing|borehole\s+drilling|environmental\s+health|climate-resilient\s+water)\b/gi
+  ];
+  for (const regex of domainPatterns) {
+    const matches = text.match(regex) || [];
+    for (const m of matches) {
+      found.add(m.trim());
+    }
+  }
+  return Array.from(found).slice(0, 20);
+}
+function splitIntoSentences(text) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+  const raw = normalized.split(/(?<=[.!?])\s+|\n{2,}/).map((s) => s.trim()).filter((s) => s.length > 0);
+  return raw;
+}
+function extractWords(text) {
+  const matches = text.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g);
+  return matches ? matches : [];
+}
+function countSyllablesInWord(word) {
+  const cleaned = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (!cleaned) return 1;
+  if (cleaned.length <= 3) return 1;
+  const stripped = cleaned.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "").replace(/^y/, "");
+  const vowelGroups = stripped.match(/[aeiouy]{1,2}/g);
+  return Math.max(1, vowelGroups ? vowelGroups.length : 1);
+}
+function computeReadingLevelLabel(fleschScore) {
+  if (fleschScore >= 80) return "Very Easy to Read (Plain Conversational)";
+  if (fleschScore >= 65) return "Clear & Accessible (Ideal for Applications)";
+  if (fleschScore >= 50) return "Standard Professional / Graduate";
+  if (fleschScore >= 35) return "Dense Academic / Technical";
+  return "Very Complex \u2014 Consider Simplifying Sentences";
+}
+function computeReadabilityMetrics(text) {
+  const paragraphs = text.replace(/\r\n/g, "\n").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const sentences = splitIntoSentences(text);
+  const words = extractWords(text);
+  const wordCount = words.length;
+  const sentenceCount = Math.max(1, sentences.length);
+  const totalSyllables = words.reduce((sum, w) => sum + countSyllablesInWord(w), 0);
+  const avgWordsPerSentence = wordCount > 0 ? Number((wordCount / sentenceCount).toFixed(1)) : 0;
+  const avgSyllablesPerWord = wordCount > 0 ? Number((totalSyllables / wordCount).toFixed(2)) : 0;
+  const rawFlesch = wordCount > 0 ? 206.835 - 1.015 * avgWordsPerSentence - 84.6 * avgSyllablesPerWord : 0;
+  const fleschReadingEase = Math.max(0, Math.min(100, Math.round(rawFlesch)));
+  const rawGrade = wordCount > 0 ? 0.39 * avgWordsPerSentence + 11.8 * avgSyllablesPerWord - 15.59 : 0;
+  const fleschKincaidGrade = Math.max(1, Math.min(20, Number(rawGrade.toFixed(1))));
+  const uniqueLower = new Set(words.map((w) => w.toLowerCase()));
+  const lexicalDiversityPercent = wordCount > 0 ? Math.round(uniqueLower.size / wordCount * 100) : 0;
+  const longSentenceCount = sentences.filter((s) => extractWords(s).length >= 28).length;
+  return {
+    wordCount,
+    sentenceCount: sentences.length,
+    paragraphCount: Math.max(paragraphs.length, text.trim() ? 1 : 0),
+    averageWordsPerSentence: avgWordsPerSentence,
+    averageSyllablesPerWord: avgSyllablesPerWord,
+    fleschReadingEase,
+    fleschKincaidGrade,
+    readingLevelLabel: computeReadingLevelLabel(fleschReadingEase),
+    lexicalDiversityPercent,
+    longSentenceCount
+  };
+}
+function tightenLongSentence(sentence) {
+  const words = extractWords(sentence);
+  if (words.length < 28) return sentence;
+  const splitPatterns = [
+    /,\s+which\s+/i,
+    /,\s+and\s+(?=(?:I|we|this|it|the|my|our|they)\b)/i,
+    /;\s+/,
+    /,\s+while\s+(?=(?:I|we|this|it|the|my|our|they)\b)/i
+  ];
+  for (const pat of splitPatterns) {
+    const match = sentence.match(pat);
+    if (match && typeof match.index === "number") {
+      const idx = match.index;
+      const before = sentence.slice(0, idx).trim();
+      const afterRaw = sentence.slice(idx + match[0].length).trim();
+      if (extractWords(before).length >= 8 && extractWords(afterRaw).length >= 7) {
+        const prefix = /which/i.test(match[0]) ? "This " : "";
+        const secondSentence = prefix ? `${prefix}${afterRaw.charAt(0).toLowerCase()}${afterRaw.slice(1)}` : `${afterRaw.charAt(0).toUpperCase()}${afterRaw.slice(1)}`;
+        return `${before.replace(/[.;,]+$/, "")}. ${secondSentence}`;
+      }
+    }
+  }
+  return sentence;
+}
+function humanizeTextDeterministically(params) {
+  const original = params.text.replace(/\r\n/g, "\n").trim();
+  const wordCountBefore = extractWords(original).length;
+  const preservedTechnicalTerms = extractPreservedTechnicalTerms(original);
+  const improvementsApplied = [];
+  let working = original;
+  let clicheCount = 0;
+  for (const rule of PHRASE_REPLACEMENT_RULES) {
+    if (rule.pattern.test(working)) {
+      clicheCount += 1;
+      const targetReplacement = params.style === "concise" && rule.conciseReplacement !== void 0 ? rule.conciseReplacement : params.style === "formal" && rule.formalReplacement !== void 0 ? rule.formalReplacement : rule.replacement;
+      working = working.replace(
+        rule.pattern,
+        (matched) => matchCapitalization(matched, targetReplacement)
+      );
+    }
+    rule.pattern.lastIndex = 0;
+  }
+  if (clicheCount > 0) {
+    improvementsApplied.push(
+      `Replaced ${clicheCount} generic or overly stiff expression${clicheCount === 1 ? "" : "s"} with natural phrasing.`
+    );
+  }
+  if (params.style === "formal" || params.style === "academic") {
+    let expandedCount = 0;
+    for (const [pat, rep] of CONTRACTION_EXPANSIONS) {
+      if (pat.test(working)) {
+        expandedCount += 1;
+        working = working.replace(pat, (m) => matchCapitalization(m, rep));
+      }
+      pat.lastIndex = 0;
+    }
+    if (expandedCount > 0) {
+      improvementsApplied.push(`Expanded contractions to maintain a consistent ${params.style} register.`);
+    }
+    if (/\bgonna\b/i.test(working)) {
+      working = working.replace(/\bgonna\b/gi, "going to");
+      improvementsApplied.push("Replaced informal phrasing with formal equivalents.");
+    }
+    if (/\bwanna\b/i.test(working)) {
+      working = working.replace(/\bwanna\b/gi, "want to");
+    }
+    if (/\btons of\b/gi.test(working)) {
+      working = working.replace(/\btons of\b/gi, "substantial");
+    }
+  } else if (params.style === "natural_conversational") {
+    let contracted = 0;
+    for (const [pat, rep] of CONVERSATIONAL_CONTRACTIONS) {
+      if (pat.test(working)) {
+        contracted += 1;
+        working = working.replace(pat, rep);
+      }
+      pat.lastIndex = 0;
+    }
+    if (contracted > 0) {
+      improvementsApplied.push("Adopted natural contractions for a warmer, more conversational flow.");
+    }
+  }
+  const paragraphs = working.split(/\n{2,}/);
+  let splitCount = 0;
+  const refinedParagraphs = paragraphs.map((para) => {
+    const lines = para.split("\n");
+    return lines.map((line) => {
+      if (/^\s*[-•*]\s+/.test(line)) {
+        return line.replace(/\s{2,}/g, " ").trim();
+      }
+      const sentences = line.split(/(?<=[.!?])\s+/);
+      const improvedSentences = sentences.map((s) => {
+        const tightened = params.style === "concise" || params.style === "professional" || params.style === "natural_conversational" ? tightenLongSentence(s) : s;
+        if (tightened !== s) splitCount += 1;
+        return tightened;
+      });
+      return improvedSentences.join(" ");
+    }).join("\n");
+  });
+  working = refinedParagraphs.join("\n\n");
+  if (splitCount > 0) {
+    improvementsApplied.push(
+      `Broke ${splitCount} overly long sentence${splitCount === 1 ? "" : "s"} into clearer, easier-to-read statements.`
+    );
+  }
+  const transitionTracker = {};
+  const transitionAlts = {
+    furthermore: ["In addition", "Beyond that", "Also"],
+    moreover: ["In addition", "Alongside this", "Also"],
+    additionally: ["In addition", "Also", "Next"]
+  };
+  let transitionVaried = 0;
+  working = working.replace(/\b(Furthermore|Moreover|Additionally),/g, (full, word) => {
+    const key = word.toLowerCase();
+    transitionTracker[key] = (transitionTracker[key] || 0) + 1;
+    if (transitionTracker[key] > 1) {
+      transitionVaried += 1;
+      const alts = transitionAlts[key] || ["Also"];
+      const chosen = alts[(transitionTracker[key] - 2) % alts.length];
+      return `${chosen},`;
+    }
+    return full;
+  });
+  if (transitionVaried > 0) {
+    improvementsApplied.push("Varied repeated transition words so sentences flow more naturally.");
+  }
+  working = working.replace(/[ \t]{2,}/g, " ").replace(/\s+([,.;:!?])/g, "$1").replace(/\n{3,}/g, "\n\n").trim();
+  if (improvementsApplied.length === 0) {
+    improvementsApplied.push(
+      "Your draft already reads clearly and naturally; minor spacing and flow polish were applied while preserving your exact meaning."
+    );
+  }
+  return {
+    revisedText: working,
+    documentType: params.documentType,
+    style: params.style,
+    improvementsApplied,
+    preservedTechnicalTerms,
+    wordCountBefore,
+    wordCountAfter: extractWords(working).length,
+    engineMode: "built_in_linguistic",
+    integrityNotice: INTEGRITY_PRESERVATION_NOTICE,
+    processedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function analyzeWritingQuality(params) {
+  const original = params.text.replace(/\r\n/g, "\n").trim();
+  const metrics = computeReadabilityMetrics(original);
+  const sentences = splitIntoSentences(original);
+  const preservedTechnicalTerms = extractPreservedTechnicalTerms(original);
+  const issues = [];
+  const alternatives = [];
+  const seenAlternatives = /* @__PURE__ */ new Set();
+  for (const rule of PHRASE_REPLACEMENT_RULES) {
+    let match;
+    rule.pattern.lastIndex = 0;
+    while ((match = rule.pattern.exec(original)) !== null) {
+      const excerpt = match[0];
+      const normKey = excerpt.toLowerCase();
+      if (!seenAlternatives.has(normKey)) {
+        seenAlternatives.add(normKey);
+        const suggested = rule.replacement || "(remove filler phrase)";
+        alternatives.push({
+          original: excerpt,
+          naturalAlternative: suggested,
+          reason: rule.reason,
+          category: rule.category
+        });
+        issues.push({
+          id: `issue_${issues.length + 1}`,
+          category: rule.category,
+          severity: rule.category === "generic_expression" ? "medium" : "low",
+          excerpt,
+          explanation: rule.reason,
+          suggestion: `Replace "${excerpt}" with "${suggested}".`
+        });
+      }
+    }
+    rule.pattern.lastIndex = 0;
+  }
+  const starterCounts = /* @__PURE__ */ new Map();
+  const normalizedSentenceMap = /* @__PURE__ */ new Map();
+  for (const s of sentences) {
+    const words = extractWords(s);
+    if (words.length >= 4) {
+      const starter = words.slice(0, 2).join(" ").toLowerCase();
+      const list = starterCounts.get(starter) || [];
+      list.push(s);
+      starterCounts.set(starter, list);
+    }
+    const normSentence = words.map((w) => w.toLowerCase()).join(" ");
+    if (normSentence.length >= 25) {
+      if (normalizedSentenceMap.has(normSentence)) {
+        issues.push({
+          id: `issue_${issues.length + 1}`,
+          category: "repetitive_sentence",
+          severity: "high",
+          excerpt: s.slice(0, 140),
+          explanation: "This sentence repeats an earlier statement almost word-for-word.",
+          suggestion: "Combine the two points or remove the duplicate sentence to keep the reader engaged."
+        });
+      } else {
+        normalizedSentenceMap.set(normSentence, s);
+      }
+    }
+  }
+  for (const [starter, group] of starterCounts.entries()) {
+    if (group.length >= 3) {
+      issues.push({
+        id: `issue_${issues.length + 1}`,
+        category: "repetitive_sentence",
+        severity: "medium",
+        excerpt: `"${starter}..." used ${group.length} times`,
+        explanation: `Multiple sentences open with the exact same words ("${starter}"), creating a repetitive rhythm.`,
+        suggestion: "Vary sentence openings by leading with the concrete outcome, action, or context."
+      });
+    }
+  }
+  for (const s of sentences) {
+    const wc = extractWords(s).length;
+    if (wc >= 28) {
+      const shortened = tightenLongSentence(s);
+      issues.push({
+        id: `issue_${issues.length + 1}`,
+        category: "overly_complicated",
+        severity: wc >= 38 ? "high" : "medium",
+        excerpt: s.length > 160 ? `${s.slice(0, 157)}...` : s,
+        explanation: `This sentence is ${wc} words long. Sentences over 28 words are harder for recruiters and review panels to scan quickly.`,
+        suggestion: shortened !== s ? `Split into shorter sentences, e.g.: "${shortened.slice(0, 180)}${shortened.length > 180 ? "..." : ""}"` : "Split this into two focused sentences with one main idea each."
+      });
+    }
+  }
+  const informalMatches = original.match(INFORMAL_MARKERS) || [];
+  const stiffMatches = original.match(STIFF_FORMAL_MARKERS) || [];
+  const hasContractions = /\b(?:I'm|I've|don't|can't|won't|isn't|aren't|it's|that's)\b/i.test(original);
+  const hasFormalOpeners = /\b(?:Dear\s+Sir|To\s+Whom\s+It\s+May\s+Concern|Furthermore|Moreover|Pursuant|Herein)\b/i.test(
+    original
+  );
+  let tonePenalty = 0;
+  if (informalMatches.length > 0 && (stiffMatches.length > 0 || hasFormalOpeners)) {
+    tonePenalty += 22;
+    issues.push({
+      id: `issue_${issues.length + 1}`,
+      category: "inconsistent_tone",
+      severity: "high",
+      excerpt: `Casual ("${informalMatches[0]}") mixed with formal register`,
+      explanation: "Your draft shifts abruptly between casual conversational phrasing and formal institutional language.",
+      suggestion: "Pick one consistent tone (such as Professional or Formal) throughout the document."
+    });
+    alternatives.push({
+      original: informalMatches[0] || "informal phrasing",
+      naturalAlternative: "clear professional phrasing",
+      reason: "Aligns casual wording with the rest of your formal application.",
+      category: "inconsistent_tone"
+    });
+  } else if (hasContractions && hasFormalOpeners && (params.documentType === "motivation_letter" || params.documentType === "scholarship_application")) {
+    tonePenalty += 12;
+    issues.push({
+      id: `issue_${issues.length + 1}`,
+      category: "inconsistent_tone",
+      severity: "low",
+      excerpt: "Contractions combined with formal salutations/transitions",
+      explanation: "Mixing contractions with formal openers can make the tone feel slightly uneven.",
+      suggestion: "Either use a consistent professional/conversational register or expand contractions for formal submissions."
+    });
+  } else if (stiffMatches.length >= 2) {
+    tonePenalty += 15;
+    issues.push({
+      id: `issue_${issues.length + 1}`,
+      category: "inconsistent_tone",
+      severity: "medium",
+      excerpt: stiffMatches.slice(0, 3).join(", "),
+      explanation: "Archaic or legalistic words make the writing sound unnecessarily rigid.",
+      suggestion: "Replace archaic terms with modern, clear professional equivalents."
+    });
+  }
+  const readabilityScore = Math.max(
+    25,
+    Math.min(
+      100,
+      Math.round(
+        metrics.fleschReadingEase >= 50 && metrics.fleschReadingEase <= 80 ? 92 : metrics.fleschReadingEase > 80 ? 88 : Math.max(35, 50 + metrics.fleschReadingEase * 0.7)
+      ) - Math.min(20, metrics.longSentenceCount * 5)
+    )
+  );
+  const genericOrUnnaturalCount = issues.filter(
+    (i) => i.category === "generic_expression" || i.category === "unnatural_wording"
+  ).length;
+  const repetitiveCount = issues.filter((i) => i.category === "repetitive_sentence").length;
+  const naturalnessScore = Math.max(
+    25,
+    Math.min(100, 96 - genericOrUnnaturalCount * 8 - repetitiveCount * 9)
+  );
+  const concisenessScore = Math.max(
+    25,
+    Math.min(
+      100,
+      95 - metrics.longSentenceCount * 10 - (metrics.averageWordsPerSentence > 24 ? 12 : 0) - genericOrUnnaturalCount * 4
+    )
+  );
+  const toneConsistencyScore = Math.max(35, Math.min(100, 96 - tonePenalty));
+  const overallQualityScore = Math.round(
+    readabilityScore * 0.28 + naturalnessScore * 0.3 + concisenessScore * 0.22 + toneConsistencyScore * 0.2
+  );
+  const improved = humanizeTextDeterministically({
+    text: original,
+    documentType: params.documentType || "cover_letter",
+    style: "professional"
+  });
+  const summaryVerdict = overallQualityScore >= 85 ? "Strong, clear writing with natural phrasing and good readability." : overallQualityScore >= 68 ? "Solid foundation \u2014 tightening long sentences and replacing generic phrases will make it noticeably stronger." : "Needs editorial refinement \u2014 simplify complex sentences, remove clich\xE9s, and align the tone for stronger clarity.";
+  return {
+    overallQualityScore,
+    subScores: {
+      readability: readabilityScore,
+      naturalness: naturalnessScore,
+      conciseness: concisenessScore,
+      toneConsistency: toneConsistencyScore
+    },
+    summaryVerdict,
+    metrics,
+    issues,
+    alternatives,
+    improvedVersion: improved.revisedText,
+    preservedTechnicalTerms,
+    engineMode: "built_in_linguistic",
+    transparencyNotice: ETHICAL_TRANSPARENCY_NOTICE,
+    analyzedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+
+// serverWritingAssistant.ts
+var VALID_DOC_TYPES = new Set(WRITING_DOCUMENT_TYPES.map((d) => d.id));
+var VALID_STYLES = new Set(WRITING_STYLES.map((s) => s.id));
+var MAX_INPUT_CHARS = 15e3;
+var MIN_INPUT_CHARS = 15;
+function sanitizeDocType(raw) {
+  if (typeof raw === "string" && VALID_DOC_TYPES.has(raw)) {
+    return raw;
+  }
+  return "cover_letter";
+}
+function sanitizeStyle(raw) {
+  if (typeof raw === "string" && VALID_STYLES.has(raw)) {
+    return raw;
+  }
+  return "professional";
+}
+function extractTextFromGeminiResponse(response) {
+  if (!response) return "";
+  if (typeof response.text === "string" && response.text.trim()) {
+    return response.text.trim();
+  }
+  const candidates = response.candidates;
+  if (Array.isArray(candidates) && candidates[0]?.content?.parts) {
+    return candidates[0].content.parts.map((p) => typeof p?.text === "string" ? p.text : "").join("").trim();
+  }
+  return "";
+}
+function safeParseJsonFromAi(raw) {
+  if (!raw) return null;
+  const cleaned = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+function registerWritingAssistantRoutes(deps) {
+  const { app, getAiClient } = deps;
+  app.post("/api/writing/humanize", async (req, res) => {
+    try {
+      const rawText = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+      if (rawText.length < MIN_INPUT_CHARS) {
+        return res.status(400).json({
+          error: `Please enter at least ${MIN_INPUT_CHARS} characters of text to improve.`
+        });
+      }
+      if (rawText.length > MAX_INPUT_CHARS) {
+        return res.status(400).json({
+          error: `Text is too long (${rawText.length} characters). Maximum allowed length is ${MAX_INPUT_CHARS.toLocaleString()} characters.`
+        });
+      }
+      const documentType = sanitizeDocType(req.body?.documentType);
+      const style = sanitizeStyle(req.body?.style);
+      const docMeta = WRITING_DOCUMENT_TYPES.find((d) => d.id === documentType);
+      const styleMeta = WRITING_STYLES.find((s) => s.id === style);
+      const deterministicResult = humanizeTextDeterministically({
+        text: rawText,
+        documentType,
+        style
+      });
+      const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
+      if (hasGeminiKey) {
+        try {
+          const ai = await getAiClient();
+          if (ai?.models?.generateContent) {
+            const prompt = [
+              "You are a senior career editor helping a job seeker, scholar, or professional refine their own writing.",
+              `Document type: ${docMeta.label} (${docMeta.guidance})`,
+              `Target writing style: ${styleMeta.label} (${styleMeta.description})`,
+              "",
+              "STRICT EDITORIAL RULES:",
+              "1. Rewrite the text so it reads like natural, clear, authentic human writing in the requested style.",
+              "2. Preserve 100% of the author's original meaning, facts, numbers, dates, employers, degrees, and technical terminology.",
+              "3. NEVER invent qualifications, certifications, years of experience, awards, employers, metrics, or skills not present in the original text.",
+              "4. Remove repetitive phrasing, generic clich\xE9s, and robotic transitions while keeping paragraph/bullet clarity.",
+              "5. Do NOT add meta-commentary or mention AI detectors.",
+              "",
+              "Return ONLY valid JSON with this exact schema:",
+              "{",
+              '  "revisedText": "string (the complete improved text)",',
+              '  "improvementsApplied": ["short concrete bullet explaining what was improved"]',
+              "}",
+              "",
+              "ORIGINAL TEXT:",
+              rawText
+            ].join("\n");
+            const response = await ai.models.generateContent({
+              model: "gemini-4-hydrogen",
+              contents: prompt,
+              config: {
+                temperature: 0.35,
+                responseMimeType: "application/json"
+              }
+            });
+            const parsed = safeParseJsonFromAi(extractTextFromGeminiResponse(response));
+            if (parsed && typeof parsed.revisedText === "string" && parsed.revisedText.trim().length >= 10) {
+              const revised = parsed.revisedText.trim();
+              const improvements = Array.isArray(parsed.improvementsApplied) && parsed.improvementsApplied.length > 0 ? parsed.improvementsApplied.filter((x) => typeof x === "string" && x.trim().length > 0).slice(0, 6) : deterministicResult.improvementsApplied;
+              return res.json({
+                ...deterministicResult,
+                revisedText: revised,
+                improvementsApplied: improvements,
+                wordCountAfter: (revised.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) || []).length,
+                engineMode: "gemini_ai",
+                integrityNotice: INTEGRITY_PRESERVATION_NOTICE,
+                processedAt: (/* @__PURE__ */ new Date()).toISOString()
+              });
+            }
+          }
+        } catch (aiErr) {
+          console.warn("[WritingAssistant] Gemini humanize fallback triggered:", aiErr?.message || aiErr);
+        }
+      }
+      return res.json(deterministicResult);
+    } catch (err) {
+      return res.status(500).json({
+        error: "Unable to process text refinement right now. Please try again."
+      });
+    }
+  });
+  app.post("/api/writing/check", async (req, res) => {
+    try {
+      const rawText = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+      if (rawText.length < MIN_INPUT_CHARS) {
+        return res.status(400).json({
+          error: `Please enter at least ${MIN_INPUT_CHARS} characters of text to analyze.`
+        });
+      }
+      if (rawText.length > MAX_INPUT_CHARS) {
+        return res.status(400).json({
+          error: `Text is too long (${rawText.length} characters). Maximum allowed length is ${MAX_INPUT_CHARS.toLocaleString()} characters.`
+        });
+      }
+      const documentType = sanitizeDocType(req.body?.documentType);
+      const report = analyzeWritingQuality({ text: rawText, documentType });
+      const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
+      if (hasGeminiKey) {
+        try {
+          const ai = await getAiClient();
+          if (ai?.models?.generateContent) {
+            const prompt = [
+              "You are an editorial writing-quality reviewer. Analyze the draft below strictly for human writing quality: readability, generic clich\xE9s, unnatural wording, tone consistency, and sentence clarity.",
+              'ETHICAL RULE: Never claim to detect AI authorship, never output an "AI probability" or "human percentage", and never claim to bypass AI detectors.',
+              "FACTUAL RULE: Preserve all facts, credentials, and technical terms in improvedVersion. Never invent qualifications or experience.",
+              "",
+              "Return ONLY valid JSON with this exact schema:",
+              "{",
+              '  "summaryVerdict": "1-2 sentence objective writing-quality summary",',
+              '  "additionalAlternatives": [',
+              '    { "original": "exact short phrase from draft", "naturalAlternative": "clearer natural phrase", "reason": "short editorial reason", "category": "generic_expression | unnatural_wording | inconsistent_tone" }',
+              "  ],",
+              '  "improvedVersion": "complete improved rewrite preserving all original meaning and technical terms"',
+              "}",
+              "",
+              "DRAFT TEXT:",
+              rawText
+            ].join("\n");
+            const response = await ai.models.generateContent({
+              model: "gemini-4-hydrogen",
+              contents: prompt,
+              config: {
+                temperature: 0.25,
+                responseMimeType: "application/json"
+              }
+            });
+            const parsed = safeParseJsonFromAi(extractTextFromGeminiResponse(response));
+            if (parsed) {
+              const mergedAlternatives = [...report.alternatives];
+              const seen = new Set(mergedAlternatives.map((a) => a.original.toLowerCase()));
+              if (Array.isArray(parsed.additionalAlternatives)) {
+                for (const item of parsed.additionalAlternatives) {
+                  if (item && typeof item.original === "string" && typeof item.naturalAlternative === "string" && item.original.trim() && item.naturalAlternative.trim() && !seen.has(item.original.trim().toLowerCase())) {
+                    seen.add(item.original.trim().toLowerCase());
+                    const cat = item.category === "unnatural_wording" || item.category === "inconsistent_tone" || item.category === "generic_expression" ? item.category : "unnatural_wording";
+                    mergedAlternatives.push({
+                      original: item.original.trim(),
+                      naturalAlternative: item.naturalAlternative.trim(),
+                      reason: typeof item.reason === "string" && item.reason.trim() ? item.reason.trim() : "More natural editorial phrasing.",
+                      category: cat
+                    });
+                  }
+                }
+              }
+              return res.json({
+                ...report,
+                summaryVerdict: typeof parsed.summaryVerdict === "string" && parsed.summaryVerdict.trim() ? parsed.summaryVerdict.trim() : report.summaryVerdict,
+                alternatives: mergedAlternatives.slice(0, 14),
+                improvedVersion: typeof parsed.improvedVersion === "string" && parsed.improvedVersion.trim().length >= 10 ? parsed.improvedVersion.trim() : report.improvedVersion,
+                engineMode: "gemini_ai",
+                transparencyNotice: ETHICAL_TRANSPARENCY_NOTICE,
+                analyzedAt: (/* @__PURE__ */ new Date()).toISOString()
+              });
+            }
+          }
+        } catch (aiErr) {
+          console.warn("[WritingAssistant] Gemini check fallback triggered:", aiErr?.message || aiErr);
+        }
+      }
+      return res.json(report);
+    } catch (err) {
+      return res.status(500).json({
+        error: "Unable to analyze writing quality right now. Please try again."
+      });
+    }
+  });
 }
 
 // src/utils/telegramSnapshot.ts
@@ -18671,6 +20003,10 @@ Return strict JSON:
     getRequesterUid,
     getRequesterEmail,
     appendAuditLog,
+    getAiClient
+  });
+  registerWritingAssistantRoutes({
+    app,
     getAiClient
   });
   function listPersistentBackups() {

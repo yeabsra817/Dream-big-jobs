@@ -194,6 +194,7 @@ import { JobApplicationModal } from './components/JobApplicationModal';
 
 // Lazy-loaded heavier secondary views (preloaded quietly right after mount)
 const GlobalOpportunitiesView = lazy(() => import('./components/GlobalOpportunitiesView').then((m) => ({ default: m.GlobalOpportunitiesView })));
+const WritingAssistantView = lazy(() => import('./components/WritingAssistantView').then((m) => ({ default: m.WritingAssistantView })));
 const InternationalJobsView = lazy(() => import('./components/InternationalJobsView').then((m) => ({ default: m.InternationalJobsView })));
 const ImmigrationResidenceView = lazy(() => import('./components/ImmigrationResidenceView').then((m) => ({ default: m.ImmigrationResidenceView })));
 const ScholarshipsView = lazy(() => import('./components/ScholarshipsView').then((m) => ({ default: m.ScholarshipsView })));
@@ -302,7 +303,13 @@ export default function App() {
     Boolean(resolveSiteContent(getCachedSiteSettings()).categoriesDefaultExpanded)
   );
   const [activeExpansionView, setActiveExpansionView] = useState<
-    'international-opportunities' | 'international-jobs' | 'immigration' | 'scholarships' | null
+    | 'international-opportunities'
+    | 'international-jobs'
+    | 'immigration'
+    | 'scholarships'
+    | 'humanize-text'
+    | 'humanize-checker'
+    | null
   >(() => {
     if (typeof window === 'undefined') return null;
     const v = new URLSearchParams(window.location.search).get('view');
@@ -310,7 +317,9 @@ export default function App() {
       v === 'international-opportunities' ||
       v === 'international-jobs' ||
       v === 'immigration' ||
-      v === 'scholarships'
+      v === 'scholarships' ||
+      v === 'humanize-text' ||
+      v === 'humanize-checker'
     ) {
       return v;
     }
@@ -1707,7 +1716,14 @@ export default function App() {
   };
 
   const handleOpenExpansionView = (
-    view: 'international-opportunities' | 'international-jobs' | 'immigration' | 'scholarships' | null
+    view:
+      | 'international-opportunities'
+      | 'international-jobs'
+      | 'immigration'
+      | 'scholarships'
+      | 'humanize-text'
+      | 'humanize-checker'
+      | null
   ) => {
     setSelectedCategory(null);
     setSelectedLocation(null);
@@ -2391,6 +2407,8 @@ export default function App() {
         onOpenInternationalJobs={() => handleOpenExpansionView('international-jobs')}
         onOpenImmigration={() => handleOpenExpansionView('immigration')}
         onOpenScholarships={() => handleOpenExpansionView('scholarships')}
+        onOpenHumanizeText={() => handleOpenExpansionView('humanize-text')}
+        onOpenHumanizeChecker={() => handleOpenExpansionView('humanize-checker')}
         onOpenLocations={() => handleSelectLocation('All')}
         onOpenSavedJobs={() => setIsSavedDrawerOpen(true)}
         savedCount={savedJobIds.size}
@@ -2608,6 +2626,15 @@ export default function App() {
                 setJobSeekerInitialTab('professional');
                 setIsJobSeekerDashboardOpen(true);
               }}
+              onOpenWritingTool={(tool) => handleOpenExpansionView(tool)}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'humanize-text' || activeExpansionView === 'humanize-checker' ? (
+          <Suspense fallback={<PageLoader />}>
+            <WritingAssistantView
+              initialTool={activeExpansionView}
+              onToolChange={(tool) => handleOpenExpansionView(tool)}
+              onBack={() => handleOpenExpansionView(null)}
             />
           </Suspense>
         ) : activeExpansionView === 'international-jobs' ? (

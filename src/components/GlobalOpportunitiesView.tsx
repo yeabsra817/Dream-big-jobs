@@ -26,6 +26,7 @@ import {
   X,
   AlertCircle,
   BookOpen,
+  FileEdit,
 } from 'lucide-react';
 import {
   GlobalOpportunitiesApiResponse,
@@ -52,6 +53,7 @@ interface Props {
   adminEmail?: string | null;
   onOpenAuth?: () => void;
   onOpenProfile?: () => void;
+  onOpenWritingTool?: (tool: 'humanize-text' | 'humanize-checker') => void;
   initialSubsection?: GlobalOpportunitySubsection | 'all';
 }
 
@@ -155,6 +157,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   adminEmail = null,
   onOpenAuth,
   onOpenProfile,
+  onOpenWritingTool,
   initialSubsection = 'all',
 }) => {
   const [activeSubsection, setActiveSubsection] = useState<GlobalOpportunitySubsection | 'all'>(initialSubsection);
@@ -423,6 +426,16 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {onOpenWritingTool && (
+                <button
+                  type="button"
+                  onClick={() => onOpenWritingTool('humanize-text')}
+                  className="min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <FileEdit className="w-4 h-4 text-[#16A34A]" />
+                  <span>Writing Studio</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowSourcesDrawer((v) => !v)}
@@ -847,10 +860,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
             <h2 className="text-base font-bold text-[#0B132B]">
               No verified opportunities match this view right now
             </h2>
-            <p className="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed">
-              HopelandJobs only displays genuine opportunities verified directly against official sources with at least{' '}
-              {MINIMUM_FULL_DAYS_REMAINING} full days remaining before their official deadline. Unverified or expired
-              listings are never shown.
+            <p className="text-xs text-slate-600 max-w-xl mx-auto leading-relaxed">
+              HopelandJobs strictly publishes only genuine opportunities whose official documentation explicitly confirms
+              employer work visa sponsorship (for jobs) or visa application fee coverage / sponsorship (for Banking &amp;
+              Finance and WASH scholarships, training, and conferences), with at least {MINIMUM_FULL_DAYS_REMAINING}{' '}
+              full days remaining. Opportunities with unconfirmed visa coverage, invitation-letter-only support, or
+              outside permitted sectors are automatically rejected and archived.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
               {hasActiveFilters && (
