@@ -252,8 +252,19 @@ export default function App() {
   const [selectedVacancy, setSelectedVacancy] = useState<Vacancy | null>(() => {
     if (typeof window === 'undefined') return null;
     const urlParams = new URLSearchParams(window.location.search);
-    const jobId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id');
-    const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?]+)/);
+    const hashQuery = window.location.hash.includes('?')
+      ? window.location.hash.slice(window.location.hash.indexOf('?') + 1)
+      : window.location.hash.replace(/^#\/?/, '');
+    const hashParams = new URLSearchParams(hashQuery);
+    const jobId =
+      urlParams.get('jobId') ||
+      urlParams.get('job_id') ||
+      urlParams.get('vacancyId') ||
+      urlParams.get('vacancy_id') ||
+      urlParams.get('id') ||
+      hashParams.get('jobId') ||
+      hashParams.get('id');
+    const pathMatch = window.location.pathname.match(/\/jobs?\/([^\/\?]+)/);
     let decodedPathId = '';
     if (pathMatch?.[1]) {
       try {
@@ -264,10 +275,16 @@ export default function App() {
     }
     const targetId = (jobId || decodedPathId).trim().replace(/[.,;!?)\]]+$/, '');
     const cached = getCachedPublishedVacancies();
+    const normTarget = targetId.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cachedMatch = targetId
-      ? cached.find((v) => v.id === targetId || v.id.toLowerCase() === targetId.toLowerCase()) || null
+      ? cached.find(
+          (v) =>
+            v.id === targetId ||
+            v.id.toLowerCase() === targetId.toLowerCase() ||
+            (normTarget.length >= 8 && v.id.toLowerCase().replace(/[^a-z0-9]/g, '') === normTarget)
+        ) || null
       : null;
-    return cachedMatch || decodeTelegramVacancySnapshot(urlParams.get('v'));
+    return cachedMatch || decodeTelegramVacancySnapshot(urlParams.get('v') || hashParams.get('v'));
   });
   const [isTelegramApplyArrival, setIsTelegramApplyArrival] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -527,8 +544,20 @@ export default function App() {
         const notifIdFromUrl = urlParams.get('notificationId');
         if (notifIdFromUrl) pendingNotifReadIdRef.current = notifIdFromUrl;
       }
-      const rawParamId = urlParams.get('jobId') || urlParams.get('job_id') || urlParams.get('id') || '';
-      const pathMatch = window.location.pathname.match(/\/jobs\/([^\/\?#]+)/);
+      const hashQuery = window.location.hash.includes('?')
+        ? window.location.hash.slice(window.location.hash.indexOf('?') + 1)
+        : window.location.hash.replace(/^#\/?/, '');
+      const hashParams = new URLSearchParams(hashQuery);
+      const rawParamId =
+        urlParams.get('jobId') ||
+        urlParams.get('job_id') ||
+        urlParams.get('vacancyId') ||
+        urlParams.get('vacancy_id') ||
+        urlParams.get('id') ||
+        hashParams.get('jobId') ||
+        hashParams.get('id') ||
+        '';
+      const pathMatch = window.location.pathname.match(/\/jobs?\/([^\/\?#]+)/);
       let pathId = '';
       if (pathMatch?.[1]) {
         try {
@@ -538,7 +567,7 @@ export default function App() {
         }
       }
       const cleanedTarget = (rawParamId || pathId).trim().replace(/[.,;!?)\]]+$/, '');
-      const embeddedSnapshotVacancy = decodeTelegramVacancySnapshot(urlParams.get('v'));
+      const embeddedSnapshotVacancy = decodeTelegramVacancySnapshot(urlParams.get('v') || hashParams.get('v'));
       const resolvedUrlId = cleanedTarget && cleanedTarget.toLowerCase() !== 'latest' ? cleanedTarget : undefined;
       deepLinkTargetId = resolvedUrlId || embeddedSnapshotVacancy?.id;
       deepLinkArrivedFromTelegram = urlParams.get('utm_source') === 'telegram';

@@ -43,7 +43,6 @@ import {
   partitionVacanciesByDeadline,
   validateVacancyStrict,
 } from '../utils/vacancyValidator';
-import { isExpired } from '../utils/helpers';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
 import {
@@ -331,6 +330,7 @@ export function setActiveAdminSessionEmail(email: string | null): void {
     try {
       if (activeAdminSessionEmail) {
         sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, activeAdminSessionEmail);
+        localStorage.setItem('hopelandjobs_admin_ever_signed_in', '1');
       } else {
         sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
       }
@@ -482,13 +482,36 @@ export function getPendingLocalCloudSyncVacancies(
     }
   });
 
+  // Guard against false positives on regular visitor phones that only ever read public jobs
+  let isAdminDevice = pendingIds.size > 0 || Boolean(getActiveAdminSessionEmail()) || extraVacancies.length > 0;
+  try {
+    if (!isAdminDevice && localStorage.getItem('hopelandjobs_admin_ever_signed_in') === '1') {
+      isAdminDevice = true;
+    }
+    if (!isAdminDevice) {
+      const rawAdminCheck = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
+      if (rawAdminCheck) {
+        const arr = JSON.parse(rawAdminCheck);
+        if (Array.isArray(arr) && arr.length >= 2) {
+          isAdminDevice = true;
+        }
+      }
+    }
+  } catch {}
+
+  if (!isAdminDevice) {
+    return [];
+  }
+
   const unsynced: Vacancy[] = [];
   for (const v of localMap.values()) {
     if (v.status === 'draft' || v.status === 'duplicate') continue;
     const isExplicitlyPending = pendingIds.has(v.id);
+    // Sync BOTH open and closed/expired locally-authored jobs missing from Cloud Firestore
+    // so even older Telegram links open cleanly on every phone (showing CLOSED if deadline passed).
     const isMissingFromCloud =
       knownCloudVacancyIds && knownCloudVacancyIds.size > 0
-        ? !knownCloudVacancyIds.has(v.id) && v.status === 'published' && !isExpired(v.applicationDeadline)
+        ? !knownCloudVacancyIds.has(v.id)
         : false;
     if (isExplicitlyPending || isMissingFromCloud) {
       unsynced.push(v);
@@ -642,20 +665,29 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
   const cleanId = String(id || '').trim().replace(/[.,;!?)\]]+$/, '');
   if (!cleanId) return null;
   const lowerId = cleanId.toLowerCase();
+  const normId = lowerId.replace(/[^a-z0-9]/g, '');
 
+  // On direct deep-link open (e.g. from Telegram), ANY non-draft, non-duplicate vacancy
+  // (including published, closed, expired, and archived) MUST open on the website.
   const isDisplayableVacancy = (v: any): v is Vacancy =>
     Boolean(
       v &&
         v.id &&
+        v.title &&
         v.status !== 'draft' &&
-        v.status !== 'duplicate' &&
-        hasValidVacancyDeadline(v)
+        v.status !== 'pending_review' &&
+        v.status !== 'duplicate'
     );
 
+  const idMatches = (vId: string) => {
+    const s = String(vId || '').trim();
+    if (!s) return false;
+    const sl = s.toLowerCase();
+    return s === cleanId || sl === lowerId || (normId.length >= 8 && sl.replace(/[^a-z0-9]/g, '') === normId);
+  };
+
   const cached = getCachedPublishedVacancies();
-  const cachedMatch = cached.find(
-    (v) => (v.id === cleanId || v.id.toLowerCase() === lowerId) && isDisplayableVacancy(v)
-  );
+  const cachedMatch = cached.find((v) => idMatches(v.id) && isDisplayableVacancy(v));
   if (cachedMatch) return cachedMatch;
 
   // Also check admin/local vacancy cache if present
@@ -664,9 +696,7 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
     if (rawAll) {
       const parsedAll: Vacancy[] = JSON.parse(rawAll);
       if (Array.isArray(parsedAll)) {
-        const localMatch = parsedAll.find(
-          (v) => (v.id === cleanId || v.id.toLowerCase() === lowerId) && isDisplayableVacancy(v)
-        );
+        const localMatch = parsedAll.find((v) => idMatches(v.id) && isDisplayableVacancy(v));
         if (localMatch) return localMatch;
       }
     }
@@ -685,7 +715,7 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
 
   const fromFirestore = (async (): Promise<Vacancy> => {
     try {
-      const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 4500, null as any);
+      const snap = await withTimeout(getDoc(doc(db, 'vacancies', cleanId)), 9000, null as any);
       if (snap && snap.exists()) {
         const data = { ...(snap.data() as Vacancy), id: snap.id };
         if (isDisplayableVacancy(data)) {
@@ -693,12 +723,12 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
         }
       }
     } catch {
-      // Ignore Firestore permission errors for archived/expired docs so server response can win
+      // Ignore Firestore permission errors so server/REST response can win
     }
     throw new Error('firestore_miss');
   })();
 
-  // Direct HTTPS Firestore REST lookup (works even on mobile networks where Firestore SDK WebChannel hangs)
+  // Direct HTTPS Firestore REST lookup (works reliably on mobile networks where WebChannel hangs)
   const fromFirestoreRest = (async (): Promise<Vacancy> => {
     const projectId = String((firebaseConfig as any)?.projectId || '').trim();
     const databaseId = String((firebaseConfig as any)?.firestoreDatabaseId || '(default)').trim();
@@ -709,8 +739,8 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
     )}/databases/${encodeURIComponent(databaseId)}/documents/vacancies/${encodeURIComponent(
       cleanId
     )}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ''}`;
-    const res = await fetch(restUrl, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error('fs_rest_miss');
+    const res = await withTimeout(fetch(restUrl, { headers: { Accept: 'application/json' } }), 9000, null as any);
+    if (!res || !res.ok) throw new Error('fs_rest_miss');
     const docJson = await res.json();
     const fields = docJson?.fields;
     if (!fields || typeof fields !== 'object') throw new Error('fs_rest_empty');
@@ -751,6 +781,16 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
     if (isDisplayableVacancy(winner)) {
       savePublishedVacancyToVisitorCache(winner);
       return winner;
+    }
+  } catch {}
+
+  // Final fallback: scan live published catalog for case-insensitive / normalized ID matches
+  try {
+    const allPublished = await fetchPublishedVacancies();
+    const fuzzy = allPublished.find((v) => idMatches(v.id) && isDisplayableVacancy(v));
+    if (fuzzy) {
+      savePublishedVacancyToVisitorCache(fuzzy);
+      return fuzzy;
     }
   } catch {}
 

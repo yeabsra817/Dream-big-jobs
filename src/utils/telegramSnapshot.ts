@@ -237,7 +237,7 @@ export function decodeTelegramVacancySnapshot(encoded: string | null | undefined
     };
 
     if (!hasValidVacancyDeadline(reconstructed)) {
-      return null;
+      reconstructed.status = 'closed';
     }
     return reconstructed;
   } catch {

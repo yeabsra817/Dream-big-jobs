@@ -24,6 +24,7 @@ import {
   ExperienceMatchAssessment,
   hasProfileExperienceSignals,
 } from '../utils/recommendationEngine';
+import { encodeTelegramVacancySnapshot } from '../utils/telegramSnapshot';
 
 interface Props {
   initialLocation: string;
@@ -207,9 +208,16 @@ export const LocationJobsView: React.FC<Props> = ({
     sortBy,
   ]);
 
+  const buildShareUrl = (v: Vacancy) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.hopelandjobs.tech';
+    const base = `${origin}/jobs/${encodeURIComponent(v.id)}?jobId=${encodeURIComponent(v.id)}`;
+    const snap = encodeTelegramVacancySnapshot(v, 1200);
+    return snap ? `${base}&v=${snap}` : base;
+  };
+
   const handleCopyLink = (v: Vacancy, e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}/?jobId=${v.id}`;
+    const url = buildShareUrl(v);
     navigator.clipboard.writeText(url);
     setCopiedId(v.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -573,7 +581,7 @@ export const LocationJobsView: React.FC<Props> = ({
                         </button>
 
                         <a
-                          href={`https://t.me/share/url?url=${encodeURIComponent(`${typeof window !== 'undefined' ? window.location.origin : ''}/?jobId=${vacancy.id}`)}&text=${encodeURIComponent(`💼 ${vacancy.title} at ${vacancy.organization}\n📍 Location: ${vacancy.location}\n💰 Salary: ${vacancy.salary}\n⏳ Deadline: ${vacancy.applicationDeadline}\nApply on HOPELAND JOBS:\n${typeof window !== 'undefined' ? window.location.origin : ''}/?jobId=${vacancy.id}`)}`}
+                          href={`https://t.me/share/url?url=${encodeURIComponent(buildShareUrl(vacancy))}&text=${encodeURIComponent(`💼 ${vacancy.title} at ${vacancy.organization}\n📍 Location: ${vacancy.location}\n⏳ Deadline: ${vacancy.applicationDeadline}\nApply on HOPELAND JOBS:`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}

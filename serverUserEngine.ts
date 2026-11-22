@@ -74,22 +74,25 @@ async function fetchVacancyFromFirestoreRest(vacancyId: string): Promise<any | n
   try {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(4500),
+      signal: AbortSignal.timeout(7000),
     });
     if (!res.ok) return null;
     const json = await res.json();
     const decoded = decodeFirestoreRestDocument(json);
     if (
       decoded &&
+      decoded.title &&
       decoded.status !== 'draft' &&
-      decoded.status !== 'duplicate' &&
-      hasValidVacancyDeadline(decoded)
+      decoded.status !== 'pending_review' &&
+      decoded.status !== 'duplicate'
     ) {
       return decoded;
     }
   } catch {}
   return null;
 }
+
+let lastCloudCatalogRefreshMs = 0;
 
 async function fetchPublishedVacanciesFromFirestoreRest(): Promise<any[]> {
   const projectId = String((firebaseAppletConfig as any)?.projectId || '').trim();
@@ -2761,12 +2764,24 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     let list = loadVacanciesCatalog()
       .filter((v: any) => v && v.status === 'published' && hasValidVacancyDeadline(v));
 
-    if (list.length === 0) {
+    const nowMs = Date.now();
+    const needsCloudRefresh = list.length === 0 || nowMs - lastCloudCatalogRefreshMs > 30000;
+    if (needsCloudRefresh) {
+      lastCloudCatalogRefreshMs = nowMs;
       const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
       if (cloudList.length > 0) {
-        list = cloudList;
+        const mergedMap = new Map<string, any>();
+        for (const item of list) {
+          if (item?.id) mergedMap.set(String(item.id), item);
+        }
+        for (const item of cloudList) {
+          if (item?.id) mergedMap.set(String(item.id), item);
+        }
+        list = Array.from(mergedMap.values()).filter(
+          (v: any) => v && v.status === 'published' && hasValidVacancyDeadline(v)
+        );
         try {
-          saveVacanciesCatalog(cloudList);
+          saveVacanciesCatalog(list);
         } catch {}
       }
     }
@@ -2792,16 +2807,25 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       return;
     }
     const lowerId = rawId.toLowerCase();
-    const list = loadVacanciesCatalog();
-    // Allow published, expired, closed, and archived vacancies to resolve when opened from a Telegram link (exclude draft & duplicate)
-    let found = list.find(
-      (v: any) =>
+    const normId = lowerId.replace(/[^a-z0-9]/g, '');
+    const idMatches = (candidateId: any) => {
+      const s = String(candidateId || '').trim();
+      if (!s) return false;
+      const sl = s.toLowerCase();
+      return s === rawId || sl === lowerId || (normId.length >= 8 && sl.replace(/[^a-z0-9]/g, '') === normId);
+    };
+    const isDisplayable = (v: any) =>
+      Boolean(
         v &&
-        v.status !== 'draft' &&
-        v.status !== 'duplicate' &&
-        hasValidVacancyDeadline(v) &&
-        (String(v.id) === rawId || String(v.id).toLowerCase() === lowerId)
-    );
+          v.title &&
+          v.status !== 'draft' &&
+          v.status !== 'pending_review' &&
+          v.status !== 'duplicate'
+      );
+
+    const list = loadVacanciesCatalog();
+    // Allow published, expired, closed, and archived vacancies to resolve when opened from a Telegram link
+    let found = list.find((v: any) => isDisplayable(v) && idMatches(v.id));
 
     // Fallback 1: check Telegram published records & queue snapshots so any Telegram-broadcast job always resolves
     if (!found) {
@@ -2810,25 +2834,16 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
         const tgStore = loadJsonFileSafe<any>(tgQueuePath, null);
         if (tgStore) {
           const recMap = tgStore.publishedRecords || {};
-          const matchedRecKey = Object.keys(recMap).find(
-            (k) => k === rawId || k.toLowerCase() === lowerId
-          );
+          const matchedRecKey = Object.keys(recMap).find((k) => idMatches(k));
           const snap = matchedRecKey ? recMap[matchedRecKey]?.vacancySnapshot : null;
-          if (snap && snap.status !== 'draft' && snap.status !== 'duplicate' && hasValidVacancyDeadline(snap)) {
+          if (isDisplayable(snap)) {
             found = snap;
           }
           if (!found && Array.isArray(tgStore?.queueState?.items)) {
             const qItem = tgStore.queueState.items.find(
-              (it: any) =>
-                it?.vacancy &&
-                (String(it.vacancyId) === rawId || String(it.vacancyId || '').toLowerCase() === lowerId)
+              (it: any) => it?.vacancy && (idMatches(it.vacancyId) || idMatches(it.vacancy?.id))
             );
-            if (
-              qItem?.vacancy &&
-              qItem.vacancy.status !== 'draft' &&
-              qItem.vacancy.status !== 'duplicate' &&
-              hasValidVacancyDeadline(qItem.vacancy)
-            ) {
+            if (isDisplayable(qItem?.vacancy)) {
               found = qItem.vacancy;
             }
           }
@@ -2836,7 +2851,7 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       } catch {}
     }
 
-    // Fallback 2: query Firestore cloud directly via REST API (handles cold Vercel serverless instances seamlessly)
+    // Fallback 2: query Firestore cloud directly via REST API (handles cold Vercel serverless instances & closed/expired docs)
     if (!found) {
       const cloudVacancy = await fetchVacancyFromFirestoreRest(rawId);
       if (cloudVacancy) {
@@ -2848,6 +2863,15 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           ];
           saveVacanciesCatalog(nextCatalog);
         } catch {}
+      }
+    }
+
+    // Fallback 3: scan live Cloud Firestore published list for case-insensitive / normalized ID matches
+    if (!found) {
+      const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
+      const cloudMatch = cloudList.find((v: any) => isDisplayable(v) && idMatches(v.id));
+      if (cloudMatch) {
+        found = cloudMatch;
       }
     }
 

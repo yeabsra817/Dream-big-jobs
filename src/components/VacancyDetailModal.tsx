@@ -162,15 +162,21 @@ export const VacancyDetailModal: React.FC<Props> = ({
     });
   }, [vacancy.id]);
 
+  const daysInfo = getDaysLeft(vacancy.applicationDeadline);
+  const isJobClosed =
+    vacancy.status === 'expired' ||
+    vacancy.status === 'closed' ||
+    vacancy.status === 'archived' ||
+    Boolean(daysInfo.expired);
+
   useEffect(() => {
-    if (!autoFocusApply) return;
+    if (!autoFocusApply || isJobClosed) return;
     const timer = setTimeout(() => {
       applySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 320);
     return () => clearTimeout(timer);
-  }, [autoFocusApply, vacancy.id]);
+  }, [autoFocusApply, isJobClosed, vacancy.id]);
 
-  const daysInfo = getDaysLeft(vacancy.applicationDeadline);
   const currentUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
     const base = `${window.location.origin}/jobs/${encodeURIComponent(vacancy.id)}`;
@@ -310,9 +316,13 @@ ${currentUrl}`;
       aria-labelledby="vacancy-detail-title"
     >
       <div className="bg-white w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-3xl sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 overflow-hidden flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
-        {/* Sticky Emerald Top App Bar */}
-        <header className="h-14 bg-[#10B981] text-white px-2 sm:px-4 flex items-center justify-between gap-2 shrink-0 shadow-xs">
-          <div className="flex items-center gap-1 min-w-0 flex-1">
+        {/* Sticky Top App Bar */}
+        <header
+          className={`h-14 text-white px-2 sm:px-4 flex items-center justify-between gap-2 shrink-0 shadow-xs ${
+            isJobClosed ? 'bg-slate-800' : 'bg-[#10B981]'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <button
               type="button"
               onClick={onClose}
@@ -324,6 +334,11 @@ ${currentUrl}`;
             <span className="text-base font-bold text-white truncate">
               {vacancy.title}
             </span>
+            {isJobClosed && (
+              <span className="shrink-0 px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-extrabold uppercase tracking-wider">
+                Closed
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -414,22 +429,27 @@ ${currentUrl}`;
                 )}
               </div>
 
-              {(vacancy.status === 'expired' || vacancy.status === 'archived' || daysInfo.expired) && (
-                <div className="mt-4 w-full max-w-xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left flex items-start justify-between gap-3">
+              {isJobClosed && (
+                <div className="mt-4 w-full max-w-xl rounded-2xl border-2 border-rose-300 bg-rose-50 px-4 py-3.5 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                   <div>
-                    <p className="text-xs font-extrabold text-amber-900">
-                      Application Deadline Closed ({deadlineDisplay})
-                    </p>
-                    <p className="text-[11px] text-amber-800 mt-0.5">
-                      You can still review the full details of this vacancy below, or browse currently open jobs on HopelandJobs.
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-extrabold uppercase tracking-wider">
+                        Closed
+                      </span>
+                      <p className="text-xs sm:text-sm font-extrabold text-rose-950">
+                        This Job Vacancy Is Closed ({deadlineDisplay})
+                      </p>
+                    </div>
+                    <p className="text-xs text-rose-900 mt-1 leading-relaxed">
+                      The application deadline has passed and this position is no longer accepting applications. Full vacancy details remain visible below for your reference.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-900 text-white text-[11px] font-bold hover:bg-amber-800 transition-colors cursor-pointer"
+                    className="shrink-0 px-3.5 py-2 rounded-xl bg-rose-700 text-white text-xs font-extrabold hover:bg-rose-800 transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    Open Jobs
+                    Browse Open Jobs
                   </button>
                 </div>
               )}
@@ -457,9 +477,17 @@ ${currentUrl}`;
                 <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>
                   <span className="text-slate-500">Deadline:</span>{' '}
-                  <strong className="font-bold text-slate-900">{deadlineDisplay}</strong>
-                  {daysInfo?.text && (
-                    <span className="text-xs text-slate-500 ml-2">({daysInfo.text})</span>
+                  <strong className={`font-bold ${isJobClosed ? 'text-rose-700' : 'text-slate-900'}`}>
+                    {deadlineDisplay}
+                  </strong>
+                  {isJobClosed ? (
+                    <span className="inline-block ml-2 px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-[11px] font-extrabold uppercase">
+                      Closed
+                    </span>
+                  ) : (
+                    daysInfo?.text && (
+                      <span className="text-xs text-slate-500 ml-2">({daysInfo.text})</span>
+                    )
                   )}
                 </span>
               </div>
@@ -662,13 +690,19 @@ ${currentUrl}`;
                 </div>
               )}
 
-              {onApplyOnWebsite && (
-                <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
-                  <span>
-                    Click <strong>Apply Now</strong> below to apply directly (no account required) or sign in to submit with your saved CV. · ያለ ምዝገባ በቀጥታ ማመልከት ወይም በአካውንትዎ በ1 ንክኪ ማመልከት ይችላሉ።
-                  </span>
+              {isJobClosed ? (
+                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 font-semibold">
+                  Applications for this vacancy are now <strong>Closed</strong> (deadline: {deadlineDisplay}). Browse currently open vacancies on HopelandJobs to apply for active roles.
                 </div>
+              ) : (
+                onApplyOnWebsite && (
+                  <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0 mt-0.5" />
+                    <span>
+                      Click <strong>Apply Now</strong> below to apply directly (no account required) or sign in to submit with your saved CV. · ያለ ምዝገባ በቀጥታ ማመልከት ወይም በአካውንትዎ በ1 ንክኪ ማመልከት ይችላሉ።
+                    </span>
+                  </div>
+                )
               )}
             </section>
 
@@ -836,15 +870,30 @@ ${currentUrl}`;
           </div>
         </div>
 
-        {/* Sticky Bottom Apply Now CTA Bar (Matching Reference Screenshots) */}
+        {/* Sticky Bottom CTA Bar */}
         <footer className="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 shrink-0">
-          <button
-            type="button"
-            onClick={handlePrimaryApplyClick}
-            className="w-full min-h-[48px] px-6 py-3 rounded-xl bg-[#10B981] hover:bg-[#059669] active:scale-[0.99] text-white font-bold text-base shadow-sm transition-all flex items-center justify-center cursor-pointer"
-          >
-            Apply Now
-          </button>
+          {isJobClosed ? (
+            <div className="flex flex-col sm:flex-row items-center gap-2.5">
+              <div className="w-full sm:flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-extrabold text-sm flex items-center justify-center text-center">
+                Closed · Application Deadline Passed
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-xl bg-[#0B132B] hover:bg-slate-800 text-white font-bold text-sm transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Browse Open Jobs
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePrimaryApplyClick}
+              className="w-full min-h-[48px] px-6 py-3 rounded-xl bg-[#10B981] hover:bg-[#059669] active:scale-[0.99] text-white font-bold text-base shadow-sm transition-all flex items-center justify-center cursor-pointer"
+            >
+              Apply Now
+            </button>
+          )}
         </footer>
       </div>
     </div>

@@ -2042,18 +2042,19 @@ async function fetchVacancyFromFirestoreRest(vacancyId) {
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(4500)
+      signal: AbortSignal.timeout(7e3)
     });
     if (!res.ok) return null;
     const json = await res.json();
     const decoded = decodeFirestoreRestDocument(json);
-    if (decoded && decoded.status !== "draft" && decoded.status !== "duplicate" && hasValidVacancyDeadline(decoded)) {
+    if (decoded && decoded.title && decoded.status !== "draft" && decoded.status !== "pending_review" && decoded.status !== "duplicate") {
       return decoded;
     }
   } catch {
   }
   return null;
 }
+var lastCloudCatalogRefreshMs = 0;
 async function fetchPublishedVacanciesFromFirestoreRest() {
   const projectId = String(firebase_applet_config_default?.projectId || "").trim();
   const databaseId = String(firebase_applet_config_default?.firestoreDatabaseId || "(default)").trim();
@@ -4138,12 +4139,24 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
   });
   app.get("/api/vacancies", async (_req, res) => {
     let list = loadVacanciesCatalog().filter((v) => v && v.status === "published" && hasValidVacancyDeadline(v));
-    if (list.length === 0) {
+    const nowMs = Date.now();
+    const needsCloudRefresh = list.length === 0 || nowMs - lastCloudCatalogRefreshMs > 3e4;
+    if (needsCloudRefresh) {
+      lastCloudCatalogRefreshMs = nowMs;
       const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
       if (cloudList.length > 0) {
-        list = cloudList;
+        const mergedMap = /* @__PURE__ */ new Map();
+        for (const item of list) {
+          if (item?.id) mergedMap.set(String(item.id), item);
+        }
+        for (const item of cloudList) {
+          if (item?.id) mergedMap.set(String(item.id), item);
+        }
+        list = Array.from(mergedMap.values()).filter(
+          (v) => v && v.status === "published" && hasValidVacancyDeadline(v)
+        );
         try {
-          saveVacanciesCatalog(cloudList);
+          saveVacanciesCatalog(list);
         } catch {
         }
       }
@@ -4167,28 +4180,34 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
       return;
     }
     const lowerId = rawId.toLowerCase();
-    const list = loadVacanciesCatalog();
-    let found = list.find(
-      (v) => v && v.status !== "draft" && v.status !== "duplicate" && hasValidVacancyDeadline(v) && (String(v.id) === rawId || String(v.id).toLowerCase() === lowerId)
+    const normId = lowerId.replace(/[^a-z0-9]/g, "");
+    const idMatches = (candidateId) => {
+      const s = String(candidateId || "").trim();
+      if (!s) return false;
+      const sl = s.toLowerCase();
+      return s === rawId || sl === lowerId || normId.length >= 8 && sl.replace(/[^a-z0-9]/g, "") === normId;
+    };
+    const isDisplayable = (v) => Boolean(
+      v && v.title && v.status !== "draft" && v.status !== "pending_review" && v.status !== "duplicate"
     );
+    const list = loadVacanciesCatalog();
+    let found = list.find((v) => isDisplayable(v) && idMatches(v.id));
     if (!found) {
       try {
         const tgQueuePath = path.join(DATA_DIR, "telegram_queue.json");
         const tgStore = loadJsonFileSafe(tgQueuePath, null);
         if (tgStore) {
           const recMap = tgStore.publishedRecords || {};
-          const matchedRecKey = Object.keys(recMap).find(
-            (k) => k === rawId || k.toLowerCase() === lowerId
-          );
+          const matchedRecKey = Object.keys(recMap).find((k) => idMatches(k));
           const snap = matchedRecKey ? recMap[matchedRecKey]?.vacancySnapshot : null;
-          if (snap && snap.status !== "draft" && snap.status !== "duplicate" && hasValidVacancyDeadline(snap)) {
+          if (isDisplayable(snap)) {
             found = snap;
           }
           if (!found && Array.isArray(tgStore?.queueState?.items)) {
             const qItem = tgStore.queueState.items.find(
-              (it) => it?.vacancy && (String(it.vacancyId) === rawId || String(it.vacancyId || "").toLowerCase() === lowerId)
+              (it) => it?.vacancy && (idMatches(it.vacancyId) || idMatches(it.vacancy?.id))
             );
-            if (qItem?.vacancy && qItem.vacancy.status !== "draft" && qItem.vacancy.status !== "duplicate" && hasValidVacancyDeadline(qItem.vacancy)) {
+            if (isDisplayable(qItem?.vacancy)) {
               found = qItem.vacancy;
             }
           }
@@ -4208,6 +4227,13 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
           saveVacanciesCatalog(nextCatalog);
         } catch {
         }
+      }
+    }
+    if (!found) {
+      const cloudList = await fetchPublishedVacanciesFromFirestoreRest();
+      const cloudMatch = cloudList.find((v) => isDisplayable(v) && idMatches(v.id));
+      if (cloudMatch) {
+        found = cloudMatch;
       }
     }
     if (!found) {

@@ -1,6 +1,6 @@
 /* HOPELAND JOBS Service Worker — Real Web Push, Notification Deep-Linking, and Reconnect Sync */
 
-const CACHE_NAME = 'hopelandjobs-shell-v8';
+const CACHE_NAME = 'hopelandjobs-shell-v9';
 const APP_SHELL_URLS = [
   '/pwa-192x192.png',
   '/pwa-badge-96x96.png',
