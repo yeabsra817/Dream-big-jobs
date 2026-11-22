@@ -3160,6 +3160,29 @@
   ],
   "researchHistory": [
     {
+      "id": "run_auto_1795334439311",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (startup)",
+      "startedAt": "2026-11-22T08:00:19.081Z",
+      "completedAt": "2026-11-22T08:00:39.311Z",
+      "regionsResearched": [
+        "Americas & Oceania",
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Canada",
+        "Australia",
+        "United Kingdom"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 2,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 1,
+      "summary": "Cycle #286 (startup): polled 3 official sources (Canada, Australia, United Kingdom), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
       "id": "run_auto_1795201942795",
       "runType": "international_jobs",
       "triggeredBy": "System 2 Auto-Scheduler (startup)",
@@ -5370,28 +5393,6 @@
       "duplicatesSkipped": 3,
       "summary": "Cycle #187 (interval_30s): polled 3 official sources (Latvia, Lithuania, Romania), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
       "status": "completed"
-    },
-    {
-      "id": "run_auto_1794993555911",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (startup)",
-      "startedAt": "2026-11-18T09:19:13.876Z",
-      "completedAt": "2026-11-18T09:19:15.911Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Germany",
-        "Finland",
-        "Estonia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #186 (startup): polled 3 official sources (Germany, Finland, Estonia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
     }
   ],
   "verificationLogs": [
@@ -6248,7 +6249,7 @@
       "checkedAt": "2026-11-15T14:34:50.023Z"
     }
   ],
-  "updatedAt": "2026-11-20T19:12:22.800Z",
+  "updatedAt": "2026-11-22T08:00:39.316Z",
   "monitoredSources": [
     {
       "id": "src_ebrd_jobs",
@@ -6745,10 +6746,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 18,
+      "failedChecks": 19,
       "verificationStatus": "FAILED",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-20T19:04:58.205Z",
+      "lastCheckedAt": "2026-11-22T08:00:19.085Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -6765,9 +6766,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-20T19:05:22.554Z",
-      "nextScheduledCheck": "2026-11-20T19:05:52.872Z",
-      "lastSuccessfulCheck": "2026-11-20T19:05:22.554Z"
+      "lastCheckedAt": "2026-11-22T08:00:25.588Z",
+      "nextScheduledCheck": "2026-11-22T08:00:55.651Z",
+      "lastSuccessfulCheck": "2026-11-22T08:00:25.588Z"
     },
     {
       "id": "src_sch_chevening",
@@ -6780,10 +6781,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 18,
+      "failedChecks": 19,
       "verificationStatus": "FAILED",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-20T19:05:23.022Z",
+      "lastCheckedAt": "2026-11-22T08:00:32.810Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -7983,12 +7984,12 @@
   "schedulerConfig": {
     "enabled": true,
     "intervalSeconds": 30,
-    "cycleCount": 285,
-    "sourceCursorIndex": 27,
-    "lastRunAt": "2026-11-20T19:12:22.795Z",
-    "lastSuccessfulRunAt": "2026-11-20T19:12:22.795Z",
+    "cycleCount": 286,
+    "sourceCursorIndex": 30,
+    "lastRunAt": "2026-11-22T08:00:39.311Z",
+    "lastSuccessfulRunAt": "2026-11-22T08:00:39.311Z",
     "lastError": null,
-    "aiProviderStatus": "degraded (Gemini 429 quota exceeded) — Live Official Crawler active",
-    "lastCycleSummary": "Cycle #285 (startup): polled 3 official sources (China, Singapore, Malaysia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered."
+    "aiProviderStatus": "degraded (Gemini timeout (7s)) — Live Official Crawler active",
+    "lastCycleSummary": "Cycle #286 (startup): polled 3 official sources (Canada, Australia, United Kingdom), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered."
   }
 }

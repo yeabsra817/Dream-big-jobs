@@ -43,6 +43,7 @@ import {
   partitionVacanciesByDeadline,
   validateVacancyStrict,
 } from '../utils/vacancyValidator';
+import { isExpired } from '../utils/helpers';
 import { Vacancy, SiteSettings, DuplicateReportItem, TelegramBatchRecord } from '../types/job';
 import { PersonalProfile, PersonalDocument, ApplicationRecord } from '../types/autoApply';
 import {
@@ -373,6 +374,132 @@ const LOCAL_STORAGE_PUBLISHED_KEY = 'hopelandjobs_published_vacancies_cache';
 const LOCAL_STORAGE_VACANCIES_KEY = 'dreambigjobs_vacancies_cache';
 const LOCAL_STORAGE_SETTINGS_KEY = 'dreambigjobs_settings_cache';
 const LOCAL_STORAGE_DUPLICATES_KEY = 'dreambigjobs_duplicates_cache';
+const LOCAL_PENDING_CLOUD_SYNC_KEY = 'hopelandjobs_pending_cloud_sync_ids';
+const LOCAL_DELETED_VACANCY_IDS_KEY = 'hopelandjobs_deleted_vacancy_ids';
+
+function readIdSetFromStorage(key: string): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.map(String).filter(Boolean)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function writeIdSetToStorage(key: string, ids: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(ids).slice(-500)));
+  } catch {}
+}
+
+export function markVacanciesPendingCloudSync(ids: string[]): void {
+  if (!ids.length) return;
+  const set = readIdSetFromStorage(LOCAL_PENDING_CLOUD_SYNC_KEY);
+  ids.forEach((id) => {
+    if (id) set.add(String(id));
+  });
+  writeIdSetToStorage(LOCAL_PENDING_CLOUD_SYNC_KEY, set);
+}
+
+export function clearVacanciesPendingCloudSync(ids: string[]): void {
+  if (!ids.length) return;
+  const set = readIdSetFromStorage(LOCAL_PENDING_CLOUD_SYNC_KEY);
+  ids.forEach((id) => set.delete(String(id)));
+  writeIdSetToStorage(LOCAL_PENDING_CLOUD_SYNC_KEY, set);
+}
+
+function recordLocallyDeletedVacancyIds(ids: string[]): void {
+  if (!ids.length) return;
+  const deletedSet = readIdSetFromStorage(LOCAL_DELETED_VACANCY_IDS_KEY);
+  const pendingSet = readIdSetFromStorage(LOCAL_PENDING_CLOUD_SYNC_KEY);
+  ids.forEach((id) => {
+    if (!id) return;
+    deletedSet.add(String(id));
+    pendingSet.delete(String(id));
+  });
+  writeIdSetToStorage(LOCAL_DELETED_VACANCY_IDS_KEY, deletedSet);
+  writeIdSetToStorage(LOCAL_PENDING_CLOUD_SYNC_KEY, pendingSet);
+}
+
+function unmarkLocallyDeletedVacancyIds(ids: string[]): void {
+  if (!ids.length) return;
+  const deletedSet = readIdSetFromStorage(LOCAL_DELETED_VACANCY_IDS_KEY);
+  let changed = false;
+  ids.forEach((id) => {
+    if (deletedSet.delete(String(id))) changed = true;
+  });
+  if (changed) writeIdSetToStorage(LOCAL_DELETED_VACANCY_IDS_KEY, deletedSet);
+}
+
+/**
+ * Returns valid local vacancies cached on this device that are NOT yet confirmed in Cloud Firestore
+ * (e.g. posted while signed in with Developer Password). Regular visitors always get [].
+ */
+export function getPendingLocalCloudSyncVacancies(
+  knownCloudVacancyIds?: Set<string>,
+  extraVacancies: Vacancy[] = []
+): Vacancy[] {
+  if (typeof window === 'undefined') return [];
+  const pendingIds = readIdSetFromStorage(LOCAL_PENDING_CLOUD_SYNC_KEY);
+  const deletedIds = readIdSetFromStorage(LOCAL_DELETED_VACANCY_IDS_KEY);
+  const localMap = new Map<string, Vacancy>();
+
+  try {
+    // Only LOCAL_STORAGE_VACANCIES_KEY holds admin-authored local saves (never regular visitor-only reads)
+    const rawAdmin = localStorage.getItem(LOCAL_STORAGE_VACANCIES_KEY);
+    if (rawAdmin) {
+      const parsed = JSON.parse(rawAdmin);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((v: Vacancy) => {
+          if (v?.id && !deletedIds.has(v.id) && hasValidVacancyDeadline(v)) {
+            localMap.set(v.id, v);
+          }
+        });
+      }
+    }
+    if (pendingIds.size > 0) {
+      const rawPub = localStorage.getItem(LOCAL_STORAGE_PUBLISHED_KEY);
+      if (rawPub) {
+        const parsed = JSON.parse(rawPub);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((v: Vacancy) => {
+            if (v?.id && pendingIds.has(v.id) && !deletedIds.has(v.id) && hasValidVacancyDeadline(v)) {
+              localMap.set(v.id, v);
+            }
+          });
+        }
+      }
+    }
+  } catch {}
+
+  extraVacancies.forEach((v) => {
+    if (v?.id && !deletedIds.has(v.id) && hasValidVacancyDeadline(v)) {
+      localMap.set(v.id, v);
+    }
+  });
+
+  const unsynced: Vacancy[] = [];
+  for (const v of localMap.values()) {
+    if (v.status === 'draft' || v.status === 'duplicate') continue;
+    const isExplicitlyPending = pendingIds.has(v.id);
+    const isMissingFromCloud =
+      knownCloudVacancyIds && knownCloudVacancyIds.size > 0
+        ? !knownCloudVacancyIds.has(v.id) && v.status === 'published' && !isExpired(v.applicationDeadline)
+        : false;
+    if (isExplicitlyPending || isMissingFromCloud) {
+      unsynced.push(v);
+    }
+  }
+  return unsynced.sort(
+    (a, b) =>
+      new Date(b.publishedAt || b.createdAt || 0).getTime() -
+      new Date(a.publishedAt || a.createdAt || 0).getTime()
+  );
+}
 
 export function getCachedPublishedVacancies(): Vacancy[] {
   if (typeof window === 'undefined') return [];
@@ -622,12 +749,30 @@ export async function fetchVacancyById(id: string): Promise<Vacancy | null> {
   try {
     const winner = await Promise.any([fromServer, fromFirestore, fromFirestoreRest]);
     if (isDisplayableVacancy(winner)) {
-      saveVacancyToLocalCache(winner);
+      savePublishedVacancyToVisitorCache(winner);
       return winner;
     }
   } catch {}
 
   return null;
+}
+
+function savePublishedVacancyToVisitorCache(vacancy: Vacancy) {
+  if (!hasValidVacancyDeadline(vacancy)) return;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_PUBLISHED_KEY);
+    let list: Vacancy[] = raw ? JSON.parse(raw) : [];
+    list = list.filter((v) => hasValidVacancyDeadline(v));
+    const idx = list.findIndex((v) => v.id === vacancy.id);
+    if (idx >= 0) {
+      list[idx] = vacancy;
+    } else {
+      list.unshift(vacancy);
+    }
+    localStorage.setItem(LOCAL_STORAGE_PUBLISHED_KEY, JSON.stringify(list));
+  } catch {
+    // Ignore quota/parse errors
+  }
 }
 
 export function saveVacancyToLocalCache(vacancy: Vacancy) {
@@ -661,18 +806,41 @@ export async function fetchAllVacanciesAdmin(): Promise<Vacancy[]> {
   }
   try {
     const snapshot = await getDocs(collection(db, path));
-    const list: Vacancy[] = [];
+    const cloudList: Vacancy[] = [];
+    const cloudIds = new Set<string>();
     snapshot.forEach((d) => {
-      list.push({ ...(d.data() as Vacancy), id: d.id });
+      cloudIds.add(d.id);
+      cloudList.push({ ...(d.data() as Vacancy), id: d.id });
     });
-    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    if (list.length > 0) {
+
+    // Preserve any valid locally-authored vacancies not yet in Firestore (never overwrite them!)
+    const deletedIds = readIdSetFromStorage(LOCAL_DELETED_VACANCY_IDS_KEY);
+    const localOnly = cached.filter(
+      (v) =>
+        v?.id &&
+        !cloudIds.has(v.id) &&
+        !deletedIds.has(v.id) &&
+        v.status !== 'draft' &&
+        v.status !== 'duplicate' &&
+        hasValidVacancyDeadline(v)
+    );
+
+    const merged = [...localOnly, ...cloudList].sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    if (merged.length > 0) {
       try {
-        localStorage.setItem(LOCAL_STORAGE_VACANCIES_KEY, JSON.stringify(list));
+        localStorage.setItem(LOCAL_STORAGE_VACANCIES_KEY, JSON.stringify(merged));
       } catch {}
-      return list;
     }
-    return cached;
+
+    // Automatically push any local-only vacancies up to Cloud Firestore in the background
+    if (localOnly.length > 0 && isUserAdmin(auth.currentUser)) {
+      syncLocalVacanciesToFirestoreCloud(localOnly).catch(() => {});
+    }
+
+    return merged.length > 0 ? merged : cached;
   } catch (err) {
     console.warn('Firestore offline/permission notice during fetchAllVacanciesAdmin (serving local cache):', err);
     return cached;
@@ -706,6 +874,20 @@ export function sanitizeForFirestore<T>(data: T): any {
   return data;
 }
 
+function buildSafeVacancyFirestorePayload(v: Vacancy): Record<string, any> {
+  const rawPayload: Record<string, any> = { ...v };
+  if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
+    rawPayload.telegramPublishError = deleteField();
+  }
+  // Guard against accidental oversized base64 images exceeding Firestore's 1MB doc limit
+  for (const field of ['imageUrl', 'organizationLogo', 'bannerUrl', 'posterUrl']) {
+    if (typeof rawPayload[field] === 'string' && rawPayload[field].length > 200000) {
+      delete rawPayload[field];
+    }
+  }
+  return sanitizeForFirestore(rawPayload);
+}
+
 export async function saveVacancy(vacancy: Vacancy): Promise<void> {
   // STRICT RULE 1: Any vacancy without a real deadline is permanently deleted and never saved
   if (!hasValidVacancyDeadline(vacancy)) {
@@ -730,30 +912,28 @@ export async function saveVacancy(vacancy: Vacancy): Promise<void> {
   const safeId = String(vacancy.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
   const normalizedVacancy: Vacancy = safeId && safeId !== vacancy.id ? { ...vacancy, id: safeId } : vacancy;
   const path = `vacancies/${normalizedVacancy.id}`;
+  unmarkLocallyDeletedVacancyIds([normalizedVacancy.id]);
   // 1. Always persist to local cache first so admin edits are never lost
   saveVacancyToLocalCache(normalizedVacancy);
 
-  // If user is not yet authenticated with Firebase, defer cloud write
-  if (!auth.currentUser) {
+  // If user is not authenticated with authorized Firebase Admin Google Auth, flag as pending cloud sync
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
+    markVacanciesPendingCloudSync([normalizedVacancy.id]);
     return;
   }
 
   // 2. Cloud write with generous mobile-network timeout (15s)
   try {
-    const rawPayload: Record<string, any> = { ...normalizedVacancy };
-    if (normalizedVacancy.telegramPublished && (!normalizedVacancy.telegramPublishError || normalizedVacancy.telegramPublishError === '')) {
-      rawPayload.telegramPublishError = deleteField();
-    }
-    const cleanPayload = sanitizeForFirestore(rawPayload);
-
+    const cleanPayload = buildSafeVacancyFirestorePayload(normalizedVacancy);
     const writePromise = setDoc(doc(db, 'vacancies', normalizedVacancy.id), cleanPayload, { merge: true });
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Cloud sync timeout; saved to local database')), 15000)
     );
 
     await Promise.race([writePromise, timeoutPromise]);
+    clearVacanciesPendingCloudSync([normalizedVacancy.id]);
   } catch (err) {
-    // Non-fatal warning: local cache has already saved the changes
+    markVacanciesPendingCloudSync([normalizedVacancy.id]);
     console.warn(`Firestore sync note (${path}):`, err);
   }
 }
@@ -784,85 +964,158 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
 
   if (validToSave.length === 0) return;
 
+  const allIds = validToSave.map((v) => v.id);
+  unmarkLocallyDeletedVacancyIds(allIds);
+
   // 1. Immediately cache all valid items locally
   for (const v of validToSave) {
     saveVacancyToLocalCache(v);
   }
 
-  if (!auth.currentUser) return;
+  if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
+    markVacanciesPendingCloudSync(allIds);
+    return;
+  }
 
-  // 2. Chunked atomic writeBatch for full cloud persistence (handles >100 items safely on mobile networks)
-  try {
-    const CHUNK_SIZE = 100;
-    for (let i = 0; i < validToSave.length; i += CHUNK_SIZE) {
-      const chunk = validToSave.slice(i, i + CHUNK_SIZE);
+  // 2. Safe 25-doc chunked commit with automatic per-doc fallback so 1 bad item never blocks the rest
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < validToSave.length; i += CHUNK_SIZE) {
+    const chunk = validToSave.slice(i, i + CHUNK_SIZE);
+    try {
       const batch = writeBatch(db);
       for (const v of chunk) {
-        const rawPayload: Record<string, any> = { ...v };
-        if (v.telegramPublished && (!v.telegramPublishError || vacancyTelegramErrorClean(v))) {
-          rawPayload.telegramPublishError = deleteField();
-        }
-        const cleanPayload = sanitizeForFirestore(rawPayload);
-        batch.set(doc(db, 'vacancies', v.id), cleanPayload, { merge: true });
+        batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
       }
-
-      const commitPromise = batch.commit();
-      const timeoutPromise = new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('Batch commit timeout; local cache active')), 20000)
-      );
-
-      await Promise.race([commitPromise, timeoutPromise]);
+      await Promise.race([
+        batch.commit(),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 18000)),
+      ]);
+      clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
+    } catch (chunkErr) {
+      console.warn('saveBatchVacancies chunk fallback to per-doc:', chunkErr);
+      for (const v of chunk) {
+        try {
+          await Promise.race([
+            setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Doc timeout')), 10000)),
+          ]);
+          clearVacanciesPendingCloudSync([v.id]);
+        } catch {
+          markVacanciesPendingCloudSync([v.id]);
+        }
+      }
     }
-  } catch (err) {
-    console.warn('saveBatchVacancies background sync note:', err);
   }
 }
 
 /**
- * Uploads any locally-cached or in-memory vacancies (e.g. posted while in Developer Password mode)
- * to Firestore cloud once the admin is authenticated with Google, so all users worldwide see them.
+ * Bulletproof Cloud Upload: uploads ALL valid locally-cached or in-memory vacancies
+ * (including already-posted jobs from Developer Password sessions or recently expired Telegram links)
+ * directly to Firestore Cloud so EVERY user's phone worldwide opens them immediately.
  */
 export async function syncLocalVacanciesToFirestoreCloud(
   extraVacancies: Vacancy[] = []
-): Promise<{ synced: number; skipped: number }> {
+): Promise<{
+  synced: number;
+  failed: number;
+  skipped: number;
+  syncedIds: string[];
+  syncedVacancies: Vacancy[];
+  error?: string;
+}> {
   if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
-    return { synced: 0, skipped: extraVacancies.length };
+    return {
+      synced: 0,
+      failed: 0,
+      skipped: extraVacancies.length,
+      syncedIds: [],
+      syncedVacancies: [],
+      error: 'Admin Google Sign-In is required to write to the global Cloud Database.',
+    };
   }
+
+  const deletedIds = readIdSetFromStorage(LOCAL_DELETED_VACANCY_IDS_KEY);
   const map = new Map<string, Vacancy>();
+
+  const collect = (v: Vacancy) => {
+    if (!v || !v.id || deletedIds.has(v.id)) return;
+    if (v.status === 'draft' || v.status === 'duplicate') return;
+    if (!hasValidVacancyDeadline(v)) return;
+    const safeId = String(v.id).trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (!safeId) return;
+    const normalized = safeId !== v.id ? { ...v, id: safeId } : v;
+    map.set(normalized.id, normalized);
+  };
+
   try {
     for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          parsed.forEach((v: Vacancy) => {
-            if (v?.id && hasValidVacancyDeadline(v)) {
-              map.set(v.id, v);
-            }
-          });
+          parsed.forEach(collect);
         }
       }
     }
   } catch {}
-  extraVacancies.forEach((v) => {
-    if (v?.id && hasValidVacancyDeadline(v)) {
-      map.set(v.id, v);
-    }
-  });
+  extraVacancies.forEach(collect);
 
-  const candidates = Array.from(map.values()).filter((v) => {
-    if (v.status === 'published') {
-      return validateVacancyStrict(v, { allowExpired: true }).valid;
-    }
-    return v.status !== 'draft' && v.status !== 'duplicate';
-  });
-
+  const candidates = Array.from(map.values());
   if (candidates.length === 0) {
-    return { synced: 0, skipped: 0 };
+    return { synced: 0, failed: 0, skipped: 0, syncedIds: [], syncedVacancies: [] };
   }
 
-  await saveBatchVacancies(candidates);
-  return { synced: candidates.length, skipped: Math.max(0, map.size - candidates.length) };
+  const syncedVacancies: Vacancy[] = [];
+  const syncedIds: string[] = [];
+  let failed = 0;
+  let lastError: string | undefined;
+
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
+    const chunk = candidates.slice(i, i + CHUNK_SIZE);
+    try {
+      const batch = writeBatch(db);
+      for (const v of chunk) {
+        batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
+      }
+      await Promise.race([
+        batch.commit(),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud batch timeout')), 18000)),
+      ]);
+      for (const v of chunk) {
+        syncedVacancies.push(v);
+        syncedIds.push(v.id);
+      }
+      clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
+    } catch (batchErr: any) {
+      lastError = batchErr?.message || String(batchErr);
+      // Fallback to individual doc writes so 1 problematic doc never stops the rest
+      for (const v of chunk) {
+        try {
+          await Promise.race([
+            setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud doc timeout')), 10000)),
+          ]);
+          syncedVacancies.push(v);
+          syncedIds.push(v.id);
+          clearVacanciesPendingCloudSync([v.id]);
+        } catch (docErr: any) {
+          failed++;
+          lastError = docErr?.message || String(docErr);
+          markVacanciesPendingCloudSync([v.id]);
+        }
+      }
+    }
+  }
+
+  return {
+    synced: syncedIds.length,
+    failed,
+    skipped: 0,
+    syncedIds,
+    syncedVacancies,
+    ...(failed > 0 && lastError ? { error: lastError } : {}),
+  };
 }
 
 function vacancyTelegramErrorClean(v: Vacancy): boolean {
@@ -871,6 +1124,7 @@ function vacancyTelegramErrorClean(v: Vacancy): boolean {
 
 export async function deleteVacancy(id: string): Promise<void> {
   const path = `vacancies/${id}`;
+  recordLocallyDeletedVacancyIds([id]);
   try {
     for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {
       const raw = localStorage.getItem(key);
@@ -894,6 +1148,7 @@ export async function deleteVacancy(id: string): Promise<void> {
 
 export async function deleteBatchVacancies(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
+  recordLocallyDeletedVacancyIds(ids);
   const idSet = new Set(ids);
   try {
     for (const key of [LOCAL_STORAGE_VACANCIES_KEY, LOCAL_STORAGE_PUBLISHED_KEY]) {

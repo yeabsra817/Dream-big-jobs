@@ -144,6 +144,24 @@ export function encodeTelegramVacancySnapshot(
     }
   }
 
+  // Tier 5 ultra-compact guarantee so long fields never prevent embedding a valid portable snapshot
+  try {
+    const minimal: CompactTelegramVacancyPayload = {
+      i: id,
+      t: clip(vacancy.title, 85) || title.slice(0, 85),
+      o: clip(vacancy.organization, 70) || organization.slice(0, 70),
+      d: clip(vacancy.applicationDeadline, 40) || deadline.slice(0, 40),
+      ...(clip(vacancy.location, 45) ? { l: clip(vacancy.location, 45) } : {}),
+      ...(clip(vacancy.applicationMethod, 30) ? { m: clip(vacancy.applicationMethod, 30) } : {}),
+      ...(clip(vacancy.applicationUrl, 160) ? { u: clip(vacancy.applicationUrl, 160) } : {}),
+      ...(clip(vacancy.applicationEmail, 70) ? { a: clip(vacancy.applicationEmail, 70) } : {}),
+    };
+    const encodedMin = `j.${toBase64UrlUtf8(JSON.stringify(minimal))}`;
+    if (encodedMin.length <= maxEncodedLength) {
+      return encodedMin;
+    }
+  } catch {}
+
   return null;
 }
 

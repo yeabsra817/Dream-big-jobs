@@ -64,7 +64,10 @@ import {
   signInWithGoogleResilient,
   establishDeveloperGoogleSession,
   syncLocalVacanciesToFirestoreCloud,
+  fetchPublishedVacancies,
+  getPendingLocalCloudSyncVacancies,
 } from '../../lib/firebase';
+import { syncVacanciesToServerCatalog } from '../../lib/notificationService';
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { runAutonomousVacancyHealing } from '../../utils/SelfHealingEngine';
 import { AppBrandLogo } from '../AppBrandLogo';
@@ -190,6 +193,7 @@ export const AdminDashboard: React.FC<Props> = ({
   const [isConnectingGoogleSync, setIsConnectingGoogleSync] = useState(false);
   const [googleSyncBannerMsg, setGoogleSyncBannerMsg] = useState<string | null>(null);
   const [googleSyncBannerError, setGoogleSyncBannerError] = useState<string | null>(null);
+  const [knownCloudIds, setKnownCloudIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -197,6 +201,49 @@ export const AdminDashboard: React.FC<Props> = ({
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchPublishedVacancies()
+      .then((cloudList) => {
+        if (!active || !Array.isArray(cloudList) || cloudList.length === 0) return;
+        setKnownCloudIds(new Set(cloudList.map((v) => v.id)));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [vacancies.length, isFirebaseGoogleConnected]);
+
+  const pendingLocalSyncVacancies = useMemo(
+    () => getPendingLocalCloudSyncVacancies(knownCloudIds, vacancies),
+    [knownCloudIds, vacancies]
+  );
+
+  const runCloudVacancyUpload = async (targetVacancies: Vacancy[]) => {
+    const result = await syncLocalVacanciesToFirestoreCloud(targetVacancies);
+    if (result.syncedVacancies.length > 0) {
+      await syncVacanciesToServerCatalog(result.syncedVacancies, { mode: 'merge' }).catch(() => {});
+      setKnownCloudIds((prev) => {
+        const next = new Set(prev);
+        result.syncedIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+    if (result.failed > 0) {
+      setGoogleSyncBannerError(
+        `Synced ${result.synced} jobs, but ${result.failed} failed to upload${result.error ? ` (${result.error})` : ''}. Tap Sync again to retry.`
+      );
+    } else if (result.error) {
+      setGoogleSyncBannerError(result.error);
+    } else {
+      setGoogleSyncBannerMsg(
+        result.synced > 0
+          ? `Synced ${result.synced} job${result.synced === 1 ? '' : 's'} to the global Cloud Database! Every user's phone (registered or unregistered) now opens your Telegram links immediately.`
+          : `Connected to Cloud Database! All vacancies are already synced globally to every user's phone.`
+      );
+    }
+  };
 
   const handleConnectGoogleCloudSync = async () => {
     setIsConnectingGoogleSync(true);
@@ -216,14 +263,22 @@ export const AdminDashboard: React.FC<Props> = ({
       const ownerEmail = result.user.email || ADMIN_EMAIL;
       await establishDeveloperGoogleSession(ownerEmail).catch(() => {});
       setIsFirebaseGoogleConnected(true);
-      const { synced } = await syncLocalVacanciesToFirestoreCloud(vacancies);
-      setGoogleSyncBannerMsg(
-        synced > 0
-          ? `Connected to Cloud Database & synced ${synced} vacancies so every user's phone opens your links immediately.`
-          : `Connected to Cloud Database! All vacancies now sync globally to every user's phone.`
-      );
+      await runCloudVacancyUpload(vacancies);
     } catch (err: any) {
       setGoogleSyncBannerError(err?.message || 'Google Cloud sign-in was cancelled or blocked.');
+    } finally {
+      setIsConnectingGoogleSync(false);
+    }
+  };
+
+  const handleManualSyncPendingToCloud = async () => {
+    setIsConnectingGoogleSync(true);
+    setGoogleSyncBannerError(null);
+    setGoogleSyncBannerMsg(null);
+    try {
+      await runCloudVacancyUpload(pendingLocalSyncVacancies.length > 0 ? pendingLocalSyncVacancies : vacancies);
+    } catch (err: any) {
+      setGoogleSyncBannerError(err?.message || 'Cloud sync failed. Please try again.');
     } finally {
       setIsConnectingGoogleSync(false);
     }
@@ -660,10 +715,14 @@ export const AdminDashboard: React.FC<Props> = ({
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <h3 className="text-sm font-extrabold text-amber-950">
-                    Developer Password Mode (Local Browser Only) — Connect Google Cloud Sync
+                    {pendingLocalSyncVacancies.length > 0
+                      ? `${pendingLocalSyncVacancies.length} Local Job${pendingLocalSyncVacancies.length === 1 ? '' : 's'} Not Uploaded to Cloud Yet`
+                      : 'Developer Password Mode (Local Browser Only) — Connect Google Cloud Sync'}
                   </h3>
                   <p className="text-xs text-amber-900 mt-1 leading-relaxed">
-                    You signed in with Developer Password without Google Auth. Jobs and settings saved in this mode stay on your device until you connect your authorized Google account ({ADMIN_EMAIL}). Tap the button to sync all {vacancies.length} vacancies to the global Cloud Database so every user&apos;s phone opens them.
+                    {pendingLocalSyncVacancies.length > 0
+                      ? `Jobs like "${pendingLocalSyncVacancies[0].title}" are currently saved only on this phone — other users clicking their Telegram links will see "no longer available" until you connect ${ADMIN_EMAIL} and upload them to the Cloud Database.`
+                      : `You signed in with Developer Password without Google Auth. Jobs and settings saved in this mode stay on your device until you connect your authorized Google account (${ADMIN_EMAIL}).`}
                   </p>
                   {googleSyncBannerError && (
                     <p className="text-xs font-bold text-rose-700 mt-2">{googleSyncBannerError}</p>
@@ -674,10 +733,50 @@ export const AdminDashboard: React.FC<Props> = ({
                 type="button"
                 onClick={handleConnectGoogleCloudSync}
                 disabled={isConnectingGoogleSync}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold whitespace-nowrap shadow-sm transition-colors disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold whitespace-nowrap shadow-sm transition-colors disabled:opacity-60 cursor-pointer"
               >
                 <Cloud className="w-4 h-4" />
-                <span>{isConnectingGoogleSync ? 'Connecting & Syncing...' : 'Connect Google Cloud Sync'}</span>
+                <span>
+                  {isConnectingGoogleSync
+                    ? 'Connecting & Uploading...'
+                    : pendingLocalSyncVacancies.length > 0
+                      ? `Sync ${pendingLocalSyncVacancies.length} Local Job${pendingLocalSyncVacancies.length === 1 ? '' : 's'} to Cloud`
+                      : 'Connect Google Cloud Sync'}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isFirebaseGoogleConnected && pendingLocalSyncVacancies.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Cloud className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-extrabold text-amber-950">
+                    {pendingLocalSyncVacancies.length} Local Job{pendingLocalSyncVacancies.length === 1 ? '' : 's'} Ready to Upload to Cloud Database
+                  </h3>
+                  <p className="text-xs text-amber-900 mt-1 leading-relaxed">
+                    Including &ldquo;{pendingLocalSyncVacancies[0].title}&rdquo; ({pendingLocalSyncVacancies[0].organization}). Upload now so every other phone opens these Telegram links immediately.
+                  </p>
+                  {googleSyncBannerError && (
+                    <p className="text-xs font-bold text-rose-700 mt-2">{googleSyncBannerError}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleManualSyncPendingToCloud}
+                disabled={isConnectingGoogleSync}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold whitespace-nowrap shadow-sm transition-colors disabled:opacity-60 cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${isConnectingGoogleSync ? 'animate-spin' : ''}`} />
+                <span>
+                  {isConnectingGoogleSync
+                    ? 'Uploading to Cloud...'
+                    : `Sync ${pendingLocalSyncVacancies.length} Local Job${pendingLocalSyncVacancies.length === 1 ? '' : 's'} Now`}
+                </span>
               </button>
             </div>
           </div>
