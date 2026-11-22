@@ -48,6 +48,7 @@ interface Props {
   onOpenCvHelp: () => void;
   onOpenSavedJobs?: () => void;
   onOpenAllCategories?: () => void;
+  onOpenInternationalOpportunities?: () => void;
   onOpenInternationalJobs?: () => void;
   onOpenImmigration?: () => void;
   onOpenScholarships?: () => void;
@@ -86,6 +87,7 @@ export const Navbar: React.FC<Props> = ({
   onOpenCvHelp,
   onOpenSavedJobs,
   onOpenAllCategories,
+  onOpenInternationalOpportunities,
   onOpenInternationalJobs,
   onOpenImmigration,
   onOpenScholarships,
@@ -298,13 +300,13 @@ export const Navbar: React.FC<Props> = ({
             >
               Locations
             </button>
-            {siteContent.showNavInternational && onOpenInternationalJobs && (
+            {siteContent.showNavInternational && (onOpenInternationalOpportunities || onOpenInternationalJobs) && (
               <button
                 type="button"
-                onClick={onOpenInternationalJobs}
+                onClick={onOpenInternationalOpportunities || onOpenInternationalJobs}
                 className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
-                International
+                International Opportunities
               </button>
             )}
             <button
@@ -753,6 +755,20 @@ export const Navbar: React.FC<Props> = ({
             <span>CV Assistance</span>
           </button>
 
+          {siteContent.showNavInternational && onOpenInternationalOpportunities && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenInternationalOpportunities();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-semibold hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <Globe className="w-4 h-4 text-[#16A34A]" />
+              <span>International Opportunities</span>
+            </button>
+          )}
+
           {siteContent.showNavInternational && onOpenInternationalJobs && (
             <button
               type="button"
@@ -763,7 +779,7 @@ export const Navbar: React.FC<Props> = ({
               className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-medium hover:text-[#16A34A] text-sm cursor-pointer"
             >
               <Globe className="w-4 h-4 text-[#1D4ED8]" />
-              <span>International Jobs</span>
+              <span>International Jobs (Legacy)</span>
             </button>
           )}
 

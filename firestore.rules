@@ -369,6 +369,119 @@ service cloud.firestore {
       allow read, write: if isOwnerAdmin();
     }
 
+    // =========================================================================
+    // GLOBAL VERIFIED OPPORTUNITY INTELLIGENCE SYSTEM (9 COLLECTIONS)
+    // =========================================================================
+
+    function isValidGlobalOpportunityWrite(data, oppId) {
+      return data.id is string && data.id == oppId && data.id.size() <= 128
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 300
+        && data.organization is string && data.organization.size() > 0 && data.organization.size() <= 250
+        && data.category is string && data.category in ['international_job', 'university_scholarship', 'professional_training', 'conference_summit', 'wash_opportunity']
+        && data.officialApplicationUrl is string && data.officialApplicationUrl.size() <= 1000 && data.officialApplicationUrl.matches('^https://.*')
+        && data.applicationStatus is string && data.applicationStatus in ['open', 'closing_soon', 'closed', 'expired', 'withdrawn', 'unverified']
+        && data.verificationStatus is string && data.verificationStatus in ['Verified and Open', 'Fully Funded', 'Partially Funded', 'Visa Sponsored', 'Funding Not Confirmed', 'Eligibility Not Confirmed', 'Closing Soon', 'Expired', 'Unverified']
+        && data.hasVerifiedBadge is bool
+        && data.lastVerifiedAt is string && data.lastVerifiedAt.size() <= 100;
+    }
+
+    function isValidUserSavedOpportunityWrite(data, saveId) {
+      return data.keys().hasAll(['id', 'userId', 'opportunityId', 'title', 'organization', 'savedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'opportunityId', 'title', 'organization', 'category', 'country', 'deadlineUtcIso', 'officialApplicationUrl', 'savedAt'])
+        && data.id is string && data.id == saveId && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.opportunityId is string && data.opportunityId.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.organization is string && data.organization.size() <= 250
+        && (!('category' in data) || (data.category is string && data.category.size() <= 64))
+        && (!('country' in data) || (data.country is string && data.country.size() <= 120))
+        && (!('deadlineUtcIso' in data) || data.deadlineUtcIso == null || (data.deadlineUtcIso is string && data.deadlineUtcIso.size() <= 100))
+        && (!('officialApplicationUrl' in data) || (data.officialApplicationUrl is string && data.officialApplicationUrl.size() <= 1000 && data.officialApplicationUrl.matches('^https://.*')))
+        && data.savedAt is string && data.savedAt.size() <= 100;
+    }
+
+    function isValidUserOppRecommendationWrite(data, recId) {
+      return data.id is string && data.id == recId && data.id.size() <= 128
+        && data.userId is string && (data.userId == request.auth.uid || isOwnerAdmin())
+        && data.opportunityId is string && data.opportunityId.size() <= 128
+        && data.matchScore is number && data.matchScore >= 0 && data.matchScore <= 100
+        && data.eligible is bool
+        && data.generatedAt is string && data.generatedAt.size() <= 100;
+    }
+
+    // 1. Verified International Opportunities (Public can only read verified open/closing_soon records)
+    match /international_opportunities/{opportunityId} {
+      allow get, list: if (resource.data.hasVerifiedBadge == true && resource.data.applicationStatus in ['open', 'closing_soon']) || isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(opportunityId) && isValidGlobalOpportunityWrite(request.resource.data, opportunityId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 2. Official Opportunity Sources Registry (Public transparent read; Admin-only write)
+    match /opportunity_sources/{sourceId} {
+      allow get, list: if true;
+      allow create, update: if isOwnerAdmin() && isValidId(sourceId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 3. Opportunity Verification Logs (Admin-only)
+    match /opportunity_verification_logs/{logId} {
+      allow get, list: if isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(logId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 4. Opportunity Funding & Visa Transparency Records
+    match /opportunity_funding/{fundingId} {
+      allow get, list: if true;
+      allow create, update: if isOwnerAdmin() && isValidId(fundingId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 5. Opportunity Eligibility & Nomination Requirements Records
+    match /opportunity_eligibility/{eligibilityId} {
+      allow get, list: if true;
+      allow create, update: if isOwnerAdmin() && isValidId(eligibilityId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 6. Opportunity Timezone-Aware Deadline Records
+    match /opportunity_deadlines/{deadlineId} {
+      allow get, list: if true;
+      allow create, update: if isOwnerAdmin() && isValidId(deadlineId);
+      allow delete: if isOwnerAdmin();
+    }
+
+    // 7. User Saved Opportunities (Strictly owner-scoped per userId)
+    match /user_saved_opportunities/{saveId} {
+      allow get: if isSignedIn() && isValidId(saveId) && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow create: if isSignedIn() && isValidId(saveId) && isValidUserSavedOpportunityWrite(request.resource.data, saveId);
+      allow update: if isSignedIn() && isValidId(saveId)
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && isValidUserSavedOpportunityWrite(request.resource.data, saveId);
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+    }
+
+    // 8. User Personalized Opportunity Recommendations (Strictly owner-scoped; website-only)
+    match /user_opportunity_recommendations/{recId} {
+      allow get: if isSignedIn() && isValidId(recId) && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+      allow create: if isSignedIn() && isValidId(recId) && isValidUserOppRecommendationWrite(request.resource.data, recId);
+      allow update: if isSignedIn() && isValidId(recId)
+        && (resource.data.userId == request.auth.uid || isOwnerAdmin())
+        && request.resource.data.userId == resource.data.userId
+        && isValidUserOppRecommendationWrite(request.resource.data, recId);
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isOwnerAdmin());
+    }
+
+    // 9. Automated Discovery & Recheck Job Logs (Admin-only)
+    match /discovery_job_logs/{jobId} {
+      allow get, list: if isOwnerAdmin();
+      allow create, update: if isOwnerAdmin() && isValidId(jobId);
+      allow delete: if isOwnerAdmin();
+    }
+
     // Test Collection (for connectivity verification)
     match /test/{document=**} {
       allow read, write: if true;

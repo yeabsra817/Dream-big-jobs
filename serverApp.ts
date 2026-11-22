@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
+import { registerGlobalOpportunitiesRoutes } from './serverGlobalOpportunities';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11366,6 +11367,21 @@ Return strict JSON:
     getRequesterEmail,
     appendAuditLog,
     pushAdminNotification,
+  });
+
+  registerGlobalOpportunitiesRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    getAiClient,
   });
 
   function listPersistentBackups(): any[] {

@@ -193,6 +193,7 @@ import { UserAuthModal } from './components/UserAuthModal';
 import { JobApplicationModal } from './components/JobApplicationModal';
 
 // Lazy-loaded heavier secondary views (preloaded quietly right after mount)
+const GlobalOpportunitiesView = lazy(() => import('./components/GlobalOpportunitiesView').then((m) => ({ default: m.GlobalOpportunitiesView })));
 const InternationalJobsView = lazy(() => import('./components/InternationalJobsView').then((m) => ({ default: m.InternationalJobsView })));
 const ImmigrationResidenceView = lazy(() => import('./components/ImmigrationResidenceView').then((m) => ({ default: m.ImmigrationResidenceView })));
 const ScholarshipsView = lazy(() => import('./components/ScholarshipsView').then((m) => ({ default: m.ScholarshipsView })));
@@ -301,11 +302,18 @@ export default function App() {
     Boolean(resolveSiteContent(getCachedSiteSettings()).categoriesDefaultExpanded)
   );
   const [activeExpansionView, setActiveExpansionView] = useState<
-    'international-jobs' | 'immigration' | 'scholarships' | null
+    'international-opportunities' | 'international-jobs' | 'immigration' | 'scholarships' | null
   >(() => {
     if (typeof window === 'undefined') return null;
     const v = new URLSearchParams(window.location.search).get('view');
-    if (v === 'international-jobs' || v === 'immigration' || v === 'scholarships') return v;
+    if (
+      v === 'international-opportunities' ||
+      v === 'international-jobs' ||
+      v === 'immigration' ||
+      v === 'scholarships'
+    ) {
+      return v;
+    }
     return null;
   });
 
@@ -1269,6 +1277,7 @@ export default function App() {
         setJobSeekerInitialTab('recommendations');
         setIsJobSeekerDashboardOpen(true);
       } else if (
+        viewParam === 'international-opportunities' ||
         viewParam === 'international-jobs' ||
         viewParam === 'immigration' ||
         viewParam === 'scholarships'
@@ -1698,7 +1707,7 @@ export default function App() {
   };
 
   const handleOpenExpansionView = (
-    view: 'international-jobs' | 'immigration' | 'scholarships' | null
+    view: 'international-opportunities' | 'international-jobs' | 'immigration' | 'scholarships' | null
   ) => {
     setSelectedCategory(null);
     setSelectedLocation(null);
@@ -2378,6 +2387,7 @@ export default function App() {
           setActiveExpansionView(null);
           window.scrollTo({ top: 0, behavior: 'auto' });
         }}
+        onOpenInternationalOpportunities={() => handleOpenExpansionView('international-opportunities')}
         onOpenInternationalJobs={() => handleOpenExpansionView('international-jobs')}
         onOpenImmigration={() => handleOpenExpansionView('immigration')}
         onOpenScholarships={() => handleOpenExpansionView('scholarships')}
@@ -2583,7 +2593,24 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1">
-        {activeExpansionView === 'international-jobs' ? (
+        {activeExpansionView === 'international-opportunities' ? (
+          <Suspense fallback={<PageLoader />}>
+            <GlobalOpportunitiesView
+              onBack={() => handleOpenExpansionView(null)}
+              userProfile={registeredProfile}
+              isAdmin={isOwnerAuthorized}
+              adminEmail={adminEmail}
+              onOpenAuth={() => {
+                setUserAuthModalMode('signin');
+                setIsUserAuthModalOpen(true);
+              }}
+              onOpenProfile={() => {
+                setJobSeekerInitialTab('professional');
+                setIsJobSeekerDashboardOpen(true);
+              }}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'international-jobs' ? (
           <Suspense fallback={<PageLoader />}>
             <InternationalJobsView
               jobs={internationalJobs}

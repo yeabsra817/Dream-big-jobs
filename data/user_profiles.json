@@ -188,17 +188,17 @@
     "jobPreferences": {
       "remote": false,
       "freshGraduate": true,
-      "partTime": false,
       "contract": false,
       "fullTime": true,
-      "internship": false
+      "internship": false,
+      "partTime": false
     },
     "uid": "XPuREoTPhvTyYsvB14L3JpptCV53",
     "experience": [],
     "documents": [],
     "education": [],
     "createdAt": "2026-11-15T16:20:10.896Z",
-    "profileCompletionPercentage": 15,
+    "profileCompletionPercentage": 35,
     "yearsOfExperience": "0-1 Years (Entry Level)",
     "locationRegion": "Addis Ababa",
     "preferredEmploymentType": "Full-time",
@@ -216,7 +216,7 @@
     "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJC_Wg2_Ief7gQOnbBlr9ensgL4R5U1ySkyiGMleWpY_P3Vog=s96-c",
     "authProvider": "google",
     "email": "nexusitsoultion@gmail.com",
-    "updatedAt": "2026-11-17T12:00:28.255Z",
+    "updatedAt": "2026-11-22T11:01:57.066Z",
     "phone": "",
     "locationCity": "Addis Ababa",
     "employmentStatus": "unemployed",
@@ -225,12 +225,20 @@
     "accountStatus": "active",
     "professionalInterests": [],
     "certifications": [],
-    "lastActiveAt": "2026-11-17T12:00:28.254Z",
+    "lastActiveAt": "2026-11-22T11:01:57.066Z",
     "areasOfExpertise": [],
     "previousPositions": [],
     "profileStatus": "incomplete",
     "noExperience": false,
-    "lastLoginAt": "2026-11-17T11:53:28.171Z"
+    "lastLoginAt": "2026-11-22T09:37:11.760Z",
+    "preferredSectors": [
+      "Banking and Financial Institutions"
+    ],
+    "customProfessionOrCategory": "",
+    "strictEmploymentTypeMatch": false,
+    "strictLocationMatch": false,
+    "minimumSalaryEtb": "",
+    "additionalRequirements": []
   },
   "xieFVTlwLcb3o5698g8nWSnyboc2": {
     "locationRegion": "Addis Ababa",

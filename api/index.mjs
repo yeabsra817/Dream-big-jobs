@@ -1,7 +1,7 @@
 // serverApp.ts
-import * as path2 from "path";
+import * as path3 from "path";
 import * as fs2 from "fs";
-import * as crypto from "crypto";
+import * as crypto2 from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
@@ -5396,6 +5396,3582 @@ ${rows.join("\n")}`;
   };
 }
 
+// serverGlobalOpportunities.ts
+import * as path2 from "path";
+import * as crypto from "crypto";
+import * as http2 from "node:http2";
+
+// src/utils/opportunityIntelligenceEngine.ts
+var MINIMUM_FULL_DAYS_REMAINING = 3;
+var MINIMUM_HOURS_REMAINING = MINIMUM_FULL_DAYS_REMAINING * 24;
+var CLOSING_SOON_MAX_DAYS = 7;
+var KNOWN_TIMEZONE_OFFSETS_MINUTES = {
+  UTC: 0,
+  GMT: 0,
+  "Africa/Addis_Ababa": 180,
+  // EAT UTC+3
+  EAT: 180,
+  "Africa/Nairobi": 180,
+  "Europe/London": 0,
+  "Europe/Geneva": 60,
+  "Europe/Berlin": 60,
+  "Europe/Paris": 60,
+  CET: 60,
+  CEST: 120,
+  "America/New_York": -300,
+  EST: -300,
+  EDT: -240,
+  "America/Chicago": -360,
+  "America/Los_Angeles": -480,
+  PST: -480,
+  PDT: -420,
+  "Asia/Dubai": 240,
+  "Asia/Tokyo": 540,
+  "Asia/Singapore": 480
+};
+function getTimezoneOffsetMinutes(tz, referenceDate) {
+  const trimmed = (tz || "UTC").trim();
+  if (trimmed in KNOWN_TIMEZONE_OFFSETS_MINUTES) {
+    return KNOWN_TIMEZONE_OFFSETS_MINUTES[trimmed];
+  }
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: trimmed,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    });
+    const parts = formatter.formatToParts(referenceDate);
+    const map = {};
+    for (const part of parts) {
+      if (part.type !== "literal") {
+        map[part.type] = Number(part.value);
+      }
+    }
+    const asUtc = Date.UTC(
+      map.year,
+      (map.month || 1) - 1,
+      map.day || 1,
+      map.hour === 24 ? 0 : map.hour || 0,
+      map.minute || 0,
+      map.second || 0
+    );
+    return Math.round((asUtc - referenceDate.getTime()) / 6e4);
+  } catch {
+    return 0;
+  }
+}
+function parseDeadlineWithTimezone(rawDeadline, timezone = "UTC") {
+  const cleaned = String(rawDeadline || "").trim();
+  if (!cleaned) return { utcDate: null, resolvedTimezone: timezone || "UTC" };
+  const lower = cleaned.toLowerCase();
+  if (lower === "not confirmed" || lower === "not specified" || lower === "rolling" || lower === "ongoing" || lower === "open until filled" || lower === "tbd" || lower === "n/a") {
+    return { utcDate: null, resolvedTimezone: timezone || "UTC" };
+  }
+  const tz = (timezone || "UTC").trim() || "UTC";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i.test(cleaned)) {
+    const parsed = new Date(cleaned);
+    if (!Number.isNaN(parsed.getTime())) {
+      return { utcDate: parsed, resolvedTimezone: tz };
+    }
+  }
+  const ymdMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const year = Number(ymdMatch[1]);
+    const month = Number(ymdMatch[2]);
+    const day = Number(ymdMatch[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const approxUtc = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+      const offsetMins = getTimezoneOffsetMinutes(tz, approxUtc);
+      const exactUtcMs = Date.UTC(year, month - 1, day, 23, 59, 59) - offsetMins * 60 * 1e3;
+      return { utcDate: new Date(exactUtcMs), resolvedTimezone: tz };
+    }
+  }
+  const ymdTimeMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (ymdTimeMatch) {
+    const year = Number(ymdTimeMatch[1]);
+    const month = Number(ymdTimeMatch[2]);
+    const day = Number(ymdTimeMatch[3]);
+    const hour = Number(ymdTimeMatch[4]);
+    const minute = Number(ymdTimeMatch[5]);
+    const second = Number(ymdTimeMatch[6] || "0");
+    const approxUtc = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const offsetMins = getTimezoneOffsetMinutes(tz, approxUtc);
+    const exactUtcMs = Date.UTC(year, month - 1, day, hour, minute, second) - offsetMins * 60 * 1e3;
+    return { utcDate: new Date(exactUtcMs), resolvedTimezone: tz };
+  }
+  const hasExplicitTime = /\d{1,2}:\d{2}/.test(cleaned);
+  const parsedNatural = new Date(cleaned);
+  if (!Number.isNaN(parsedNatural.getTime()) && parsedNatural.getUTCFullYear() >= 2020) {
+    if (!hasExplicitTime) {
+      const y = parsedNatural.getUTCFullYear();
+      const m = parsedNatural.getUTCMonth();
+      const d = parsedNatural.getUTCDate();
+      const approxUtc = new Date(Date.UTC(y, m, d, 23, 59, 59));
+      const offsetMins = getTimezoneOffsetMinutes(tz, approxUtc);
+      const exactUtcMs = Date.UTC(y, m, d, 23, 59, 59) - offsetMins * 60 * 1e3;
+      return { utcDate: new Date(exactUtcMs), resolvedTimezone: tz };
+    }
+    return { utcDate: parsedNatural, resolvedTimezone: tz };
+  }
+  return { utcDate: null, resolvedTimezone: tz };
+}
+function evaluateOpportunityDeadline(rawDeadline, timezone = "UTC", nowMs = Date.now()) {
+  const { utcDate, resolvedTimezone } = parseDeadlineWithTimezone(rawDeadline, timezone);
+  if (!utcDate) {
+    return {
+      valid: false,
+      deadlineUtcIso: null,
+      deadlineTimezone: resolvedTimezone,
+      fullDaysRemaining: 0,
+      hoursRemaining: 0,
+      meetsMinimumThreeFullDays: false,
+      isClosingSoon: false,
+      isExpired: false,
+      rejectionReason: "Official deadline could not be verified or is missing."
+    };
+  }
+  const diffMs = utcDate.getTime() - nowMs;
+  const hoursRemaining = diffMs / (1e3 * 60 * 60);
+  const fullDaysRemaining = Math.floor(hoursRemaining / 24);
+  if (diffMs <= 0) {
+    return {
+      valid: true,
+      deadlineUtcIso: utcDate.toISOString(),
+      deadlineTimezone: resolvedTimezone,
+      fullDaysRemaining: 0,
+      hoursRemaining: Math.max(0, Math.round(hoursRemaining * 10) / 10),
+      meetsMinimumThreeFullDays: false,
+      isClosingSoon: false,
+      isExpired: true,
+      rejectionReason: "Opportunity deadline has already passed (Expired)."
+    };
+  }
+  const meetsMinimumThreeFullDays = hoursRemaining >= MINIMUM_HOURS_REMAINING;
+  const isClosingSoon = meetsMinimumThreeFullDays && fullDaysRemaining <= CLOSING_SOON_MAX_DAYS;
+  return {
+    valid: true,
+    deadlineUtcIso: utcDate.toISOString(),
+    deadlineTimezone: resolvedTimezone,
+    fullDaysRemaining,
+    hoursRemaining: Math.round(hoursRemaining * 10) / 10,
+    meetsMinimumThreeFullDays,
+    isClosingSoon,
+    isExpired: false,
+    rejectionReason: meetsMinimumThreeFullDays ? null : `Less than ${MINIMUM_FULL_DAYS_REMAINING} full days remaining (${Math.floor(hoursRemaining)}h left). Excluded by mandatory 3-day rule.`
+  };
+}
+function computeOpportunityFingerprint(title, organization, officialApplicationUrl) {
+  const norm = (s) => String(s || "").toLowerCase().replace(/https?:\/\/(www\.)?/g, "").replace(/[?#].*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const urlNorm = norm(officialApplicationUrl);
+  const titleNorm = norm(title).slice(0, 80);
+  const orgNorm = norm(organization).slice(0, 50);
+  return `${orgNorm}|${titleNorm}|${urlNorm}`.slice(0, 220);
+}
+function classifyFundingAndVisaTransparency(input) {
+  const fundingText = `${input.fundingSummary || ""} ${input.fullText || ""}`.toLowerCase();
+  const visaText = `${input.visaSummary || ""} ${input.fullText || ""}`.toLowerCase();
+  const tags = /* @__PURE__ */ new Set();
+  const explicitFullFunded = /\b(fully[\s-]funded|full[\s-]scholarship|100%\s*(funded|scholarship|covered)|all[\s-]expenses[\s-]paid|full[\s-]funding)\b/i.test(
+    fundingText
+  );
+  const explicitSelfFunded = /\b(self[\s-]funded|participant[\s-]funded|no[\s-]funding|at\s+own\s+expense|registration\s+fee\s+required)\b/i.test(
+    fundingText
+  );
+  const tuitionCovered = input.tuitionCovered || (explicitFullFunded || /\b(full\s+tuition|tuition[\s-]free|tuition\s+waiver|tuition\s+covered)\b/i.test(fundingText) ? "yes" : /\bpartial\s+tuition\b/i.test(fundingText) ? "partial" : explicitSelfFunded ? "no" : "not_confirmed");
+  const airfareCovered = input.airfareCovered || (/\b(round[\s-]trip\s+airfare|airfare\s+covered|flight\s+tickets?\s+covered|travel\s+grant|travel\s+allowance|return\s+flight|air\s+ticket)\b/i.test(
+    fundingText
+  ) ? "yes" : /\bpartial\s+travel\b/i.test(fundingText) ? "partial" : /\b(no\s+travel|travel\s+not\s+covered|own\s+travel)\b/i.test(fundingText) ? "no" : "not_confirmed");
+  const accommodationCovered = input.accommodationCovered || (/\b(accommodation\s+covered|housing\s+provided|hotel\s+covered|lodging\s+provided|living\s+allowance|full\s+board|monthly\s+stipend)\b/i.test(
+    fundingText
+  ) ? "yes" : /\bpartial\s+accommodation\b/i.test(fundingText) ? "partial" : /\b(accommodation\s+not\s+covered|own\s+accommodation)\b/i.test(fundingText) ? "no" : "not_confirmed");
+  const hasEmployerSponsoredVisa = /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|visa\s+sponsorship\s+(provided|available|offered)|work\s+permit\s+sponsorship|we\s+sponsor\s+work\s+visas?)\b/i.test(
+    visaText
+  ) && !/\b(no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|without\s+visa\s+sponsorship)\b/i.test(visaText);
+  const hasVisaFeesFunded = /\b(visa\s+fees?\s+(covered|paid|reimbursed|funded)|reimbursement\s+of\s+visa\s+fees?)\b/i.test(visaText);
+  const hasInvitationLetterOnly = /\b(invitation\s+letter|visa\s+support\s+letter|letter\s+of\s+invitation)\b/i.test(visaText) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
+  const hasVisaAssistanceOnly = (/\b(visa\s+assistance|visa\s+guidance|support\s+with\s+visa\s+application)\b/i.test(visaText) || hasInvitationLetterOnly) && !hasEmployerSponsoredVisa && !hasVisaFeesFunded;
+  const hasNoVisaSupport = /\b(no\s+visa\s+sponsorship|must\s+have\s+right\s+to\s+work|already\s+authorized\s+to\s+work|national\s+position\s+only)\b/i.test(
+    visaText
+  );
+  let visaSupportType = "not_confirmed";
+  let visaSupportSummary = "Not Confirmed";
+  if (hasEmployerSponsoredVisa) {
+    visaSupportType = "employer_sponsored_visa";
+    visaSupportSummary = "Employer-sponsored work visa / permit confirmed";
+    tags.add("Employer-sponsored visa");
+  } else if (hasVisaFeesFunded) {
+    visaSupportType = "visa_fees_funded";
+    visaSupportSummary = "Visa fee coverage confirmed (check official rules)";
+    tags.add("Visa fees funded");
+  } else if (hasInvitationLetterOnly) {
+    visaSupportType = "invitation_letter_only";
+    visaSupportSummary = "Invitation letter / visa application assistance only (NOT visa sponsorship)";
+    tags.add("Visa application assistance only");
+  } else if (hasVisaAssistanceOnly) {
+    visaSupportType = "visa_assistance_only";
+    visaSupportSummary = "Visa application assistance only (no sponsorship or fee coverage confirmed)";
+    tags.add("Visa application assistance only");
+  } else if (hasNoVisaSupport) {
+    visaSupportType = "none";
+    visaSupportSummary = "No visa sponsorship confirmed";
+  }
+  if (explicitFullFunded && !explicitSelfFunded) tags.add("Fully funded");
+  if (tuitionCovered === "yes") tags.add("Tuition funded");
+  if (airfareCovered === "yes") tags.add("Travel funded");
+  if (accommodationCovered === "yes") tags.add("Accommodation funded");
+  if (explicitSelfFunded && !explicitFullFunded) tags.add("Self-funded");
+  let fundingLevel = "not_confirmed";
+  if (explicitFullFunded && !explicitSelfFunded) {
+    fundingLevel = "fully_funded";
+  } else if (tuitionCovered === "yes" || tuitionCovered === "partial" || airfareCovered === "yes" || accommodationCovered === "yes" || hasVisaFeesFunded) {
+    fundingLevel = "partially_funded";
+  } else if (explicitSelfFunded) {
+    fundingLevel = "self_funded";
+  }
+  if (tags.size === 0) {
+    tags.add("Funding Not Confirmed");
+  }
+  const relocationAssistance = input.relocationAssistance || (/\b(relocation\s+(package|assistance|allowance|support|covered)|installation\s+grant)\b/i.test(fundingText) ? "yes" : "not_confirmed");
+  const fundingSummary = input.fundingSummary?.trim() || (fundingLevel === "fully_funded" ? "Fully funded (verify exact inclusions on official portal)" : fundingLevel === "partially_funded" ? `Partially funded (${Array.from(tags).join(", ")})` : fundingLevel === "self_funded" ? "Self-funded" : "Funding Not Confirmed");
+  return {
+    fundingLevel,
+    fundingSummary,
+    transparencyTags: Array.from(tags),
+    tuitionCovered,
+    airfareCovered,
+    accommodationCovered,
+    visaSupportType,
+    visaSupportSummary,
+    relocationAssistance,
+    applicationFee: input.applicationFee?.trim() || "Not Confirmed",
+    stipendOrSalary: input.stipendOrSalary?.trim() || void 0
+  };
+}
+function computeVerificationOutcome(params) {
+  const { urlVerified, organizationAuthentic, applicationStatus, deadlineEval, funding, eligibility, category } = params;
+  if (applicationStatus === "expired" || applicationStatus === "closed" || applicationStatus === "withdrawn" || deadlineEval.isExpired) {
+    return {
+      verificationStatus: "Expired",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false
+    };
+  }
+  if (!urlVerified || !organizationAuthentic || !deadlineEval.valid) {
+    return {
+      verificationStatus: "Unverified",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false
+    };
+  }
+  if (!deadlineEval.meetsMinimumThreeFullDays) {
+    return {
+      verificationStatus: "Expired",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false
+    };
+  }
+  let verificationStatus = "Verified and Open";
+  if (deadlineEval.isClosingSoon) {
+    verificationStatus = "Closing Soon";
+  } else if (funding.visaSupportType === "employer_sponsored_visa") {
+    verificationStatus = "Visa Sponsored";
+  } else if (funding.fundingLevel === "fully_funded") {
+    verificationStatus = "Fully Funded";
+  } else if (funding.fundingLevel === "partially_funded") {
+    verificationStatus = "Partially Funded";
+  } else if (eligibility.ethiopianEligible === "not_confirmed") {
+    verificationStatus = "Eligibility Not Confirmed";
+  } else if ((category === "university_scholarship" || category === "professional_training" || category === "conference_summit") && funding.fundingLevel === "not_confirmed") {
+    verificationStatus = "Funding Not Confirmed";
+  }
+  return {
+    verificationStatus,
+    hasVerifiedBadge: true,
+    isPubliclyDisplayable: true
+  };
+}
+function isOpportunityActiveAndDisplayable(opp, nowMs = Date.now()) {
+  if (!opp.hasVerifiedBadge) return false;
+  if (opp.applicationStatus === "closed" || opp.applicationStatus === "expired" || opp.applicationStatus === "withdrawn") {
+    return false;
+  }
+  if (opp.verificationStatus === "Expired" || opp.verificationStatus === "Unverified") {
+    return false;
+  }
+  if (opp.eligibility.ethiopianEligible === "excluded") {
+    return false;
+  }
+  const deadlineCheck = evaluateOpportunityDeadline(
+    opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
+    opp.deadline.deadlineTimezone,
+    nowMs
+  );
+  return deadlineCheck.valid && !deadlineCheck.isExpired && deadlineCheck.meetsMinimumThreeFullDays;
+}
+var WASH_KEYWORDS = [
+  "wash",
+  "water supply",
+  "water and sanitation",
+  "water, sanitation",
+  "sanitation",
+  "hygiene",
+  "wastewater",
+  "water resources",
+  "water engineering",
+  "water engineer",
+  "hydrology",
+  "hydrogeology",
+  "environmental health",
+  "hydraulic",
+  "borehole",
+  "fecal sludge",
+  "clean water",
+  "drinking water",
+  "wateraid",
+  "water.org",
+  "un-habitat",
+  "climate-resilient wash",
+  "humanitarian wash",
+  "public health engineering"
+];
+var BANKING_FINANCE_KEYWORDS = [
+  "bank",
+  "banking",
+  "central bank",
+  "digital banking",
+  "fintech",
+  "financial technology",
+  "microfinance",
+  "financial inclusion",
+  "risk management",
+  "financial regulation",
+  "credit risk",
+  "treasury",
+  "accounting",
+  "audit",
+  "auditor",
+  "finance",
+  "financial analyst",
+  "investment",
+  "economics",
+  "economist",
+  "monetary policy",
+  "insurance",
+  "actuary",
+  "capital market",
+  "imf",
+  "world bank",
+  "african development bank",
+  "afdb",
+  "ifc"
+];
+var TECH_AI_KEYWORDS = [
+  "artificial intelligence",
+  "machine learning",
+  "software",
+  "developer",
+  "data science",
+  "data analyst",
+  "cybersecurity",
+  "cloud",
+  "information technology",
+  "computer science",
+  "digital transformation",
+  "devops",
+  "ai ",
+  "technology"
+];
+var DEVELOPMENT_HUMANITARIAN_KEYWORDS = [
+  "humanitarian",
+  "international development",
+  "sustainable development",
+  "sdg",
+  "unicef",
+  "undp",
+  "unhcr",
+  "iom",
+  "irc",
+  "world vision",
+  "save the children",
+  "ifrc",
+  "red cross",
+  "oxfam",
+  "refugee",
+  "community development",
+  "ngo",
+  "donor",
+  "grant",
+  "monitoring and evaluation",
+  "m&e",
+  "protection officer",
+  "livelihoods"
+];
+function detectSectorsFromText(text) {
+  const lower = ` ${String(text || "").toLowerCase()} `;
+  const sectors = /* @__PURE__ */ new Set();
+  const hasAny = (list) => list.some((kw) => lower.includes(kw));
+  const isWash = hasAny(WASH_KEYWORDS);
+  const isBankingFinance = hasAny(BANKING_FINANCE_KEYWORDS);
+  if (isWash) sectors.add("wash");
+  if (isBankingFinance) sectors.add("banking_finance");
+  if (hasAny(TECH_AI_KEYWORDS)) sectors.add("technology_ai");
+  if (hasAny(DEVELOPMENT_HUMANITARIAN_KEYWORDS)) {
+    sectors.add("international_development");
+    if (/\b(humanitarian|refugee|emergency|relief|unhcr|iom|irc|ifrc|red cross|unicef)\b/i.test(lower)) {
+      sectors.add("humanitarian");
+    }
+  }
+  if (/\b(engineer|engineering|civil|mechanical|electrical|infrastructure|hydraulic)\b/i.test(lower)) {
+    sectors.add("engineering");
+  }
+  if (/\b(public health|healthcare|medical|epidemiology|nutrition|who|clinic|doctor|nurse)\b/i.test(lower)) {
+    sectors.add("healthcare_public_health");
+  }
+  if (/\b(climate|environment|renewable|sustainability|green|carbon|biodiversity)\b/i.test(lower)) {
+    sectors.add("climate_environment");
+  }
+  if (/\b(entrepreneur|startup|business|sme|trade|commerce|innovation)\b/i.test(lower)) {
+    sectors.add("entrepreneurship_business");
+  }
+  if (/\b(leadership|project management|governance|policy|fellowship|executive)\b/i.test(lower)) {
+    sectors.add("leadership_management");
+  }
+  if (/\b(scholarship|university|masters|master's|phd|doctoral|academic|research|tuition)\b/i.test(lower)) {
+    sectors.add("academic_research");
+  }
+  return {
+    sectors: Array.from(sectors),
+    isWash,
+    isBankingFinance
+  };
+}
+var EDUCATION_RANK2 = {
+  none: 0,
+  not_confirmed: 0,
+  diploma: 1,
+  bachelors: 2,
+  masters: 3,
+  phd: 4
+};
+function extractProfileYearsOfExperience(profile) {
+  if (profile.noExperience === true) return 0;
+  const raw = String(profile.yearsOfExperience || "");
+  const rangeMatch = raw.match(/(\d+(?:\.\d+)?)\s*[-–to]+\s*(\d+(?:\.\d+)?)/i);
+  if (rangeMatch) {
+    return Math.max(Number(rangeMatch[1]), Number(rangeMatch[2]));
+  }
+  const singleMatch = raw.match(/(\d+(?:\.\d+)?)/);
+  if (singleMatch) {
+    return Number(singleMatch[1]);
+  }
+  if (Array.isArray(profile.experience) && profile.experience.length > 0) {
+    let totalMonths = 0;
+    const now = /* @__PURE__ */ new Date();
+    for (const exp of profile.experience) {
+      const start = exp.startDate ? new Date(exp.startDate) : null;
+      const end = exp.isCurrent ? now : exp.endDate ? new Date(exp.endDate) : null;
+      if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        const months = Math.max(0, (end.getTime() - start.getTime()) / (1e3 * 60 * 60 * 24 * 30.4));
+        totalMonths += months;
+      }
+    }
+    if (totalMonths > 0) return Math.round(totalMonths / 12 * 10) / 10;
+  }
+  return 0;
+}
+function extractProfileHighestEducationLevel(profile) {
+  if (!Array.isArray(profile.education) || profile.education.length === 0) {
+    return "not_confirmed";
+  }
+  let highest = "diploma";
+  for (const ed of profile.education) {
+    const q = `${ed.qualification || ""} ${ed.fieldOfStudy || ""}`.toLowerCase();
+    if (/\b(phd|ph\.d|doctorate|doctoral)\b/.test(q)) {
+      highest = "phd";
+    } else if (EDUCATION_RANK2[highest] < EDUCATION_RANK2.masters && /\b(master|msc|m\.sc|mba|ma\b|m\.a|mph|llm|postgraduate)\b/.test(q)) {
+      highest = "masters";
+    } else if (EDUCATION_RANK2[highest] < EDUCATION_RANK2.bachelors && /\b(bachelor|bsc|b\.sc|ba\b|b\.a|bba|beng|b\.eng|degree|undergraduate|llb)\b/.test(q)) {
+      highest = "bachelors";
+    }
+  }
+  return highest;
+}
+function buildProfileCorpus(profile) {
+  const parts = [
+    profile.desiredJobTitle || "",
+    profile.currentPosition || "",
+    profile.preferredIndustry || "",
+    profile.customProfessionOrCategory || "",
+    profile.staffDepartmentOrSector || "",
+    profile.bio || "",
+    ...profile.preferredSectors || [],
+    ...profile.skills || [],
+    ...profile.areasOfExpertise || [],
+    ...profile.professionalInterests || [],
+    ...profile.previousPositions || [],
+    ...profile.additionalRequirements || [],
+    ...(profile.certifications || []).map((c) => `${c.name} ${c.issuingOrganization}`),
+    ...(profile.education || []).map((e) => `${e.qualification} ${e.fieldOfStudy} ${e.institution}`),
+    ...(profile.experience || []).map((x) => `${x.jobTitle} ${x.companyName} ${x.responsibilities}`)
+  ];
+  return parts.join(" ").toLowerCase();
+}
+function extractMeaningfulKeywords(text) {
+  const stopWords = /* @__PURE__ */ new Set([
+    "and",
+    "the",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "have",
+    "will",
+    "your",
+    "about",
+    "into",
+    "over",
+    "under",
+    "more",
+    "most",
+    "other",
+    "work",
+    "working",
+    "experience",
+    "years",
+    "year",
+    "role",
+    "position",
+    "officer",
+    "specialist",
+    "manager",
+    "program",
+    "programme",
+    "international",
+    "global",
+    "ethiopia",
+    "ethiopian"
+  ]);
+  const tokens = String(text || "").toLowerCase().replace(/[^a-z0-9\s-]/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !stopWords.has(w));
+  return Array.from(new Set(tokens));
+}
+function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
+  const disqualificationReasons = [];
+  const matchReasons = [];
+  const matchedSectors = [];
+  if (!isOpportunityActiveAndDisplayable(opportunity, nowMs)) {
+    disqualificationReasons.push("Opportunity is closed, unverified, or has fewer than 3 full days remaining.");
+  }
+  if (opportunity.eligibility.ethiopianEligible === "excluded") {
+    disqualificationReasons.push(
+      `Nationality restriction: ${opportunity.eligibility.eligibleNationalities.join(", ") || "Not open to Ethiopian applicants"}.`
+    );
+  }
+  const userYears = extractProfileYearsOfExperience(profile);
+  const minYears = opportunity.eligibility.minimumYearsExperience;
+  if (typeof minYears === "number" && minYears > 0 && userYears < minYears) {
+    disqualificationReasons.push(
+      `Requires at least ${minYears} year${minYears > 1 ? "s" : ""} of experience (profile shows ${userYears} year${userYears === 1 ? "" : "s"}).`
+    );
+  }
+  const userEdu = extractProfileHighestEducationLevel(profile);
+  const reqEdu = opportunity.eligibility.minimumEducationLevel;
+  if (reqEdu !== "none" && reqEdu !== "not_confirmed" && userEdu !== "not_confirmed" && EDUCATION_RANK2[userEdu] < EDUCATION_RANK2[reqEdu]) {
+    disqualificationReasons.push(
+      `Requires minimum ${reqEdu.toUpperCase()} qualification (profile lists ${userEdu.toUpperCase()}).`
+    );
+  }
+  if (opportunity.category === "university_scholarship" && opportunity.eligibility.universityRecommendationRequired === "required" && opportunity.eligibility.directIndividualApplicationAllowed === "no" || (opportunity.category === "professional_training" || opportunity.category === "conference_summit") && opportunity.eligibility.companyRecommendationRequired === "required" && opportunity.eligibility.directIndividualApplicationAllowed === "no" || opportunity.eligibility.institutionalNominationRequired === "required" && opportunity.eligibility.directIndividualApplicationAllowed === "no") {
+    disqualificationReasons.push(
+      "Requires mandatory institutional/university/company nomination rather than direct individual application."
+    );
+  }
+  const profileCorpus = buildProfileCorpus(profile);
+  const profileDetected = detectSectorsFromText(profileCorpus);
+  let score = 0;
+  const sharedSectors = opportunity.sectors.filter((s) => profileDetected.sectors.includes(s));
+  if (sharedSectors.length > 0) {
+    score += Math.min(40, 22 + (sharedSectors.length - 1) * 10);
+    const labelMap = {
+      banking_finance: "Banking & Finance",
+      wash: "WASH (Water, Sanitation & Hygiene)",
+      technology_ai: "Technology & AI",
+      international_development: "International Development",
+      humanitarian: "Humanitarian Operations",
+      engineering: "Engineering & Water Infrastructure",
+      healthcare_public_health: "Public Health & Healthcare",
+      climate_environment: "Climate & Environmental Health",
+      entrepreneurship_business: "Business & Entrepreneurship",
+      leadership_management: "Leadership & Project Management",
+      academic_research: "Academic & Research"
+    };
+    for (const s of sharedSectors) {
+      matchedSectors.push(labelMap[s]);
+    }
+    matchReasons.push(`Matches your sector background in ${matchedSectors.slice(0, 3).join(", ")}`);
+  }
+  if (opportunity.isWashDedicated && profileDetected.isWash) {
+    score += 15;
+    matchReasons.push("Direct alignment with your WASH / Water & Sanitation profile");
+  }
+  if (opportunity.isBankingFinance && profileDetected.isBankingFinance) {
+    score += 15;
+    matchReasons.push("Direct alignment with your Banking, Microfinance & Finance specialization");
+  }
+  const oppText = `${opportunity.title} ${opportunity.summary} ${opportunity.eligibility.requiredSkills.join(" ")} ${opportunity.organization}`;
+  const oppKeywords = extractMeaningfulKeywords(oppText);
+  const profileKeywords = new Set(extractMeaningfulKeywords(profileCorpus));
+  const overlappingKeywords = oppKeywords.filter((kw) => profileKeywords.has(kw));
+  if (overlappingKeywords.length > 0) {
+    score += Math.min(25, overlappingKeywords.length * 5);
+    matchReasons.push(`Matches skills & focus areas: ${overlappingKeywords.slice(0, 4).join(", ")}`);
+  }
+  if (typeof minYears === "number" && minYears > 0 && userYears >= minYears) {
+    score += 10;
+    matchReasons.push(`You meet the experience requirement (${userYears} yrs vs ${minYears}+ yrs required)`);
+  } else if (minYears === 0 || opportunity.eligibility.careerLevel === "entry") {
+    score += 6;
+    matchReasons.push("Open to entry-level and early-career professionals");
+  }
+  if (reqEdu !== "none" && reqEdu !== "not_confirmed" && userEdu !== "not_confirmed" && EDUCATION_RANK2[userEdu] >= EDUCATION_RANK2[reqEdu]) {
+    score += 8;
+    matchReasons.push(`Education requirement satisfied (${opportunity.eligibility.educationRequirement})`);
+  }
+  if (opportunity.eligibility.ethiopianEligible === "confirmed") {
+    score += 8;
+    matchReasons.push("Confirmed eligible for Ethiopian applicants");
+  }
+  if (opportunity.funding.fundingLevel === "fully_funded") {
+    score += 8;
+    matchReasons.push("Confirmed Fully Funded program");
+  } else if (opportunity.funding.visaSupportType === "employer_sponsored_visa") {
+    score += 8;
+    matchReasons.push("Employer-sponsored work visa confirmed");
+  }
+  if (opportunity.eligibility.directIndividualApplicationAllowed === "yes" && opportunity.eligibility.universityRecommendationRequired !== "required" && opportunity.eligibility.companyRecommendationRequired !== "required") {
+    score += 5;
+    matchReasons.push("Accepts direct individual applications without mandatory institutional nomination");
+  }
+  const prefLoc = String(profile.preferredWorkLocation || "").toLowerCase();
+  if (prefLoc && prefLoc !== "any location" && opportunity.country.toLowerCase().includes(prefLoc)) {
+    score += 8;
+    matchReasons.push(`Located in your preferred destination (${opportunity.country})`);
+  }
+  const boundedScore = disqualificationReasons.length > 0 ? 0 : Math.min(100, Math.max(0, Math.round(score)));
+  const eligible = disqualificationReasons.length === 0 && boundedScore >= 25;
+  const eligibilitySummary = disqualificationReasons.length > 0 ? `Not eligible: ${disqualificationReasons[0]}` : eligible ? "Meets verified eligibility criteria for your profile" : "Eligible, lower direct sector match with current profile";
+  return {
+    id: `rec_${profile.uid}_${opportunity.id}`.slice(0, 128),
+    userId: profile.uid,
+    opportunityId: opportunity.id,
+    matchScore: boundedScore,
+    eligible,
+    matchReasons: matchReasons.slice(0, 5),
+    eligibilitySummary,
+    matchedSectors,
+    disqualificationReasons,
+    generatedAt: new Date(nowMs).toISOString()
+  };
+}
+
+// serverGlobalOpportunities.ts
+var BLOCKED_UNOFFICIAL_DOMAINS = [
+  "opportunitiescorners.com",
+  "scholarshippositions.com",
+  "afterschoolafrica.com",
+  "opportunitydesk.org",
+  "opportunitiesforyouth.org",
+  "youthop.com",
+  "scholars4dev.com",
+  "brightscholarship.com",
+  "blogspot.com",
+  "wordpress.com",
+  "medium.com",
+  "facebook.com",
+  "instagram.com",
+  "tiktok.com",
+  "t.me",
+  "telegram.me",
+  "whatsapp.com",
+  "youtu.be",
+  "youtube.com",
+  "x.com",
+  "twitter.com",
+  "linkedin.com"
+];
+var TRUSTED_OFFICIAL_HOST_PATTERNS = [
+  /\.gov(\.[a-z]{2})?$/i,
+  /\.edu(\.[a-z]{2})?$/i,
+  /\.ac\.[a-z]{2}$/i,
+  /\.int$/i,
+  /(^|\.)un\.org$/i,
+  /(^|\.)unicef\.org$/i,
+  /(^|\.)who\.int$/i,
+  /(^|\.)unhabitat\.org$/i,
+  /(^|\.)undp\.org$/i,
+  /(^|\.)unhcr\.org$/i,
+  /(^|\.)iom\.int$/i,
+  /(^|\.)worldbank\.org$/i,
+  /(^|\.)imf\.org$/i,
+  /(^|\.)afdb\.org$/i,
+  /(^|\.)ifc\.org$/i,
+  /(^|\.)bis\.org$/i,
+  /(^|\.)afi-global\.org$/i,
+  /(^|\.)wateraid\.org$/i,
+  /(^|\.)water\.org$/i,
+  /(^|\.)rescue\.org$/i,
+  /(^|\.)wvi\.org$/i,
+  /(^|\.)savethechildren\.(org|net)$/i,
+  /(^|\.)ifrc\.org$/i,
+  /(^|\.)icrc\.org$/i,
+  /(^|\.)oxfam\.org$/i,
+  /(^|\.)actionagainsthunger\.org$/i,
+  /(^|\.)drc\.ngo$/i,
+  /(^|\.)reliefweb\.int$/i,
+  /(^|\.)siwi\.org$/i,
+  /(^|\.)iwa-network\.org$/i,
+  /(^|\.)sanitationandwaterforall\.org$/i,
+  /(^|\.)daad\.de$/i,
+  /(^|\.)chevening\.org$/i,
+  /(^|\.)mastercardfdn\.org$/i,
+  /(^|\.)fulbrightonline\.org$/i,
+  /(^|\.)erasmus-plus\.ec\.europa\.eu$/i,
+  /(^|\.)europa\.eu$/i,
+  /(^|\.)oecd\.org$/i,
+  /(^|\.)wto\.org$/i,
+  /(^|\.)ilo\.org$/i,
+  /(^|\.)fao\.org$/i,
+  /(^|\.)wfp\.org$/i,
+  /(^|\.)unesco\.org$/i,
+  /(^|\.)unep\.org$/i,
+  /(^|\.)unops\.org$/i,
+  /(^|\.)eib\.org$/i,
+  /(^|\.)ebrd\.com$/i,
+  /(^|\.)adb\.org$/i,
+  /(^|\.)au\.int$/i,
+  /(^|\.)eca\.org$/i,
+  /(^|\.)uneca\.org$/i
+];
+var WASH_TARGET_ORGS = [
+  "unicef",
+  "world health organization",
+  "who",
+  "un-habitat",
+  "undp",
+  "world bank",
+  "african development bank",
+  "afdb",
+  "international organization for migration",
+  "iom",
+  "international rescue committee",
+  "irc",
+  "wateraid",
+  "water.org",
+  "world vision",
+  "save the children",
+  "ifrc",
+  "red cross",
+  "red crescent",
+  "oxfam",
+  "action against hunger",
+  "danish refugee council",
+  "norwegian refugee council",
+  "care international",
+  "snv",
+  "siwi",
+  "unhcr"
+];
+function validateOfficialExternalUrl(rawUrl) {
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed || trimmed.length > 1e3) {
+    return { valid: false, isOfficialDomain: false, hostname: "", normalizedUrl: "", reason: "Missing or oversized URL" };
+  }
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { valid: false, isOfficialDomain: false, hostname: "", normalizedUrl: "", reason: "Malformed URL" };
+  }
+  if (parsed.protocol !== "https:") {
+    return { valid: false, isOfficialDomain: false, hostname: parsed.hostname, normalizedUrl: "", reason: "Only HTTPS official URLs are permitted" };
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || host === "::1" || host.startsWith("[") || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) || /^0\./.test(host) || /^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    return { valid: false, isOfficialDomain: false, hostname: host, normalizedUrl: "", reason: "Blocked private, loopback, or raw-IP host (SSRF protection)" };
+  }
+  if (BLOCKED_UNOFFICIAL_DOMAINS.some((bad) => host === bad || host.endsWith(`.${bad}`))) {
+    return { valid: false, isOfficialDomain: false, hostname: host, normalizedUrl: parsed.toString(), reason: "Unofficial aggregator or social media domain blocked" };
+  }
+  const isTrustedPattern = TRUSTED_OFFICIAL_HOST_PATTERNS.some((re) => re.test(host));
+  const isOfficialTld = /\.(org|int|gov|edu|ngo)$/i.test(host) || /\.ac\.[a-z]{2}$/i.test(host) || /\.gov\.[a-z]{2}$/i.test(host);
+  return {
+    valid: true,
+    isOfficialDomain: isTrustedPattern || isOfficialTld || host.split(".").length >= 2,
+    hostname: host,
+    normalizedUrl: parsed.toString()
+  };
+}
+var robotsCache = /* @__PURE__ */ new Map();
+async function isAllowedByRobotsTxt(targetUrl) {
+  try {
+    const parsed = new URL(targetUrl);
+    const origin = parsed.origin;
+    const now = Date.now();
+    const cached = robotsCache.get(origin);
+    let disallowedPrefixes = [];
+    if (cached && now - cached.checkedAt < 15 * 60 * 1e3) {
+      disallowedPrefixes = cached.disallowedPrefixes;
+    } else {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3500);
+      try {
+        const resp = await fetch(`${origin}/robots.txt`, {
+          method: "GET",
+          headers: { "User-Agent": "HopelandJobsBot/1.0 (+https://hopelandjobs.tech)" },
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        if (resp.ok) {
+          const text = await resp.text();
+          let inStarBlock = false;
+          for (const rawLine of text.split(/\r?\n/)) {
+            const line = rawLine.replace(/#.*$/, "").trim();
+            if (!line) continue;
+            if (/^user-agent:\s*\*/i.test(line)) {
+              inStarBlock = true;
+            } else if (/^user-agent:/i.test(line)) {
+              inStarBlock = false;
+            } else if (inStarBlock && /^disallow:/i.test(line)) {
+              const rule = line.replace(/^disallow:\s*/i, "").trim();
+              if (rule) disallowedPrefixes.push(rule);
+            }
+          }
+        }
+      } catch {
+        clearTimeout(timer);
+      }
+      robotsCache.set(origin, { checkedAt: now, disallowedPrefixes });
+    }
+    const pathname = parsed.pathname || "/";
+    for (const prefix of disallowedPrefixes) {
+      if (prefix === "/") return false;
+      if (prefix && pathname.startsWith(prefix)) return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+async function fetchWithRetry(url, init, maxRetries = 2, timeoutMs = 8500) {
+  let lastErr = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      if ((resp.status === 429 || resp.status >= 500) && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+        continue;
+      }
+      return resp;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+      }
+    }
+  }
+  throw lastErr || new Error("Network request failed");
+}
+async function fetchTextViaHttp2(targetUrl, timeoutMs = 9e3, redirectDepth = 0) {
+  const urlCheck = validateOfficialExternalUrl(targetUrl);
+  if (!urlCheck.valid) {
+    throw new Error(urlCheck.reason || "Unsafe URL blocked");
+  }
+  const parsed = new URL(urlCheck.normalizedUrl);
+  return new Promise((resolve2, reject) => {
+    let settled = false;
+    const client = http2.connect(parsed.origin);
+    const finish = (err, result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        client.close();
+      } catch {
+      }
+      if (err) reject(err);
+      else resolve2(result);
+    };
+    const timer = setTimeout(() => {
+      finish(new Error("HTTP/2 request timed out"));
+    }, timeoutMs);
+    client.on("error", (err) => {
+      finish(err instanceof Error ? err : new Error(String(err)));
+    });
+    const req = client.request({
+      ":path": `${parsed.pathname}${parsed.search}`,
+      ":method": "GET",
+      "user-agent": "curl/8.5.0",
+      accept: "*/*"
+    });
+    let status = 0;
+    let locationHeader = "";
+    const chunks = [];
+    let totalBytes = 0;
+    const MAX_BYTES = 15e5;
+    req.on("response", (headers) => {
+      status = Number(headers[":status"] || 0);
+      const loc = headers["location"];
+      if (typeof loc === "string") locationHeader = loc;
+      else if (Array.isArray(loc) && loc.length > 0) locationHeader = String(loc[0]);
+    });
+    req.on("data", (chunk) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      if (totalBytes + buf.length <= MAX_BYTES) {
+        chunks.push(buf);
+        totalBytes += buf.length;
+      }
+    });
+    req.on("end", () => {
+      if ([301, 302, 303, 307, 308].includes(status) && locationHeader && redirectDepth < 2) {
+        try {
+          const nextUrl = new URL(locationHeader, parsed.origin).toString();
+          clearTimeout(timer);
+          settled = true;
+          try {
+            client.close();
+          } catch {
+          }
+          fetchTextViaHttp2(nextUrl, timeoutMs, redirectDepth + 1).then(resolve2).catch(reject);
+          return;
+        } catch {
+        }
+      }
+      const body = Buffer.concat(chunks).toString("utf8");
+      finish(null, { status, body, finalUrl: parsed.toString() });
+    });
+    req.on("error", (err) => {
+      finish(err instanceof Error ? err : new Error(String(err)));
+    });
+    req.end();
+  });
+}
+function stripHtmlToText(html) {
+  return String(html || "").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
+}
+function parseMinimumYearsFromText(text) {
+  const lower = String(text || "").toLowerCase();
+  if (/\b(0[\s-]+years?|no\s+experience\s+required|fresh\s+graduate|entry[\s-]level)\b/.test(lower)) {
+    return 0;
+  }
+  const m = lower.match(/(?:minimum|at\s+least|min\.?)?\s*(\d{1,2})\s*(?:\+|plus)?\s*(?:to\s+\d+\s*)?years?\s+(?:of\s+)?(?:relevant\s+|professional\s+|work\s+)?experience/);
+  if (m) return Number(m[1]);
+  const bandMatch = lower.match(/\b(\d{1,2})\s*[-–]\s*\d{1,2}\s*years?\b/);
+  if (bandMatch) return Number(bandMatch[1]);
+  return null;
+}
+function parseMinEducationFromText(text) {
+  const lower = String(text || "").toLowerCase();
+  if (/\b(phd|ph\.d|doctoral\s+degree|doctorate)\b/.test(lower)) return "phd";
+  if (/\b(master'?s|msc|m\.sc|mba|advanced\s+university\s+degree|postgraduate\s+degree)\b/.test(lower)) return "masters";
+  if (/\b(bachelor'?s|bsc|b\.sc|ba\s+degree|university\s+degree|first[\s-]level\s+university\s+degree|undergraduate\s+degree)\b/.test(lower)) return "bachelors";
+  if (/\b(diploma|associate\s+degree|tvet)\b/.test(lower)) return "diploma";
+  return "not_confirmed";
+}
+function inferOrganizationType(orgName, hostname) {
+  const combined = `${orgName} ${hostname}`.toLowerCase();
+  if (/\b(unicef|who|undp|unhcr|un-habitat|unep|unesco|unops|wfp|fao|ilo|iom|united nations)\b/.test(combined) || /\.int$/.test(hostname)) {
+    return "un_agency";
+  }
+  if (/\b(world bank|african development bank|afdb|imf|ifc|eib|ebrd|adb|central bank|bank)\b/.test(combined)) {
+    return "multilateral_bank";
+  }
+  if (/\b(wateraid|water\.org|rescue committee|irc|world vision|save the children|ifrc|red cross|oxfam|action against hunger|drc|nrc|care)\b/.test(combined)) {
+    return "international_ngo";
+  }
+  if (/\b(university|college|institute|school of)\b/.test(combined) || /\.edu(\.[a-z]{2})?$/.test(hostname) || /\.ac\.[a-z]{2}$/.test(hostname)) {
+    return "university";
+  }
+  if (/\b(ministry|government|agency|commission|authority|embassy)\b/.test(combined) || /\.gov(\.[a-z]{2})?$/.test(hostname)) {
+    return "government_agency";
+  }
+  if (/\b(summit|forum|conference|congress|symposium|week)\b/.test(combined)) {
+    return "conference_organizer";
+  }
+  return "other";
+}
+var ETHIOPIA_TIMEZONE = "Africa/Addis_Ababa";
+var ETHIOPIA_UTC_OFFSET_HOURS = 3;
+var ETHIOPIA_SCHEDULE_LABELS = ["00:00", "06:00", "12:00", "18:00"];
+var ETHIOPIA_CRON_EXPRESSION_UTC = "0 3,9,15,21 * * *";
+function formatEthiopiaDateTime(input) {
+  if (input === null || input === void 0) return null;
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return null;
+  const eatMs = d.getTime() + ETHIOPIA_UTC_OFFSET_HOURS * 60 * 60 * 1e3;
+  const eat = new Date(eatMs);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = String(eat.getUTCDate()).padStart(2, "0");
+  const mon = months[eat.getUTCMonth()];
+  const yr = eat.getUTCFullYear();
+  const hh = String(eat.getUTCHours()).padStart(2, "0");
+  const mm = String(eat.getUTCMinutes()).padStart(2, "0");
+  const ss = String(eat.getUTCSeconds()).padStart(2, "0");
+  return `${day} ${mon} ${yr}, ${hh}:${mm}:${ss} EAT (Africa/Addis_Ababa)`;
+}
+function getNextEthiopiaScheduleSlot(nowMs = Date.now()) {
+  const offsetMs = ETHIOPIA_UTC_OFFSET_HOURS * 60 * 60 * 1e3;
+  const eatNow = new Date(nowMs + offsetMs);
+  const y = eatNow.getUTCFullYear();
+  const m = eatNow.getUTCMonth();
+  const d = eatNow.getUTCDate();
+  const candidates = [
+    { hour: 0, dayOffset: 0 },
+    { hour: 6, dayOffset: 0 },
+    { hour: 12, dayOffset: 0 },
+    { hour: 18, dayOffset: 0 },
+    { hour: 0, dayOffset: 1 }
+  ];
+  for (const c of candidates) {
+    const slotEatAsUtcMs = Date.UTC(y, m, d + c.dayOffset, c.hour, 0, 0, 0);
+    const slotRealUtcMs = slotEatAsUtcMs - offsetMs;
+    if (slotRealUtcMs > nowMs + 1e3) {
+      const slotLabel = `${String(c.hour).padStart(2, "0")}:00 Africa/Addis_Ababa`;
+      return {
+        utcMs: slotRealUtcMs,
+        utcIso: new Date(slotRealUtcMs).toISOString(),
+        eatFormatted: formatEthiopiaDateTime(slotRealUtcMs) || slotLabel,
+        slotLabelEat: slotLabel,
+        msUntilNext: slotRealUtcMs - nowMs
+      };
+    }
+  }
+  const fallbackMs = nowMs + 6 * 60 * 60 * 1e3;
+  return {
+    utcMs: fallbackMs,
+    utcIso: new Date(fallbackMs).toISOString(),
+    eatFormatted: formatEthiopiaDateTime(fallbackMs) || new Date(fallbackMs).toISOString(),
+    slotLabelEat: "00:00 Africa/Addis_Ababa",
+    msUntilNext: 6 * 60 * 60 * 1e3
+  };
+}
+function getDiscoveryIntervalMinutes() {
+  const raw = process.env.DISCOVERY_INTERVAL_MINUTES;
+  if (raw === void 0 || String(raw).trim() === "") return 360;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 360;
+  return Math.max(10, Math.min(Math.round(parsed), 1440));
+}
+function getEnabledSearchProviders() {
+  const raw = String(process.env.OPPORTUNITY_SEARCH_PROVIDERS || "auto").trim().toLowerCase();
+  if (!raw || raw === "auto" || raw === "all") {
+    return /* @__PURE__ */ new Set(["reliefweb", "direct_websites", "gemini", "tavily", "brave"]);
+  }
+  const allowed = ["reliefweb", "direct_websites", "gemini", "tavily", "brave"];
+  const parsed = raw.split(",").map((p) => p.trim()).filter((p) => allowed.includes(p));
+  return new Set(parsed);
+}
+function buildInitialSourcesCatalog() {
+  const enabledProviders = getEnabledSearchProviders();
+  const hasGeminiKey = Boolean(
+    process.env.GEMINI_API_KEY?.trim() && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY"
+  );
+  const hasTavilyKey = Boolean(
+    process.env.TAVILY_API_KEY?.trim() && process.env.TAVILY_API_KEY !== "MY_TAVILY_API_KEY"
+  );
+  const hasBraveKey = Boolean(
+    process.env.BRAVE_SEARCH_API_KEY?.trim() && process.env.BRAVE_SEARCH_API_KEY !== "MY_BRAVE_SEARCH_API_KEY"
+  );
+  const reliefwebEnabled = enabledProviders.has("reliefweb");
+  const directWebsitesEnabled = enabledProviders.has("direct_websites");
+  const geminiEnabled = enabledProviders.has("gemini");
+  const tavilyEnabled = enabledProviders.has("tavily");
+  const braveEnabled = enabledProviders.has("brave");
+  return [
+    {
+      id: "reliefweb_jobs_wash_intl",
+      name: "ReliefWeb Official UN & INGO Recruitment Feeds (WASH, Banking & Finance, International Jobs)",
+      providerType: "official_api",
+      organizationGroup: "United Nations OCHA, UNICEF, WHO, UNDP, IOM, IRC, WaterAid, World Vision, Save the Children, IFRC",
+      baseUrl: "https://reliefweb.int/jobs/rss.xml",
+      categoriesCovered: ["wash_opportunity", "international_job"],
+      sectorsCovered: ["wash", "banking_finance", "humanitarian", "international_development", "healthcare_public_health", "engineering"],
+      configured: reliefwebEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !reliefwebEnabled,
+      pricingNote: "Free official public feed (no API key required). Runs automatically every 30 minutes.",
+      requiredEnvVars: [],
+      status: reliefwebEnabled ? "connected" : "disabled",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: reliefwebEnabled ? null : "Disabled via OPPORTUNITY_SEARCH_PROVIDERS."
+    },
+    {
+      id: "reliefweb_training_conferences",
+      name: "ReliefWeb Official Training, Fellowships, Scholarships & Conferences Feeds",
+      providerType: "official_api",
+      organizationGroup: "United Nations OCHA & Official Global Training / Conference Partners",
+      baseUrl: "https://reliefweb.int/training/rss.xml",
+      categoriesCovered: ["professional_training", "conference_summit", "wash_opportunity", "university_scholarship"],
+      sectorsCovered: ["wash", "banking_finance", "humanitarian", "international_development", "climate_environment", "healthcare_public_health", "leadership_management"],
+      configured: reliefwebEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !reliefwebEnabled,
+      pricingNote: "Free official public feed (no API key required). Runs automatically every 30 minutes.",
+      requiredEnvVars: [],
+      status: reliefwebEnabled ? "connected" : "disabled",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: reliefwebEnabled ? null : "Disabled via OPPORTUNITY_SEARCH_PROVIDERS."
+    },
+    {
+      id: "official_direct_website_monitor",
+      name: "Direct Official Institutional Website Monitor (BIS, World Bank, AFI, EIB, DAAD, Chevening, Mastercard Fdn, World Water Week, UNICEF, WHO, UNITAR)",
+      providerType: "direct_website_monitor",
+      organizationGroup: "Official Multilateral Banks, Universities, UN Agencies, Government Scholarship & WASH Portals",
+      baseUrl: "https://www.bis.org/events/index.htm",
+      categoriesCovered: ["international_job", "university_scholarship", "professional_training", "conference_summit", "wash_opportunity"],
+      sectorsCovered: ["banking_finance", "wash", "international_development", "healthcare_public_health", "leadership_management"],
+      configured: directWebsitesEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !directWebsitesEnabled,
+      pricingNote: "Free direct monitoring of 11 verified official portals (respects robots.txt; no API key required).",
+      requiredEnvVars: [],
+      status: directWebsitesEnabled ? "connected" : "disabled",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: directWebsitesEnabled ? null : "Disabled via OPPORTUNITY_SEARCH_PROVIDERS."
+    },
+    {
+      id: "gemini_official_search_grounding",
+      name: "Gemini with Native Google Search Grounding (Scholarships, Banking & Finance, WASH, Trainings, Conferences)",
+      providerType: "gemini_search_grounding",
+      organizationGroup: "Global Official Universities, Multilateral Banks, UN & Government Portals",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      categoriesCovered: ["international_job", "university_scholarship", "professional_training", "conference_summit", "wash_opportunity"],
+      sectorsCovered: ["banking_finance", "wash", "technology_ai", "international_development", "engineering", "entrepreneurship_business", "leadership_management"],
+      configured: geminiEnabled && hasGeminiKey,
+      requiresCredentials: true,
+      isOptional: true,
+      disabledByConfig: !geminiEnabled,
+      pricingNote: "Recommended live web search (no Custom Search API required). Includes free monthly grounding allowance; paid tier billed per 1,000 grounded queries.",
+      requiredEnvVars: ["GEMINI_API_KEY"],
+      status: !geminiEnabled ? "disabled" : hasGeminiKey ? "connected" : "optional_unconfigured",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: !geminiEnabled ? "Disabled via OPPORTUNITY_SEARCH_PROVIDERS." : hasGeminiKey ? null : "Optional: Configure GEMINI_API_KEY in server environment to enable live Gemini Google Search grounding."
+    },
+    {
+      id: "tavily_web_search_api",
+      name: "Tavily Live Web Search API (Optional Multi-Sector Discovery Fallback)",
+      providerType: "tavily_search_api",
+      organizationGroup: "Tavily Live Search (Filtered to Official Institutional Domains)",
+      baseUrl: "https://api.tavily.com/search",
+      categoriesCovered: ["international_job", "university_scholarship", "professional_training", "conference_summit", "wash_opportunity"],
+      sectorsCovered: ["banking_finance", "wash", "technology_ai", "international_development", "engineering"],
+      configured: tavilyEnabled && hasTavilyKey,
+      requiresCredentials: true,
+      isOptional: true,
+      disabledByConfig: !tavilyEnabled,
+      pricingNote: "Optional provider: 1,000 free search credits/month (no credit card required); pay-as-you-go $0.008/credit thereafter.",
+      requiredEnvVars: ["TAVILY_API_KEY"],
+      status: !tavilyEnabled ? "disabled" : hasTavilyKey ? "connected" : "optional_unconfigured",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: !tavilyEnabled ? "Disabled via OPPORTUNITY_SEARCH_PROVIDERS." : hasTavilyKey ? null : "Optional: Add TAVILY_API_KEY to enable additional live web discovery (website works without it)."
+    },
+    {
+      id: "brave_web_search_api",
+      name: "Brave Live Web Search API (Optional Independent Index Fallback)",
+      providerType: "brave_search_api",
+      organizationGroup: "Brave Search Independent Web Index (Official Domains Only)",
+      baseUrl: "https://api.search.brave.com/res/v1/web/search",
+      categoriesCovered: ["international_job", "university_scholarship", "professional_training", "conference_summit", "wash_opportunity"],
+      sectorsCovered: ["banking_finance", "wash", "technology_ai", "international_development", "engineering"],
+      configured: braveEnabled && hasBraveKey,
+      requiresCredentials: true,
+      isOptional: true,
+      disabledByConfig: !braveEnabled,
+      pricingNote: "Optional provider: $5/month free credit (~1,000 queries/month; card required on signup), $5 per 1,000 queries thereafter.",
+      requiredEnvVars: ["BRAVE_SEARCH_API_KEY"],
+      status: !braveEnabled ? "disabled" : hasBraveKey ? "connected" : "optional_unconfigured",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: !braveEnabled ? "Disabled via OPPORTUNITY_SEARCH_PROVIDERS." : hasBraveKey ? null : "Optional: Add BRAVE_SEARCH_API_KEY to enable Brave Search fallback (website works without it)."
+    }
+  ];
+}
+function decodeXmlEntities(input) {
+  return String(input || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&amp;/g, "&");
+}
+function parseReliefWebRssXml(xml) {
+  const items = [];
+  const itemMatches = xml.match(/<item>[\s\S]*?<\/item>/gi) || [];
+  for (const rawItem of itemMatches) {
+    const extractTag = (tag) => {
+      const m = rawItem.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+      return m ? decodeXmlEntities(m[1]).trim() : "";
+    };
+    const title = extractTag("title");
+    const link = extractTag("link");
+    const descHtml = extractTag("description");
+    if (!title || !link) continue;
+    const extractDivLabel = (cssClass, prefix) => {
+      const m = descHtml.match(new RegExp(`<div class="${cssClass}">\\s*${prefix}\\s*([^<]+)<\\/div>`, "i"));
+      return m ? m[1].trim() : "";
+    };
+    const country = extractDivLabel("tag country", "Country:");
+    const organization = extractDivLabel("tag source", "Organization:");
+    const closingDate = extractDivLabel("date closing", "Closing date:");
+    const registrationDeadline = extractDivLabel("date registration", "Registration deadline:");
+    const startDate = extractDivLabel("date start", "Start date:");
+    const descriptionText = stripHtmlToText(descHtml);
+    items.push({
+      title,
+      link,
+      country,
+      organization,
+      closingDate,
+      registrationDeadline,
+      startDate,
+      descriptionHtml: descHtml,
+      descriptionText
+    });
+  }
+  return items;
+}
+async function fetchReliefWebJobs(_appname) {
+  try {
+    const feeds = [
+      {
+        label: "WASH",
+        url: "https://reliefweb.int/jobs/rss.xml?advanced-search=%28T4604%29",
+        limit: 16
+      },
+      {
+        label: "BankingFinance",
+        url: "https://reliefweb.int/jobs/rss.xml?search=finance+OR+banking+OR+grant+OR+microfinance",
+        limit: 14
+      },
+      {
+        label: "GeneralIntl",
+        url: "https://reliefweb.int/jobs/rss.xml",
+        limit: 14
+      }
+    ];
+    const candidates = [];
+    const seenLinks = /* @__PURE__ */ new Set();
+    const errors = [];
+    for (const feed of feeds) {
+      let xml = "";
+      let status = 0;
+      try {
+        const h2 = await fetchTextViaHttp2(feed.url, 1e4);
+        status = h2.status;
+        xml = h2.body;
+      } catch {
+        const resp = await fetchWithRetry(
+          feed.url,
+          {
+            method: "GET",
+            headers: {
+              "User-Agent": "HopelandJobs/1.0 (+https://hopelandjobs.tech)",
+              Accept: "*/*"
+            }
+          },
+          1,
+          9e3
+        );
+        status = resp.status;
+        if (resp.ok) xml = await resp.text();
+      }
+      if (status < 200 || status >= 300 || !xml) {
+        errors.push(`ReliefWeb ${feed.label} RSS returned HTTP ${status}`);
+        continue;
+      }
+      const parsedItems = parseReliefWebRssXml(xml).slice(0, feed.limit);
+      for (const item of parsedItems) {
+        if (seenLinks.has(item.link)) continue;
+        seenLinks.add(item.link);
+        const closingDate = item.closingDate.trim();
+        if (!closingDate) continue;
+        const orgName = item.organization || "International Organization";
+        const countryName = item.country || "International";
+        const combinedText = `${item.title} ${orgName} ${item.descriptionText}`;
+        const sectorDetect = detectSectorsFromText(combinedText);
+        const isWashOrg = WASH_TARGET_ORGS.some((o) => orgName.toLowerCase().includes(o));
+        const isWash = feed.label === "WASH" || sectorDetect.isWash || isWashOrg && /\b(water|sanitation|hygiene|wash)\b/i.test(combinedText);
+        const minYears = parseMinimumYearsFromText(item.descriptionText);
+        let careerLevel = "not_confirmed";
+        if (/\bintern(ship)?\b/i.test(item.title)) careerLevel = "internship";
+        else if (/\bfellow(ship)?\b/i.test(item.title)) careerLevel = "fellowship";
+        else if (minYears === 0) careerLevel = "entry";
+        else if (typeof minYears === "number" && minYears >= 7) careerLevel = "management";
+        else if (typeof minYears === "number" && minYears >= 3) careerLevel = "mid";
+        else careerLevel = "technical";
+        const lowerCombined = combinedText.toLowerCase();
+        let ethiopianEligible = "likely_global";
+        const eligibleNationalities = [];
+        if (/\bethiopia(n)?\b/i.test(countryName) || /\bopen to ethiopian/i.test(lowerCombined)) {
+          ethiopianEligible = "confirmed";
+          eligibleNationalities.push("Ethiopian citizens");
+        } else if (/\b(national\s+position\s+only|nationals\s+of\s+[a-z]+\s+only|open\s+only\s+to\s+citizens\s+of|must\s+be\s+a\s+citizen\s+of\s+(?!ethiopia)|local\s+nationals\s+only)\b/i.test(
+          lowerCombined
+        )) {
+          ethiopianEligible = "excluded";
+          eligibleNationalities.push(`Host country nationals only (${countryName})`);
+        } else if (/\b(international\s+(position|staff|recruitment|applicants)|all\s+nationalities)\b/i.test(lowerCombined)) {
+          ethiopianEligible = "confirmed";
+          eligibleNationalities.push("All nationalities (including Ethiopian citizens)");
+        } else {
+          eligibleNationalities.push("International applicants (verify nationality criteria on official page)");
+        }
+        const minEdu = parseMinEducationFromText(item.descriptionText);
+        candidates.push({
+          title: item.title,
+          organization: orgName,
+          organizationType: inferOrganizationType(orgName, "reliefweb.int"),
+          category: isWash ? "wash_opportunity" : "international_job",
+          country: countryName,
+          location: countryName,
+          summary: item.descriptionText.slice(0, 420) || `${item.title} with ${orgName} in ${countryName}.`,
+          sourceId: "reliefweb_jobs_wash_intl",
+          sourceName: feed.label === "WASH" ? "ReliefWeb Official WASH Jobs Feed" : "ReliefWeb Official UN & INGO Jobs Feed",
+          originalSourceUrl: item.link,
+          officialApplicationUrl: item.link,
+          deadlineDateRaw: closingDate,
+          deadlineTimezone: "UTC",
+          startDate: item.startDate || "Not Confirmed",
+          applicationFee: "None (Official UN/NGO recruitment)",
+          eligibleNationalities,
+          ethiopianEligible,
+          educationRequirement: minEdu === "phd" ? "Doctoral degree (PhD) or equivalent" : minEdu === "masters" ? "Master's degree or equivalent (see official page)" : minEdu === "bachelors" ? "Bachelor's degree in relevant field (see official page)" : "See official vacancy requirements",
+          minimumEducationLevel: minEdu,
+          experienceRequirement: minYears !== null ? `Minimum ${minYears} year(s)` : "See official vacancy requirements",
+          minimumYearsExperience: minYears,
+          careerLevel,
+          requiredSkills: isWash ? ["WASH", "Water & Sanitation", "Hygiene"] : sectorDetect.isBankingFinance ? ["Finance", "Grant & Risk Management", "Accounting"] : ["International Development", "Project Management"],
+          languagesRequired: /\bfrench\b/i.test(lowerCombined) ? ["English", "French"] : ["English"],
+          universityRecommendationRequired: "not_required",
+          companyRecommendationRequired: "not_required",
+          institutionalNominationRequired: "not_required",
+          directIndividualApplicationAllowed: "yes",
+          fullText: combinedText.slice(0, 5e3),
+          preVerifiedByOfficialApi: true
+        });
+      }
+    }
+    return { candidates, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
+  } catch (err) {
+    return { candidates: [], error: `ReliefWeb Jobs feed error: ${err?.message || String(err)}` };
+  }
+}
+async function fetchReliefWebTrainings(_appname) {
+  try {
+    const feeds = [
+      {
+        label: "ConferencesFellowships",
+        url: "https://reliefweb.int/training/rss.xml?search=conference+OR+summit+OR+forum+OR+scholarship+OR+fellowship",
+        limit: 14
+      },
+      {
+        label: "WashFinanceTraining",
+        url: "https://reliefweb.int/training/rss.xml?search=water+OR+sanitation+OR+wash+OR+finance+OR+banking",
+        limit: 14
+      },
+      {
+        label: "GeneralTraining",
+        url: "https://reliefweb.int/training/rss.xml",
+        limit: 12
+      }
+    ];
+    const candidates = [];
+    const seenLinks = /* @__PURE__ */ new Set();
+    const errors = [];
+    for (const feed of feeds) {
+      let xml = "";
+      let status = 0;
+      try {
+        const h2 = await fetchTextViaHttp2(feed.url, 1e4);
+        status = h2.status;
+        xml = h2.body;
+      } catch {
+        try {
+          const resp = await fetchWithRetry(
+            feed.url,
+            {
+              method: "GET",
+              headers: {
+                "User-Agent": "HopelandJobs/1.0 (+https://hopelandjobs.tech)",
+                Accept: "*/*"
+              }
+            },
+            1,
+            9e3
+          );
+          status = resp.status;
+          if (resp.ok) xml = await resp.text();
+        } catch (err) {
+          errors.push(`ReliefWeb ${feed.label} RSS error: ${err?.message || String(err)}`);
+          continue;
+        }
+      }
+      if (status < 200 || status >= 300 || !xml) {
+        errors.push(`ReliefWeb ${feed.label} RSS returned HTTP ${status}`);
+        continue;
+      }
+      const parsedItems = parseReliefWebRssXml(xml).slice(0, feed.limit);
+      for (const item of parsedItems) {
+        if (seenLinks.has(item.link)) continue;
+        seenLinks.add(item.link);
+        const closingDate = (item.registrationDeadline || item.closingDate || item.startDate || "").trim();
+        if (!closingDate) continue;
+        const orgName = item.organization || "International Training Provider";
+        const countryName = item.country || (/\bonline\b/i.test(item.descriptionText) ? "Online / Global" : "International");
+        const combinedText = `${item.title} ${orgName} ${item.descriptionText}`;
+        const isConference = /\b(conference|summit|forum|symposium|congress|colloquium)\b/i.test(combinedText);
+        const isScholarship = /\b(scholarship|fellowship\s+grant|full\s+tuition)\b/i.test(item.title);
+        const sectorDetect = detectSectorsFromText(combinedText);
+        const category = isConference ? "conference_summit" : isScholarship ? "university_scholarship" : sectorDetect.isWash && /\bfellowship\b/i.test(item.title) ? "wash_opportunity" : "professional_training";
+        const isFree = /\b(free\s+of\s+charge|no\s+fee|fully[\s-]funded|tuition[\s-]free|free\s+course|free\s+training|scholarship\s+available)\b/i.test(
+          combinedText
+        );
+        const isFeeBased = /\b(course\s+fee|tuition\s+fee|registration\s+fee|usd\s*\d+|eur\s*\d+|\$\s*\d+)\b/i.test(
+          combinedText
+        );
+        const fundingSummary = isFree ? "Free / Funded program (verify travel/accommodation coverage on official page)" : isFeeBased ? "Fee-based / Self-funded (check official page for partial waivers)" : "Funding Not Confirmed";
+        const requiresCompanyNom = /\b(company\s+nomination\s+required|employer\s+nomination\s+mandatory|must\s+be\s+nominated\s+by\s+their\s+organization)\b/i.test(
+          combinedText
+        );
+        const minEdu = parseMinEducationFromText(item.descriptionText);
+        const minYears = parseMinimumYearsFromText(item.descriptionText);
+        candidates.push({
+          title: item.title,
+          organization: orgName,
+          organizationType: inferOrganizationType(orgName, "reliefweb.int"),
+          category,
+          country: countryName,
+          location: countryName,
+          summary: item.descriptionText.slice(0, 420) || `${item.title} organized by ${orgName}.`,
+          sourceId: "reliefweb_training_conferences",
+          sourceName: isConference ? "ReliefWeb Official Conferences & Forums Feed" : "ReliefWeb Official Training & Fellowships Feed",
+          originalSourceUrl: item.link,
+          officialApplicationUrl: item.link,
+          deadlineDateRaw: closingDate,
+          deadlineTimezone: "UTC",
+          startDate: item.startDate || "Not Confirmed",
+          fundingSummary,
+          applicationFee: isFree ? "None (Free)" : isFeeBased ? "Fee-based (see official page)" : "Not Confirmed",
+          eligibleNationalities: ["All nationalities (including Ethiopian applicants)"],
+          ethiopianEligible: "confirmed",
+          educationRequirement: minEdu !== "not_confirmed" ? `${minEdu.toUpperCase()} or relevant background (see official page)` : "Relevant professional or academic background (see official page)",
+          minimumEducationLevel: minEdu,
+          experienceRequirement: minYears !== null ? `${minYears}+ years` : "Open to qualified practitioners",
+          minimumYearsExperience: minYears,
+          careerLevel: "all_levels",
+          requiredSkills: sectorDetect.isWash ? ["WASH", "Water & Sanitation", "Public Health"] : sectorDetect.isBankingFinance ? ["Finance", "Banking", "Risk Management"] : ["Professional Development", "Humanitarian Leadership"],
+          languagesRequired: ["English"],
+          universityRecommendationRequired: "not_required",
+          companyRecommendationRequired: requiresCompanyNom ? "required" : "not_required",
+          institutionalNominationRequired: requiresCompanyNom ? "required" : "not_required",
+          directIndividualApplicationAllowed: requiresCompanyNom ? "no" : "yes",
+          fullText: combinedText.slice(0, 5e3),
+          preVerifiedByOfficialApi: true
+        });
+      }
+    }
+    return { candidates, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
+  } catch (err) {
+    return { candidates: [], error: `ReliefWeb Training feed error: ${err?.message || String(err)}` };
+  }
+}
+function extractVerifiableDeadlineFromSnippet(text) {
+  const s = String(text || "");
+  const m = s.match(/(?:deadline|closing\s+date|apply\s+by|applications?\s+close|due\s+date|register\s+by)[:\s-]+(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202\d|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+202\d|202\d-\d{2}-\d{2})/i) || s.match(/\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+202\d|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+202\d|202\d-\d{2}-\d{2})\b/i);
+  return m ? m[1].trim() : null;
+}
+var LIVE_SEARCH_QUERIES = [
+  {
+    label: "Fully Funded Scholarships",
+    q: "fully funded scholarship Ethiopian applicants direct application deadline 2026 OR 2027 (site:.edu OR site:.gov OR site:.org OR site:.de)",
+    category: "university_scholarship"
+  },
+  {
+    label: "Banking & Finance Jobs",
+    q: "international banking finance job visa sponsorship OR multilateral bank World Bank IMF AfDB deadline 2026 OR 2027",
+    category: "international_job"
+  },
+  {
+    label: "WASH Jobs & Fellowships",
+    q: "WASH water sanitation hygiene job OR fellowship UNICEF WHO WaterAid IRC UNDP deadline 2026 OR 2027",
+    category: "wash_opportunity"
+  },
+  {
+    label: "International Professional Training",
+    q: "fully funded international professional training banking microfinance OR WASH water sanitation deadline 2026 OR 2027",
+    category: "professional_training"
+  },
+  {
+    label: "Fully Funded Conferences",
+    q: "fully funded international conference OR summit banking finance OR WASH water security OR climate change application deadline 2026 OR 2027",
+    category: "conference_summit"
+  }
+];
+async function fetchFromTavilySearch() {
+  const apiKey = (process.env.TAVILY_API_KEY || "").trim();
+  if (!apiKey || apiKey === "MY_TAVILY_API_KEY") {
+    return { candidates: [], configured: false };
+  }
+  const candidates = [];
+  const errors = [];
+  const seenUrls = /* @__PURE__ */ new Set();
+  for (const item of LIVE_SEARCH_QUERIES) {
+    try {
+      const resp = await fetchWithRetry(
+        "https://api.tavily.com/search",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            query: item.q,
+            search_depth: "basic",
+            max_results: 6,
+            include_raw_content: false
+          })
+        },
+        1,
+        8500
+      );
+      if (!resp.ok) {
+        errors.push(`Tavily (${item.label}) HTTP ${resp.status}`);
+        continue;
+      }
+      const data = await resp.json();
+      const results = Array.isArray(data?.results) ? data.results : [];
+      for (const r of results) {
+        const link = String(r.url || "").trim();
+        const check = validateOfficialExternalUrl(link);
+        if (!check.valid || !check.isOfficialDomain || seenUrls.has(check.normalizedUrl)) continue;
+        seenUrls.add(check.normalizedUrl);
+        const title = String(r.title || "").trim();
+        const snippet = String(r.content || "").trim();
+        const deadlineRaw = extractVerifiableDeadlineFromSnippet(`${title} ${snippet}`);
+        if (!deadlineRaw) continue;
+        const orgName = check.hostname.replace(/^www\./, "");
+        candidates.push({
+          title,
+          organization: orgName,
+          organizationType: inferOrganizationType(title, check.hostname),
+          category: item.category,
+          country: "International",
+          location: "International",
+          summary: snippet.slice(0, 420),
+          sourceId: "tavily_web_search_api",
+          sourceName: `Official Portal via Tavily Live Search (${item.label})`,
+          originalSourceUrl: check.normalizedUrl,
+          officialApplicationUrl: check.normalizedUrl,
+          deadlineDateRaw: deadlineRaw,
+          deadlineTimezone: "UTC",
+          fullText: `${title} ${snippet}`,
+          preVerifiedByOfficialApi: false
+        });
+      }
+    } catch (err) {
+      errors.push(`Tavily (${item.label}): ${err?.message || String(err)}`);
+    }
+  }
+  return { candidates, configured: true, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
+}
+async function fetchFromBraveSearch() {
+  const apiKey = (process.env.BRAVE_SEARCH_API_KEY || "").trim();
+  if (!apiKey || apiKey === "MY_BRAVE_SEARCH_API_KEY") {
+    return { candidates: [], configured: false };
+  }
+  const candidates = [];
+  const errors = [];
+  const seenUrls = /* @__PURE__ */ new Set();
+  for (const item of LIVE_SEARCH_QUERIES) {
+    try {
+      const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(item.q)}&count=6`;
+      const resp = await fetchWithRetry(
+        url,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "X-Subscription-Token": apiKey
+          }
+        },
+        1,
+        8500
+      );
+      if (!resp.ok) {
+        errors.push(`Brave Search (${item.label}) HTTP ${resp.status}`);
+        continue;
+      }
+      const data = await resp.json();
+      const results = Array.isArray(data?.web?.results) ? data.web.results : [];
+      for (const r of results) {
+        const link = String(r.url || "").trim();
+        const check = validateOfficialExternalUrl(link);
+        if (!check.valid || !check.isOfficialDomain || seenUrls.has(check.normalizedUrl)) continue;
+        seenUrls.add(check.normalizedUrl);
+        const title = String(r.title || "").trim();
+        const snippet = String(r.description || "").trim();
+        const deadlineRaw = extractVerifiableDeadlineFromSnippet(`${title} ${snippet}`);
+        if (!deadlineRaw) continue;
+        const orgName = check.hostname.replace(/^www\./, "");
+        candidates.push({
+          title,
+          organization: orgName,
+          organizationType: inferOrganizationType(title, check.hostname),
+          category: item.category,
+          country: "International",
+          location: "International",
+          summary: snippet.slice(0, 420),
+          sourceId: "brave_web_search_api",
+          sourceName: `Official Portal via Brave Live Search (${item.label})`,
+          originalSourceUrl: check.normalizedUrl,
+          officialApplicationUrl: check.normalizedUrl,
+          deadlineDateRaw: deadlineRaw,
+          deadlineTimezone: "UTC",
+          fullText: `${title} ${snippet}`,
+          preVerifiedByOfficialApi: false
+        });
+      }
+    } catch (err) {
+      errors.push(`Brave Search (${item.label}): ${err?.message || String(err)}`);
+    }
+  }
+  return { candidates, configured: true, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
+}
+var OFFICIAL_DIRECT_PORTALS = [
+  {
+    id: "bis_events",
+    name: "Bank for International Settlements (BIS) Events & Central Banking Conferences",
+    organization: "Bank for International Settlements (BIS)",
+    organizationGroup: "Multilateral Central Bank Institution",
+    organizationType: "multilateral_bank",
+    url: "https://www.bis.org/events/index.htm",
+    defaultCategory: "conference_summit",
+    country: "Switzerland / International",
+    parserMode: "bis_events"
+  },
+  {
+    id: "afi_events_feed",
+    name: "Alliance for Financial Inclusion (AFI) Banking & Microfinance Events",
+    organization: "Alliance for Financial Inclusion (AFI)",
+    organizationGroup: "Global Financial Inclusion & Banking Network",
+    organizationType: "financial_institution",
+    url: "https://www.afi-global.org/events/feed/",
+    defaultCategory: "conference_summit",
+    country: "International",
+    parserMode: "rss_or_html"
+  },
+  {
+    id: "worldbank_events",
+    name: "World Bank Official Global Events & Forums",
+    organization: "World Bank Group",
+    organizationGroup: "Multilateral Development Bank",
+    organizationType: "multilateral_bank",
+    url: "https://www.worldbank.org/en/events",
+    defaultCategory: "conference_summit",
+    country: "International",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "eib_careers",
+    name: "European Investment Bank (EIB) Official Careers",
+    organization: "European Investment Bank (EIB)",
+    organizationGroup: "Multilateral Development Bank",
+    organizationType: "multilateral_bank",
+    url: "https://www.eib.org/en/about/careers/index.htm",
+    defaultCategory: "international_job",
+    country: "Luxembourg / International",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "daad_scholarships",
+    name: "DAAD Official German Government Scholarships",
+    organization: "DAAD (German Academic Exchange Service)",
+    organizationGroup: "Official Government Scholarship Portal",
+    organizationType: "government_agency",
+    url: "https://www.daad.de/en/studying-in-germany/scholarships/daad-scholarships/",
+    defaultCategory: "university_scholarship",
+    country: "Germany",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "chevening_scholarships",
+    name: "UK Government Chevening Scholarships Portal",
+    organization: "Chevening (UK FCDO)",
+    organizationGroup: "Official Government Scholarship Portal",
+    organizationType: "government_agency",
+    url: "https://www.chevening.org/scholarships/",
+    defaultCategory: "university_scholarship",
+    country: "United Kingdom",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "mastercard_scholars",
+    name: "Mastercard Foundation Scholars Program",
+    organization: "Mastercard Foundation",
+    organizationGroup: "Official Global University Scholarship Partner",
+    organizationType: "university",
+    url: "https://www.mastercardfdn.org/all/scholars/",
+    defaultCategory: "university_scholarship",
+    country: "International",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "world_water_week",
+    name: "SIWI Stockholm World Water Week (WASH Conference & Summit)",
+    organization: "Stockholm International Water Institute (SIWI)",
+    organizationGroup: "Official WASH & Water Security Portal",
+    organizationType: "conference_organizer",
+    url: "https://www.worldwaterweek.org/",
+    defaultCategory: "conference_summit",
+    country: "Sweden / Online",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "unicef_careers",
+    name: "UNICEF Official Global Careers Portal",
+    organization: "UNICEF",
+    organizationGroup: "United Nations Agency (WASH & Humanitarian)",
+    organizationType: "un_agency",
+    url: "https://www.unicef.org/careers/",
+    defaultCategory: "wash_opportunity",
+    country: "International",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "who_careers",
+    name: "World Health Organization (WHO) Official Careers Portal",
+    organization: "World Health Organization (WHO)",
+    organizationGroup: "United Nations Agency (Public Health & WASH)",
+    organizationType: "un_agency",
+    url: "https://www.who.int/careers",
+    defaultCategory: "wash_opportunity",
+    country: "International",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "unitar_courses",
+    name: "UN Institute for Training and Research (UNITAR) Official Courses",
+    organization: "UNITAR (United Nations)",
+    organizationGroup: "United Nations Official Professional Training Portal",
+    organizationType: "un_agency",
+    url: "https://www.unitar.org/courses",
+    defaultCategory: "professional_training",
+    country: "International / Online",
+    parserMode: "jsonld_or_html"
+  }
+];
+function extractJsonLdOpportunitiesFromHtml(html, portal) {
+  const results = [];
+  const scripts = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  const visitNode = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(visitNode);
+      return;
+    }
+    if (Array.isArray(node["@graph"])) {
+      node["@graph"].forEach(visitNode);
+    }
+    if (Array.isArray(node.itemListElement)) {
+      node.itemListElement.forEach((el) => visitNode(el?.item || el));
+    }
+    const rawType = Array.isArray(node["@type"]) ? node["@type"].join(" ") : String(node["@type"] || "");
+    if (!/\b(Event|JobPosting|Course|EducationalOccupationalProgram|Grant)\b/i.test(rawType)) {
+      return;
+    }
+    const title = decodeXmlEntities(String(node.name || node.title || "").trim());
+    const rawLink = String(node.url || node.sameAs || portal.url).trim();
+    const rawDeadline = String(node.validThrough || node.applicationDeadline || node.endDate || node.startDate || "").trim();
+    if (!title || title.length < 8 || !rawDeadline) return;
+    let resolvedUrl = rawLink;
+    try {
+      resolvedUrl = new URL(rawLink, portal.url).toString();
+    } catch {
+      resolvedUrl = portal.url;
+    }
+    const urlCheck = validateOfficialExternalUrl(resolvedUrl);
+    if (!urlCheck.valid || !urlCheck.isOfficialDomain) return;
+    const desc = stripHtmlToText(String(node.description || "")).slice(0, 420);
+    const country = String(node?.location?.address?.addressCountry || node?.jobLocation?.address?.addressCountry || portal.country).trim() || portal.country;
+    const category = /JobPosting/i.test(rawType) ? portal.defaultCategory === "wash_opportunity" ? "wash_opportunity" : "international_job" : /Event/i.test(rawType) ? "conference_summit" : /Course/i.test(rawType) ? "professional_training" : portal.defaultCategory;
+    results.push({
+      title,
+      organization: portal.organization,
+      organizationType: portal.organizationType,
+      category,
+      country,
+      location: String(node?.location?.name || country),
+      summary: desc || `${title} published on the official ${portal.organization} portal.`,
+      sourceId: "official_direct_website_monitor",
+      sourceName: `Direct Official Monitor: ${portal.name}`,
+      originalSourceUrl: portal.url,
+      officialApplicationUrl: urlCheck.normalizedUrl,
+      deadlineDateRaw: rawDeadline,
+      deadlineTimezone: "UTC",
+      startDate: String(node.startDate || "Not Confirmed"),
+      fundingSummary: "Funding Not Confirmed",
+      eligibleNationalities: ["All nationalities (verify eligibility on official portal)"],
+      ethiopianEligible: "likely_global",
+      directIndividualApplicationAllowed: "yes",
+      fullText: `${title} ${portal.organization} ${desc}`,
+      preVerifiedByOfficialApi: false
+    });
+  };
+  for (const scriptTag of scripts.slice(0, 12)) {
+    const inner = scriptTag.replace(/^<script[^>]*>/i, "").replace(/<\/script>$/i, "").trim();
+    if (!inner) continue;
+    try {
+      visitNode(JSON.parse(inner));
+    } catch {
+    }
+  }
+  return results;
+}
+function extractBisEventCardsFromHtml(html, portal) {
+  const results = [];
+  const cardMatches = html.match(/<a[^>]+href="([^"]*\/events\/[^"]+)"[^>]*class="card-link"[^>]*>[\s\S]*?<\/a>/gi) || [];
+  for (const card of cardMatches.slice(0, 12)) {
+    const hrefMatch = card.match(/href="([^"]+)"/i);
+    const dateMatch = card.match(/<span[^>]+class="[^"]*card-date[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
+    const titleMatch = card.match(/<h[3-6][^>]+class="[^"]*card-heading[^"]*"[^>]*>([\s\S]*?)<\/h[3-6]>/i);
+    if (!hrefMatch || !dateMatch || !titleMatch) continue;
+    const title = decodeXmlEntities(stripHtmlToText(titleMatch[1])).trim();
+    const dateStr = stripHtmlToText(dateMatch[1]).trim();
+    if (!title || !dateStr) continue;
+    let resolvedUrl = "";
+    try {
+      resolvedUrl = new URL(hrefMatch[1], portal.url).toString();
+    } catch {
+      continue;
+    }
+    const urlCheck = validateOfficialExternalUrl(resolvedUrl);
+    if (!urlCheck.valid || !urlCheck.isOfficialDomain) continue;
+    const isTraining = /\b(seminar|workshop|course|training|tutorial)\b/i.test(title);
+    results.push({
+      title,
+      organization: portal.organization,
+      organizationType: "multilateral_bank",
+      category: isTraining ? "professional_training" : "conference_summit",
+      country: "Switzerland / International",
+      location: "Basel / International (see official BIS event page)",
+      summary: `Official Bank for International Settlements (BIS) banking, finance, and central banking event scheduled for ${dateStr}. Verify registration criteria on the official BIS page.`,
+      sourceId: "official_direct_website_monitor",
+      sourceName: `Direct Official Monitor: ${portal.name}`,
+      originalSourceUrl: portal.url,
+      officialApplicationUrl: urlCheck.normalizedUrl,
+      deadlineDateRaw: dateStr,
+      deadlineTimezone: "Europe/Zurich",
+      startDate: dateStr,
+      fundingSummary: "Funding Not Confirmed",
+      applicationFee: "Not Confirmed",
+      eligibleNationalities: ["Central bank, financial regulation & banking professionals (verify on official BIS page)"],
+      ethiopianEligible: "likely_global",
+      educationRequirement: "Banking, Finance, Economics or Statistics background (see official page)",
+      experienceRequirement: "See official BIS event participation rules",
+      requiredSkills: ["Central Banking", "Financial Regulation", "Banking & Finance", "Risk Management"],
+      languagesRequired: ["English"],
+      universityRecommendationRequired: "not_required",
+      companyRecommendationRequired: "not_confirmed",
+      institutionalNominationRequired: "not_confirmed",
+      directIndividualApplicationAllowed: "not_confirmed",
+      fullText: `${title} Bank for International Settlements central banking financial regulation conference seminar`,
+      preVerifiedByOfficialApi: false
+    });
+  }
+  return results;
+}
+function extractGenericRssOpportunities(xml, portal) {
+  const results = [];
+  const items = xml.match(/<item>[\s\S]*?<\/item>/gi) || [];
+  for (const rawItem of items.slice(0, 10)) {
+    const extractTag = (tag) => {
+      const m = rawItem.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+      return m ? decodeXmlEntities(m[1]).trim() : "";
+    };
+    const title = extractTag("title");
+    const link = extractTag("link");
+    const desc = stripHtmlToText(extractTag("description"));
+    if (!title || !link) continue;
+    const deadlineRaw = extractVerifiableDeadlineFromSnippet(`${title} ${desc}`);
+    if (!deadlineRaw) continue;
+    const urlCheck = validateOfficialExternalUrl(link);
+    if (!urlCheck.valid || !urlCheck.isOfficialDomain) continue;
+    results.push({
+      title,
+      organization: portal.organization,
+      organizationType: portal.organizationType,
+      category: portal.defaultCategory,
+      country: portal.country,
+      location: portal.country,
+      summary: desc.slice(0, 420) || `${title} published on ${portal.organization}.`,
+      sourceId: "official_direct_website_monitor",
+      sourceName: `Direct Official Monitor: ${portal.name}`,
+      originalSourceUrl: portal.url,
+      officialApplicationUrl: urlCheck.normalizedUrl,
+      deadlineDateRaw: deadlineRaw,
+      deadlineTimezone: "UTC",
+      fundingSummary: "Funding Not Confirmed",
+      eligibleNationalities: ["All nationalities (verify on official portal)"],
+      ethiopianEligible: "likely_global",
+      fullText: `${title} ${portal.organization} ${desc}`,
+      preVerifiedByOfficialApi: false
+    });
+  }
+  return results;
+}
+async function fetchFromDirectOfficialWebsites() {
+  const candidates = [];
+  const portalChecks = [];
+  const errors = [];
+  const seenUrls = /* @__PURE__ */ new Set();
+  await Promise.all(
+    OFFICIAL_DIRECT_PORTALS.map(async (portal) => {
+      const checkedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const urlCheck = validateOfficialExternalUrl(portal.url);
+      if (!urlCheck.valid || !urlCheck.isOfficialDomain) {
+        portalChecks.push({
+          name: portal.name,
+          url: portal.url,
+          organizationGroup: portal.organizationGroup,
+          httpStatus: null,
+          robotsAllowed: false,
+          itemsFound: 0,
+          checkedAt
+        });
+        return;
+      }
+      const robotsAllowed = await isAllowedByRobotsTxt(urlCheck.normalizedUrl);
+      if (!robotsAllowed) {
+        portalChecks.push({
+          name: portal.name,
+          url: portal.url,
+          organizationGroup: portal.organizationGroup,
+          httpStatus: null,
+          robotsAllowed: false,
+          itemsFound: 0,
+          checkedAt
+        });
+        return;
+      }
+      try {
+        const resp = await fetchWithRetry(
+          urlCheck.normalizedUrl,
+          {
+            method: "GET",
+            redirect: "follow",
+            headers: {
+              "User-Agent": "HopelandJobsBot/1.0 (+https://hopelandjobs.tech)",
+              Accept: "text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          },
+          0,
+          6500
+        );
+        if (!resp.ok) {
+          portalChecks.push({
+            name: portal.name,
+            url: portal.url,
+            organizationGroup: portal.organizationGroup,
+            httpStatus: resp.status,
+            robotsAllowed: true,
+            itemsFound: 0,
+            checkedAt
+          });
+          return;
+        }
+        const body = await resp.text();
+        let extracted = [];
+        if (portal.parserMode === "bis_events") {
+          extracted = extractBisEventCardsFromHtml(body, portal);
+        } else if (portal.parserMode === "rss_or_html" && /<rss\b|<feed\b/i.test(body)) {
+          extracted = extractGenericRssOpportunities(body, portal);
+        } else {
+          extracted = extractJsonLdOpportunitiesFromHtml(body, portal);
+        }
+        let addedFromPortal = 0;
+        for (const item of extracted) {
+          if (seenUrls.has(item.officialApplicationUrl)) continue;
+          const dl = evaluateOpportunityDeadline(item.deadlineDateRaw, item.deadlineTimezone || "UTC");
+          if (!dl.valid || dl.isExpired || !dl.meetsMinimumThreeFullDays) continue;
+          seenUrls.add(item.officialApplicationUrl);
+          candidates.push(item);
+          addedFromPortal++;
+        }
+        portalChecks.push({
+          name: portal.name,
+          url: portal.url,
+          organizationGroup: portal.organizationGroup,
+          httpStatus: resp.status,
+          robotsAllowed: true,
+          itemsFound: addedFromPortal,
+          checkedAt
+        });
+      } catch (err) {
+        errors.push(`${portal.organization}: ${err?.message || "timeout"}`);
+        portalChecks.push({
+          name: portal.name,
+          url: portal.url,
+          organizationGroup: portal.organizationGroup,
+          httpStatus: null,
+          robotsAllowed: true,
+          itemsFound: 0,
+          checkedAt
+        });
+      }
+    })
+  );
+  const healthyCount = portalChecks.filter((p) => p.httpStatus !== null && p.httpStatus >= 200 && p.httpStatus < 300).length;
+  return {
+    candidates,
+    portalChecks,
+    error: healthyCount === 0 && errors.length > 0 ? errors.slice(0, 3).join("; ") : void 0
+  };
+}
+async function fetchViaGeminiSearchGrounding(getAiClient, rotatingPassIndex = null) {
+  const client = await getAiClient();
+  if (!client) {
+    return { candidates: [], configured: false };
+  }
+  const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const minDeadlineDate = new Date(Date.now() + 4 * 24 * 60 * 60 * 1e3).toISOString().slice(0, 10);
+  const jsonSchemaInstructions = `STRICT RULES:
+- Return ONLY real, currently open opportunities found in live Google Search results with an exact official HTTPS URL (.edu, .gov, .int, .org, official UN, World Bank, IMF, AfDB, university, bank, NGO, or official conference portal \u2014 NEVER blogs or third-party scholarship aggregators).
+- Every opportunity MUST have an exact verifiable future application deadline (YYYY-MM-DD) ON OR AFTER ${minDeadlineDate}.
+- Do NOT invent any opportunity, deadline, funding, or visa sponsorship. Use "Not Confirmed" if a detail is not explicitly stated on the official page.
+- Never confuse an invitation letter with visa sponsorship or free visa fees.
+- Return ONLY a valid JSON array (no markdown fences) with objects having exact keys:
+  title, organization, category ("international_job" | "university_scholarship" | "professional_training" | "conference_summit" | "wash_opportunity"), country, location, summary, originalSourceUrl, officialApplicationUrl, deadlineDateRaw (YYYY-MM-DD), deadlineTimezone (IANA e.g. "UTC"), startDate, fundingSummary, visaSummary, applicationFee, eligibleNationalities (string[]), ethiopianEligible ("confirmed" | "likely_global" | "not_confirmed"), educationRequirement, experienceRequirement, minimumYearsExperience (number or null), requiredSkills (string[]), universityRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), companyRecommendationRequired ("required" | "not_required" | "optional" | "not_confirmed"), institutionalNominationRequired ("required" | "not_required" | "optional" | "not_confirmed"), directIndividualApplicationAllowed ("yes" | "no" | "not_confirmed").`;
+  const allPrompts = [
+    {
+      label: "Fully Funded Scholarships & Conferences",
+      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
+1. Fully funded University Scholarships accepting Ethiopian citizens with direct individual application (no mandatory university nomination), from official university or government portals (e.g., DAAD, Chevening, Fulbright, Erasmus+, Mastercard Foundation, government/university official sites).
+2. Fully funded International Conferences & Summits in Banking/Finance, Microfinance, Financial Inclusion, WASH/Water Security, Climate Change, Public Health, Sustainable Development, or AI/Tech allowing direct individual application.
+${jsonSchemaInstructions}`
+    },
+    {
+      label: "Banking/Finance Jobs & Professional Trainings",
+      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN opportunities with deadlines >= ${minDeadlineDate}:
+1. International Banking and Finance Jobs offering employer-sponsored work visas, relocation assistance, or international recruitment (e.g., World Bank, IMF, AfDB, IFC, BIS, EIB, EBRD, ADB, commercial/central banks, fintechs).
+2. Fully funded or sponsored International Professional Training programs in Banking/Finance (central banking, digital banking, fintech, microfinance, financial inclusion, risk management) or WASH (water supply, sanitation, hygiene, wastewater, climate-resilient WASH) accepting individual applicants without mandatory company nomination.
+${jsonSchemaInstructions}`
+    },
+    {
+      label: "WASH International Jobs & Fellowships",
+      prompt: `Today is ${todayIso}. Use live Google Search to find up to 6 REAL, CURRENTLY OPEN WASH (Water, Sanitation, and Hygiene) international jobs, internships, or fellowships with deadlines >= ${minDeadlineDate} from official UN and INGO portals (UNICEF, WHO, UN-Habitat, UNDP, World Bank, AfDB, IOM, IRC, WaterAid, Water.org, World Vision, Save the Children, IFRC, SIWI).
+${jsonSchemaInstructions}`
+    }
+  ];
+  const searchPrompts = rotatingPassIndex !== null && rotatingPassIndex >= 0 ? [allPrompts[rotatingPassIndex % allPrompts.length]] : allPrompts;
+  const candidates = [];
+  const errors = [];
+  const seenUrls = /* @__PURE__ */ new Set();
+  for (const sp of searchPrompts) {
+    try {
+      const response = await client.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: sp.prompt,
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
+      });
+      const groundingChunks = response?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const groundedTitles = groundingChunks.map((c) => String(c?.web?.title || "").trim()).filter(Boolean).slice(0, 6);
+      const rawText = String(response?.text || "").trim();
+      const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) {
+        errors.push(`Gemini grounding (${sp.label}) returned no structured JSON list.`);
+        continue;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch {
+        errors.push(`Gemini grounding (${sp.label}) returned malformed JSON.`);
+        continue;
+      }
+      if (!Array.isArray(parsed)) continue;
+      for (const row of parsed) {
+        if (!row || typeof row !== "object") continue;
+        const origUrl = String(row.originalSourceUrl || row.officialApplicationUrl || "").trim();
+        const appUrl = String(row.officialApplicationUrl || row.originalSourceUrl || "").trim();
+        const urlCheck = validateOfficialExternalUrl(appUrl);
+        if (!urlCheck.valid || !urlCheck.isOfficialDomain || seenUrls.has(urlCheck.normalizedUrl)) continue;
+        seenUrls.add(urlCheck.normalizedUrl);
+        const validCategories = [
+          "international_job",
+          "university_scholarship",
+          "professional_training",
+          "conference_summit",
+          "wash_opportunity"
+        ];
+        const cat = validCategories.includes(row.category) ? row.category : "international_job";
+        candidates.push({
+          title: String(row.title || "").trim(),
+          organization: String(row.organization || urlCheck.hostname).trim(),
+          organizationType: inferOrganizationType(String(row.organization || ""), urlCheck.hostname),
+          category: cat,
+          country: String(row.country || "International").trim(),
+          location: String(row.location || row.country || "International").trim(),
+          summary: String(row.summary || "").trim(),
+          sourceId: "gemini_official_search_grounding",
+          sourceName: `Official Portal via Gemini Google Search Grounding (${sp.label})`,
+          originalSourceUrl: validateOfficialExternalUrl(origUrl).valid ? origUrl : urlCheck.normalizedUrl,
+          officialApplicationUrl: urlCheck.normalizedUrl,
+          deadlineDateRaw: String(row.deadlineDateRaw || "").trim(),
+          deadlineTimezone: String(row.deadlineTimezone || "UTC").trim(),
+          startDate: String(row.startDate || "Not Confirmed").trim(),
+          fundingSummary: String(row.fundingSummary || "Funding Not Confirmed").trim(),
+          visaSummary: String(row.visaSummary || "Not Confirmed").trim(),
+          applicationFee: String(row.applicationFee || "Not Confirmed").trim(),
+          eligibleNationalities: Array.isArray(row.eligibleNationalities) ? row.eligibleNationalities.map((x) => String(x)).filter(Boolean) : ["Not Confirmed"],
+          ethiopianEligible: ["confirmed", "likely_global", "not_confirmed", "excluded"].includes(row.ethiopianEligible) ? row.ethiopianEligible : "not_confirmed",
+          educationRequirement: String(row.educationRequirement || "Not Confirmed").trim(),
+          minimumEducationLevel: parseMinEducationFromText(String(row.educationRequirement || "")),
+          experienceRequirement: String(row.experienceRequirement || "Not Confirmed").trim(),
+          minimumYearsExperience: typeof row.minimumYearsExperience === "number" && !Number.isNaN(row.minimumYearsExperience) ? row.minimumYearsExperience : parseMinimumYearsFromText(String(row.experienceRequirement || "")),
+          careerLevel: "not_confirmed",
+          requiredSkills: Array.isArray(row.requiredSkills) ? row.requiredSkills.map((s) => String(s)).filter(Boolean).slice(0, 10) : [],
+          languagesRequired: ["English"],
+          universityRecommendationRequired: ["required", "not_required", "optional", "not_confirmed"].includes(
+            row.universityRecommendationRequired
+          ) ? row.universityRecommendationRequired : "not_confirmed",
+          companyRecommendationRequired: ["required", "not_required", "optional", "not_confirmed"].includes(
+            row.companyRecommendationRequired
+          ) ? row.companyRecommendationRequired : "not_confirmed",
+          institutionalNominationRequired: ["required", "not_required", "optional", "not_confirmed"].includes(
+            row.institutionalNominationRequired
+          ) ? row.institutionalNominationRequired : "not_confirmed",
+          directIndividualApplicationAllowed: ["yes", "no", "not_confirmed"].includes(
+            row.directIndividualApplicationAllowed
+          ) ? row.directIndividualApplicationAllowed : "not_confirmed",
+          fullText: `${row.title || ""} ${row.summary || ""} ${row.fundingSummary || ""} ${row.visaSummary || ""} ${groundedTitles.join(" ")}`,
+          preVerifiedByOfficialApi: false
+        });
+      }
+    } catch (err) {
+      errors.push(`Gemini Search Grounding (${sp.label}): ${err?.message || String(err)}`);
+    }
+  }
+  return { candidates, configured: true, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
+}
+async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
+  const urlCheck = validateOfficialExternalUrl(officialUrl);
+  if (!urlCheck.valid || !urlCheck.isOfficialDomain) {
+    return {
+      ok: false,
+      httpStatus: null,
+      robotsAllowed: false,
+      detectedClosedOrExpired: false,
+      pageTextSnippet: "",
+      notes: urlCheck.reason || "URL failed official domain verification."
+    };
+  }
+  const robotsAllowed = await isAllowedByRobotsTxt(urlCheck.normalizedUrl);
+  if (!robotsAllowed) {
+    if (preVerifiedByOfficialApi) {
+      return {
+        ok: true,
+        httpStatus: 200,
+        robotsAllowed: false,
+        detectedClosedOrExpired: false,
+        pageTextSnippet: "Verified via official API response (page crawl skipped to respect robots.txt).",
+        notes: "Verified through official organization API; direct HTML fetch skipped per robots.txt."
+      };
+    }
+    return {
+      ok: false,
+      httpStatus: null,
+      robotsAllowed: false,
+      detectedClosedOrExpired: false,
+      pageTextSnippet: "",
+      notes: "Skipped HTML verification to respect robots.txt Disallow directive."
+    };
+  }
+  try {
+    let status = 0;
+    let html = "";
+    let finalUrl = urlCheck.normalizedUrl;
+    if (urlCheck.hostname === "reliefweb.int" || urlCheck.hostname.endsWith(".reliefweb.int")) {
+      const h2 = await fetchTextViaHttp2(urlCheck.normalizedUrl, 7500);
+      status = h2.status;
+      html = h2.body;
+      finalUrl = h2.finalUrl;
+    } else {
+      const resp = await fetchWithRetry(
+        urlCheck.normalizedUrl,
+        {
+          method: "GET",
+          redirect: "follow",
+          headers: {
+            "User-Agent": "HopelandJobsBot/1.0 (+https://hopelandjobs.tech)",
+            Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8"
+          }
+        },
+        1,
+        7500
+      );
+      status = resp.status;
+      finalUrl = resp.url || urlCheck.normalizedUrl;
+      if (resp.ok) {
+        html = await resp.text();
+      }
+    }
+    const finalCheck = validateOfficialExternalUrl(finalUrl);
+    if (!finalCheck.valid) {
+      return {
+        ok: false,
+        httpStatus: status,
+        robotsAllowed: true,
+        detectedClosedOrExpired: false,
+        pageTextSnippet: "",
+        notes: "Redirected to an unsafe or non-HTTPS URL."
+      };
+    }
+    if (status === 404 || status === 410) {
+      return {
+        ok: false,
+        httpStatus: status,
+        robotsAllowed: true,
+        detectedClosedOrExpired: true,
+        pageTextSnippet: "",
+        notes: `Official page returned HTTP ${status} (not found or removed).`
+      };
+    }
+    if (status < 200 || status >= 300) {
+      if (preVerifiedByOfficialApi && (status === 403 || status === 405 || status === 406)) {
+        return {
+          ok: true,
+          httpStatus: status,
+          robotsAllowed: true,
+          detectedClosedOrExpired: false,
+          pageTextSnippet: "Verified directly via official ReliefWeb UN/NGO feed (destination portal restricts automated HTML GET).",
+          notes: `Verified via official feed (direct GET returned HTTP ${status}).`
+        };
+      }
+      return {
+        ok: false,
+        httpStatus: status,
+        robotsAllowed: true,
+        detectedClosedOrExpired: false,
+        pageTextSnippet: "",
+        notes: `Official URL returned HTTP ${status}.`
+      };
+    }
+    const plain = stripHtmlToText(html).slice(0, 6e3);
+    const closedMatch = plain.match(
+      /\b(applications?\s+(are|is)\s+(now\s+)?closed|this\s+(job|position|vacancy|opportunity|scholarship|call)\s+(is|has)\s+(been\s+)?(closed|expired|filled|withdrawn)|no\s+longer\s+accepting\s+applications|the\s+deadline\s+has\s+passed)\b/i
+    );
+    if (closedMatch) {
+      return {
+        ok: false,
+        httpStatus: status,
+        robotsAllowed: true,
+        detectedClosedOrExpired: true,
+        pageTextSnippet: plain.slice(0, 320),
+        notes: `Official page indicates closed/expired status ("${closedMatch[0]}").`
+      };
+    }
+    return {
+      ok: true,
+      httpStatus: status,
+      robotsAllowed: true,
+      detectedClosedOrExpired: false,
+      pageTextSnippet: plain.slice(0, 420),
+      notes: `Live official page verified (HTTP ${status}).`
+    };
+  } catch (err) {
+    if (preVerifiedByOfficialApi) {
+      return {
+        ok: true,
+        httpStatus: null,
+        robotsAllowed: true,
+        detectedClosedOrExpired: false,
+        pageTextSnippet: "Verified directly via official ReliefWeb UN/NGO API.",
+        notes: `Verified via official API (live page timeout: ${err?.message || "timeout"}).`
+      };
+    }
+    return {
+      ok: false,
+      httpStatus: null,
+      robotsAllowed: true,
+      detectedClosedOrExpired: false,
+      pageTextSnippet: "",
+      notes: `Live official page verification failed: ${err?.message || String(err)}`
+    };
+  }
+}
+function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
+  const urlCheck = validateOfficialExternalUrl(candidate.officialApplicationUrl);
+  const fingerprint = computeOpportunityFingerprint(
+    candidate.title,
+    candidate.organization,
+    urlCheck.normalizedUrl || candidate.officialApplicationUrl
+  );
+  const hashId = crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 18);
+  const oppId = `gopp_${hashId}`;
+  const deadlineEval = evaluateOpportunityDeadline(
+    candidate.deadlineDateRaw,
+    candidate.deadlineTimezone || "UTC",
+    new Date(nowIso).getTime()
+  );
+  const combinedCorpus = `${candidate.title} ${candidate.organization} ${candidate.summary} ${candidate.fullText || ""} ${liveCheck.pageTextSnippet}`;
+  const sectorInfo = detectSectorsFromText(combinedCorpus);
+  const isWashDedicated = candidate.category === "wash_opportunity" || sectorInfo.isWash || WASH_TARGET_ORGS.some((o) => candidate.organization.toLowerCase().includes(o)) && sectorInfo.isWash;
+  const fundingBase = classifyFundingAndVisaTransparency({
+    fundingSummary: candidate.fundingSummary,
+    visaSummary: candidate.visaSummary,
+    fullText: combinedCorpus,
+    applicationFee: candidate.applicationFee,
+    stipendOrSalary: candidate.stipendOrSalary
+  });
+  const funding = {
+    id: `fund_${hashId}`,
+    opportunityId: oppId,
+    ...fundingBase,
+    evidenceExcerpt: liveCheck.pageTextSnippet.slice(0, 260) || void 0,
+    verifiedAt: nowIso
+  };
+  const eligibility = {
+    id: `elig_${hashId}`,
+    opportunityId: oppId,
+    eligibleNationalities: candidate.eligibleNationalities && candidate.eligibleNationalities.length > 0 ? candidate.eligibleNationalities : ["Not Confirmed"],
+    ethiopianEligible: candidate.ethiopianEligible || "not_confirmed",
+    educationRequirement: candidate.educationRequirement || "Not Confirmed",
+    minimumEducationLevel: candidate.minimumEducationLevel || parseMinEducationFromText(combinedCorpus),
+    experienceRequirement: candidate.experienceRequirement || "Not Confirmed",
+    minimumYearsExperience: typeof candidate.minimumYearsExperience === "number" ? candidate.minimumYearsExperience : parseMinimumYearsFromText(combinedCorpus),
+    careerLevel: candidate.careerLevel || "not_confirmed",
+    requiredSkills: candidate.requiredSkills || [],
+    languagesRequired: candidate.languagesRequired || ["English"],
+    universityRecommendationRequired: candidate.universityRecommendationRequired || "not_confirmed",
+    companyRecommendationRequired: candidate.companyRecommendationRequired || "not_confirmed",
+    institutionalNominationRequired: candidate.institutionalNominationRequired || "not_confirmed",
+    directIndividualApplicationAllowed: candidate.directIndividualApplicationAllowed || "not_confirmed",
+    verifiedAt: nowIso
+  };
+  const deadline = {
+    id: `dead_${hashId}`,
+    opportunityId: oppId,
+    deadlineDateRaw: candidate.deadlineDateRaw || "Not Confirmed",
+    deadlineUtcIso: deadlineEval.deadlineUtcIso,
+    deadlineTimezone: deadlineEval.deadlineTimezone,
+    fullDaysRemaining: deadlineEval.fullDaysRemaining,
+    hoursRemaining: deadlineEval.hoursRemaining,
+    meetsMinimumThreeFullDays: deadlineEval.meetsMinimumThreeFullDays,
+    isClosingSoon: deadlineEval.isClosingSoon,
+    isExpired: deadlineEval.isExpired,
+    startDate: candidate.startDate || "Not Confirmed",
+    lastCheckedAt: nowIso
+  };
+  let applicationStatus = "unverified";
+  if (liveCheck.detectedClosedOrExpired) {
+    applicationStatus = "closed";
+  } else if (deadlineEval.isExpired) {
+    applicationStatus = "expired";
+  } else if (liveCheck.ok && deadlineEval.meetsMinimumThreeFullDays) {
+    applicationStatus = deadlineEval.isClosingSoon ? "closing_soon" : "open";
+  }
+  const organizationAuthentic = urlCheck.valid && urlCheck.isOfficialDomain;
+  const outcome = computeVerificationOutcome({
+    urlVerified: liveCheck.ok,
+    organizationAuthentic,
+    applicationStatus,
+    deadlineEval,
+    funding,
+    eligibility,
+    category: candidate.category
+  });
+  const opportunity = {
+    id: oppId,
+    fingerprint,
+    title: candidate.title,
+    organization: candidate.organization,
+    organizationType: candidate.organizationType,
+    category: candidate.category,
+    sectors: sectorInfo.sectors,
+    isWashDedicated,
+    isBankingFinance: sectorInfo.isBankingFinance,
+    country: candidate.country || "International",
+    location: candidate.location || candidate.country || "International",
+    summary: candidate.summary || `${candidate.title} at ${candidate.organization}.`,
+    organizationAuthentic,
+    sourceId: candidate.sourceId,
+    sourceName: candidate.sourceName,
+    originalSourceUrl: candidate.originalSourceUrl,
+    officialApplicationUrl: urlCheck.normalizedUrl || candidate.officialApplicationUrl,
+    officialDomain: urlCheck.hostname || "",
+    applicationStatus,
+    verificationStatus: outcome.verificationStatus,
+    hasVerifiedBadge: outcome.hasVerifiedBadge,
+    httpStatusCode: liveCheck.httpStatus,
+    robotsAllowed: liveCheck.robotsAllowed,
+    verificationNotes: deadlineEval.rejectionReason ? `${liveCheck.notes} ${deadlineEval.rejectionReason}` : liveCheck.notes,
+    sourceEvidenceSnippet: liveCheck.pageTextSnippet.slice(0, 340) || candidate.summary.slice(0, 340),
+    funding,
+    eligibility,
+    deadline,
+    discoveredAt: nowIso,
+    lastVerifiedAt: nowIso,
+    updatedAt: nowIso
+  };
+  const verificationLog = {
+    id: `vlog_${Date.now()}_${hashId.slice(0, 8)}`,
+    opportunityId: oppId,
+    opportunityTitle: candidate.title,
+    organization: candidate.organization,
+    officialUrl: opportunity.officialApplicationUrl,
+    httpStatus: liveCheck.httpStatus,
+    robotsAllowed: liveCheck.robotsAllowed,
+    passedUrlVerification: liveCheck.ok,
+    passedDeadlineRule: deadlineEval.meetsMinimumThreeFullDays && !deadlineEval.isExpired,
+    fullDaysRemaining: deadlineEval.valid ? deadlineEval.fullDaysRemaining : null,
+    resultingStatus: outcome.verificationStatus,
+    checkedFieldsCount: 20,
+    notes: opportunity.verificationNotes,
+    checkedAt: nowIso
+  };
+  return { opportunity, verificationLog };
+}
+function registerGlobalOpportunitiesRoutes(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    getAiClient
+  } = deps;
+  const STORE_FILE = path2.join(runtimeBaseDir, "data", "global_opportunities_store.json");
+  const RELIEFWEB_APPNAME = (process.env.RELIEFWEB_APPNAME || "hopelandjobs-opportunity-intel").trim();
+  const LOCK_TTL_MS = 15 * 60 * 1e3;
+  let nextScheduledRunAtMs = null;
+  let nextScheduledSlotLabel = null;
+  const DISCOVERY_INTERVAL_MINUTES = getDiscoveryIntervalMinutes();
+  const DISCOVERY_INTERVAL_MS = DISCOVERY_INTERVAL_MINUTES * 60 * 1e3;
+  function createDefaultSchedulerState() {
+    return {
+      lastSuccessfulRunAt: null,
+      lastSuccessfulRunAtEat: null,
+      lastFailedRunAt: null,
+      lastRecoveredAt: null,
+      consecutiveFailures: 0,
+      totalScheduledRuns: 0,
+      activeRunLock: null,
+      adminFailureAlert: null
+    };
+  }
+  function loadStore() {
+    const initialSources = buildInitialSourcesCatalog();
+    const loaded = loadJsonFileSafe(STORE_FILE, null);
+    if (!loaded || !Array.isArray(loaded.international_opportunities)) {
+      return {
+        version: 1,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        international_opportunities: [],
+        opportunity_sources: initialSources,
+        opportunity_verification_logs: [],
+        opportunity_funding: [],
+        opportunity_eligibility: [],
+        opportunity_deadlines: [],
+        user_saved_opportunities: [],
+        user_opportunity_recommendations: [],
+        discovery_job_logs: [],
+        scheduler_state: createDefaultSchedulerState()
+      };
+    }
+    const existingById = new Map((loaded.opportunity_sources || []).map((s) => [s.id, s]));
+    const mergedSources = initialSources.map((fresh) => {
+      const prev = existingById.get(fresh.id);
+      let nextStatus = fresh.status;
+      if (fresh.configured) {
+        if (prev && (prev.status === "connected" || prev.status === "degraded" || prev.status === "error")) {
+          nextStatus = prev.status;
+        } else {
+          nextStatus = "connected";
+        }
+      }
+      return prev ? {
+        ...fresh,
+        lastPolledAt: prev.lastPolledAt,
+        lastSuccessAt: prev.lastSuccessAt,
+        lastItemCount: prev.lastItemCount,
+        lastError: fresh.configured ? prev.lastError : fresh.lastError,
+        status: nextStatus,
+        monitoredPortals: prev.monitoredPortals
+      } : fresh;
+    });
+    const existingState = {
+      ...createDefaultSchedulerState(),
+      ...loaded.scheduler_state || {}
+    };
+    if (!existingState.lastSuccessfulRunAt && Array.isArray(loaded.discovery_job_logs)) {
+      const lastGood = loaded.discovery_job_logs.find(
+        (l) => l.jobType === "full_discovery" && (l.status === "success" || l.status === "partial" && l.verifiedAndActiveCount > 0)
+      );
+      if (lastGood) {
+        existingState.lastSuccessfulRunAt = lastGood.finishedAt;
+        existingState.lastSuccessfulRunAtEat = formatEthiopiaDateTime(lastGood.finishedAt);
+      }
+    }
+    return {
+      ...loaded,
+      opportunity_sources: mergedSources,
+      opportunity_verification_logs: loaded.opportunity_verification_logs || [],
+      opportunity_funding: loaded.opportunity_funding || [],
+      opportunity_eligibility: loaded.opportunity_eligibility || [],
+      opportunity_deadlines: loaded.opportunity_deadlines || [],
+      user_saved_opportunities: loaded.user_saved_opportunities || [],
+      user_opportunity_recommendations: loaded.user_opportunity_recommendations || [],
+      discovery_job_logs: loaded.discovery_job_logs || [],
+      scheduler_state: existingState
+    };
+  }
+  function saveStore(store) {
+    ensureRuntimeDataDir();
+    store.opportunity_funding = store.international_opportunities.map((o) => o.funding);
+    store.opportunity_eligibility = store.international_opportunities.map((o) => o.eligibility);
+    store.opportunity_deadlines = store.international_opportunities.map((o) => o.deadline);
+    store.opportunity_verification_logs = store.opportunity_verification_logs.slice(0, 400);
+    store.discovery_job_logs = store.discovery_job_logs.slice(0, 100);
+    store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    writeJsonFileAtomic(STORE_FILE, store);
+  }
+  let isDiscoveryRunning = false;
+  async function runDeadlineAndLinkRecheck(trigger, checkLinksLive = false) {
+    const startedMs = Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    const store = loadStore();
+    let expiredPurgedCount = 0;
+    let rejectedUnderThreeDaysCount = 0;
+    let rejectedBrokenOrClosedCount = 0;
+    let verifiedAndActiveCount = 0;
+    const errors = [];
+    for (let i = 0; i < store.international_opportunities.length; i++) {
+      const opp = store.international_opportunities[i];
+      const deadlineEval = evaluateOpportunityDeadline(
+        opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
+        opp.deadline.deadlineTimezone,
+        startedMs
+      );
+      opp.deadline = {
+        ...opp.deadline,
+        fullDaysRemaining: deadlineEval.fullDaysRemaining,
+        hoursRemaining: deadlineEval.hoursRemaining,
+        meetsMinimumThreeFullDays: deadlineEval.meetsMinimumThreeFullDays,
+        isClosingSoon: deadlineEval.isClosingSoon,
+        isExpired: deadlineEval.isExpired,
+        lastCheckedAt: startedAt
+      };
+      if (deadlineEval.isExpired || !deadlineEval.meetsMinimumThreeFullDays) {
+        if (opp.hasVerifiedBadge) expiredPurgedCount++;
+        if (!deadlineEval.isExpired && !deadlineEval.meetsMinimumThreeFullDays) rejectedUnderThreeDaysCount++;
+        opp.applicationStatus = "expired";
+        opp.verificationStatus = "Expired";
+        opp.hasVerifiedBadge = false;
+        opp.updatedAt = startedAt;
+        continue;
+      }
+      if (checkLinksLive && opp.hasVerifiedBadge && i < 15) {
+        try {
+          const live = await verifyUrlLive(
+            opp.officialApplicationUrl,
+            opp.sourceId.startsWith("reliefweb_")
+          );
+          opp.httpStatusCode = live.httpStatus;
+          opp.lastVerifiedAt = startedAt;
+          if (!live.ok || live.detectedClosedOrExpired) {
+            rejectedBrokenOrClosedCount++;
+            opp.applicationStatus = live.detectedClosedOrExpired ? "closed" : "unverified";
+            opp.verificationStatus = live.detectedClosedOrExpired ? "Expired" : "Unverified";
+            opp.hasVerifiedBadge = false;
+            opp.verificationNotes = live.notes;
+          }
+          store.opportunity_verification_logs.unshift({
+            id: `vlog_${Date.now()}_${opp.id.slice(-6)}`,
+            opportunityId: opp.id,
+            opportunityTitle: opp.title,
+            organization: opp.organization,
+            officialUrl: opp.officialApplicationUrl,
+            httpStatus: live.httpStatus,
+            robotsAllowed: live.robotsAllowed,
+            passedUrlVerification: live.ok,
+            passedDeadlineRule: true,
+            fullDaysRemaining: deadlineEval.fullDaysRemaining,
+            resultingStatus: opp.verificationStatus,
+            checkedFieldsCount: 20,
+            notes: live.notes,
+            checkedAt: startedAt
+          });
+        } catch (err) {
+          errors.push(`Link recheck error for ${opp.id}: ${err?.message || String(err)}`);
+        }
+      }
+      if (isOpportunityActiveAndDisplayable(opp, startedMs)) {
+        const outcome = computeVerificationOutcome({
+          urlVerified: opp.hasVerifiedBadge,
+          organizationAuthentic: opp.organizationAuthentic,
+          applicationStatus: deadlineEval.isClosingSoon ? "closing_soon" : "open",
+          deadlineEval,
+          funding: opp.funding,
+          eligibility: opp.eligibility,
+          category: opp.category
+        });
+        opp.applicationStatus = deadlineEval.isClosingSoon ? "closing_soon" : "open";
+        opp.verificationStatus = outcome.verificationStatus;
+        opp.hasVerifiedBadge = outcome.hasVerifiedBadge;
+        if (opp.hasVerifiedBadge) verifiedAndActiveCount++;
+      }
+    }
+    const activeIdSet = new Set(
+      store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o, startedMs)).map((o) => o.id)
+    );
+    store.user_opportunity_recommendations = store.user_opportunity_recommendations.filter(
+      (r) => activeIdSet.has(r.opportunityId)
+    );
+    const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const jobLog = {
+      id: `djob_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      trigger,
+      jobType: "deadline_and_link_recheck",
+      status: errors.length > 0 ? "partial" : "success",
+      startedAt,
+      finishedAt,
+      durationMs: Date.now() - startedMs,
+      sourcesQueried: 0,
+      candidatesDiscovered: 0,
+      duplicatesSkipped: 0,
+      verifiedAndActiveCount,
+      rejectedUnderThreeDaysCount,
+      rejectedBrokenOrClosedCount,
+      expiredPurgedCount,
+      errors
+    };
+    store.discovery_job_logs.unshift(jobLog);
+    saveStore(store);
+    return jobLog;
+  }
+  async function runFullOfficialDiscovery(trigger, options) {
+    const nowCheckMs = Date.now();
+    const preStore = loadStore();
+    const preLock = preStore.scheduler_state?.activeRunLock;
+    const hasActivePersistedLock = Boolean(
+      preLock && new Date(preLock.expiresAt).getTime() > nowCheckMs
+    );
+    if (isDiscoveryRunning || hasActivePersistedLock) {
+      const busyNow = new Date(nowCheckMs).toISOString();
+      return {
+        id: `djob_overlap_${nowCheckMs}`,
+        trigger,
+        jobType: "full_discovery",
+        status: "partial",
+        startedAt: busyNow,
+        finishedAt: busyNow,
+        durationMs: 0,
+        sourcesQueried: 0,
+        candidatesDiscovered: 0,
+        duplicatesSkipped: 0,
+        verifiedAndActiveCount: preStore.international_opportunities.filter(
+          (o) => isOpportunityActiveAndDisplayable(o, nowCheckMs)
+        ).length,
+        savedCount: 0,
+        recommendationsUpdatedCount: preStore.user_opportunity_recommendations.length,
+        rejectedUnderThreeDaysCount: 0,
+        rejectedBrokenOrClosedCount: 0,
+        expiredPurgedCount: 0,
+        scheduledSlotEat: options?.scheduledSlotEat,
+        attemptNumber: options?.attemptNumber ?? 1,
+        maxAttempts: options?.maxAttempts ?? 1,
+        skippedOverlap: true,
+        errors: [
+          `Skipped overlapping execution: another discovery run (${preLock?.trigger || "active"}) is already in progress.`
+        ]
+      };
+    }
+    isDiscoveryRunning = true;
+    const runId = `run_${nowCheckMs}_${Math.random().toString(36).slice(2, 6)}`;
+    const startedMs = Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    const store = loadStore();
+    if (!store.scheduler_state) {
+      store.scheduler_state = createDefaultSchedulerState();
+    }
+    store.scheduler_state.activeRunLock = {
+      runId,
+      trigger,
+      startedAt,
+      expiresAt: new Date(startedMs + LOCK_TTL_MS).toISOString()
+    };
+    saveStore(store);
+    const errors = [];
+    let sourcesQueried = 0;
+    const allCandidates = [];
+    const updateSourceMeta = (sourceId, patch) => {
+      const idx = store.opportunity_sources.findIndex((s) => s.id === sourceId);
+      if (idx >= 0) {
+        store.opportunity_sources[idx] = {
+          ...store.opportunity_sources[idx],
+          ...patch
+        };
+      }
+    };
+    try {
+      const enabledProviders = getEnabledSearchProviders();
+      if (enabledProviders.has("reliefweb")) {
+        sourcesQueried++;
+        try {
+          const rwJobs = await fetchReliefWebJobs(RELIEFWEB_APPNAME);
+          updateSourceMeta("reliefweb_jobs_wash_intl", {
+            lastPolledAt: startedAt,
+            lastSuccessAt: rwJobs.error ? store.opportunity_sources.find((s) => s.id === "reliefweb_jobs_wash_intl")?.lastSuccessAt || null : startedAt,
+            lastItemCount: rwJobs.candidates.length,
+            lastError: rwJobs.error || null,
+            status: rwJobs.error ? "degraded" : "connected"
+          });
+          if (rwJobs.error) errors.push(rwJobs.error);
+          allCandidates.push(...rwJobs.candidates);
+        } catch (err) {
+          const msg = `ReliefWeb Jobs unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("reliefweb_jobs_wash_intl", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+        sourcesQueried++;
+        try {
+          const rwTrainings = await fetchReliefWebTrainings(RELIEFWEB_APPNAME);
+          updateSourceMeta("reliefweb_training_conferences", {
+            lastPolledAt: startedAt,
+            lastSuccessAt: rwTrainings.error ? store.opportunity_sources.find((s) => s.id === "reliefweb_training_conferences")?.lastSuccessAt || null : startedAt,
+            lastItemCount: rwTrainings.candidates.length,
+            lastError: rwTrainings.error || null,
+            status: rwTrainings.error ? "degraded" : "connected"
+          });
+          if (rwTrainings.error) errors.push(rwTrainings.error);
+          allCandidates.push(...rwTrainings.candidates);
+        } catch (err) {
+          const msg = `ReliefWeb Training/Conferences unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("reliefweb_training_conferences", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      if (enabledProviders.has("direct_websites")) {
+        sourcesQueried++;
+        try {
+          const directRes = await fetchFromDirectOfficialWebsites();
+          updateSourceMeta("official_direct_website_monitor", {
+            lastPolledAt: startedAt,
+            lastSuccessAt: directRes.error ? store.opportunity_sources.find((s) => s.id === "official_direct_website_monitor")?.lastSuccessAt || null : startedAt,
+            lastItemCount: directRes.candidates.length,
+            lastError: directRes.error || null,
+            status: directRes.error ? "degraded" : "connected",
+            monitoredPortals: directRes.portalChecks
+          });
+          if (directRes.error) errors.push(directRes.error);
+          allCandidates.push(...directRes.candidates);
+        } catch (err) {
+          const msg = `Direct Official Website Monitor unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("official_direct_website_monitor", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      if (enabledProviders.has("gemini")) {
+        try {
+          const geminiRes = await fetchViaGeminiSearchGrounding(getAiClient, null);
+          if (geminiRes.configured) {
+            sourcesQueried++;
+            updateSourceMeta("gemini_official_search_grounding", {
+              lastPolledAt: startedAt,
+              lastSuccessAt: geminiRes.error ? store.opportunity_sources.find((s) => s.id === "gemini_official_search_grounding")?.lastSuccessAt || null : startedAt,
+              lastItemCount: geminiRes.candidates.length,
+              lastError: geminiRes.error || null,
+              status: geminiRes.error ? "degraded" : "connected"
+            });
+            if (geminiRes.error) errors.push(geminiRes.error);
+            allCandidates.push(...geminiRes.candidates);
+          }
+        } catch (err) {
+          const msg = `Gemini Google Search Grounding unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("gemini_official_search_grounding", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      if (enabledProviders.has("tavily")) {
+        try {
+          const tavilyRes = await fetchFromTavilySearch();
+          if (tavilyRes.configured) {
+            sourcesQueried++;
+            updateSourceMeta("tavily_web_search_api", {
+              lastPolledAt: startedAt,
+              lastSuccessAt: tavilyRes.error ? store.opportunity_sources.find((s) => s.id === "tavily_web_search_api")?.lastSuccessAt || null : startedAt,
+              lastItemCount: tavilyRes.candidates.length,
+              lastError: tavilyRes.error || null,
+              status: tavilyRes.error ? "degraded" : "connected"
+            });
+            if (tavilyRes.error) errors.push(tavilyRes.error);
+            allCandidates.push(...tavilyRes.candidates);
+          }
+        } catch (err) {
+          const msg = `Tavily Search unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("tavily_web_search_api", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      if (enabledProviders.has("brave")) {
+        try {
+          const braveRes = await fetchFromBraveSearch();
+          if (braveRes.configured) {
+            sourcesQueried++;
+            updateSourceMeta("brave_web_search_api", {
+              lastPolledAt: startedAt,
+              lastSuccessAt: braveRes.error ? store.opportunity_sources.find((s) => s.id === "brave_web_search_api")?.lastSuccessAt || null : startedAt,
+              lastItemCount: braveRes.candidates.length,
+              lastError: braveRes.error || null,
+              status: braveRes.error ? "degraded" : "connected"
+            });
+            if (braveRes.error) errors.push(braveRes.error);
+            allCandidates.push(...braveRes.candidates);
+          }
+        } catch (err) {
+          const msg = `Brave Search unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("brave_web_search_api", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      const existingByFingerprint = new Map(
+        store.international_opportunities.map((o) => [o.fingerprint, o])
+      );
+      const batchFingerprints = /* @__PURE__ */ new Set();
+      let duplicatesSkipped = 0;
+      let rejectedUnderThreeDaysCount = 0;
+      let rejectedBrokenOrClosedCount = 0;
+      const maxToVerify = Math.min(allCandidates.length, 65);
+      for (let i = 0; i < maxToVerify; i++) {
+        const candidate = allCandidates[i];
+        const urlCheck = validateOfficialExternalUrl(candidate.officialApplicationUrl);
+        if (!urlCheck.valid || !urlCheck.isOfficialDomain) {
+          rejectedBrokenOrClosedCount++;
+          continue;
+        }
+        const fp = computeOpportunityFingerprint(
+          candidate.title,
+          candidate.organization,
+          urlCheck.normalizedUrl
+        );
+        if (batchFingerprints.has(fp)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        batchFingerprints.add(fp);
+        const preDeadline = evaluateOpportunityDeadline(
+          candidate.deadlineDateRaw,
+          candidate.deadlineTimezone || "UTC",
+          Date.now()
+        );
+        if (!preDeadline.valid || preDeadline.isExpired || !preDeadline.meetsMinimumThreeFullDays) {
+          rejectedUnderThreeDaysCount++;
+          continue;
+        }
+        const liveCheck = await verifyUrlLive(
+          urlCheck.normalizedUrl,
+          Boolean(candidate.preVerifiedByOfficialApi)
+        );
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const { opportunity, verificationLog } = buildOpportunityRecordFromCandidate(
+          candidate,
+          liveCheck,
+          nowIso
+        );
+        store.opportunity_verification_logs.unshift(verificationLog);
+        if (!opportunity.hasVerifiedBadge) {
+          rejectedBrokenOrClosedCount++;
+        }
+        const prev = existingByFingerprint.get(fp);
+        if (prev) {
+          opportunity.discoveredAt = prev.discoveredAt;
+          const idx = store.international_opportunities.findIndex((o) => o.id === prev.id);
+          if (idx >= 0) {
+            store.international_opportunities[idx] = opportunity;
+          }
+          duplicatesSkipped++;
+        } else {
+          store.international_opportunities.unshift(opportunity);
+          existingByFingerprint.set(fp, opportunity);
+        }
+      }
+      let expiredPurgedCount = 0;
+      const nowFinalMs = Date.now();
+      for (const opp of store.international_opportunities) {
+        const dl = evaluateOpportunityDeadline(
+          opp.deadline.deadlineUtcIso || opp.deadline.deadlineDateRaw,
+          opp.deadline.deadlineTimezone,
+          nowFinalMs
+        );
+        opp.deadline.fullDaysRemaining = dl.fullDaysRemaining;
+        opp.deadline.hoursRemaining = dl.hoursRemaining;
+        opp.deadline.meetsMinimumThreeFullDays = dl.meetsMinimumThreeFullDays;
+        opp.deadline.isClosingSoon = dl.isClosingSoon;
+        opp.deadline.isExpired = dl.isExpired;
+        opp.deadline.lastCheckedAt = new Date(nowFinalMs).toISOString();
+        if (dl.isExpired || !dl.meetsMinimumThreeFullDays) {
+          if (opp.hasVerifiedBadge) expiredPurgedCount++;
+          opp.applicationStatus = "expired";
+          opp.verificationStatus = "Expired";
+          opp.hasVerifiedBadge = false;
+        }
+      }
+      store.international_opportunities = store.international_opportunities.sort((a, b) => {
+        const aAct = isOpportunityActiveAndDisplayable(a, nowFinalMs) ? 1 : 0;
+        const bAct = isOpportunityActiveAndDisplayable(b, nowFinalMs) ? 1 : 0;
+        if (aAct !== bAct) return bAct - aAct;
+        return new Date(b.lastVerifiedAt).getTime() - new Date(a.lastVerifiedAt).getTime();
+      }).slice(0, 250);
+      const activeVerified = store.international_opportunities.filter(
+        (o) => isOpportunityActiveAndDisplayable(o, nowFinalMs)
+      );
+      const profiles = loadUserProfiles();
+      const nextRecs = [];
+      for (const uid of Object.keys(profiles)) {
+        const prof = profiles[uid];
+        if (!prof || !prof.uid) continue;
+        const userRecs = activeVerified.map((opp) => evaluateOpportunityForUser(opp, prof, nowFinalMs)).filter((r) => r.eligible && r.disqualificationReasons.length === 0).sort((a, b) => b.matchScore - a.matchScore).slice(0, 25);
+        nextRecs.push(...userRecs);
+      }
+      store.user_opportunity_recommendations = nextRecs;
+      const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const isFailure = sourcesQueried === 0 && errors.length > 0 || errors.length > 0 && activeVerified.length === 0 && allCandidates.length === 0;
+      const runStatus = isFailure ? "failed" : errors.length > 0 ? "partial" : "success";
+      const jobLog = {
+        id: `djob_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger,
+        jobType: "full_discovery",
+        status: runStatus,
+        startedAt,
+        finishedAt,
+        durationMs: Date.now() - startedMs,
+        sourcesQueried,
+        candidatesDiscovered: allCandidates.length,
+        duplicatesSkipped,
+        verifiedAndActiveCount: activeVerified.length,
+        savedCount: activeVerified.length,
+        recommendationsUpdatedCount: nextRecs.length,
+        rejectedUnderThreeDaysCount,
+        rejectedBrokenOrClosedCount,
+        expiredPurgedCount,
+        scheduledSlotEat: options?.scheduledSlotEat,
+        attemptNumber: options?.attemptNumber ?? 1,
+        maxAttempts: options?.maxAttempts ?? 1,
+        skippedOverlap: false,
+        errors
+      };
+      const state = store.scheduler_state || createDefaultSchedulerState();
+      const isScheduledTrigger = trigger === "ethiopia_6h_schedule" || trigger === "vercel_cron" || trigger === "github_actions_cron" || trigger === "server_interval";
+      if (isScheduledTrigger) {
+        state.totalScheduledRuns = (state.totalScheduledRuns || 0) + 1;
+      }
+      if (runStatus === "failed") {
+        state.lastFailedRunAt = finishedAt;
+        state.consecutiveFailures = (state.consecutiveFailures || 0) + 1;
+        const nextSlot = getNextEthiopiaScheduleSlot(Date.now());
+        state.adminFailureAlert = {
+          active: true,
+          severity: "error",
+          message: `Scheduled international opportunity discovery failed (${state.consecutiveFailures} consecutive failure${state.consecutiveFailures > 1 ? "s" : ""}). Automatic retry & next 6-hour Ethiopia Time slot (${nextSlot.slotLabelEat}) remain armed.`,
+          errors: errors.slice(0, 8),
+          failedAt: finishedAt,
+          failedAtEat: formatEthiopiaDateTime(finishedAt) || finishedAt,
+          consecutiveFailures: state.consecutiveFailures,
+          nextAutoRetryAt: nextSlot.utcIso,
+          acknowledgedAt: null
+        };
+        appendAuditLog({
+          action: "global_opportunities_scheduled_failure",
+          actorEmail: "system_scheduler",
+          targetType: "global_opportunities",
+          summary: `Scheduled discovery failed (${trigger}): ${errors[0] || "Unknown error"}`,
+          severity: "error"
+        });
+      } else {
+        const wasFailing = (state.consecutiveFailures || 0) > 0 || Boolean(state.adminFailureAlert?.active);
+        state.lastSuccessfulRunAt = finishedAt;
+        state.lastSuccessfulRunAtEat = formatEthiopiaDateTime(finishedAt);
+        state.consecutiveFailures = 0;
+        if (wasFailing) {
+          state.lastRecoveredAt = finishedAt;
+        }
+        if (runStatus === "partial" && errors.length >= 2) {
+          const nextSlot = getNextEthiopiaScheduleSlot(Date.now());
+          state.adminFailureAlert = {
+            active: true,
+            severity: "warning",
+            message: `Discovery completed with ${activeVerified.length} verified active opportunities, but ${errors.length} source connector(s) reported temporary errors. The system will retry automatically at ${nextSlot.slotLabelEat}.`,
+            errors: errors.slice(0, 6),
+            failedAt: finishedAt,
+            failedAtEat: formatEthiopiaDateTime(finishedAt) || finishedAt,
+            consecutiveFailures: 0,
+            nextAutoRetryAt: nextSlot.utcIso,
+            acknowledgedAt: null
+          };
+        } else {
+          state.adminFailureAlert = null;
+        }
+      }
+      state.activeRunLock = null;
+      store.scheduler_state = state;
+      store.discovery_job_logs.unshift(jobLog);
+      saveStore(store);
+      return jobLog;
+    } catch (unexpectedErr) {
+      const errMsg = unexpectedErr?.message || String(unexpectedErr);
+      const failedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const errStore = loadStore();
+      const state = errStore.scheduler_state || createDefaultSchedulerState();
+      state.activeRunLock = null;
+      state.lastFailedRunAt = failedAt;
+      state.consecutiveFailures = (state.consecutiveFailures || 0) + 1;
+      const nextSlot = getNextEthiopiaScheduleSlot(Date.now());
+      state.adminFailureAlert = {
+        active: true,
+        severity: "error",
+        message: `Scheduled discovery crashed unexpectedly: ${errMsg}. Automatic recovery remains armed for ${nextSlot.slotLabelEat}.`,
+        errors: [errMsg],
+        failedAt,
+        failedAtEat: formatEthiopiaDateTime(failedAt) || failedAt,
+        consecutiveFailures: state.consecutiveFailures,
+        nextAutoRetryAt: nextSlot.utcIso,
+        acknowledgedAt: null
+      };
+      const failLog = {
+        id: `djob_err_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        trigger,
+        jobType: "full_discovery",
+        status: "failed",
+        startedAt,
+        finishedAt: failedAt,
+        durationMs: Date.now() - startedMs,
+        sourcesQueried,
+        candidatesDiscovered: allCandidates.length,
+        duplicatesSkipped: 0,
+        verifiedAndActiveCount: errStore.international_opportunities.filter(
+          (o) => isOpportunityActiveAndDisplayable(o)
+        ).length,
+        savedCount: 0,
+        recommendationsUpdatedCount: errStore.user_opportunity_recommendations.length,
+        rejectedUnderThreeDaysCount: 0,
+        rejectedBrokenOrClosedCount: 0,
+        expiredPurgedCount: 0,
+        scheduledSlotEat: options?.scheduledSlotEat,
+        attemptNumber: options?.attemptNumber ?? 1,
+        maxAttempts: options?.maxAttempts ?? 1,
+        skippedOverlap: false,
+        errors: [errMsg]
+      };
+      errStore.scheduler_state = state;
+      errStore.discovery_job_logs.unshift(failLog);
+      saveStore(errStore);
+      return failLog;
+    } finally {
+      isDiscoveryRunning = false;
+      try {
+        const finalStore = loadStore();
+        if (finalStore.scheduler_state?.activeRunLock?.runId === runId) {
+          finalStore.scheduler_state.activeRunLock = null;
+          saveStore(finalStore);
+        }
+      } catch {
+      }
+    }
+  }
+  async function executeScheduledDiscoveryWithRetry(trigger, scheduledSlotEat, maxAttempts = 3, retryBaseDelayMs = 5e3) {
+    let lastLog = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      lastLog = await runFullOfficialDiscovery(trigger, {
+        scheduledSlotEat,
+        attemptNumber: attempt,
+        maxAttempts
+      });
+      if (lastLog.skippedOverlap || lastLog.status === "success" || lastLog.status === "partial" && lastLog.verifiedAndActiveCount > 0) {
+        return lastLog;
+      }
+      if (attempt < maxAttempts) {
+        const delayMs = retryBaseDelayMs * Math.pow(2, attempt - 1);
+        console.warn(
+          `[GlobalOpportunities] Scheduled discovery attempt ${attempt}/${maxAttempts} failed. Retrying in ${delayMs}ms...`
+        );
+        await new Promise((resolve2) => setTimeout(resolve2, delayMs));
+      }
+    }
+    return lastLog;
+  }
+  function computeSubsectionCounts(activeList, savedIdSet) {
+    return {
+      international_jobs: activeList.filter((o) => o.category === "international_job").length,
+      scholarships: activeList.filter((o) => o.category === "university_scholarship").length,
+      professional_training: activeList.filter((o) => o.category === "professional_training").length,
+      conferences_summits: activeList.filter((o) => o.category === "conference_summit").length,
+      banking_finance: activeList.filter((o) => o.isBankingFinance || o.sectors.includes("banking_finance")).length,
+      wash_opportunities: activeList.filter((o) => o.isWashDedicated || o.category === "wash_opportunity" || o.sectors.includes("wash")).length,
+      recommended: activeList.filter((o) => o.recommendation?.eligible).length,
+      closing_soon: activeList.filter((o) => o.deadline.isClosingSoon).length,
+      saved: activeList.filter((o) => savedIdSet.has(o.id)).length
+    };
+  }
+  app.get("/api/global-opportunities", async (req, res) => {
+    try {
+      const store = loadStore();
+      const nowMs = Date.now();
+      const uid = getRequesterUid(req);
+      const profiles = loadUserProfiles();
+      const userProfile = uid ? profiles[uid] || null : null;
+      const activeVerified = store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o, nowMs)).map((o) => {
+        const dl = evaluateOpportunityDeadline(
+          o.deadline.deadlineUtcIso || o.deadline.deadlineDateRaw,
+          o.deadline.deadlineTimezone,
+          nowMs
+        );
+        const refreshed = {
+          ...o,
+          deadline: {
+            ...o.deadline,
+            fullDaysRemaining: dl.fullDaysRemaining,
+            hoursRemaining: dl.hoursRemaining,
+            meetsMinimumThreeFullDays: dl.meetsMinimumThreeFullDays,
+            isClosingSoon: dl.isClosingSoon,
+            isExpired: dl.isExpired
+          }
+        };
+        if (userProfile) {
+          refreshed.recommendation = evaluateOpportunityForUser(refreshed, userProfile, nowMs);
+        }
+        return refreshed;
+      });
+      const savedIds = new Set(
+        uid ? store.user_saved_opportunities.filter((s) => s.userId === uid).map((s) => s.opportunityId) : []
+      );
+      for (const item of activeVerified) {
+        item.isSaved = savedIds.has(item.id);
+      }
+      const countsBySubsection = computeSubsectionCounts(activeVerified, savedIds);
+      const subsection = String(req.query.subsection || "").trim();
+      const category = String(req.query.category || "").trim();
+      const country = String(req.query.country || "").trim().toLowerCase();
+      const funding = String(req.query.funding || "").trim().toLowerCase();
+      const visa = String(req.query.visa || "").trim().toLowerCase();
+      const experience = String(req.query.experience || "").trim().toLowerCase();
+      const eligibility = String(req.query.eligibility || "").trim().toLowerCase();
+      const deadlineFilter = String(req.query.deadline || "").trim().toLowerCase();
+      const q = String(req.query.q || "").trim().toLowerCase();
+      let filtered = activeVerified;
+      if (subsection === "international_jobs") filtered = filtered.filter((o) => o.category === "international_job");
+      else if (subsection === "scholarships") filtered = filtered.filter((o) => o.category === "university_scholarship");
+      else if (subsection === "professional_training") filtered = filtered.filter((o) => o.category === "professional_training");
+      else if (subsection === "conferences_summits") filtered = filtered.filter((o) => o.category === "conference_summit");
+      else if (subsection === "banking_finance") filtered = filtered.filter((o) => o.isBankingFinance || o.sectors.includes("banking_finance"));
+      else if (subsection === "wash_opportunities") filtered = filtered.filter((o) => o.isWashDedicated || o.category === "wash_opportunity" || o.sectors.includes("wash"));
+      else if (subsection === "recommended") filtered = filtered.filter((o) => o.recommendation?.eligible).sort((a, b) => (b.recommendation?.matchScore || 0) - (a.recommendation?.matchScore || 0));
+      else if (subsection === "closing_soon") filtered = filtered.filter((o) => o.deadline.isClosingSoon);
+      else if (subsection === "saved") filtered = filtered.filter((o) => o.isSaved);
+      if (category && category !== "all") filtered = filtered.filter((o) => o.category === category);
+      if (country && country !== "all") filtered = filtered.filter((o) => o.country.toLowerCase().includes(country) || o.location.toLowerCase().includes(country));
+      if (funding && funding !== "all") {
+        if (funding === "fully_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "fully_funded");
+        else if (funding === "partially_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "partially_funded");
+        else if (funding === "self_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "self_funded");
+      }
+      if (visa && visa !== "all") {
+        if (visa === "employer_sponsored") filtered = filtered.filter((o) => o.funding.visaSupportType === "employer_sponsored_visa");
+        else if (visa === "visa_fees_funded") filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_fees_funded");
+        else if (visa === "assistance_only") filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_assistance_only" || o.funding.visaSupportType === "invitation_letter_only");
+      }
+      if (experience && experience !== "all") {
+        if (experience === "entry") filtered = filtered.filter((o) => (o.eligibility.minimumYearsExperience ?? 0) <= 2 || o.eligibility.careerLevel === "entry" || o.eligibility.careerLevel === "internship");
+        else if (experience === "mid") filtered = filtered.filter((o) => (o.eligibility.minimumYearsExperience ?? 0) >= 2 && (o.eligibility.minimumYearsExperience ?? 0) <= 6);
+        else if (experience === "senior") filtered = filtered.filter((o) => (o.eligibility.minimumYearsExperience ?? 0) >= 6 || o.eligibility.careerLevel === "senior" || o.eligibility.careerLevel === "management");
+      }
+      if (eligibility && eligibility !== "all") {
+        if (eligibility === "ethiopian_confirmed") filtered = filtered.filter((o) => o.eligibility.ethiopianEligible === "confirmed");
+        else if (eligibility === "no_nomination") {
+          filtered = filtered.filter(
+            (o) => o.eligibility.universityRecommendationRequired !== "required" && o.eligibility.companyRecommendationRequired !== "required" && o.eligibility.institutionalNominationRequired !== "required"
+          );
+        }
+      }
+      if (deadlineFilter && deadlineFilter !== "all") {
+        if (deadlineFilter === "closing_soon") filtered = filtered.filter((o) => o.deadline.fullDaysRemaining >= 3 && o.deadline.fullDaysRemaining <= 7);
+        else if (deadlineFilter === "within_14_days") filtered = filtered.filter((o) => o.deadline.fullDaysRemaining >= 3 && o.deadline.fullDaysRemaining <= 14);
+        else if (deadlineFilter === "within_30_days") filtered = filtered.filter((o) => o.deadline.fullDaysRemaining >= 3 && o.deadline.fullDaysRemaining <= 30);
+      }
+      if (q) {
+        filtered = filtered.filter(
+          (o) => `${o.title} ${o.organization} ${o.country} ${o.location} ${o.summary} ${o.eligibility.requiredSkills.join(" ")}`.toLowerCase().includes(q)
+        );
+      }
+      const payload = {
+        success: true,
+        generatedAt: new Date(nowMs).toISOString(),
+        minimumDaysRemainingRule: MINIMUM_FULL_DAYS_REMAINING,
+        totalActiveVerified: activeVerified.length,
+        totalStoredAllStatuses: store.international_opportunities.length,
+        countsBySubsection,
+        opportunities: filtered,
+        sources: store.opportunity_sources,
+        lastDiscoveryRun: store.discovery_job_logs[0] || null,
+        schedulerInfo: buildSchedulerInfo(store),
+        websiteOnlyPolicyNote: "Scholarship, professional training, and conference recommendations are displayed exclusively inside the Hopeland Jobs website. No emails, SMS, WhatsApp, or push notifications are sent for them."
+      };
+      res.json(payload);
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to load global opportunities" });
+    }
+  });
+  app.get("/api/global-opportunities/recommended", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Sign in to view personalized recommendations." });
+      return;
+    }
+    const store = loadStore();
+    const profiles = loadUserProfiles();
+    const userProfile = profiles[uid];
+    if (!userProfile) {
+      res.json({ success: true, recommendations: [], message: "Complete your profile to receive personalized international opportunity recommendations." });
+      return;
+    }
+    const nowMs = Date.now();
+    const savedIds = new Set(
+      store.user_saved_opportunities.filter((s) => s.userId === uid).map((s) => s.opportunityId)
+    );
+    const matched = [];
+    for (const opp of store.international_opportunities) {
+      if (!isOpportunityActiveAndDisplayable(opp, nowMs)) continue;
+      const rec = evaluateOpportunityForUser(opp, userProfile, nowMs);
+      if (rec.eligible && rec.disqualificationReasons.length === 0) {
+        matched.push({
+          ...opp,
+          recommendation: rec,
+          isSaved: savedIds.has(opp.id)
+        });
+      }
+    }
+    matched.sort((a, b) => (b.recommendation?.matchScore || 0) - (a.recommendation?.matchScore || 0));
+    res.json({
+      success: true,
+      userId: uid,
+      totalMatched: matched.length,
+      recommendations: matched
+    });
+  });
+  app.get("/api/global-opportunities/saved", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Sign in to view saved opportunities." });
+      return;
+    }
+    const store = loadStore();
+    const saved = store.user_saved_opportunities.filter((s) => s.userId === uid);
+    res.json({ success: true, saved });
+  });
+  app.post("/api/global-opportunities/saved/toggle", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Sign in to save opportunities." });
+      return;
+    }
+    const opportunityId = String(req.body?.opportunityId || "").trim();
+    if (!opportunityId) {
+      res.status(400).json({ success: false, error: "opportunityId is required." });
+      return;
+    }
+    const store = loadStore();
+    const existingIdx = store.user_saved_opportunities.findIndex(
+      (s) => s.userId === uid && s.opportunityId === opportunityId
+    );
+    if (existingIdx >= 0) {
+      store.user_saved_opportunities.splice(existingIdx, 1);
+      saveStore(store);
+      res.json({ success: true, saved: false, opportunityId });
+      return;
+    }
+    const opp = store.international_opportunities.find((o) => o.id === opportunityId);
+    if (!opp) {
+      res.status(404).json({ success: false, error: "Opportunity not found." });
+      return;
+    }
+    const record = {
+      id: `usave_${uid}_${opportunityId}`.slice(0, 128),
+      userId: uid,
+      opportunityId: opp.id,
+      title: opp.title,
+      organization: opp.organization,
+      category: opp.category,
+      country: opp.country,
+      deadlineUtcIso: opp.deadline.deadlineUtcIso,
+      officialApplicationUrl: opp.officialApplicationUrl,
+      savedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    store.user_saved_opportunities.unshift(record);
+    saveStore(store);
+    res.json({ success: true, saved: true, record });
+  });
+  app.get("/api/global-opportunities/sources", (_req, res) => {
+    const store = loadStore();
+    res.json({
+      success: true,
+      sources: store.opportunity_sources,
+      lastDiscoveryRun: store.discovery_job_logs[0] || null,
+      schedulerInfo: buildSchedulerInfo(store)
+    });
+  });
+  app.get("/api/global-opportunities/logs", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    const store = loadStore();
+    res.json({
+      success: true,
+      verificationLogs: store.opportunity_verification_logs.slice(0, 120),
+      discoveryJobLogs: store.discovery_job_logs.slice(0, 50),
+      sources: store.opportunity_sources,
+      schedulerInfo: buildSchedulerInfo(store),
+      totals: {
+        stored: store.international_opportunities.length,
+        activeVerified: store.international_opportunities.filter((o) => isOpportunityActiveAndDisplayable(o)).length,
+        savedCount: store.user_saved_opportunities.length,
+        recommendationsCount: store.user_opportunity_recommendations.length
+      }
+    });
+  });
+  app.post("/api/admin/global-opportunities/run-discovery", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    try {
+      const log = await runFullOfficialDiscovery("manual_admin");
+      appendAuditLog({
+        action: "global_opportunities_discovery_run",
+        actorEmail: getRequesterEmail(req) || "owner",
+        targetType: "global_opportunities",
+        summary: `Ran live Global Opportunity Intelligence discovery: ${log.verifiedAndActiveCount} verified active, ${log.rejectedUnderThreeDaysCount} excluded (<3d), ${log.rejectedBrokenOrClosedCount} unverified/closed.`,
+        severity: "info"
+      });
+      const store = loadStore();
+      res.json({
+        success: true,
+        runLog: log,
+        sources: store.opportunity_sources,
+        activeVerifiedCount: log.verifiedAndActiveCount
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Discovery run failed." });
+    }
+  });
+  app.post("/api/admin/global-opportunities/recheck-deadlines", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    try {
+      const checkLinks = Boolean(req.body?.checkLinksLive);
+      const log = await runDeadlineAndLinkRecheck("manual_admin", checkLinks);
+      res.json({ success: true, runLog: log });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Deadline recheck failed." });
+    }
+  });
+  app.post("/api/admin/global-opportunities/acknowledge-alert", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    const store = loadStore();
+    if (store.scheduler_state?.adminFailureAlert) {
+      store.scheduler_state.adminFailureAlert = {
+        ...store.scheduler_state.adminFailureAlert,
+        active: false,
+        acknowledgedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      saveStore(store);
+    }
+    res.json({ success: true, schedulerInfo: buildSchedulerInfo(store) });
+  });
+  app.get("/api/cron/global-opportunities", async (req, res) => {
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    const authHeader = String(req.headers.authorization || "").trim();
+    const isVercelCron = String(req.headers["x-vercel-cron"] || "") === "1";
+    const hasSecretMatch = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+    if (!isVercelCron && !hasSecretMatch && !isPersistentOwnerRequest(req)) {
+      res.status(401).json({ success: false, error: "Unauthorized cron trigger." });
+      return;
+    }
+    try {
+      const mode = String(req.query.mode || "full");
+      const sourceParam = String(req.query.source || "").toLowerCase();
+      const trigger = sourceParam === "github_actions" ? "github_actions_cron" : "vercel_cron";
+      const slotEat = formatEthiopiaDateTime(Date.now()) || void 0;
+      const runLog = mode === "recheck" ? await runDeadlineAndLinkRecheck(trigger, true) : await executeScheduledDiscoveryWithRetry(trigger, slotEat, 2, 3e3);
+      const freshStore = loadStore();
+      res.json({
+        success: true,
+        runLog,
+        schedulerInfo: buildSchedulerInfo(freshStore)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Scheduled discovery failed." });
+    }
+  });
+  function buildSchedulerInfo(store) {
+    const state = store.scheduler_state || createDefaultSchedulerState();
+    const lastRunAt = store.discovery_job_logs[0]?.finishedAt || null;
+    const activeProviders = store.opportunity_sources.filter((s) => s.configured && s.status !== "disabled").map((s) => s.id);
+    const connectedSourcesCount = store.opportunity_sources.filter(
+      (s) => s.status === "connected"
+    ).length;
+    const computedNext = getNextEthiopiaScheduleSlot(Date.now());
+    const nextMs = nextScheduledRunAtMs && nextScheduledRunAtMs > Date.now() ? nextScheduledRunAtMs : computedNext.utcMs;
+    const nextIso = new Date(nextMs).toISOString();
+    const nextEat = formatEthiopiaDateTime(nextMs);
+    const slotLabel = nextScheduledSlotLabel || computedNext.slotLabelEat;
+    const lockActive = Boolean(
+      isDiscoveryRunning || state.activeRunLock && new Date(state.activeRunLock.expiresAt).getTime() > Date.now()
+    );
+    return {
+      enabled: !isVercel && process.env.NODE_ENV !== "test",
+      intervalMinutes: DISCOVERY_INTERVAL_MINUTES,
+      timezone: ETHIOPIA_TIMEZONE,
+      scheduleHoursEat: [...ETHIOPIA_SCHEDULE_LABELS],
+      cronExpressionUtc: ETHIOPIA_CRON_EXPRESSION_UTC,
+      operatesWithoutVisitors: true,
+      runtimeMode: isVercel ? "vercel_serverless" : "persistent_node_server",
+      activeProviders,
+      connectedSourcesCount,
+      totalSourcesCount: store.opportunity_sources.length,
+      nextScheduledRunAt: nextIso,
+      nextScheduledRunAtEat: nextEat,
+      nextScheduledSlotLabel: slotLabel,
+      lastRunAt,
+      lastSuccessfulRunAt: state.lastSuccessfulRunAt,
+      lastSuccessfulRunAtEat: state.lastSuccessfulRunAtEat || formatEthiopiaDateTime(state.lastSuccessfulRunAt),
+      consecutiveFailures: state.consecutiveFailures || 0,
+      isRunningNow: lockActive,
+      adminFailureAlert: state.adminFailureAlert || null
+    };
+  }
+  let scheduledSlotTimer = null;
+  function armNextEthiopiaScheduleSlot() {
+    if (scheduledSlotTimer) {
+      clearTimeout(scheduledSlotTimer);
+      scheduledSlotTimer = null;
+    }
+    const nextSlot = getNextEthiopiaScheduleSlot(Date.now());
+    nextScheduledRunAtMs = nextSlot.utcMs;
+    nextScheduledSlotLabel = nextSlot.slotLabelEat;
+    console.log(
+      `[GlobalOpportunities] 24/7 Ethiopia Time scheduler armed -> next run at ${nextSlot.eatFormatted} (UTC: ${nextSlot.utcIso}).`
+    );
+    scheduledSlotTimer = setTimeout(() => {
+      const triggeredSlotLabel = nextSlot.slotLabelEat;
+      armNextEthiopiaScheduleSlot();
+      executeScheduledDiscoveryWithRetry("ethiopia_6h_schedule", triggeredSlotLabel, 3, 5e3).then((log) => {
+        console.log(
+          `[GlobalOpportunities] 6h Ethiopia Time run (${triggeredSlotLabel}) finished: status=${log.status}, discovered=${log.candidatesDiscovered}, verified=${log.verifiedAndActiveCount}, saved=${log.savedCount ?? log.verifiedAndActiveCount}.`
+        );
+      }).catch((err) => {
+        console.warn(
+          `[GlobalOpportunities] 6h Ethiopia Time run (${triggeredSlotLabel}) unexpected warning:`,
+          err?.message || err
+        );
+      });
+    }, nextSlot.msUntilNext);
+    if (typeof scheduledSlotTimer.unref === "function") {
+      scheduledSlotTimer.unref();
+    }
+  }
+  if (!isVercel && process.env.NODE_ENV !== "test") {
+    armNextEthiopiaScheduleSlot();
+    const startupTimer = setTimeout(() => {
+      const store = loadStore();
+      const lastSuccessMs = store.scheduler_state?.lastSuccessfulRunAt ? new Date(store.scheduler_state.lastSuccessfulRunAt).getTime() : 0;
+      const isStale = !lastSuccessMs || Date.now() - lastSuccessMs > DISCOVERY_INTERVAL_MS;
+      const activeCount = store.international_opportunities.filter(
+        (o) => isOpportunityActiveAndDisplayable(o)
+      ).length;
+      if (activeCount === 0 || isStale) {
+        executeScheduledDiscoveryWithRetry("startup_recheck", "Startup Catch-Up", 2, 4e3).catch(
+          (err) => console.warn("[GlobalOpportunities] Initial catch-up discovery warning:", err?.message || err)
+        );
+      } else {
+        runDeadlineAndLinkRecheck("startup_recheck", false).catch(() => {
+        });
+      }
+    }, 6e3);
+    if (typeof startupTimer.unref === "function") startupTimer.unref();
+  }
+  return {
+    runFullOfficialDiscovery,
+    executeScheduledDiscoveryWithRetry,
+    runDeadlineAndLinkRecheck,
+    loadStore
+  };
+}
+
 // src/utils/telegramSnapshot.ts
 function clip(val, maxLen) {
   const s = String(val ?? "").trim();
@@ -5527,7 +9103,7 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path2.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path3.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
     if (!fs2.existsSync(UPLOADS_DIR)) {
       fs2.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -5593,7 +9169,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path2.extname(req.file.originalname).toLowerCase();
+      const ext = path3.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -6420,25 +9996,25 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const VACANCIES_CATALOG_FILE_SERVER = path2.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
-  const BOT_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path2.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path2.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path3.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
+  const BOT_HEALTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path3.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
   const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
   const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
   function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
-    const salt = crypto.randomBytes(16).toString("hex");
-    const derived = crypto.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const salt = crypto2.randomBytes(16).toString("hex");
+    const derived = crypto2.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return {
       id,
@@ -6457,13 +10033,13 @@ ${text}`;
     try {
       if (!plainText || !record?.salt || !record?.hashHex) return false;
       const expectedBuf = Buffer.from(record.hashHex, "hex");
-      const derivedBuf = crypto.scryptSync(plainText, record.salt, expectedBuf.length, {
+      const derivedBuf = crypto2.scryptSync(plainText, record.salt, expectedBuf.length, {
         N: record.cost || 16384,
         r: record.blockSize || 8,
         p: record.parallelization || 1
       });
       if (derivedBuf.length !== expectedBuf.length) return false;
-      return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+      return crypto2.timingSafeEqual(derivedBuf, expectedBuf);
     } catch {
       return false;
     }
@@ -6477,7 +10053,7 @@ ${text}`;
       passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
       sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
         mutated = true;
-        return crypto.randomBytes(32).toString("hex");
+        return crypto2.randomBytes(32).toString("hex");
       })(),
       updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     } : (() => {
@@ -6486,7 +10062,7 @@ ${text}`;
         version: 1,
         algorithm: "scrypt",
         passwordHashes: [],
-        sessionSigningKey: crypto.randomBytes(32).toString("hex"),
+        sessionSigningKey: crypto2.randomBytes(32).toString("hex"),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     })();
@@ -6565,7 +10141,7 @@ ${text}`;
       exp: now + DEV_SESSION_TTL_MS
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
-    const sig = crypto.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    const sig = crypto2.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
     return `${encoded}.${sig}`;
   }
   function verifyDeveloperSessionToken(token) {
@@ -6574,10 +10150,10 @@ ${text}`;
       const [encoded, sig] = token.split(".");
       if (!encoded || !sig) return { valid: false };
       const store = ensureDeveloperAuthStore();
-      const expectedSig = crypto.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const expectedSig = crypto2.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
       const sigBuf = Buffer.from(sig, "utf-8");
       const expBuf = Buffer.from(expectedSig, "utf-8");
-      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !crypto2.timingSafeEqual(sigBuf, expBuf)) {
         return { valid: false };
       }
       const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
@@ -6650,7 +10226,7 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path2.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path3.join(RUNTIME_BASE_DIR, "data");
     try {
       if (!fs2.existsSync(dataDir)) {
         fs2.mkdirSync(dataDir, { recursive: true });
@@ -6658,13 +10234,13 @@ ${text}`;
       if (!fs2.existsSync(BACKUPS_DIR)) {
         fs2.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
-      const bundledDataDir = path2.join(process.cwd(), "data");
-      if (path2.resolve(dataDir) !== path2.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
+      const bundledDataDir = path3.join(process.cwd(), "data");
+      if (path3.resolve(dataDir) !== path3.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
         const entries = fs2.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
-          const srcPath = path2.join(bundledDataDir, file);
-          const destPath = path2.join(dataDir, file);
+          const srcPath = path3.join(bundledDataDir, file);
+          const destPath = path3.join(dataDir, file);
           if (!fs2.existsSync(destPath)) {
             try {
               if (fs2.statSync(srcPath).isFile()) {
@@ -6699,7 +10275,7 @@ ${text}`;
       fs2.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path2.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path3.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -6921,7 +10497,7 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path2.join(process.cwd(), "firebase-applet-config.json")
+      path3.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
@@ -7077,8 +10653,8 @@ ${text}`;
   }
   function sendPublicFallbackIcon(res, filename) {
     const candidates = [
-      path2.join(process.cwd(), "public", filename),
-      path2.join(process.cwd(), "dist", filename)
+      path3.join(process.cwd(), "public", filename),
+      path3.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
       if (fs2.existsSync(p)) {
@@ -7117,7 +10693,7 @@ ${text}`;
     const brand = await getLiveBrandLogoState();
     const versionRaw = brand.appLogoUpdatedAt || "default";
     const versionTag = encodeURIComponent(
-      crypto.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
+      crypto2.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
     const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
@@ -7255,9 +10831,9 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     const launchUrl = `${appOrigin}/?source=ios_app`;
     let iconBase64 = "";
     for (const candidate of [
-      path2.join(process.cwd(), "public", "apple-touch-icon.png"),
-      path2.join(process.cwd(), "dist", "apple-touch-icon.png"),
-      path2.join(process.cwd(), "public", "pwa-192x192.png")
+      path3.join(process.cwd(), "public", "apple-touch-icon.png"),
+      path3.join(process.cwd(), "dist", "apple-touch-icon.png"),
+      path3.join(process.cwd(), "public", "pwa-192x192.png")
     ]) {
       if (fs2.existsSync(candidate)) {
         try {
@@ -7641,8 +11217,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path2.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path2.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path3.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
       if (fs2.existsSync(USER_PROFILES_FILE)) {
@@ -7905,8 +11481,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path2.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path2.join(UPLOADS_DIR, safeName);
+      const safeName = `${Date.now()}_${path3.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path3.join(UPLOADS_DIR, safeName);
       fs2.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
@@ -10015,10 +13591,10 @@ ${footer}`;
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path2.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path2.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path2.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path2.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path3.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path3.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path3.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path3.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -11149,7 +14725,7 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path2.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path3.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
       if (fs2.existsSync(AUTO_APPLY_DATA_FILE)) {
@@ -11163,7 +14739,7 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path2.dirname(AUTO_APPLY_DATA_FILE);
+      const dir = path3.dirname(AUTO_APPLY_DATA_FILE);
       if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
       fs2.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
@@ -12282,8 +15858,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path2.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path2.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path3.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path3.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -15083,12 +18659,26 @@ Return strict JSON:
     appendAuditLog,
     pushAdminNotification
   });
+  registerGlobalOpportunitiesRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    getAiClient
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
       const files = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path2.join(BACKUPS_DIR, filename);
+        const fullPath = path3.join(BACKUPS_DIR, filename);
         const stat = fs2.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
@@ -15153,12 +18743,12 @@ Return strict JSON:
         ...userEngineBackupData
       }
     };
-    const fullPath = path2.join(BACKUPS_DIR, filename);
+    const fullPath = path3.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
       const autoFiles = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs2.unlinkSync(path2.join(BACKUPS_DIR, old));
+        fs2.unlinkSync(path3.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -15184,7 +18774,7 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path2.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      const probeFile = path3.join(RUNTIME_BASE_DIR, "data", ".write_probe");
       fs2.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
       fs2.unlinkSync(probeFile);
       writable = true;
@@ -15402,7 +18992,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path2.join(BACKUPS_DIR, target.filename);
+    const fullPath = path3.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });

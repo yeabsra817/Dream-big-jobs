@@ -543,6 +543,158 @@
         "createdAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["id", "trigger", "createdAt"]
+    },
+    "GlobalInternationalOpportunity": {
+      "title": "Global Verified International Opportunity",
+      "description": "Verified international job, university scholarship, professional training, conference, or WASH opportunity with 20 verified attributes and mandatory >= 3 full days deadline gate.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "fingerprint": { "type": "string", "maxLength": 240 },
+        "title": { "type": "string", "maxLength": 300 },
+        "organization": { "type": "string", "maxLength": 250 },
+        "category": {
+          "type": "string",
+          "enum": ["international_job", "university_scholarship", "professional_training", "conference_summit", "wash_opportunity"]
+        },
+        "country": { "type": "string", "maxLength": 120 },
+        "location": { "type": "string", "maxLength": 200 },
+        "originalSourceUrl": { "type": "string", "maxLength": 1000 },
+        "officialApplicationUrl": { "type": "string", "maxLength": 1000 },
+        "applicationStatus": {
+          "type": "string",
+          "enum": ["open", "closing_soon", "closed", "expired", "withdrawn", "unverified"]
+        },
+        "verificationStatus": {
+          "type": "string",
+          "enum": ["Verified and Open", "Fully Funded", "Partially Funded", "Visa Sponsored", "Funding Not Confirmed", "Eligibility Not Confirmed", "Closing Soon", "Expired", "Unverified"]
+        },
+        "hasVerifiedBadge": { "type": "boolean" },
+        "isWashDedicated": { "type": "boolean" },
+        "isBankingFinance": { "type": "boolean" },
+        "lastVerifiedAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "title", "organization", "category", "officialApplicationUrl", "applicationStatus", "verificationStatus", "hasVerifiedBadge", "lastVerifiedAt"]
+    },
+    "OpportunitySource": {
+      "title": "Official Opportunity Discovery Source",
+      "description": "Registry of official APIs, portals, and search connectors monitored by the Global Opportunity Intelligence System.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 250 },
+        "providerType": { "type": "string", "enum": ["official_api", "google_search_api", "bing_search_api", "gemini_search_grounding", "official_portal"] },
+        "baseUrl": { "type": "string", "maxLength": 500 },
+        "configured": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["connected", "requires_credentials", "degraded", "error"] },
+        "lastPolledAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "providerType", "baseUrl", "configured", "status"]
+    },
+    "OpportunityVerificationLog": {
+      "title": "Opportunity Live Verification Log",
+      "description": "Admin-only audit trail of live HTTP checks, robots.txt compliance, and >= 3 full days deadline validation per opportunity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "officialUrl": { "type": "string", "maxLength": 1000 },
+        "passedUrlVerification": { "type": "boolean" },
+        "passedDeadlineRule": { "type": "boolean" },
+        "resultingStatus": { "type": "string", "maxLength": 64 },
+        "checkedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "opportunityId", "officialUrl", "passedUrlVerification", "passedDeadlineRule", "resultingStatus", "checkedAt"]
+    },
+    "OpportunityFunding": {
+      "title": "Opportunity Funding & Visa Transparency Record",
+      "description": "Structured funding, airfare, accommodation, application fee, and visa support transparency data.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "fundingLevel": { "type": "string", "enum": ["fully_funded", "partially_funded", "self_funded", "not_confirmed"] },
+        "visaSupportType": { "type": "string", "enum": ["employer_sponsored_visa", "visa_fees_funded", "visa_assistance_only", "invitation_letter_only", "none", "not_confirmed"] },
+        "verifiedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "opportunityId", "fundingLevel", "visaSupportType", "verifiedAt"]
+    },
+    "OpportunityEligibility": {
+      "title": "Opportunity Eligibility & Nomination Requirements",
+      "description": "Structured nationality, Ethiopian eligibility, education, experience, and recommendation/nomination rules.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "ethiopianEligible": { "type": "string", "enum": ["confirmed", "likely_global", "not_confirmed", "excluded"] },
+        "minimumEducationLevel": { "type": "string", "enum": ["none", "diploma", "bachelors", "masters", "phd", "not_confirmed"] },
+        "directIndividualApplicationAllowed": { "type": "string", "enum": ["yes", "no", "not_confirmed"] },
+        "verifiedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "opportunityId", "ethiopianEligible", "verifiedAt"]
+    },
+    "OpportunityDeadline": {
+      "title": "Opportunity Timezone-Aware Deadline Record",
+      "description": "Timezone-aware deadline record enforcing the mandatory >= 3 full days (72 hours) active rule.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "deadlineDateRaw": { "type": "string", "maxLength": 120 },
+        "deadlineTimezone": { "type": "string", "maxLength": 64 },
+        "fullDaysRemaining": { "type": "number" },
+        "meetsMinimumThreeFullDays": { "type": "boolean" },
+        "isExpired": { "type": "boolean" },
+        "lastCheckedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "opportunityId", "deadlineDateRaw", "meetsMinimumThreeFullDays", "isExpired", "lastCheckedAt"]
+    },
+    "UserSavedOpportunity": {
+      "title": "User Saved International Opportunity",
+      "description": "User-scoped bookmark of a verified international opportunity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 300 },
+        "organization": { "type": "string", "maxLength": 250 },
+        "category": { "type": "string", "maxLength": 64 },
+        "officialApplicationUrl": { "type": "string", "maxLength": 1000 },
+        "savedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "opportunityId", "title", "organization", "savedAt"]
+    },
+    "UserOpportunityRecommendation": {
+      "title": "Website-Only Personalized Opportunity Recommendation",
+      "description": "Eligibility-gated personalized international opportunity match scoped strictly to the owning user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "opportunityId": { "type": "string", "maxLength": 128 },
+        "matchScore": { "type": "number" },
+        "eligible": { "type": "boolean" },
+        "eligibilitySummary": { "type": "string", "maxLength": 400 },
+        "generatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "userId", "opportunityId", "matchScore", "eligible", "generatedAt"]
+    },
+    "DiscoveryJobLog": {
+      "title": "Scheduled Discovery & Recheck Job Log",
+      "description": "Admin-only execution log for autonomous official source discovery and deadline recheck sweeps.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "trigger": { "type": "string", "enum": ["vercel_cron", "server_interval", "manual_admin", "startup_recheck"] },
+        "jobType": { "type": "string", "enum": ["full_discovery", "deadline_and_link_recheck"] },
+        "status": { "type": "string", "enum": ["success", "partial", "failed"] },
+        "startedAt": { "type": "string", "maxLength": 100 },
+        "finishedAt": { "type": "string", "maxLength": 100 },
+        "verifiedAndActiveCount": { "type": "number" }
+      },
+      "required": ["id", "trigger", "jobType", "status", "startedAt", "finishedAt"]
     }
   },
   "firestore": {
@@ -663,6 +815,42 @@
     "/scheduler_runs/{runId}": {
       "schema": "SchedulerRunRecord",
       "description": "Admin-only execution history of automated job notification sweeps"
+    },
+    "/international_opportunities/{opportunityId}": {
+      "schema": "GlobalInternationalOpportunity",
+      "description": "Verified international jobs, scholarships, trainings, conferences, and WASH opportunities (>= 3 full days active rule)"
+    },
+    "/opportunity_sources/{sourceId}": {
+      "schema": "OpportunitySource",
+      "description": "Official discovery sources and API connection status registry"
+    },
+    "/opportunity_verification_logs/{logId}": {
+      "schema": "OpportunityVerificationLog",
+      "description": "Admin-only official source HTTP verification and deadline audit logs"
+    },
+    "/opportunity_funding/{fundingId}": {
+      "schema": "OpportunityFunding",
+      "description": "Normalized funding and visa sponsorship transparency records"
+    },
+    "/opportunity_eligibility/{eligibilityId}": {
+      "schema": "OpportunityEligibility",
+      "description": "Normalized nationality, education, experience, and nomination eligibility records"
+    },
+    "/opportunity_deadlines/{deadlineId}": {
+      "schema": "OpportunityDeadline",
+      "description": "Timezone-aware deadline records enforcing >= 3 full days remaining"
+    },
+    "/user_saved_opportunities/{saveId}": {
+      "schema": "UserSavedOpportunity",
+      "description": "User-scoped saved international opportunities"
+    },
+    "/user_opportunity_recommendations/{recId}": {
+      "schema": "UserOpportunityRecommendation",
+      "description": "Website-only personalized international opportunity matches scoped strictly to the owning user"
+    },
+    "/discovery_job_logs/{jobId}": {
+      "schema": "DiscoveryJobLog",
+      "description": "Admin-only automated official opportunity discovery and deadline recheck job logs"
     }
   }
 }

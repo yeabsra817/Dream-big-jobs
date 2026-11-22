@@ -51,6 +51,7 @@ import { SmartAlertsBell, SmartAlertsCenter, evaluateSmartAlerts } from './Smart
 import { PersonalAutoApply } from './PersonalAutoApply';
 import { ApplicantManager } from './ApplicantManager';
 import { InternationalControlCenter } from './InternationalControlCenter';
+import { GlobalOpportunityAdminPanel } from './GlobalOpportunityAdminPanel';
 import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
@@ -820,27 +821,30 @@ export const AdminDashboard: React.FC<Props> = ({
         )}
 
         {activeTab === 'international' && isYeabsraOwner && (
-          <InternationalControlCenter
-            adminEmail={adminEmail}
-            siteSettings={siteSettings}
-            onSaveSiteSettings={onSaveSiteSettings}
-            domesticVacancies={vacancies}
-            onUpdateDomesticVacancyStatus={(id, status) => onUpdateVacancyStatus(id, status)}
-            internationalJobs={internationalJobs}
-            immigrationPathways={immigrationPathways}
-            scholarships={experienceScholarships}
-            researchHistory={researchHistory}
-            verificationLogs={verificationLogs}
-            onSaveInternationalJobs={onSaveInternationalJobs}
-            onDeleteInternationalJob={onDeleteInternationalJob}
-            onSaveImmigrationPathways={onSaveImmigrationPathways}
-            onDeleteImmigrationPathway={onDeleteImmigrationPathway}
-            onSaveScholarships={onSaveExperienceScholarships}
-            onDeleteScholarship={onDeleteExperienceScholarship}
-            onSaveResearchRun={onSaveResearchRun}
-            onSaveVerificationLogs={onSaveVerificationLogs}
-            onSyncInternationalState={onSyncInternationalState}
-          />
+          <div className="space-y-6">
+            <GlobalOpportunityAdminPanel adminEmail={adminEmail} />
+            <InternationalControlCenter
+              adminEmail={adminEmail}
+              siteSettings={siteSettings}
+              onSaveSiteSettings={onSaveSiteSettings}
+              domesticVacancies={vacancies}
+              onUpdateDomesticVacancyStatus={(id, status) => onUpdateVacancyStatus(id, status)}
+              internationalJobs={internationalJobs}
+              immigrationPathways={immigrationPathways}
+              scholarships={experienceScholarships}
+              researchHistory={researchHistory}
+              verificationLogs={verificationLogs}
+              onSaveInternationalJobs={onSaveInternationalJobs}
+              onDeleteInternationalJob={onDeleteInternationalJob}
+              onSaveImmigrationPathways={onSaveImmigrationPathways}
+              onDeleteImmigrationPathway={onDeleteImmigrationPathway}
+              onSaveScholarships={onSaveExperienceScholarships}
+              onDeleteScholarship={onDeleteExperienceScholarship}
+              onSaveResearchRun={onSaveResearchRun}
+              onSaveVerificationLogs={onSaveVerificationLogs}
+              onSyncInternationalState={onSyncInternationalState}
+            />
+          </div>
         )}
 
         {activeTab === 'telegramQueue' && (

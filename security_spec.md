@@ -38,3 +38,10 @@ All the above 12 attack vectors are blocked by:
 10. **Owner-Only Permanent Deletion**: Only `isOwnerAdmin()` can delete profiles, backups, or settings. Backend `/api/admin/staff-profiles/:uid` requires verified owner headers and explicit confirmation tokens, taking a pre-delete safety backup first.
 11. **Audit Logs & Backups Isolation**: `/audit_logs`, `/admin_notifications`, and `/system_backups` are readable and writable exclusively by `isOwnerAdmin()`.
 
+## 6. Global Verified Opportunity Intelligence System Invariants
+12. **Verified & Active-Only Public Reads**: Public visitors may ONLY read `/international_opportunities` documents where `resource.data.hasVerifiedBadge == true` and `resource.data.applicationStatus in ['open', 'closing_soon']`. Unverified, expired, withdrawn, or `< 3 full days` entries remain strictly restricted to `isOwnerAdmin()`.
+13. **Strict User Ownership for Saved Opportunities & Recommendations**: `/user_saved_opportunities` and `/user_opportunity_recommendations` enforce `request.auth.uid == resource.data.userId` on reads, updates, and deletes, validate HTTPS-only application URLs, enforce field allow-lists (`hasOnly`) on saved items, and prevent `userId` reassignment.
+14. **Admin-Only Verification & Discovery Job Logs**: `/opportunity_verification_logs` and `/discovery_job_logs` are readable and writable exclusively by `isOwnerAdmin()`.
+15. **SSRF, URL & Website-Only Policy Enforcement**: Server-side official discovery and live verification strictly permit `https://` official domains, reject private/loopback/link-local hosts, respect `robots.txt`, and never dispatch email, SMS, WhatsApp, or push notifications for scholarships, trainings, or conferences.
+
+
