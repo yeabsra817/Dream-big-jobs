@@ -5,7 +5,9 @@ import * as http2 from 'node:http2';
 import {
   ApplicationLifecycleStatus,
   AutonomousSchedulerInfo,
+  DepartmentRunSummary,
   DiscoveryJobLogRecord,
+  GlobalDiscoveryDepartment,
   GlobalOpportunitiesApiResponse,
   GlobalOpportunity,
   GlobalOpportunityCategory,
@@ -17,6 +19,8 @@ import {
   OpportunityFundingRecord,
   OpportunitySourceRecord,
   OpportunityVerificationLogRecord,
+  PermanentResidencyAssessmentResult,
+  PermanentResidencyCountryRecord,
   RequirementBooleanStatus,
   SchedulerFailureAlert,
   SchedulerPersistentState,
@@ -27,21 +31,25 @@ import {
 } from './src/types/globalOpportunities';
 import {
   classifyFundingAndVisaTransparency,
+  classifyOpportunityDepartment,
   computeOpportunityFingerprint,
   computeVerificationOutcome,
   detectSectorsFromText,
   evaluateMandatoryVisaCompliance,
   evaluateOpportunityDeadline,
   evaluateOpportunityForUser,
+  evaluatePermanentResidencyEligibility,
   evaluateProfessionalRestrictionCompliance,
   isOpportunityActiveAndDisplayable,
   MINIMUM_FULL_DAYS_REMAINING,
 } from './src/utils/opportunityIntelligenceEngine';
+import { verifyOfficialPermanentResidencyPathways } from './serverPermanentResidency';
 
 export interface GlobalOpportunitiesStore {
   version: number;
   updatedAt: string;
   international_opportunities: GlobalOpportunity[];
+  permanent_residency_pathways?: PermanentResidencyCountryRecord[];
   opportunity_sources: OpportunitySourceRecord[];
   opportunity_verification_logs: OpportunityVerificationLogRecord[];
   opportunity_funding: OpportunityFundingRecord[];
@@ -145,6 +153,22 @@ const TRUSTED_OFFICIAL_HOST_PATTERNS: RegExp[] = [
   /(^|\.)au\.int$/i,
   /(^|\.)eca\.org$/i,
   /(^|\.)uneca\.org$/i,
+  /(^|\.)arbeitnow\.com$/i,
+  /(^|\.)un-ihe\.org$/i,
+  /(^|\.)worldwaterweek\.org$/i,
+  /(^|\.)unitar\.org$/i,
+  /(^|\.)eacea\.ec\.europa\.eu$/i,
+  /(^|\.)canada\.ca$/i,
+  /(^|\.)immigration\.govt\.nz$/i,
+  /(^|\.)make-it-in-germany\.com$/i,
+  /(^|\.)workinfinland\.com$/i,
+  /(^|\.)migrationsverket\.se$/i,
+  /(^|\.)udi\.no$/i,
+  /(^|\.)nyidanmark\.dk$/i,
+  /(^|\.)ind\.nl$/i,
+  /(^|\.)migration\.gv\.at$/i,
+  /(^|\.)ch\.ch$/i,
+  /(^|\.)moj\.go\.jp$/i,
 ];
 
 const WASH_TARGET_ORGS = [
@@ -503,7 +527,14 @@ function inferOrganizationType(orgName: string, hostname: string): GlobalOpportu
   return 'other';
 }
 
-type SearchProviderKey = 'reliefweb' | 'direct_websites' | 'gemini' | 'tavily' | 'brave';
+type SearchProviderKey =
+  | 'reliefweb'
+  | 'arbeitnow'
+  | 'direct_websites'
+  | 'official_gov_pr'
+  | 'gemini'
+  | 'tavily'
+  | 'brave';
 
 export const ETHIOPIA_TIMEZONE = 'Africa/Addis_Ababa' as const;
 export const ETHIOPIA_UTC_OFFSET_HOURS = 3; // Ethiopia permanently observes EAT (UTC+3), no DST
@@ -587,10 +618,18 @@ export function getDiscoveryIntervalMinutes(): number {
 
 export function getEnabledSearchProviders(): Set<SearchProviderKey> {
   const raw = String(process.env.OPPORTUNITY_SEARCH_PROVIDERS || 'auto').trim().toLowerCase();
+  const allowed: SearchProviderKey[] = [
+    'reliefweb',
+    'arbeitnow',
+    'direct_websites',
+    'official_gov_pr',
+    'gemini',
+    'tavily',
+    'brave',
+  ];
   if (!raw || raw === 'auto' || raw === 'all') {
-    return new Set<SearchProviderKey>(['reliefweb', 'direct_websites', 'gemini', 'tavily', 'brave']);
+    return new Set<SearchProviderKey>(allowed);
   }
-  const allowed: SearchProviderKey[] = ['reliefweb', 'direct_websites', 'gemini', 'tavily', 'brave'];
   const parsed = raw
     .split(',')
     .map((p) => p.trim() as SearchProviderKey)
@@ -615,12 +654,54 @@ function buildInitialSourcesCatalog(): OpportunitySourceRecord[] {
   );
 
   const reliefwebEnabled = enabledProviders.has('reliefweb');
+  const arbeitnowEnabled = enabledProviders.has('arbeitnow');
   const directWebsitesEnabled = enabledProviders.has('direct_websites');
+  const govPrEnabled = enabledProviders.has('official_gov_pr');
   const geminiEnabled = enabledProviders.has('gemini');
   const tavilyEnabled = enabledProviders.has('tavily');
   const braveEnabled = enabledProviders.has('brave');
 
   return [
+    {
+      id: 'arbeitnow_intl_banking_wash_jobs',
+      name: 'Arbeitnow International & European Job Board API (Banking, Finance, Compliance & WASH)',
+      providerType: 'official_api',
+      organizationGroup: 'International European & Global Private Sector Employers (with Live Visa/Relocation Verification)',
+      baseUrl: 'https://www.arbeitnow.com/api/job-board-api',
+      categoriesCovered: ['international_job', 'wash_opportunity'],
+      sectorsCovered: ['banking_finance', 'wash', 'engineering', 'entrepreneurship_business'],
+      configured: arbeitnowEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !arbeitnowEnabled,
+      pricingNote: 'Free public API (zero API keys, AI-independent). Verifies live JSON-LD validThrough closing dates.',
+      requiredEnvVars: [],
+      status: arbeitnowEnabled ? 'connected' : 'disabled',
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: arbeitnowEnabled ? null : 'Disabled via OPPORTUNITY_SEARCH_PROVIDERS.',
+    },
+    {
+      id: 'official_gov_pr_intelligence',
+      name: 'Official Government Immigration & Shortage Occupation Portals (14 Countries)',
+      providerType: 'official_portal',
+      organizationGroup: 'Official National Immigration Ministries (Canada IRCC, UK GOV.UK, NZ INZ, Germany, Ireland DETE, Finland, Sweden, Norway, Denmark, Netherlands, Austria, Switzerland, Japan, Australia)',
+      baseUrl: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html',
+      categoriesCovered: ['international_job'],
+      sectorsCovered: ['banking_finance', 'wash', 'engineering', 'healthcare_public_health', 'technology_ai'],
+      configured: govPrEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !govPrEnabled,
+      pricingNote: 'Free direct live verification of 14 authoritative government immigration & labour shortage portals (no blogs/agents).',
+      requiredEnvVars: [],
+      status: govPrEnabled ? 'connected' : 'disabled',
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: govPrEnabled ? null : 'Disabled via OPPORTUNITY_SEARCH_PROVIDERS.',
+    },
     {
       id: 'reliefweb_jobs_wash_intl',
       name: 'ReliefWeb Official UN & INGO Recruitment Feeds (WASH, Banking & Finance, International Jobs)',
@@ -831,16 +912,16 @@ async function fetchReliefWebJobs(_appname: string): Promise<{ candidates: RawCa
       {
         label: 'WASH',
         url: 'https://reliefweb.int/jobs/rss.xml?advanced-search=%28T4604%29',
-        limit: 16,
+        limit: 22,
       },
       {
         label: 'BankingFinance',
-        url: 'https://reliefweb.int/jobs/rss.xml?search=finance+OR+banking+OR+grant+OR+microfinance',
-        limit: 14,
+        url: 'https://reliefweb.int/jobs/rss.xml?search=finance+OR+banking+OR+microfinance+OR+audit+OR+treasury+OR+credit',
+        limit: 20,
       },
       {
-        label: 'GeneralIntl',
-        url: 'https://reliefweb.int/jobs/rss.xml',
+        label: 'WaterEngineering',
+        url: 'https://reliefweb.int/jobs/rss.xml?search=water+engineer+OR+sanitation+OR+hygiene+OR+hydrology',
         limit: 14,
       },
     ];
@@ -891,9 +972,37 @@ async function fetchReliefWebJobs(_appname: string): Promise<{ candidates: RawCa
         const countryName = item.country || 'International';
         const combinedText = `${item.title} ${orgName} ${item.descriptionText}`;
 
+        // Global hub focuses strictly worldwide outside Ethiopia (local Ethiopian vacancies belong exclusively in the existing local Jobs module)
+        if (
+          /^ethiopia$/i.test(countryName.trim()) ||
+          /\b(national\s+(?:officer|facilitator|consultant|coordinator|specialist|advisor|manager|staff|position|vacancy)|local\s+nationals?\s+only)\b/i.test(
+            item.title
+          )
+        ) {
+          continue;
+        }
+
         const sectorDetect = detectSectorsFromText(combinedText);
+        const titleLower = item.title.toLowerCase();
+        const hasWashTitleOrFeed =
+          feed.label === 'WASH' ||
+          feed.label === 'WaterEngineering' ||
+          /\b(wash|water|sanitation|hygiene|hydrolog|hydrogeolog|wastewater|borehole|plumbing|environmental\s+health|public\s+health\s+engineer)\b/i.test(
+            titleLower
+          );
+        const hasBankingTitle =
+          /\b(bank|banking|finance|financial|accountant|accounting|audit|auditor|treasury|credit|loan|microfinance|compliance|aml|risk|investment|economist|fintech|budget|grants?\s+and\s+finance|controller|cfo|actuar|portfolio)\b/i.test(
+            titleLower
+          );
         const isWashOrg = WASH_TARGET_ORGS.some((o) => orgName.toLowerCase().includes(o));
-        const isWash = feed.label === 'WASH' || sectorDetect.isWash || (isWashOrg && /\b(water|sanitation|hygiene|wash)\b/i.test(combinedText));
+        const isWash =
+          hasWashTitleOrFeed ||
+          (sectorDetect.isWash && (isWashOrg || /\b(wash|water|sanitation|hygiene)\b/i.test(combinedText)));
+
+        // Keep Global Discovery strictly scoped to Banking/Finance and WASH (preventing generic security/admin jobs from leaking in)
+        if (!isWash && !(hasBankingTitle || (feed.label === 'FinanceBanking' && sectorDetect.isBankingFinance))) {
+          continue;
+        }
 
         const minYears = parseMinimumYearsFromText(item.descriptionText);
         let careerLevel: OpportunityEligibilityRecord['careerLevel'] = 'not_confirmed';
@@ -907,17 +1016,14 @@ async function fetchReliefWebJobs(_appname: string): Promise<{ candidates: RawCa
         const lowerCombined = combinedText.toLowerCase();
         let ethiopianEligible: OpportunityEligibilityRecord['ethiopianEligible'] = 'likely_global';
         const eligibleNationalities: string[] = [];
-        if (/\bethiopia(n)?\b/i.test(countryName) || /\bopen to ethiopian/i.test(lowerCombined)) {
-          ethiopianEligible = 'confirmed';
-          eligibleNationalities.push('Ethiopian citizens');
-        } else if (
-          /\b(national\s+position\s+only|nationals\s+of\s+[a-z]+\s+only|open\s+only\s+to\s+citizens\s+of|must\s+be\s+a\s+citizen\s+of\s+(?!ethiopia)|local\s+nationals\s+only)\b/i.test(
+        if (
+          /\b(national\s+position\s+only|nationals\s+of\s+[a-z]+\s+only|open\s+only\s+to\s+citizens\s+of|must\s+be\s+a\s+citizen\s+of\s+(?!ethiopia)|local\s+nationals\s+only|host\s+country\s+nationals\s+only|must\s+already\s+have\s+the\s+right\s+to\s+work)\b/i.test(
             lowerCombined
           )
         ) {
           ethiopianEligible = 'excluded';
           eligibleNationalities.push(`Host country nationals only (${countryName})`);
-        } else if (/\b(international\s+(position|staff|recruitment|applicants)|all\s+nationalities)\b/i.test(lowerCombined)) {
+        } else if (/\b(international\s+(position|staff|recruitment|applicants)|all\s+nationalities|expatriate)\b/i.test(lowerCombined)) {
           ethiopianEligible = 'confirmed';
           eligibleNationalities.push('All nationalities (including Ethiopian citizens)');
         } else {
@@ -975,6 +1081,165 @@ async function fetchReliefWebJobs(_appname: string): Promise<{ candidates: RawCa
     return { candidates, error: errors.length && candidates.length === 0 ? errors.join('; ') : undefined };
   } catch (err: any) {
     return { candidates: [], error: `ReliefWeb Jobs feed error: ${err?.message || String(err)}` };
+  }
+}
+
+/**
+ * Free, AI-Independent International Banking, Finance & WASH Job Connector (Arbeitnow Public API).
+ * Strictly verifies live JSON-LD validThrough closing date from each posting page — never invents deadlines or visa sponsorship.
+ */
+async function fetchArbeitnowBankingWashJobs(): Promise<{ candidates: RawCandidateOpportunity[]; error?: string }> {
+  try {
+    const resp = await fetchWithRetry(
+      'https://www.arbeitnow.com/api/job-board-api',
+      {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'HopelandJobs/1.0 (+https://hopelandjobs.tech)',
+          Accept: 'application/json',
+        },
+      },
+      1,
+      9000
+    );
+
+    if (!resp.ok) {
+      return { candidates: [], error: `Arbeitnow API returned HTTP ${resp.status}` };
+    }
+
+    const payload: any = await resp.json();
+    const rawList: any[] = Array.isArray(payload?.data) ? payload.data : [];
+    const bankingWashTitleRegex =
+      /\b(bank|banking|finance|financial|accounting|accountant|audit|auditor|credit|treasury|compliance|aml|risk\s+manager|risk\s+analyst|microfinance|fintech|water\s+engineer|wash|sanitation|hygiene|hydrolog|wastewater)\b/i;
+    const excludeJuniorLocalRegex = /\b(werkstudent|praktikum|ausbildung|working\s+student|trainee\s+german)\b/i;
+
+    const matching = rawList
+      .filter((job) => {
+        const title = String(job?.title || '');
+        if (!title || excludeJuniorLocalRegex.test(title)) return false;
+        return bankingWashTitleRegex.test(title);
+      })
+      .slice(0, 14);
+
+    const candidates: RawCandidateOpportunity[] = [];
+    for (const job of matching) {
+      const url = String(job?.url || '').trim();
+      const urlCheck = validateOfficialExternalUrl(url);
+      if (!urlCheck.valid) continue;
+
+      const title = String(job.title || '').trim();
+      const company = String(job.company_name || 'International Employer').trim();
+      const location = String(job.location || 'Europe / International').trim();
+      const plainDesc = stripHtmlToText(String(job.description || ''));
+
+      // Extract exact official validThrough closing date from live posting JSON-LD or description text (never fabricate!)
+      let deadlineRaw = extractVerifiableDeadlineFromSnippet(plainDesc) || '';
+      if (!deadlineRaw) {
+        try {
+          const pageResp = await fetchWithRetry(
+            urlCheck.normalizedUrl,
+            {
+              method: 'GET',
+              headers: {
+                'User-Agent': 'HopelandJobsBot/1.0 (+https://hopelandjobs.tech)',
+                Accept: 'text/html',
+              },
+            },
+            0,
+            6000
+          );
+          if (pageResp.ok) {
+            const pageHtml = await pageResp.text();
+            const vtMatch = pageHtml.match(/"validThrough"\s*:\s*"([^"]+)"/i);
+            if (vtMatch && vtMatch[1]) {
+              deadlineRaw = vtMatch[1].trim();
+            }
+          }
+        } catch {
+          // Skip if page fetch times out and no explicit deadline exists
+        }
+      }
+
+      if (!deadlineRaw) continue;
+
+      const combinedText = `${title} ${company} ${location} ${plainDesc}`;
+      const sectorDetect = detectSectorsFromText(combinedText);
+      const isWash = sectorDetect.isWash || /\b(water|sanitation|hygiene|wash|hydrolog|wastewater)\b/i.test(title);
+      const minEdu = parseMinEducationFromText(plainDesc);
+      const minYears = parseMinimumYearsFromText(plainDesc);
+
+      // Infer country honestly from location string
+      let country = 'Europe / International';
+      if (/\b(london|uk|united kingdom|manchester|edinburgh)\b/i.test(location)) country = 'United Kingdom';
+      else if (/\b(paris|lyon|france)\b/i.test(location)) country = 'France';
+      else if (/\b(amsterdam|rotterdam|netherlands|utrecht)\b/i.test(location)) country = 'Netherlands';
+      else if (/\b(berlin|munich|münchen|frankfurt|hamburg|germany|stuttgart|köln|cologne|düsseldorf)\b/i.test(location)) country = 'Germany';
+      else if (/\b(dublin|ireland)\b/i.test(location)) country = 'Ireland';
+      else if (/\b(zurich|zürich|geneva|basel|switzerland)\b/i.test(location)) country = 'Switzerland';
+      else if (/\b(vienna|wien|austria)\b/i.test(location)) country = 'Austria';
+      else if (/\b(stockholm|sweden)\b/i.test(location)) country = 'Sweden';
+      else if (/\b(helsinki|finland)\b/i.test(location)) country = 'Finland';
+      else if (/\b(copenhagen|denmark)\b/i.test(location)) country = 'Denmark';
+      else if (/\b(oslo|norway)\b/i.test(location)) country = 'Norway';
+      else if (location) country = location;
+
+      const lower = combinedText.toLowerCase();
+      const hasSponsorshipText = /\b(visa\s+sponsor|work\s+permit\s+sponsor|relocation\s+(support|package|assistance)|international\s+applicants|visa\s+support)\b/i.test(lower);
+      const isLocalOnlyText = /\b(must\s+already\s+have\s+the\s+right\s+to\s+work|no\s+visa\s+sponsorship|cannot\s+sponsor\s+visas?|eu\s+citizens?\s+only)\b/i.test(lower);
+
+      candidates.push({
+        title,
+        organization: company,
+        organizationType: /\bbank\b/i.test(company) ? 'financial_institution' : 'employer',
+        category: isWash ? 'wash_opportunity' : 'international_job',
+        country,
+        location: job.remote ? `${location} (Remote / Hybrid)` : location,
+        summary: plainDesc.slice(0, 420) || `${title} at ${company} (${location}).`,
+        sourceId: 'arbeitnow_intl_banking_wash_jobs',
+        sourceName: 'Arbeitnow International Banking, Finance & WASH Feed',
+        originalSourceUrl: urlCheck.normalizedUrl,
+        officialApplicationUrl: urlCheck.normalizedUrl,
+        deadlineDateRaw: deadlineRaw,
+        deadlineTimezone: 'UTC',
+        startDate: 'See official posting',
+        applicationFee: 'None (Direct employer application)',
+        eligibleNationalities: isLocalOnlyText
+          ? [`Local work authorization required (${country})`]
+          : hasSponsorshipText
+          ? ['International applicants (visa/relocation support referenced — verify on employer page)']
+          : ['International applicants (verify visa sponsorship directly with employer)'],
+        ethiopianEligible: isLocalOnlyText ? 'excluded' : hasSponsorshipText ? 'confirmed' : 'likely_global',
+        educationRequirement:
+          minEdu === 'masters'
+            ? "Master's degree or equivalent"
+            : minEdu === 'bachelors'
+            ? "Bachelor's degree in Finance, Accounting, Banking or related field"
+            : 'See official employer job description',
+        minimumEducationLevel: minEdu,
+        experienceRequirement: minYears !== null ? `Minimum ${minYears} year(s)` : 'See official job description',
+        minimumYearsExperience: minYears,
+        careerLevel:
+          typeof minYears === 'number' && minYears >= 7
+            ? 'management'
+            : typeof minYears === 'number' && minYears >= 3
+            ? 'mid'
+            : 'technical',
+        requiredSkills: isWash
+          ? ['WASH', 'Water Engineering', 'Sanitation']
+          : ['Banking & Finance', 'Financial Analysis', 'Compliance & Risk'],
+        languagesRequired: /\b(german|deutsch)\b/i.test(plainDesc) ? ['English', 'German'] : ['English'],
+        universityRecommendationRequired: 'not_required',
+        companyRecommendationRequired: 'not_required',
+        institutionalNominationRequired: 'not_required',
+        directIndividualApplicationAllowed: 'yes',
+        fullText: combinedText.slice(0, 5000),
+        preVerifiedByOfficialApi: true,
+      });
+    }
+
+    return { candidates };
+  } catch (err: any) {
+    return { candidates: [], error: `Arbeitnow API error: ${err?.message || String(err)}` };
   }
 }
 
@@ -1446,6 +1711,61 @@ export const OFFICIAL_DIRECT_PORTALS: OfficialDirectPortalConfig[] = [
     url: 'https://www.unitar.org/courses',
     defaultCategory: 'professional_training',
     country: 'International / Online',
+    parserMode: 'jsonld_or_html',
+  },
+  {
+    id: 'worldbank_jj_wbgsp',
+    name: 'World Bank Joint Japan/World Bank Graduate Scholarship Program (JJ/WBGSP)',
+    organization: 'World Bank Group',
+    organizationGroup: 'Multilateral Development Bank (Banking, Economics & Water Development Scholarships)',
+    organizationType: 'multilateral_bank',
+    url: 'https://www.worldbank.org/en/programs/scholarships/jj-wbgsp',
+    defaultCategory: 'university_scholarship',
+    country: 'Global Partner Universities',
+    parserMode: 'jsonld_or_html',
+  },
+  {
+    id: 'ihe_delft_scholarships',
+    name: 'IHE Delft Institute for Water Education Official WASH Scholarships',
+    organization: 'IHE Delft Institute for Water Education',
+    organizationGroup: 'Official UNESCO-Linked Water & WASH University Portal',
+    organizationType: 'university',
+    url: 'https://www.un-ihe.org/scholarships',
+    defaultCategory: 'university_scholarship',
+    country: 'Netherlands',
+    parserMode: 'jsonld_or_html',
+  },
+  {
+    id: 'erasmus_mundus_catalogue',
+    name: 'European Commission Erasmus Mundus Joint Masters Scholarships',
+    organization: 'European Education and Culture Executive Agency (EACEA)',
+    organizationGroup: 'Official European Union Government Scholarship Portal',
+    organizationType: 'government_agency',
+    url: 'https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en',
+    defaultCategory: 'university_scholarship',
+    country: 'European Union',
+    parserMode: 'jsonld_or_html',
+  },
+  {
+    id: 'imf_icd_training',
+    name: 'IMF Institute for Capacity Development (Banking, Macro-Finance & Fiscal Training)',
+    organization: 'International Monetary Fund (IMF)',
+    organizationGroup: 'Multilateral Financial Institution Official Training Portal',
+    organizationType: 'multilateral_bank',
+    url: 'https://www.imf.org/en/Capacity-Development/Training/ICDTC',
+    defaultCategory: 'professional_training',
+    country: 'International / Online',
+    parserMode: 'jsonld_or_html',
+  },
+  {
+    id: 'adb_careers',
+    name: 'Asian Development Bank (ADB) Official Careers Portal',
+    organization: 'Asian Development Bank (ADB)',
+    organizationGroup: 'Multilateral Development Bank (Banking, Finance & Water Infrastructure)',
+    organizationType: 'multilateral_bank',
+    url: 'https://www.adb.org/work-with-us/careers',
+    defaultCategory: 'international_job',
+    country: 'Philippines / International',
     parserMode: 'jsonld_or_html',
   },
 ];
@@ -1960,6 +2280,7 @@ async function verifyUrlLive(
   robotsAllowed: boolean;
   detectedClosedOrExpired: boolean;
   pageTextSnippet: string;
+  pageTextFull: string;
   notes: string;
 }> {
   const urlCheck = validateOfficialExternalUrl(officialUrl);
@@ -1970,6 +2291,7 @@ async function verifyUrlLive(
       robotsAllowed: false,
       detectedClosedOrExpired: false,
       pageTextSnippet: '',
+      pageTextFull: '',
       notes: urlCheck.reason || 'URL failed official domain verification.',
     };
   }
@@ -1984,6 +2306,7 @@ async function verifyUrlLive(
         robotsAllowed: false,
         detectedClosedOrExpired: false,
         pageTextSnippet: 'Verified via official API response (page crawl skipped to respect robots.txt).',
+        pageTextFull: '',
         notes: 'Verified through official organization API; direct HTML fetch skipped per robots.txt.',
       };
     }
@@ -1993,6 +2316,7 @@ async function verifyUrlLive(
       robotsAllowed: false,
       detectedClosedOrExpired: false,
       pageTextSnippet: '',
+      pageTextFull: '',
       notes: 'Skipped HTML verification to respect robots.txt Disallow directive.',
     };
   }
@@ -2037,6 +2361,7 @@ async function verifyUrlLive(
         robotsAllowed: true,
         detectedClosedOrExpired: false,
         pageTextSnippet: '',
+        pageTextFull: '',
         notes: 'Redirected to an unsafe or non-HTTPS URL.',
       };
     }
@@ -2048,6 +2373,7 @@ async function verifyUrlLive(
         robotsAllowed: true,
         detectedClosedOrExpired: true,
         pageTextSnippet: '',
+        pageTextFull: '',
         notes: `Official page returned HTTP ${status} (not found or removed).`,
       };
     }
@@ -2060,7 +2386,8 @@ async function verifyUrlLive(
           httpStatus: status,
           robotsAllowed: true,
           detectedClosedOrExpired: false,
-          pageTextSnippet: 'Verified directly via official ReliefWeb UN/NGO feed (destination portal restricts automated HTML GET).',
+          pageTextSnippet: 'Verified directly via official feed (destination portal restricts automated HTML GET).',
+          pageTextFull: '',
           notes: `Verified via official feed (direct GET returned HTTP ${status}).`,
         };
       }
@@ -2070,10 +2397,11 @@ async function verifyUrlLive(
         robotsAllowed: true,
         detectedClosedOrExpired: false,
         pageTextSnippet: '',
+        pageTextFull: '',
         notes: `Official URL returned HTTP ${status}.`,
       };
     }
-    const plain = stripHtmlToText(html).slice(0, 6000);
+    const plain = stripHtmlToText(html).slice(0, 6500);
     const closedMatch = plain.match(
       /\b(applications?\s+(are|is)\s+(now\s+)?closed|this\s+(job|position|vacancy|opportunity|scholarship|call)\s+(is|has)\s+(been\s+)?(closed|expired|filled|withdrawn)|no\s+longer\s+accepting\s+applications|the\s+deadline\s+has\s+passed)\b/i
     );
@@ -2084,7 +2412,8 @@ async function verifyUrlLive(
         httpStatus: status,
         robotsAllowed: true,
         detectedClosedOrExpired: true,
-        pageTextSnippet: plain.slice(0, 320),
+        pageTextSnippet: plain.slice(0, 340),
+        pageTextFull: plain.slice(0, 4500),
         notes: `Official page indicates closed/expired status ("${closedMatch[0]}").`,
       };
     }
@@ -2095,6 +2424,7 @@ async function verifyUrlLive(
       robotsAllowed: true,
       detectedClosedOrExpired: false,
       pageTextSnippet: plain.slice(0, 420),
+      pageTextFull: plain.slice(0, 4500),
       notes: `Live official page verified (HTTP ${status}).`,
     };
   } catch (err: any) {
@@ -2104,7 +2434,8 @@ async function verifyUrlLive(
         httpStatus: null,
         robotsAllowed: true,
         detectedClosedOrExpired: false,
-        pageTextSnippet: 'Verified directly via official ReliefWeb UN/NGO API.',
+        pageTextSnippet: 'Verified directly via official API.',
+        pageTextFull: '',
         notes: `Verified via official API (live page timeout: ${err?.message || 'timeout'}).`,
       };
     }
@@ -2114,6 +2445,7 @@ async function verifyUrlLive(
       robotsAllowed: true,
       detectedClosedOrExpired: false,
       pageTextSnippet: '',
+      pageTextFull: '',
       notes: `Live official page verification failed: ${err?.message || String(err)}`,
     };
   }
@@ -2139,12 +2471,12 @@ function buildOpportunityRecordFromCandidate(
     new Date(nowIso).getTime()
   );
 
-  const combinedCorpus = `${candidate.title} ${candidate.organization} ${candidate.summary} ${candidate.fullText || ''} ${liveCheck.pageTextSnippet}`;
+  const combinedCorpus = `${candidate.title} ${candidate.organization} ${candidate.summary} ${candidate.fullText || ''} ${liveCheck.pageTextFull || liveCheck.pageTextSnippet}`;
   const sectorInfo = detectSectorsFromText(combinedCorpus);
   const isWashDedicated =
     candidate.category === 'wash_opportunity' ||
     sectorInfo.isWash ||
-    WASH_TARGET_ORGS.some((o) => candidate.organization.toLowerCase().includes(o)) && sectorInfo.isWash;
+    (WASH_TARGET_ORGS.some((o) => candidate.organization.toLowerCase().includes(o)) && sectorInfo.isWash);
 
   const fundingBase = classifyFundingAndVisaTransparency({
     fundingSummary: candidate.fundingSummary,
@@ -2230,6 +2562,12 @@ function buildOpportunityRecordFromCandidate(
     officialSourceText: combinedCorpus,
   });
 
+  const department = classifyOpportunityDepartment({
+    category: candidate.category,
+    isWashDedicated,
+    isBankingFinance: sectorInfo.isBankingFinance,
+  });
+
   const visaAudit = evaluateMandatoryVisaCompliance(candidate.category, funding, combinedCorpus);
   funding.visaMandatoryRulePassed = outcome.visaCompliancePassed;
   if (!outcome.visaCompliancePassed) {
@@ -2257,6 +2595,7 @@ function buildOpportunityRecordFromCandidate(
     organization: candidate.organization,
     organizationType: candidate.organizationType,
     category: candidate.category,
+    department,
     sectors: sectorInfo.sectors,
     isWashDedicated,
     isBankingFinance: sectorInfo.isBankingFinance,
@@ -2271,11 +2610,13 @@ function buildOpportunityRecordFromCandidate(
     officialDomain: urlCheck.hostname || '',
     applicationStatus,
     verificationStatus: outcome.verificationStatus,
+    verificationTier: outcome.verificationTier,
     hasVerifiedBadge: outcome.hasVerifiedBadge,
     httpStatusCode: liveCheck.httpStatus,
     robotsAllowed: liveCheck.robotsAllowed,
     verificationNotes: combinedNotes || 'Verified against official source.',
     sourceEvidenceSnippet: liveCheck.pageTextSnippet.slice(0, 340) || candidate.summary.slice(0, 340),
+    publicationDate: nowIso.slice(0, 10),
     funding,
     eligibility,
     deadline,
@@ -2362,6 +2703,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         version: 1,
         updatedAt: new Date().toISOString(),
         international_opportunities: [],
+        permanent_residency_pathways: [],
         opportunity_sources: initialSources,
         opportunity_verification_logs: [],
         opportunity_funding: [],
@@ -2416,6 +2758,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
 
     return {
       ...loaded,
+      permanent_residency_pathways: loaded.permanent_residency_pathways || [],
       opportunity_sources: mergedSources,
       opportunity_verification_logs: loaded.opportunity_verification_logs || [],
       opportunity_funding: loaded.opportunity_funding || [],
@@ -2790,6 +3133,84 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
 
     try {
       const enabledProviders = getEnabledSearchProviders();
+
+      // 0A. Arbeitnow International & European Banking/Finance/WASH Job Board API (Free, AI-Independent)
+      if (enabledProviders.has('arbeitnow')) {
+        sourcesQueried++;
+        try {
+          const arbJobs = await fetchArbeitnowBankingWashJobs();
+          updateSourceMeta('arbeitnow_intl_banking_wash_jobs', {
+            lastPolledAt: startedAt,
+            lastSuccessAt: arbJobs.error
+              ? store.opportunity_sources.find((s) => s.id === 'arbeitnow_intl_banking_wash_jobs')?.lastSuccessAt || null
+              : startedAt,
+            lastItemCount: arbJobs.candidates.length,
+            lastError: arbJobs.error || null,
+            status: arbJobs.error ? 'degraded' : 'connected',
+          });
+          if (arbJobs.error) errors.push(arbJobs.error);
+          allCandidates.push(...arbJobs.candidates);
+        } catch (err: any) {
+          const msg = `Arbeitnow International Jobs unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta('arbeitnow_intl_banking_wash_jobs', {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: 'degraded',
+          });
+          errors.push(msg);
+        }
+      }
+
+      // 0B. Department 6 — Official Government Permanent Residency & Labour Shortage Portals (14 Countries, AI-Independent)
+      let prDepartmentSummary: DepartmentRunSummary = {
+        department: 'permanent_residency_intelligence',
+        label: 'Department 6: Permanent Residency & Labour Shortage Intelligence',
+        status: 'success',
+        candidatesFound: (store.permanent_residency_pathways || []).length,
+        verifiedCount: 0,
+        partiallyVerifiedCount: 0,
+        pendingCount: 0,
+        rejectedOrExpiredCount: 0,
+        errors: [],
+      };
+      if (enabledProviders.has('official_gov_pr')) {
+        sourcesQueried++;
+        try {
+          const prRes = await verifyOfficialPermanentResidencyPathways();
+          store.permanent_residency_pathways = prRes.records;
+          updateSourceMeta('official_gov_pr_intelligence', {
+            lastPolledAt: startedAt,
+            lastSuccessAt: startedAt,
+            lastItemCount: prRes.records.length,
+            lastError: prRes.errors.length > 0 ? prRes.errors.slice(0, 3).join('; ') : null,
+            status: prRes.verifiedCount > 0 ? 'connected' : 'degraded',
+          });
+          prDepartmentSummary = {
+            department: 'permanent_residency_intelligence',
+            label: 'Department 6: Permanent Residency & Labour Shortage Intelligence',
+            status: prRes.errors.length === 0 ? 'success' : prRes.verifiedCount > 0 ? 'partial' : 'failed',
+            candidatesFound: prRes.records.length,
+            verifiedCount: prRes.verifiedCount,
+            partiallyVerifiedCount: prRes.partiallyVerifiedCount,
+            pendingCount: prRes.pendingCount,
+            rejectedOrExpiredCount: 0,
+            errors: prRes.errors,
+          };
+          if (prRes.errors.length > 0) {
+            errors.push(...prRes.errors.slice(0, 2));
+          }
+        } catch (err: any) {
+          const msg = `Official Government PR Intelligence error: ${err?.message || String(err)}`;
+          updateSourceMeta('official_gov_pr_intelligence', {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: 'degraded',
+          });
+          prDepartmentSummary.status = 'failed';
+          prDepartmentSummary.errors.push(msg);
+          errors.push(msg);
+        }
+      }
 
       // 1. ReliefWeb Official Jobs Feeds (Free, No API Key Required: WASH, Banking/Finance, International Jobs)
       if (enabledProviders.has('reliefweb')) {
@@ -3205,6 +3626,42 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       }
       store.user_opportunity_recommendations = nextRecs;
 
+      // Compute fault-isolated per-department breakdown across all 6 independent departments
+      const deptLabels: Array<{ department: GlobalDiscoveryDepartment; label: string }> = [
+        { department: 'banking_finance_jobs', label: 'Department 1: International Banking & Finance Jobs' },
+        { department: 'wash_jobs', label: 'Department 2: International WASH Jobs' },
+        { department: 'banking_wash_scholarships', label: 'Department 3: Banking & WASH Scholarships' },
+        { department: 'banking_wash_training', label: 'Department 4: Banking & WASH Professional Training' },
+        { department: 'banking_wash_conferences', label: 'Department 5: Banking & WASH International Conferences' },
+      ];
+      const departmentSummaries: DepartmentRunSummary[] = deptLabels.map(({ department, label }) => {
+        const deptItems = store.international_opportunities.filter(
+          (o) => (o.department || classifyOpportunityDepartment(o)) === department
+        );
+        const verifiedCount = deptItems.filter(
+          (o) => isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier === 'VERIFIED'
+        ).length;
+        const partiallyVerifiedCount = deptItems.filter(
+          (o) => isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier !== 'VERIFIED'
+        ).length;
+        const pendingCount = deptItems.filter((o) => o.verificationTier === 'PENDING VERIFICATION').length;
+        const rejectedOrExpiredCount = deptItems.filter(
+          (o) => !isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier !== 'PENDING VERIFICATION'
+        ).length;
+        return {
+          department,
+          label,
+          status: 'success',
+          candidatesFound: deptItems.length,
+          verifiedCount,
+          partiallyVerifiedCount,
+          pendingCount,
+          rejectedOrExpiredCount,
+          errors: [],
+        };
+      });
+      departmentSummaries.push(prDepartmentSummary);
+
       const finishedAt = new Date().toISOString();
       // Note: strict visa/sector filtering legitimately rejects non-compliant candidates; that is a SUCCESSFUL compliance sweep, not a source failure!
       const isFailure = sourcesQueried === 0 && errors.length > 0;
@@ -3239,6 +3696,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         attemptNumber: options?.attemptNumber ?? 1,
         maxAttempts: options?.maxAttempts ?? 1,
         skippedOverlap: false,
+        departmentSummaries,
         errors,
       };
 
@@ -3414,7 +3872,8 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
 
   function computeSubsectionCounts(
     activeList: GlobalOpportunityWithMatch[],
-    savedIdSet: Set<string>
+    savedIdSet: Set<string>,
+    permanentResidencyCount: number = 0
   ): Record<GlobalOpportunitySubsection, number> {
     return {
       international_jobs: activeList.filter((o) => o.category === 'international_job').length,
@@ -3423,6 +3882,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       conferences_summits: activeList.filter((o) => o.category === 'conference_summit').length,
       banking_finance: activeList.filter((o) => o.isBankingFinance || o.sectors.includes('banking_finance')).length,
       wash_opportunities: activeList.filter((o) => o.isWashDedicated || o.category === 'wash_opportunity' || o.sectors.includes('wash')).length,
+      permanent_residency: permanentResidencyCount,
       recommended: activeList.filter((o) => o.recommendation?.eligible).length,
       closing_soon: activeList.filter((o) => o.deadline.isClosingSoon).length,
       saved: activeList.filter((o) => savedIdSet.has(o.id)).length,
@@ -3476,7 +3936,12 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         item.isSaved = savedIds.has(item.id);
       }
 
-      const countsBySubsection = computeSubsectionCounts(activeVerified, savedIds);
+      const prPathways = store.permanent_residency_pathways || [];
+      const prAssessments: PermanentResidencyAssessmentResult[] = userProfile
+        ? prPathways.map((p) => evaluatePermanentResidencyEligibility(p, userProfile))
+        : [];
+
+      const countsBySubsection = computeSubsectionCounts(activeVerified, savedIds, prPathways.length);
 
       // Optional query filters
       const subsection = String(req.query.subsection || '').trim() as GlobalOpportunitySubsection | '';
@@ -3506,12 +3971,31 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       if (funding && funding !== 'all') {
         if (funding === 'fully_funded') filtered = filtered.filter((o) => o.funding.fundingLevel === 'fully_funded');
         else if (funding === 'partially_funded') filtered = filtered.filter((o) => o.funding.fundingLevel === 'partially_funded');
+        else if (funding === 'free') filtered = filtered.filter((o) => o.funding.fundingLevel === 'free');
         else if (funding === 'self_funded') filtered = filtered.filter((o) => o.funding.fundingLevel === 'self_funded');
       }
       if (visa && visa !== 'all') {
-        if (visa === 'employer_sponsored') filtered = filtered.filter((o) => o.funding.visaSupportType === 'employer_sponsored_visa');
-        else if (visa === 'visa_fees_funded') filtered = filtered.filter((o) => o.funding.visaSupportType === 'visa_fees_funded');
-        else if (visa === 'assistance_only') filtered = filtered.filter((o) => o.funding.visaSupportType === 'visa_assistance_only' || o.funding.visaSupportType === 'invitation_letter_only');
+        if (visa === 'employer_sponsored' || visa === 'confirmed_visa_sponsorship') {
+          filtered = filtered.filter(
+            (o) =>
+              o.funding.visaSupportType === 'employer_sponsored_visa' ||
+              o.funding.employmentVisaClassification === 'confirmed_visa_sponsorship'
+          );
+        } else if (visa === 'confirmed_international_recruitment') {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === 'confirmed_international_recruitment');
+        } else if (visa === 'relocation_assistance') {
+          filtered = filtered.filter(
+            (o) => o.funding.relocationAssistance === 'yes' || o.funding.employmentVisaClassification === 'relocation_assistance'
+          );
+        } else if (visa === 'work_permit_assistance') {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === 'work_permit_assistance');
+        } else if (visa === 'no_sponsorship_stated') {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === 'no_sponsorship_stated');
+        } else if (visa === 'visa_fees_funded') {
+          filtered = filtered.filter((o) => o.funding.visaSupportType === 'visa_fees_funded');
+        } else if (visa === 'assistance_only') {
+          filtered = filtered.filter((o) => o.funding.visaSupportType === 'visa_assistance_only' || o.funding.visaSupportType === 'invitation_letter_only');
+        }
       }
       if (experience && experience !== 'all') {
         if (experience === 'entry') filtered = filtered.filter((o) => (o.eligibility.minimumYearsExperience ?? 0) <= 2 || o.eligibility.careerLevel === 'entry' || o.eligibility.careerLevel === 'internship');
@@ -3550,16 +4034,65 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
         totalStoredAllStatuses: store.international_opportunities.length,
         countsBySubsection,
         opportunities: filtered,
+        permanentResidencyPathways: prPathways,
+        permanentResidencyAssessments: prAssessments,
         sources: store.opportunity_sources,
         lastDiscoveryRun: store.discovery_job_logs[0] || null,
         schedulerInfo: buildSchedulerInfo(store),
         websiteOnlyPolicyNote:
-          'Scholarship, professional training, and conference recommendations are displayed exclusively inside the Hopeland Jobs website. No emails, SMS, WhatsApp, or push notifications are sent for them.',
+          'Website-only display (no emails, SMS, WhatsApp, or push) — Global Banking, Finance, WASH, Scholarship, Training, Conference, and Official Government Permanent Residency Intelligence verified directly against official sources with transparent visa sponsorship & funding classifications.',
       };
 
       res.json(payload);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Failed to load global opportunities' });
+    }
+  });
+
+  app.get('/api/global-opportunities/permanent-residency', (req: Request, res: Response): void => {
+    try {
+      const store = loadStore();
+      const uid = getRequesterUid(req);
+      const profiles = loadUserProfiles();
+      const userProfile = uid ? profiles[uid] || null : null;
+
+      let pathways = store.permanent_residency_pathways || [];
+      const countryQ = String(req.query.country || '').trim().toLowerCase();
+      const pathwayType = String(req.query.pathwayType || '').trim().toLowerCase();
+      const q = String(req.query.q || '').trim().toLowerCase();
+
+      if (countryQ && countryQ !== 'all') {
+        pathways = pathways.filter((p) => p.country.toLowerCase().includes(countryQ));
+      }
+      if (pathwayType && pathwayType !== 'all') {
+        pathways = pathways.filter((p) => p.pathwayClassification === pathwayType);
+      }
+      if (q) {
+        pathways = pathways.filter((p) =>
+          `${p.country} ${p.programName} ${p.officialAuthority} ${p.professionalOccupationsInDemand.join(' ')} ${p.labourOccupationsInDemand.join(' ')} ${p.bankingFinanceOccupations.join(' ')} ${p.washWaterOccupations.join(' ')}`
+            .toLowerCase()
+            .includes(q)
+        );
+      }
+
+      const assessments = userProfile
+        ? pathways.map((p) => evaluatePermanentResidencyEligibility(p, userProfile))
+        : [];
+
+      res.json({
+        success: true,
+        generatedAt: new Date().toISOString(),
+        totalCountries: pathways.length,
+        directPrCount: pathways.filter((p) => p.pathwayClassification === 'direct_pr').length,
+        routeToPrCount: pathways.filter((p) => p.pathwayClassification === 'route_to_pr').length,
+        temporaryPermitCount: pathways.filter((p) => p.pathwayClassification === 'temporary_work_permit').length,
+        pathways,
+        assessments,
+        disclaimer:
+          'Labour or skill shortages do NOT automatically grant permanent residency. Every immigration pathway is governed exclusively by official national immigration authorities.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to load permanent residency intelligence' });
     }
   });
 
@@ -3687,22 +4220,74 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
     const expiredRecords = archivedRecords.filter(
       (o) => o.rejectionCategory === 'deadline' || o.applicationStatus === 'expired' || o.verificationStatus === 'Expired'
     );
-    const sourceFailuresCount = store.opportunity_sources.filter(
+    const failedSources = store.opportunity_sources.filter(
       (s) => s.status === 'error' || s.status === 'degraded'
-    ).length;
+    );
+    const sourceFailuresCount = failedSources.length;
     const lastVerificationAt =
       store.opportunity_verification_logs[0]?.checkedAt || store.discovery_job_logs[0]?.finishedAt || null;
+
+    const prPathways = store.permanent_residency_pathways || [];
+    const verifiedTierCount = activeVerified.filter((o) => o.verificationTier === 'VERIFIED').length;
+    const partiallyVerifiedTierCount = activeVerified.filter((o) => o.verificationTier !== 'VERIFIED').length;
+    const pendingVerificationCount = archivedRecords.filter((o) => o.verificationTier === 'PENDING VERIFICATION').length;
+
+    const bankingJobsCount = activeVerified.filter(
+      (o) => (o.department || classifyOpportunityDepartment(o)) === 'banking_finance_jobs'
+    ).length;
+    const washJobsCount = activeVerified.filter(
+      (o) => (o.department || classifyOpportunityDepartment(o)) === 'wash_jobs'
+    ).length;
+    const visaSponsoredJobsCount = activeVerified.filter(
+      (o) =>
+        (o.category === 'international_job' || o.category === 'wash_opportunity') &&
+        (o.funding.visaSupportType === 'employer_sponsored_visa' ||
+          o.funding.employmentVisaClassification === 'confirmed_visa_sponsorship' ||
+          o.funding.employmentVisaClassification === 'confirmed_international_recruitment' ||
+          o.funding.employmentVisaClassification === 'relocation_assistance')
+    ).length;
+    const scholarshipsCount = activeVerified.filter((o) => o.category === 'university_scholarship').length;
+    const fullyFundedScholarshipsCount = activeVerified.filter(
+      (o) => o.category === 'university_scholarship' && o.funding.fundingLevel === 'fully_funded'
+    ).length;
+    const trainingCount = activeVerified.filter((o) => o.category === 'professional_training').length;
+    const conferencesCount = activeVerified.filter((o) => o.category === 'conference_summit').length;
+
+    const professionalShortageOccupationsCount = prPathways.reduce(
+      (sum, p) => sum + (p.professionalOccupationsInDemand?.length || 0),
+      0
+    );
+    const labourShortageOccupationsCount = prPathways.reduce(
+      (sum, p) => sum + (p.labourOccupationsInDemand?.length || 0),
+      0
+    );
 
     const monitoringSummary: VerificationMonitoringSummary = {
       totalDiscoveredAllTime: store.international_opportunities.length,
       activeVerifiedCount: activeVerified.length,
+      verifiedTierCount,
+      partiallyVerifiedTierCount,
+      pendingVerificationCount,
       totalRejectedCount: archivedRecords.length,
       autoUnpublishedCount: autoUnpublished.length,
       rejectedDueToVisaCount: rejectedVisa.length,
       rejectedDueToProfessionalRestrictionCount: rejectedSector.length,
       expiredCount: expiredRecords.length,
+      duplicatesSkippedLastRun: store.discovery_job_logs[0]?.duplicatesSkipped || 0,
       archivedRecordsCount: archivedRecords.length,
       sourceFailuresCount,
+      failedSourcesList: failedSources.map((s) => `${s.name}: ${s.lastError || s.status}`),
+      bankingJobsCount,
+      washJobsCount,
+      visaSponsoredJobsCount,
+      scholarshipsCount,
+      fullyFundedScholarshipsCount,
+      trainingCount,
+      conferencesCount,
+      permanentResidencyPathwaysCount: prPathways.length,
+      countriesSeekingWorkersCount: new Set(prPathways.map((p) => p.country)).size,
+      professionalShortageOccupationsCount,
+      labourShortageOccupationsCount,
       lastVerificationAt,
       lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt),
     };

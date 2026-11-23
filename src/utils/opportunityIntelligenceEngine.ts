@@ -1,13 +1,18 @@
 import { JobSeekerProfile } from '../types/jobSeeker';
 import {
   ApplicationLifecycleStatus,
+  CanonicalVerificationTier,
+  EmploymentVisaClassification,
   FundingTransparencyCategory,
+  GlobalDiscoveryDepartment,
   GlobalOpportunity,
   GlobalOpportunityCategory,
   GlobalVerificationStatus,
   OpportunityDeadlineRecord,
   OpportunityEligibilityRecord,
   OpportunityFundingRecord,
+  PermanentResidencyAssessmentResult,
+  PermanentResidencyCountryRecord,
   RequirementBooleanStatus,
   SectorTag,
   UserOpportunityRecommendationRecord,
@@ -386,6 +391,25 @@ export function classifyFundingAndVisaTransparency(input: {
   if (accommodationCovered === 'yes') tags.add('Accommodation funded');
   if (explicitSelfFunded && !explicitFullFunded) tags.add('Self-funded');
 
+  const insuranceCovered: OpportunityFundingRecord['insuranceCovered'] =
+    /\b(health\s+insurance|medical\s+insurance|insurance\s+covered|insurance\s+provided)\b/i.test(fundingText)
+      ? 'yes'
+      : 'not_confirmed';
+
+  const livingAllowanceCovered: OpportunityFundingRecord['livingAllowanceCovered'] =
+    /\b(living\s+allowance|monthly\s+stipend|subsistence\s+allowance|per\s+diem|stipend\s+provided|living\s+expenses\s+covered)\b/i.test(
+      fundingText
+    )
+      ? 'yes'
+      : 'not_confirmed';
+
+  const explicitFreeNoFee =
+    !explicitFullFunded &&
+    !explicitSelfFunded &&
+    /\b(free\s+of\s+charge|free\s+to\s+attend|free\s+course|free\s+training|no\s+tuition\s+fee|no\s+registration\s+fee|tuition[\s-]free)\b/i.test(
+      fundingText
+    );
+
   let fundingLevel: OpportunityFundingRecord['fundingLevel'] = 'not_confirmed';
   if (explicitFullFunded && !explicitSelfFunded) {
     fundingLevel = 'fully_funded';
@@ -397,6 +421,8 @@ export function classifyFundingAndVisaTransparency(input: {
     hasVisaFeesFunded
   ) {
     fundingLevel = 'partially_funded';
+  } else if (explicitFreeNoFee) {
+    fundingLevel = 'free';
   } else if (explicitSelfFunded) {
     fundingLevel = 'self_funded';
   }
@@ -411,12 +437,22 @@ export function classifyFundingAndVisaTransparency(input: {
       ? 'yes'
       : 'not_confirmed');
 
+  const employmentVisa = classifyEmploymentVisaStatus({
+    visaSummary: input.visaSummary,
+    fundingSummary: input.fundingSummary,
+    fullText: input.fullText,
+    visaSupportType,
+    relocationAssistance,
+  });
+
   const fundingSummary =
     input.fundingSummary?.trim() ||
     (fundingLevel === 'fully_funded'
       ? 'Fully funded (verify exact inclusions on official portal)'
       : fundingLevel === 'partially_funded'
       ? `Partially funded (${Array.from(tags).join(', ')})`
+      : fundingLevel === 'free'
+      ? 'Free participation (travel/accommodation not confirmed)'
       : fundingLevel === 'self_funded'
       ? 'Self-funded'
       : 'Funding Not Confirmed');
@@ -428,12 +464,130 @@ export function classifyFundingAndVisaTransparency(input: {
     tuitionCovered,
     airfareCovered,
     accommodationCovered,
+    insuranceCovered,
+    livingAllowanceCovered,
     visaSupportType,
+    employmentVisaClassification: employmentVisa.classification,
+    employmentVisaLabel: employmentVisa.label,
     visaSupportSummary,
     relocationAssistance,
     applicationFee: input.applicationFee?.trim() || 'Not Confirmed',
     stipendOrSalary: input.stipendOrSalary?.trim() || undefined,
   };
+}
+
+export const EMPLOYMENT_VISA_LABELS: Record<EmploymentVisaClassification, string> = {
+  confirmed_visa_sponsorship: 'Confirmed visa sponsorship',
+  confirmed_international_recruitment: 'Confirmed international recruitment',
+  relocation_assistance: 'Relocation assistance',
+  work_permit_assistance: 'Work permit assistance',
+  no_sponsorship_stated: 'No sponsorship stated',
+  not_eligible_international: 'Not eligible for international applicants',
+};
+
+/**
+ * Strictly classifies employment visa/sponsorship evidence into the 6 official tiers.
+ * Never labels a job as confirmed visa sponsorship without reliable textual evidence.
+ */
+export function classifyEmploymentVisaStatus(input: {
+  visaSummary?: string;
+  fundingSummary?: string;
+  fullText?: string;
+  visaSupportType?: OpportunityFundingRecord['visaSupportType'];
+  relocationAssistance?: OpportunityFundingRecord['relocationAssistance'];
+  ethiopianEligible?: OpportunityEligibilityRecord['ethiopianEligible'];
+}): { classification: EmploymentVisaClassification; label: string } {
+  const corpus = `${input.visaSummary || ''} ${input.fundingSummary || ''} ${input.fullText || ''}`.toLowerCase();
+
+  const isLocalOrNationalOnly =
+    input.ethiopianEligible === 'excluded' ||
+    /\b(national\s+position\s+only|local\s+nationals?\s+only|open\s+only\s+to\s+citizens\s+of|host\s+country\s+nationals?\s+only|must\s+(?:already\s+)?have\s+(?:the\s+)?right\s+to\s+work|already\s+authorized\s+to\s+work|citizens?\s+or\s+permanent\s+residents?\s+only|no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|not\s+available|withdrawn|discontinued|revoked))\b/i.test(
+      corpus
+    );
+
+  if (isLocalOrNationalOnly || input.visaSupportType === 'none') {
+    return {
+      classification: 'not_eligible_international',
+      label: EMPLOYMENT_VISA_LABELS.not_eligible_international,
+    };
+  }
+
+  if (
+    input.visaSupportType === 'employer_sponsored_visa' ||
+    /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|work\s+permit\s+sponsorship|visa\s+sponsorship\s+(?:provided|available|offered|included|confirmed)|we\s+sponsor\s+(?:work\s+)?visas?|sponsors?\s+work\s+(?:visas?|permits?)|tier\s*2\s+sponsorship|skilled\s+worker\s+visa\s+sponsorship)\b/i.test(
+      corpus
+    )
+  ) {
+    return {
+      classification: 'confirmed_visa_sponsorship',
+      label: EMPLOYMENT_VISA_LABELS.confirmed_visa_sponsorship,
+    };
+  }
+
+  if (
+    /\b(work\s+permit\s+(?:assistance|support|arranged|facilitated|processing)|assist(?:ance)?\s+with\s+(?:obtaining\s+)?(?:a\s+)?work\s+permit)\b/i.test(
+      corpus
+    )
+  ) {
+    return {
+      classification: 'work_permit_assistance',
+      label: EMPLOYMENT_VISA_LABELS.work_permit_assistance,
+    };
+  }
+
+  if (
+    input.relocationAssistance === 'yes' ||
+    /\b(relocation\s+(?:package|assistance|allowance|support|covered|benefits?)|installation\s+grant|settling[\s-]in\s+grant)\b/i.test(
+      corpus
+    )
+  ) {
+    return {
+      classification: 'relocation_assistance',
+      label: EMPLOYMENT_VISA_LABELS.relocation_assistance,
+    };
+  }
+
+  if (
+    /\b(international\s+(?:staff|position|recruitment|applicants?|candidates?|hiring|professionals?|vacancy|contract|post)|open\s+to\s+all\s+nationalities|applicants?\s+of\s+all\s+nationalities|p-?[1-5]\s+(?:level|grade|post)|un\s+international\s+professional|expatriate\s+(?:contract|package|position))\b/i.test(
+      corpus
+    )
+  ) {
+    return {
+      classification: 'confirmed_international_recruitment',
+      label: EMPLOYMENT_VISA_LABELS.confirmed_international_recruitment,
+    };
+  }
+
+  return {
+    classification: 'no_sponsorship_stated',
+    label: EMPLOYMENT_VISA_LABELS.no_sponsorship_stated,
+  };
+}
+
+export function classifyOpportunityDepartment(
+  inputOrCategory:
+    | GlobalOpportunityCategory
+    | {
+        category: GlobalOpportunityCategory;
+        isBankingFinance?: boolean;
+        isWashDedicated?: boolean;
+      },
+  isBankingFinanceArg?: boolean,
+  isWashDedicatedArg?: boolean
+): GlobalDiscoveryDepartment {
+  const category = typeof inputOrCategory === 'string' ? inputOrCategory : inputOrCategory.category;
+  const isBankingFinance =
+    typeof inputOrCategory === 'string' ? Boolean(isBankingFinanceArg) : Boolean(inputOrCategory.isBankingFinance);
+  const isWashDedicated =
+    typeof inputOrCategory === 'string' ? Boolean(isWashDedicatedArg) : Boolean(inputOrCategory.isWashDedicated);
+
+  if (category === 'university_scholarship') return 'banking_wash_scholarships';
+  if (category === 'professional_training') return 'banking_wash_training';
+  if (category === 'conference_summit') return 'banking_wash_conferences';
+  if (category === 'wash_opportunity' || (isWashDedicated && !isBankingFinance)) {
+    return 'wash_jobs';
+  }
+  return 'banking_finance_jobs';
 }
 
 /**
@@ -582,7 +736,8 @@ export function computeVerificationOutcome(params: {
   organizationAuthentic: boolean;
   applicationStatus: ApplicationLifecycleStatus;
   deadlineEval: DeadlineEvaluationResult;
-  funding: Pick<OpportunityFundingRecord, 'fundingLevel' | 'visaSupportType' | 'visaSupportSummary' | 'evidenceExcerpt'>;
+  funding: Pick<OpportunityFundingRecord, 'fundingLevel' | 'visaSupportType' | 'visaSupportSummary'> &
+    Partial<Pick<OpportunityFundingRecord, 'evidenceExcerpt' | 'employmentVisaClassification' | 'relocationAssistance'>>;
   eligibility: Pick<OpportunityEligibilityRecord, 'ethiopianEligible'>;
   category: GlobalOpportunityCategory;
   title?: string;
@@ -592,8 +747,10 @@ export function computeVerificationOutcome(params: {
   isBankingFinance?: boolean;
   isWashDedicated?: boolean;
   officialSourceText?: string;
+  strictVisaOnly?: boolean;
 }): {
   verificationStatus: GlobalVerificationStatus;
+  verificationTier: CanonicalVerificationTier;
   hasVerifiedBadge: boolean;
   isPubliclyDisplayable: boolean;
   visaCompliancePassed: boolean;
@@ -613,6 +770,16 @@ export function computeVerificationOutcome(params: {
     isWashDedicated: params.isWashDedicated,
   });
 
+  // Also ensure global job departments focus on Banking & Finance OR WASH
+  const isBankingOrWashJob =
+    category === 'wash_opportunity' ||
+    Boolean(params.isBankingFinance) ||
+    Boolean(params.isWashDedicated) ||
+    Boolean(params.sectors?.includes('banking_finance')) ||
+    Boolean(params.sectors?.includes('wash')) ||
+    detectSectorsFromText(`${params.title || ''} ${params.summary || ''} ${params.organization || ''}`).isBankingFinance ||
+    detectSectorsFromText(`${params.title || ''} ${params.summary || ''} ${params.organization || ''}`).isWash;
+
   if (
     applicationStatus === 'expired' ||
     applicationStatus === 'closed' ||
@@ -621,6 +788,7 @@ export function computeVerificationOutcome(params: {
   ) {
     return {
       verificationStatus: 'Expired',
+      verificationTier: 'EXPIRED',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
@@ -633,20 +801,22 @@ export function computeVerificationOutcome(params: {
   if (!urlVerified || !organizationAuthentic) {
     return {
       verificationStatus: 'Unverified',
+      verificationTier: !organizationAuthentic ? 'REJECTED / POTENTIAL SCAM' : 'PENDING VERIFICATION',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
       professionalRestrictionPassed: profCheck.passed,
       rejectionCategory: !organizationAuthentic ? 'authenticity' : 'broken_link',
       rejectionReason: !organizationAuthentic
-        ? 'Organization authenticity or official domain could not be verified.'
-        : 'Official application URL could not be verified live.',
+        ? 'Rejected: Unofficial domain or organization authenticity could not be verified.'
+        : 'Pending verification: Official application URL could not be verified live.',
     };
   }
 
   if (!deadlineEval.valid || !deadlineEval.meetsMinimumThreeFullDays) {
     return {
       verificationStatus: 'Expired',
+      verificationTier: 'EXPIRED',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
@@ -656,50 +826,99 @@ export function computeVerificationOutcome(params: {
     };
   }
 
-  if (eligibility.ethiopianEligible === 'excluded') {
+  if (
+    eligibility.ethiopianEligible === 'excluded' ||
+    funding.employmentVisaClassification === 'not_eligible_international' ||
+    funding.visaSupportType === 'none'
+  ) {
     return {
       verificationStatus: 'Unverified',
-      hasVerifiedBadge: false,
-      isPubliclyDisplayable: false,
-      visaCompliancePassed: visaCheck.passed,
-      professionalRestrictionPassed: profCheck.passed,
-      rejectionCategory: 'eligibility',
-      rejectionReason: 'Excluded: Official source restricts eligibility against Ethiopian applicants.',
-    };
-  }
-
-  // MANDATORY VISA SPONSORSHIP / VISA-COST FILTER
-  if (!visaCheck.passed) {
-    return {
-      verificationStatus: 'Unverified',
+      verificationTier: 'REJECTED / POTENTIAL SCAM',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: false,
       professionalRestrictionPassed: profCheck.passed,
-      rejectionCategory: 'visa',
-      rejectionReason: visaCheck.reason,
+      rejectionCategory: 'eligibility',
+      rejectionReason:
+        'Excluded: Not eligible for international/Ethiopian applicants or explicitly states no visa sponsorship.',
     };
   }
 
-  // MANDATORY PROFESSIONAL RESTRICTION FILTER (Banking & WASH exclusively for Scholarships, Training, Conferences)
+  // Enforce Banking & Finance / WASH professional scope
   if (!profCheck.passed) {
     return {
       verificationStatus: 'Unverified',
+      verificationTier: 'REJECTED / POTENTIAL SCAM',
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
-      visaCompliancePassed: true,
+      visaCompliancePassed: visaCheck.passed,
       professionalRestrictionPassed: false,
       rejectionCategory: 'professional_restriction',
       rejectionReason: profCheck.reason,
     };
   }
 
-  // Determine exact display status among required labels
+  if ((category === 'international_job' || category === 'wash_opportunity') && !isBankingOrWashJob) {
+    return {
+      verificationStatus: 'Unverified',
+      verificationTier: 'REJECTED / POTENTIAL SCAM',
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: false,
+      rejectionCategory: 'professional_restriction',
+      rejectionReason:
+        'Rejected (Department Scope): Global employment discovery is focused exclusively on Banking & Finance and WASH.',
+    };
+  }
+
+  // If caller explicitly requires strict visa-only pass (or visa was explicitly invitation-letter/visa-free/assistance-only when strictVisaOnly is requested)
+  if (params.strictVisaOnly && !visaCheck.passed) {
+    return {
+      verificationStatus: 'Unverified',
+      verificationTier: 'REJECTED / POTENTIAL SCAM',
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: false,
+      professionalRestrictionPassed: true,
+      rejectionCategory: 'visa',
+      rejectionReason: visaCheck.reason,
+    };
+  }
+
+  // Transparent distinction between VERIFIED vs PARTIALLY VERIFIED
+  const empVisaClass =
+    funding.employmentVisaClassification ||
+    classifyEmploymentVisaStatus({
+      visaSummary: funding.visaSupportSummary,
+      fullText: params.officialSourceText,
+      visaSupportType: funding.visaSupportType,
+      relocationAssistance: funding.relocationAssistance,
+      ethiopianEligible: eligibility.ethiopianEligible,
+    }).classification;
+
+  const isEmployment = category === 'international_job' || category === 'wash_opportunity';
+
+  const hasStrongVerificationEvidence = isEmployment
+    ? empVisaClass === 'confirmed_visa_sponsorship' ||
+      empVisaClass === 'confirmed_international_recruitment' ||
+      empVisaClass === 'relocation_assistance' ||
+      empVisaClass === 'work_permit_assistance'
+    : visaCheck.passed ||
+      funding.fundingLevel === 'fully_funded' ||
+      funding.fundingLevel === 'partially_funded' ||
+      funding.fundingLevel === 'free';
+
+  const verificationTier: CanonicalVerificationTier = hasStrongVerificationEvidence
+    ? 'VERIFIED'
+    : 'PARTIALLY VERIFIED';
+
+  // Determine exact display status without EVER exaggerating visa sponsorship or full funding
   let verificationStatus: GlobalVerificationStatus = 'Verified and Open';
 
   if (deadlineEval.isClosingSoon) {
     verificationStatus = 'Closing Soon';
-  } else if (funding.visaSupportType === 'employer_sponsored_visa') {
+  } else if (funding.visaSupportType === 'employer_sponsored_visa' && empVisaClass === 'confirmed_visa_sponsorship') {
     verificationStatus = 'Visa Sponsored';
   } else if (funding.fundingLevel === 'fully_funded') {
     verificationStatus = 'Fully Funded';
@@ -718,9 +937,10 @@ export function computeVerificationOutcome(params: {
 
   return {
     verificationStatus,
+    verificationTier,
     hasVerifiedBadge: true,
     isPubliclyDisplayable: true,
-    visaCompliancePassed: true,
+    visaCompliancePassed: visaCheck.passed,
     professionalRestrictionPassed: true,
     rejectionCategory: null,
     rejectionReason: null,
@@ -729,8 +949,8 @@ export function computeVerificationOutcome(params: {
 
 /**
  * Checks whether an opportunity is eligible for active display on the website right now.
- * Enforces verified badge, non-archived status, mandatory visa compliance, professional restrictions,
- * Ethiopian eligibility, and the >= 3 full days deadline gate.
+ * Enforces verified official source, non-archived status, Banking & WASH scope,
+ * international eligibility, and the >= 3 full days deadline gate.
  */
 export function isOpportunityActiveAndDisplayable(
   opp: GlobalOpportunity,
@@ -738,6 +958,13 @@ export function isOpportunityActiveAndDisplayable(
 ): boolean {
   if (!opp.hasVerifiedBadge) return false;
   if (opp.isArchived === true) return false;
+  if (
+    opp.verificationTier === 'EXPIRED' ||
+    opp.verificationTier === 'REJECTED / POTENTIAL SCAM' ||
+    opp.verificationTier === 'PENDING VERIFICATION'
+  ) {
+    return false;
+  }
   if (
     opp.applicationStatus === 'closed' ||
     opp.applicationStatus === 'expired' ||
@@ -750,17 +977,24 @@ export function isOpportunityActiveAndDisplayable(
   if (opp.verificationStatus === 'Expired' || opp.verificationStatus === 'Unverified') {
     return false;
   }
-  if (opp.eligibility.ethiopianEligible === 'excluded') {
+  if (
+    opp.eligibility.ethiopianEligible === 'excluded' ||
+    opp.funding.employmentVisaClassification === 'not_eligible_international' ||
+    opp.funding.visaSupportType === 'none'
+  ) {
     return false;
   }
-  // Enforce mandatory visa sponsorship / visa fee coverage filter live
-  const visaCheck = evaluateMandatoryVisaCompliance(opp.category, opp.funding, opp.sourceEvidenceSnippet);
-  if (!visaCheck.passed) {
-    return false;
-  }
-  // Enforce Banking & WASH professional restrictions for scholarships, training & conferences
+  // Enforce Banking & WASH scope across the 5 global opportunity departments
   const profCheck = evaluateProfessionalRestrictionCompliance(opp.category, opp);
   if (!profCheck.passed) {
+    return false;
+  }
+  const isBankingOrWash =
+    opp.isBankingFinance ||
+    opp.isWashDedicated ||
+    opp.sectors.includes('banking_finance') ||
+    opp.sectors.includes('wash');
+  if (!isBankingOrWash) {
     return false;
   }
   const deadlineCheck = evaluateOpportunityDeadline(
@@ -769,6 +1003,129 @@ export function isOpportunityActiveAndDisplayable(
     nowMs
   );
   return deadlineCheck.valid && !deadlineCheck.isExpired && deadlineCheck.meetsMinimumThreeFullDays;
+}
+
+/**
+ * Separate, honest eligibility assessment for Permanent Residency & Labour Shortage pathways.
+ * NEVER claims guaranteed qualification or that a labour shortage automatically grants PR.
+ */
+export function evaluatePermanentResidencyEligibility(
+  pathway: PermanentResidencyCountryRecord,
+  profile: JobSeekerProfile | null | undefined
+): PermanentResidencyAssessmentResult {
+  const disclaimer =
+    'Official Verification Notice: This assessment checks general alignment only. A labour shortage occupation does NOT automatically grant permanent residency. Final eligibility must be confirmed directly on the official government immigration portal.';
+
+  if (!profile) {
+    return {
+      pathwayId: pathway.id,
+      country: pathway.country,
+      programName: pathway.programName,
+      pathwayClassification: pathway.pathwayClassification,
+      readinessStatus: 'Partial Fit — Additional Requirements Needed',
+      matchedCriteria: ['Open to eligible foreign skilled applicants subject to official points/sponsorship rules.'],
+      missingOrUnverifiedCriteria: [
+        'Sign in and complete your education, occupation, years of experience, and language details for a personalized pathway check.',
+      ],
+      disclaimer,
+    };
+  }
+
+  const matchedCriteria: string[] = [];
+  const missingOrUnverifiedCriteria: string[] = [];
+
+  // 1. Occupation alignment (Banking/Finance, WASH/Water, Engineering, Healthcare, IT, Construction, Trades, etc.)
+  const profileCorpus = [
+    profile.desiredJobTitle,
+    profile.currentPosition,
+    profile.preferredIndustry,
+    profile.customProfessionOrCategory,
+    ...(profile.skills || []),
+    ...(profile.areasOfExpertise || []),
+    ...(profile.education || []).map((e) => `${e.qualification} ${e.fieldOfStudy}`),
+    ...(profile.experience || []).map((x) => `${x.jobTitle} ${x.responsibilities}`),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  const allPathwayOccupations = [
+    ...pathway.bankingFinanceOccupations,
+    ...pathway.washWaterOccupations,
+    ...pathway.professionalOccupationsInDemand,
+    ...pathway.labourOccupationsInDemand,
+  ];
+
+  const matchedOccupations = allPathwayOccupations.filter((occ) => {
+    const tokens = occ
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 4 && !['officer', 'worker', 'manager', 'specialist', 'services'].includes(t));
+    return tokens.some((t) => profileCorpus.includes(t));
+  });
+
+  if (matchedOccupations.length > 0) {
+    matchedCriteria.push(
+      `Occupation aligns with listed demand areas: ${matchedOccupations.slice(0, 3).join(', ')}.`
+    );
+  } else {
+    missingOrUnverifiedCriteria.push(
+      `Your profile occupation does not yet clearly match listed occupations on ${pathway.country}'s official shortage list.`
+    );
+  }
+
+  // 2. Education check
+  const eduText = (profile.education || [])
+    .map((e) => `${e.qualification} ${e.fieldOfStudy}`)
+    .join(' ')
+    .toLowerCase();
+  const hasDegree = /\b(bachelor|bsc|ba|master|msc|mba|phd|doctorate|degree)\b/i.test(eduText);
+  const hasDiplomaOrTrade = /\b(diploma|tvet|certificate|trade|vocational|associate)\b/i.test(eduText);
+  if (hasDegree) {
+    matchedCriteria.push('University degree documented (verify formal credential assessment with official authority).');
+  } else if (hasDiplomaOrTrade && pathway.labourOccupationsInDemand.length > 0) {
+    matchedCriteria.push('Vocational/diploma qualification documented (check specific skilled-trade/labour stream criteria).');
+  } else {
+    missingOrUnverifiedCriteria.push(`Education requirement must be verified: ${pathway.educationRequirement}`);
+  }
+
+  // 3. Experience check
+  const yearsMatch = String(profile.yearsOfExperience || '').match(/\d+/);
+  const yearsExp = yearsMatch ? parseInt(yearsMatch[0], 10) : 0;
+  if (yearsExp >= 2) {
+    matchedCriteria.push(`${yearsExp}+ years of work experience listed.`);
+  } else {
+    missingOrUnverifiedCriteria.push(`Experience requirement must be verified: ${pathway.experienceRequirement}`);
+  }
+
+  // 4. Mandatory official government prerequisites always flagged honestly
+  missingOrUnverifiedCriteria.push(`Official language test required: ${pathway.languageRequirement}`);
+  if (pathway.skillsAssessmentRequired && !/^not\s+required$/i.test(pathway.skillsAssessmentRequired)) {
+    missingOrUnverifiedCriteria.push(`Skills/credential assessment: ${pathway.skillsAssessmentRequired}`);
+  }
+  if (pathway.pathwayClassification !== 'direct_pr') {
+    missingOrUnverifiedCriteria.push(
+      `Employer job offer / sponsorship check: ${pathway.employerSponsorshipOptions}`
+    );
+  }
+
+  const readinessStatus: PermanentResidencyAssessmentResult['readinessStatus'] =
+    matchedOccupations.length > 0 && (hasDegree || hasDiplomaOrTrade) && yearsExp >= 2
+      ? 'Potentially Eligible — Verify Official Criteria'
+      : matchedCriteria.length >= 2
+      ? 'Partial Fit — Additional Requirements Needed'
+      : 'Not Currently Matched';
+
+  return {
+    pathwayId: pathway.id,
+    country: pathway.country,
+    programName: pathway.programName,
+    pathwayClassification: pathway.pathwayClassification,
+    readinessStatus,
+    matchedCriteria,
+    missingOrUnverifiedCriteria,
+    disclaimer,
+  };
 }
 
 // =========================================================================

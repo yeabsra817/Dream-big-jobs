@@ -64,12 +64,13 @@ const SUBSECTIONS: Array<{
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   { id: 'all', label: 'All Verified', shortLabel: 'All', icon: Globe },
+  { id: 'banking_finance', label: 'Banking & Finance', shortLabel: 'Banking & Finance', icon: Landmark },
+  { id: 'wash_opportunities', label: 'WASH Opportunities', shortLabel: 'WASH', icon: Droplets },
   { id: 'international_jobs', label: 'International Jobs', shortLabel: 'Intl Jobs', icon: Briefcase },
   { id: 'scholarships', label: 'Scholarships', shortLabel: 'Scholarships', icon: GraduationCap },
   { id: 'professional_training', label: 'Professional Training', shortLabel: 'Training', icon: BookOpen },
   { id: 'conferences_summits', label: 'Conferences & Summits', shortLabel: 'Conferences', icon: Users },
-  { id: 'banking_finance', label: 'Banking & Finance', shortLabel: 'Banking & Finance', icon: Landmark },
-  { id: 'wash_opportunities', label: 'WASH Opportunities', shortLabel: 'WASH', icon: Droplets },
+  { id: 'permanent_residency', label: 'Permanent Residency & Shortage Lists', shortLabel: 'PR & Shortage', icon: ShieldCheck },
   { id: 'recommended', label: 'Recommended for You', shortLabel: 'Recommended', icon: Sparkles },
   { id: 'closing_soon', label: 'Closing Soon', shortLabel: 'Closing Soon', icon: Clock },
   { id: 'saved', label: 'Saved Opportunities', shortLabel: 'Saved', icon: Bookmark },
@@ -176,6 +177,11 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   const [filterDeadline, setFilterDeadline] = useState('all');
   const [showFiltersBar, setShowFiltersBar] = useState(true);
 
+  // Permanent Residency Intelligence filters (separate from job/scholarship filters)
+  const [prCountryFilter, setPrCountryFilter] = useState('all');
+  const [prPathwayFilter, setPrPathwayFilter] = useState('all');
+  const [prQuery, setPrQuery] = useState('');
+
   // UI panels & modals
   const [selectedOpportunity, setSelectedOpportunity] = useState<GlobalOpportunityWithMatch | null>(null);
   const [showSourcesDrawer, setShowSourcesDrawer] = useState(false);
@@ -241,7 +247,38 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
         if (filterCountry !== 'all' && o.country !== filterCountry) return false;
         if (filterFunding !== 'all' && o.funding.fundingLevel !== filterFunding) return false;
         if (filterVisa !== 'all') {
-          if (filterVisa === 'employer_sponsored' && o.funding.visaSupportType !== 'employer_sponsored_visa') return false;
+          if (
+            (filterVisa === 'employer_sponsored' || filterVisa === 'confirmed_visa_sponsorship') &&
+            o.funding.visaSupportType !== 'employer_sponsored_visa' &&
+            o.funding.employmentVisaClassification !== 'confirmed_visa_sponsorship'
+          ) {
+            return false;
+          }
+          if (
+            filterVisa === 'confirmed_international_recruitment' &&
+            o.funding.employmentVisaClassification !== 'confirmed_international_recruitment'
+          ) {
+            return false;
+          }
+          if (
+            filterVisa === 'relocation_assistance' &&
+            o.funding.relocationAssistance !== 'yes' &&
+            o.funding.employmentVisaClassification !== 'relocation_assistance'
+          ) {
+            return false;
+          }
+          if (
+            filterVisa === 'work_permit_assistance' &&
+            o.funding.employmentVisaClassification !== 'work_permit_assistance'
+          ) {
+            return false;
+          }
+          if (
+            filterVisa === 'no_sponsorship_stated' &&
+            o.funding.employmentVisaClassification !== 'no_sponsorship_stated'
+          ) {
+            return false;
+          }
           if (filterVisa === 'visa_fees_funded' && o.funding.visaSupportType !== 'visa_fees_funded') return false;
           if (
             filterVisa === 'assistance_only' &&
@@ -466,11 +503,17 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           </div>
 
           {/* Honest Summary Metrics Strip (Single-Elevation, Tabular Figures, Zero Pills) */}
-          <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+          <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
             <div>
               <div className="text-slate-500 font-medium">Verified Open (&ge;3 Days)</div>
               <div className="mt-0.5 text-lg font-extrabold text-[#0B132B] tabular-nums">
                 {loading ? '—' : data?.totalActiveVerified ?? 0}
+              </div>
+            </div>
+            <div>
+              <div className="text-slate-500 font-medium">Banking &amp; Finance</div>
+              <div className="mt-0.5 text-lg font-extrabold text-[#0B132B] tabular-nums">
+                {loading ? '—' : data?.countsBySubsection.banking_finance ?? 0}
               </div>
             </div>
             <div>
@@ -480,9 +523,9 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
               </div>
             </div>
             <div>
-              <div className="text-slate-500 font-medium">Banking &amp; Finance</div>
-              <div className="mt-0.5 text-lg font-extrabold text-[#0B132B] tabular-nums">
-                {loading ? '—' : data?.countsBySubsection.banking_finance ?? 0}
+              <div className="text-slate-500 font-medium">PR &amp; Shortage Countries</div>
+              <div className="mt-0.5 text-lg font-extrabold text-[#15803D] tabular-nums">
+                {loading ? '—' : data?.permanentResidencyPathways?.length ?? 0}
               </div>
             </div>
             <div>
@@ -715,6 +758,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 <option value="all">Funding: All</option>
                 <option value="fully_funded">Fully Funded</option>
                 <option value="partially_funded">Partially Funded</option>
+                <option value="free">Free Program</option>
                 <option value="self_funded">Self-Funded</option>
                 <option value="not_confirmed">Funding Not Confirmed</option>
               </select>
@@ -725,10 +769,13 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 onChange={(e) => setFilterVisa(e.target.value)}
                 className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
               >
-                <option value="all">Visa Support: All</option>
-                <option value="employer_sponsored">Employer-Sponsored Visa</option>
+                <option value="all">Visa Status: All</option>
+                <option value="confirmed_visa_sponsorship">Confirmed Visa Sponsorship</option>
+                <option value="confirmed_international_recruitment">Confirmed Intl Recruitment</option>
+                <option value="relocation_assistance">Relocation Assistance</option>
+                <option value="work_permit_assistance">Work Permit Assistance</option>
+                <option value="no_sponsorship_stated">No Sponsorship Stated</option>
                 <option value="visa_fees_funded">Visa Fees Funded</option>
-                <option value="assistance_only">Assistance / Letter Only</option>
               </select>
 
               <select
@@ -853,8 +900,271 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Department 6: Official Government Permanent Residency & Labour Shortage Intelligence View */}
+        {!loading && activeSubsection === 'permanent_residency' && (
+          <div className="space-y-5">
+            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 text-xs text-amber-950 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-bold text-[#0B132B]">
+                  Official Government Immigration &amp; Labour Shortage Intelligence (All Eligible Sectors)
+                </div>
+                <p className="leading-relaxed">
+                  <strong>Mandatory Legal Accuracy Notice:</strong> Labour or skill shortages do{' '}
+                  <strong>NOT</strong> automatically grant permanent residency. HopelandJobs tracks official government
+                  immigration ministries and national shortage lists only (zero third-party blogs or agents) and clearly
+                  distinguishes <strong>Direct PR</strong>, <strong>Work Permit with Route to PR</strong>, and{' '}
+                  <strong>Temporary Work Permits</strong> across Finance/Banking, WASH/Engineering, Healthcare, IT,
+                  Construction, Manufacturing, Skilled Trades, Agriculture, Hospitality, and Transportation.
+                </p>
+              </div>
+            </div>
+
+            {/* PR Filters */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={prQuery}
+                  onChange={(e) => setPrQuery(e.target.value)}
+                  placeholder="Search occupation (Auditor, Nurse, Water Engineer, Electrician...)"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-[#FBFBFA] text-xs focus:outline-none focus:border-[#16A34A]"
+                />
+              </div>
+              <select
+                aria-label="Filter PR by country"
+                value={prCountryFilter}
+                onChange={(e) => setPrCountryFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+              >
+                <option value="all">Country: All ({data?.permanentResidencyPathways?.length || 0})</option>
+                {(data?.permanentResidencyPathways || []).map((p) => (
+                  <option key={p.id} value={p.country}>
+                    {p.country} ({p.region})
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Filter PR by pathway classification"
+                value={prPathwayFilter}
+                onChange={(e) => setPrPathwayFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+              >
+                <option value="all">Pathway Type: All</option>
+                <option value="direct_pr">Direct Permanent Residency</option>
+                <option value="route_to_pr">Work Permit with Route to PR</option>
+                <option value="temporary_work_permit">Temporary Work Permit (Long-Term Quota)</option>
+              </select>
+            </div>
+
+            {/* Separate Permanent Residency Eligibility Assessment Panel */}
+            {userProfile?.uid && (data?.permanentResidencyAssessments?.length || 0) > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h2 className="text-sm font-extrabold text-[#0B132B]">
+                      Personal Permanent Residency Eligibility Assessment (Separate from Job Matching)
+                    </h2>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Evaluated honestly against your profile ({userProfile.desiredJobTitle || userProfile.currentPosition || 'Role not set'} · {userProfile.yearsOfExperience || 'Experience not set'}). Unverified criteria (language test scores, credentials, age, job offer) are explicitly listed as missing.
+                    </p>
+                  </div>
+                  {onOpenProfile && (
+                    <button
+                      type="button"
+                      onClick={onOpenProfile}
+                      className="text-xs font-bold text-[#16A34A] hover:underline cursor-pointer shrink-0"
+                    >
+                      Update Profile
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  {(data?.permanentResidencyAssessments || []).slice(0, 6).map((a) => (
+                    <div key={a.pathwayId} className="border border-slate-200 rounded-lg p-3 space-y-1.5 bg-[#FBFBFA]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-[#0B132B]">{a.country}</span>
+                        <span
+                          className={`text-[11px] font-bold ${
+                            a.readinessStatus.startsWith('Potentially')
+                              ? 'text-[#15803D]'
+                              : a.readinessStatus.startsWith('Partial')
+                              ? 'text-[#1D4ED8]'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {a.readinessStatus.split('—')[0].trim()}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 line-clamp-1">{a.programName}</div>
+                      {a.matchedCriteria.length > 0 && (
+                        <div className="text-[11px] text-[#15803D]">
+                          <strong>Matched:</strong> {a.matchedCriteria[0]}
+                        </div>
+                      )}
+                      {a.missingOrUnverifiedCriteria.length > 0 && (
+                        <div className="text-[11px] text-amber-800">
+                          <strong>Verify / Needed:</strong> {a.missingOrUnverifiedCriteria[0]}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="text-slate-600">
+                  <strong className="text-[#0B132B]">Permanent Residency Eligibility Assessment:</strong> Sign in with
+                  your profile to compare your profession, education, and experience against official government PR
+                  pathways (kept completely separate from job matching).
+                </div>
+                {onOpenAuth && (
+                  <button
+                    type="button"
+                    onClick={onOpenAuth}
+                    className="px-3.5 py-2 rounded-lg bg-[#0B132B] text-white text-xs font-bold hover:bg-slate-800 cursor-pointer shrink-0"
+                  >
+                    Sign In to Assess Eligibility
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Official Government Country Pathway Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {(data?.permanentResidencyPathways || [])
+                .filter((p) => {
+                  if (prCountryFilter !== 'all' && p.country !== prCountryFilter) return false;
+                  if (prPathwayFilter !== 'all' && p.pathwayClassification !== prPathwayFilter) return false;
+                  if (prQuery.trim()) {
+                    const hay = `${p.country} ${p.programName} ${p.officialAuthority} ${p.professionalOccupationsInDemand.join(' ')} ${p.labourOccupationsInDemand.join(' ')} ${p.bankingFinanceOccupations.join(' ')} ${p.washWaterOccupations.join(' ')}`.toLowerCase();
+                    if (!hay.includes(prQuery.trim().toLowerCase())) return false;
+                  }
+                  return true;
+                })
+                .map((p) => (
+                  <article
+                    key={p.id}
+                    className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between gap-4 text-xs"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-extrabold text-[#0B132B]">{p.country}</span>
+                          <span className="text-slate-300">·</span>
+                          <span className="font-semibold text-slate-500">{p.region}</span>
+                        </div>
+                        <span
+                          className={`font-bold ${
+                            p.verificationTier === 'VERIFIED' ? 'text-[#15803D]' : 'text-[#1D4ED8]'
+                          }`}
+                        >
+                          {p.verificationTier} {p.httpStatus ? `(HTTP ${p.httpStatus})` : ''}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-sm font-bold text-[#0B132B] leading-snug">{p.programName}</h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                          <span
+                            className={`font-bold ${
+                              p.pathwayClassification === 'direct_pr'
+                                ? 'text-[#15803D]'
+                                : p.pathwayClassification === 'route_to_pr'
+                                ? 'text-[#1D4ED8]'
+                                : 'text-amber-700'
+                            }`}
+                          >
+                            {p.pathwayClassificationLabel}
+                          </span>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-slate-600">{p.officialAuthority}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                            Professional Shortage Demand
+                          </div>
+                          <ul className="mt-1 space-y-0.5 text-slate-700 list-disc pl-4">
+                            {p.professionalOccupationsInDemand.slice(0, 4).map((occ, idx) => (
+                              <li key={idx}>{occ}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                            Skilled Trades &amp; Labour Demand
+                          </div>
+                          <ul className="mt-1 space-y-0.5 text-slate-700 list-disc pl-4">
+                            {p.labourOccupationsInDemand.slice(0, 4).map((occ, idx) => (
+                              <li key={idx}>{occ}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
+                        <div>
+                          <div className="text-[11px] font-semibold text-slate-500">Banking &amp; Finance Roles</div>
+                          <div className="text-slate-800 mt-0.5">{p.bankingFinanceOccupations.join('; ')}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold text-slate-500">WASH &amp; Water Engineering</div>
+                          <div className="text-slate-800 mt-0.5">{p.washWaterOccupations.join('; ')}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-[11px]">
+                        <div>
+                          <span className="font-semibold text-slate-500">PR Route: </span>
+                          <span className="text-slate-800">{p.permanentResidencyRoute}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Ethiopian Eligibility: </span>
+                          <span className="text-slate-800">{p.ethiopianEligibilityNotes}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Language &amp; Education: </span>
+                          <span className="text-slate-800">{p.languageRequirement}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Government Fees: </span>
+                          <span className="text-slate-800">{p.governmentApplicationFees}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                      <a
+                        href={p.shortageOccupationListUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-[#0B132B] hover:text-[#16A34A] inline-flex items-center gap-1"
+                      >
+                        <span>Official Shortage List</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <a
+                        href={p.officialApplicationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-h-[36px] px-3.5 py-2 rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold inline-flex items-center gap-1.5"
+                      >
+                        <span>Official Government Portal</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  </article>
+                ))}
+            </div>
+          </div>
+        )}
+
         {/* Empty State (Honest — Never Fakes Data) */}
-        {!loading && !error && filteredOpportunities.length === 0 && (
+        {!loading && !error && activeSubsection !== 'permanent_residency' && filteredOpportunities.length === 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-3">
             <Compass className="w-8 h-8 text-slate-400 mx-auto" />
             <h2 className="text-base font-bold text-[#0B132B]">
@@ -901,7 +1211,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
         )}
 
         {/* Populated Opportunity Cards Grid — All 12 Required Card Fields, Zero-Pill Discipline */}
-        {!loading && filteredOpportunities.length > 0 && (
+        {!loading && activeSubsection !== 'permanent_residency' && filteredOpportunities.length > 0 && (
           <>
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>
@@ -909,7 +1219,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 active {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'}
               </span>
               <span className="hidden sm:inline">
-                Website-only display for scholarships, training &amp; conferences · Manual official application only
+                Global Banking, Finance &amp; WASH Intelligence · Official source links only
               </span>
             </div>
 
@@ -924,14 +1234,14 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                     className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 transition-colors p-5 flex flex-col justify-between gap-4"
                   >
                     <div className="space-y-3">
-                      {/* Row 1: Category · Verification Status · Days Remaining (Unboxed Typographic Line) */}
+                      {/* Row 1: Category · Verification Tier · Days Remaining (Unboxed Typographic Line) */}
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-1.5 min-w-0 truncate">
                           <span className="font-semibold text-slate-600">{formatCategoryLabel(opp.category)}</span>
                           <span className="text-slate-300">·</span>
                           <span className={`inline-flex items-center gap-1 font-bold ${getStatusAccentClasses(opp.verificationStatus)}`}>
                             {opp.hasVerifiedBadge && <BadgeCheck className="w-3.5 h-3.5 shrink-0" />}
-                            <span>{opp.verificationStatus}</span>
+                            <span>{opp.verificationTier || opp.verificationStatus}</span>
                           </span>
                         </div>
 
@@ -994,9 +1304,9 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                         </div>
 
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">Visa Support</div>
+                          <div className="text-[11px] font-medium text-slate-500">Visa Sponsorship Verification</div>
                           <div className="font-semibold text-[#0B132B] mt-0.5 line-clamp-1">
-                            {opp.funding.visaSupportSummary}
+                            {opp.funding.employmentVisaLabel || opp.funding.visaSupportSummary}
                           </div>
                         </div>
 

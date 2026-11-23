@@ -283,41 +283,87 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
         </div>
       )}
 
-      {/* Complete Verification Monitoring KPI Matrix (Single Elevation, Hairline Divided, Tabular Numerals) */}
+      {/* Complete Section G Verification & 6-Department Monitoring KPI Matrix (Single Elevation, Hairline Divided, Tabular Numerals) */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-slate-200 text-xs tabular-nums">
           <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Opportunities Discovered</div>
-            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.totalDiscoveredAllTime}</div>
+            <div className="text-slate-500 font-medium">Intl Banking &amp; Finance Jobs</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.bankingJobsCount ?? 0}</div>
           </div>
           <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Verified &amp; Published</div>
-            <div className="text-xl font-extrabold text-[#15803D] mt-0.5">{summary.activeVerifiedCount}</div>
+            <div className="text-slate-500 font-medium">International WASH Jobs</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.washJobsCount ?? 0}</div>
           </div>
           <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Total Rejected / Archived</div>
-            <div className="text-xl font-extrabold text-rose-700 mt-0.5">{summary.totalRejectedCount}</div>
+            <div className="text-slate-500 font-medium">Visa-Sponsored / Intl Rec. Jobs</div>
+            <div className="text-xl font-extrabold text-[#15803D] mt-0.5">{summary.visaSponsoredJobsCount ?? 0}</div>
           </div>
           <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Auto-Unpublished</div>
-            <div className="text-xl font-extrabold text-amber-700 mt-0.5">{summary.autoUnpublishedCount}</div>
-          </div>
-          <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Rejected: Visa Conditions</div>
-            <div className="text-xl font-extrabold text-rose-700 mt-0.5">{summary.rejectedDueToVisaCount}</div>
-          </div>
-          <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Rejected: Prof. Restrictions</div>
-            <div className="text-xl font-extrabold text-amber-700 mt-0.5">
-              {summary.rejectedDueToProfessionalRestrictionCount}
+            <div className="text-slate-500 font-medium">Scholarships (Fully Funded)</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">
+              {summary.scholarshipsCount ?? 0}{' '}
+              <span className="text-xs font-semibold text-[#15803D]">({summary.fullyFundedScholarshipsCount ?? 0} full)</span>
             </div>
+          </div>
+
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Professional Training</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.trainingCount ?? 0}</div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">International Conferences</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.conferencesCount ?? 0}</div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">PR Pathways (Countries Seeking)</div>
+            <div className="text-xl font-extrabold text-[#15803D] mt-0.5">
+              {summary.permanentResidencyPathwaysCount ?? 0}{' '}
+              <span className="text-xs font-semibold text-slate-500">({summary.countriesSeekingWorkersCount ?? 0} nations)</span>
+            </div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Shortage Lists (Prof / Labour)</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">
+              {summary.professionalShortageOccupationsCount ?? 0} / {summary.labourShortageOccupationsCount ?? 0}
+            </div>
+          </div>
+
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">VERIFIED / Partially Verified</div>
+            <div className="text-xl font-extrabold text-[#15803D] mt-0.5">
+              {summary.verifiedTierCount ?? summary.activeVerifiedCount}{' '}
+              <span className="text-xs font-semibold text-[#1D4ED8]">/ {summary.partiallyVerifiedTierCount ?? 0}</span>
+            </div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Pending Verification</div>
+            <div className="text-xl font-extrabold text-amber-700 mt-0.5">{summary.pendingVerificationCount ?? 0}</div>
           </div>
           <div className="p-3.5">
             <div className="text-slate-500 font-medium">Expired / &lt;3 Full Days</div>
             <div className="text-xl font-extrabold text-slate-700 mt-0.5">{summary.expiredCount}</div>
           </div>
           <div className="p-3.5">
-            <div className="text-slate-500 font-medium">Source Failures</div>
+            <div className="text-slate-500 font-medium">Duplicates Skipped (Last Run)</div>
+            <div className="text-xl font-extrabold text-slate-700 mt-0.5">{summary.duplicatesSkippedLastRun ?? 0}</div>
+          </div>
+
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Total Stored / Discovered</div>
+            <div className="text-xl font-extrabold text-[#0B132B] mt-0.5">{summary.totalDiscoveredAllTime}</div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Auto-Unpublished</div>
+            <div className="text-xl font-extrabold text-amber-700 mt-0.5">{summary.autoUnpublishedCount}</div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Rejected (Visa / Sector)</div>
+            <div className="text-xl font-extrabold text-rose-700 mt-0.5">
+              {summary.rejectedDueToVisaCount} / {summary.rejectedDueToProfessionalRestrictionCount}
+            </div>
+          </div>
+          <div className="p-3.5">
+            <div className="text-slate-500 font-medium">Source Availability Failures</div>
             <div
               className={`text-xl font-extrabold mt-0.5 ${
                 summary.sourceFailuresCount > 0 ? 'text-rose-700' : 'text-[#15803D]'
@@ -331,9 +377,10 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
         {/* Schedule Timestamps Strip */}
         <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs tabular-nums">
           <div>
-            <span className="text-slate-500">Last Verification Time: </span>
+            <span className="text-slate-500">Last Successful Search: </span>
             <strong className="text-[#0B132B]">
-              {summary.lastVerificationAtEat ||
+              {schedulerInfo?.lastSuccessfulRunAtEat ||
+                summary.lastVerificationAtEat ||
                 (summary.lastVerificationAt
                   ? new Date(summary.lastVerificationAt).toLocaleString()
                   : 'Pending first run')}
@@ -353,6 +400,55 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
           </div>
         </div>
       </div>
+
+      {/* 6 Fault-Isolated Discovery Departments Status Table */}
+      {jobLogs[0]?.departmentSummaries && jobLogs[0].departmentSummaries.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            6 Independent Discovery Departments (Fault-Isolated Last Run)
+          </h4>
+          <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white">
+            <table className="w-full text-left text-xs tabular-nums">
+              <thead className="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase">
+                <tr>
+                  <th className="px-3.5 py-2.5 font-bold">Department</th>
+                  <th className="px-3 py-2.5 font-bold">Status</th>
+                  <th className="px-3 py-2.5 font-bold text-right">Total</th>
+                  <th className="px-3 py-2.5 font-bold text-right">VERIFIED</th>
+                  <th className="px-3 py-2.5 font-bold text-right">Partially Verified</th>
+                  <th className="px-3 py-2.5 font-bold text-right">Pending</th>
+                  <th className="px-3 py-2.5 font-bold text-right">Rejected / Expired</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {jobLogs[0].departmentSummaries.map((d) => (
+                  <tr key={d.department} className="hover:bg-slate-50/50">
+                    <td className="px-3.5 py-2 font-semibold text-[#0B132B]">{d.label}</td>
+                    <td className="px-3 py-2 font-bold">
+                      <span
+                        className={
+                          d.status === 'success'
+                            ? 'text-[#15803D]'
+                            : d.status === 'partial'
+                            ? 'text-amber-700'
+                            : 'text-rose-700'
+                        }
+                      >
+                        {d.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-slate-700">{d.candidatesFound}</td>
+                    <td className="px-3 py-2 text-right font-bold text-[#15803D]">{d.verifiedCount}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-[#1D4ED8]">{d.partiallyVerifiedCount}</td>
+                    <td className="px-3 py-2 text-right font-semibold text-amber-700">{d.pendingCount}</td>
+                    <td className="px-3 py-2 text-right text-slate-500">{d.rejectedOrExpiredCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Exact Rejection & Auto-Unpublish Audit History */}
       <div className="space-y-2.5">

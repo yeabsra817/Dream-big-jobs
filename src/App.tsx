@@ -101,6 +101,7 @@ import {
   logoutDeveloperSession,
   fetchInternationalStateFromServer,
   syncLocalVacanciesToFirestoreCloud,
+  pushVacanciesToBackendSilently,
   getPendingLocalCloudSyncVacancies,
   googleProvider,
   signInWithGoogleResilient,
@@ -117,6 +118,7 @@ import { runAutonomousVacancyHealing } from './utils/SelfHealingEngine';
 import { broadcastJobToTelegram, normalizeTelegramChatId } from './utils/telegramClient';
 import { decodeTelegramVacancySnapshot } from './utils/telegramSnapshot';
 import { Navbar } from './components/Navbar';
+import { BackgroundSyncIndicator } from './components/admin/BackgroundSyncIndicator';
 import { CategoryCard } from './components/CategoryCard';
 import { CategoryIcon } from './components/CategoryIcon';
 import { Footer } from './components/Footer';
@@ -380,13 +382,6 @@ export default function App() {
   const [isMinuteInstallReminderOpen, setIsMinuteInstallReminderOpen] = useState(false);
   const [isResolvingDeepLink, setIsResolvingDeepLink] = useState(false);
   const [deepLinkNotFoundNotice, setDeepLinkNotFoundNotice] = useState<string | null>(null);
-  const [unsyncedLocalVacancies, setUnsyncedLocalVacancies] = useState<Vacancy[]>([]);
-  const [isSyncingLocalToCloud, setIsSyncingLocalToCloud] = useState(false);
-  const [localCloudSyncBannerNotice, setLocalCloudSyncBannerNotice] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
-  const [localCloudSyncBannerDismissed, setLocalCloudSyncBannerDismissed] = useState(false);
   const {
     isInstalled: isStandaloneApp,
     isInstallable: canInstallNativeApp,
@@ -532,6 +527,10 @@ export default function App() {
         setActiveAdminSessionEmail(email);
         setIsOwnerAuthorized(true);
         setAdminEmail(email);
+        const pendingLocal = getPendingLocalCloudSyncVacancies();
+        if (pendingLocal.length > 0) {
+          void pushVacanciesToBackendSilently(pendingLocal).catch(() => {});
+        }
       }
     });
 
@@ -717,16 +716,18 @@ export default function App() {
           // Seed server-side vacancy catalog if empty so matching engine & fast API stay warm
           syncVacanciesToServerCatalog(loadedVacancies, { mode: 'seed_if_empty' });
 
-          // Check if THIS device has local-only admin vacancies (e.g. posted under Developer Password)
-          // that have not yet reached Cloud Firestore. Regular visitors always have 0 items here.
+          // Silently auto-upload any locally-authored admin vacancies in the background
+          // (backend server catalog first so ALL users & Telegram links work immediately, plus Cloud Firestore if signed in).
+          // NEVER shows any sync banner or prompt to regular users.
           const cloudIdSet = new Set(loadedVacancies.map((v) => v.id));
           const unsyncedOnThisDevice = getPendingLocalCloudSyncVacancies(cloudIdSet);
           if (unsyncedOnThisDevice.length > 0) {
+            void pushVacanciesToBackendSilently(unsyncedOnThisDevice).catch(() => {});
+
             if (auth.currentUser && isUserAdmin(auth.currentUser)) {
-              syncLocalVacanciesToFirestoreCloud(unsyncedOnThisDevice)
+              void syncLocalVacanciesToFirestoreCloud(unsyncedOnThisDevice)
                 .then((res) => {
                   if (res.syncedVacancies.length > 0) {
-                    syncVacanciesToServerCatalog(res.syncedVacancies, { mode: 'merge' }).catch(() => {});
                     setVacancies((prev) => {
                       const map = new Map(prev.map((v) => [v.id, v]));
                       res.syncedVacancies.forEach((v) => {
@@ -739,19 +740,8 @@ export default function App() {
                       );
                     });
                   }
-                  if (res.failed > 0) {
-                    setUnsyncedLocalVacancies(
-                      unsyncedOnThisDevice.filter((v) => !res.syncedIds.includes(v.id))
-                    );
-                  } else {
-                    setUnsyncedLocalVacancies([]);
-                  }
                 })
-                .catch(() => {
-                  setUnsyncedLocalVacancies(unsyncedOnThisDevice);
-                });
-            } else {
-              setUnsyncedLocalVacancies(unsyncedOnThisDevice);
+                .catch(() => {});
             }
           }
         }
@@ -844,11 +834,11 @@ export default function App() {
           setAdminEmail(ownerEmail);
           setActiveAdminSessionEmail(ownerEmail);
           establishDeveloperGoogleSession(ownerEmail).catch(() => {});
-          // Automatically push any locally-cached vacancies (from earlier Developer Password sessions) to Firestore Cloud
+          // Silently push any locally-cached vacancies (from earlier Developer Password sessions) to backend & Firestore Cloud
           syncLocalVacanciesToFirestoreCloud()
             .then((res) => {
               if (res.syncedVacancies.length > 0) {
-                syncVacanciesToServerCatalog(res.syncedVacancies, { mode: 'merge' }).catch(() => {});
+                syncVacanciesToServerCatalog(res.syncedVacancies, { mode: 'background_auto_sync' }).catch(() => {});
                 setVacancies((prev) => {
                   const map = new Map(prev.map((v) => [v.id, v]));
                   res.syncedVacancies.forEach((v) => {
@@ -860,9 +850,6 @@ export default function App() {
                       new Date(a.publishedAt || a.createdAt || 0).getTime()
                   );
                 });
-              }
-              if (res.failed === 0) {
-                setUnsyncedLocalVacancies([]);
               }
             })
             .catch(() => {});
@@ -2329,45 +2316,48 @@ export default function App() {
   // If in Admin Dashboard view
   if (isAdminView && isOwnerAuthorized) {
     return (
-      <Suspense fallback={<PageLoader />}>
-        <AdminDashboard
-          adminEmail={adminEmail}
-          onLogout={async () => {
-            await Promise.allSettled([signOut(auth), logoutDeveloperSession()]);
-            setAdminEmail(null);
-            setIsOwnerAuthorized(false);
-            setIsAdminView(false);
-          }}
-          onCloseDashboard={() => setIsAdminView(false)}
-          vacancies={vacancies}
-          siteSettings={siteSettings}
-          duplicateReports={duplicateReports}
-          onSaveVacancy={handleSaveVacancy}
-          onBatchSaveVacancies={handleBatchSaveVacancies}
-          onDeleteVacancy={handleDeleteVacancy}
-          onBatchDeleteVacancies={handleBatchDeleteVacancies}
-          onUpdateVacancyStatus={handleUpdateVacancyStatus}
-          onSaveSiteSettings={handleSaveSiteSettings}
-          onSaveDuplicateReports={handleSaveDuplicateReports}
-          onDiscardDuplicate={handleDiscardDuplicate}
-          onRestoreDuplicate={handleRestoreDuplicate}
-          onRestoreFullBackup={handleRestoreFullBackup}
-          internationalJobs={internationalJobs}
-          immigrationPathways={immigrationPathways}
-          experienceScholarships={experienceScholarships}
-          researchHistory={researchHistory}
-          verificationLogs={verificationLogs}
-          onSaveInternationalJobs={handleSaveInternationalJobs}
-          onDeleteInternationalJob={handleDeleteInternationalJob}
-          onSaveImmigrationPathways={handleSaveImmigrationPathways}
-          onDeleteImmigrationPathway={handleDeleteImmigrationPathway}
-          onSaveExperienceScholarships={handleSaveExperienceScholarships}
-          onDeleteExperienceScholarship={handleDeleteExperienceScholarship}
-          onSaveResearchRun={handleSaveResearchRun}
-          onSaveVerificationLogs={handleSaveVerificationLogs}
-          onSyncInternationalState={handleSyncInternationalState}
-        />
-      </Suspense>
+      <>
+        <Suspense fallback={<PageLoader />}>
+          <AdminDashboard
+            adminEmail={adminEmail}
+            onLogout={async () => {
+              await Promise.allSettled([signOut(auth), logoutDeveloperSession()]);
+              setAdminEmail(null);
+              setIsOwnerAuthorized(false);
+              setIsAdminView(false);
+            }}
+            onCloseDashboard={() => setIsAdminView(false)}
+            vacancies={vacancies}
+            siteSettings={siteSettings}
+            duplicateReports={duplicateReports}
+            onSaveVacancy={handleSaveVacancy}
+            onBatchSaveVacancies={handleBatchSaveVacancies}
+            onDeleteVacancy={handleDeleteVacancy}
+            onBatchDeleteVacancies={handleBatchDeleteVacancies}
+            onUpdateVacancyStatus={handleUpdateVacancyStatus}
+            onSaveSiteSettings={handleSaveSiteSettings}
+            onSaveDuplicateReports={handleSaveDuplicateReports}
+            onDiscardDuplicate={handleDiscardDuplicate}
+            onRestoreDuplicate={handleRestoreDuplicate}
+            onRestoreFullBackup={handleRestoreFullBackup}
+            internationalJobs={internationalJobs}
+            immigrationPathways={immigrationPathways}
+            experienceScholarships={experienceScholarships}
+            researchHistory={researchHistory}
+            verificationLogs={verificationLogs}
+            onSaveInternationalJobs={handleSaveInternationalJobs}
+            onDeleteInternationalJob={handleDeleteInternationalJob}
+            onSaveImmigrationPathways={handleSaveImmigrationPathways}
+            onDeleteImmigrationPathway={handleDeleteImmigrationPathway}
+            onSaveExperienceScholarships={handleSaveExperienceScholarships}
+            onDeleteExperienceScholarship={handleDeleteExperienceScholarship}
+            onSaveResearchRun={handleSaveResearchRun}
+            onSaveVerificationLogs={handleSaveVerificationLogs}
+            onSyncInternationalState={handleSyncInternationalState}
+          />
+        </Suspense>
+        <BackgroundSyncIndicator isAdmin={isOwnerAuthorized} />
+      </>
     );
   }
 
@@ -2488,126 +2478,6 @@ export default function App() {
         isOnline={isOnline}
         isSyncingReconnect={isSyncingReconnect}
       />
-
-      {/* Admin Device-Only Cloud Sync Recovery Banner (only appears on a device holding un-uploaded local admin jobs) */}
-      {((!localCloudSyncBannerDismissed && unsyncedLocalVacancies.length > 0) ||
-        localCloudSyncBannerNotice) && (
-        <div className="bg-amber-50 border-b border-amber-300 px-4 py-3">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {localCloudSyncBannerNotice ? (
-              <div className="flex items-center justify-between w-full gap-3">
-                <div
-                  className={`flex items-center gap-2 text-xs sm:text-sm font-bold ${
-                    localCloudSyncBannerNotice.type === 'success' ? 'text-emerald-800' : 'text-rose-800'
-                  }`}
-                >
-                  {localCloudSyncBannerNotice.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  )}
-                  <span>{localCloudSyncBannerNotice.text}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLocalCloudSyncBannerNotice(null)}
-                  className="p-1 text-slate-600 hover:text-slate-900 cursor-pointer"
-                  aria-label="Dismiss sync status"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-start gap-2.5 text-amber-950">
-                  <UploadCloud className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs sm:text-sm font-semibold leading-snug">
-                    <span className="font-extrabold">
-                      {unsyncedLocalVacancies.length} job{unsyncedLocalVacancies.length === 1 ? '' : 's'} saved only on this phone
-                    </span>{' '}
-                    (including &ldquo;{unsyncedLocalVacancies[0]?.title}&rdquo;) — not uploaded to Cloud Database yet, so other users&apos; phones show &ldquo;no longer available&rdquo; on Telegram links.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    disabled={isSyncingLocalToCloud}
-                    onClick={async () => {
-                      setIsSyncingLocalToCloud(true);
-                      setLocalCloudSyncBannerNotice(null);
-                      try {
-                        let activeUser = auth.currentUser;
-                        if (!activeUser || !isUserAdmin(activeUser)) {
-                          const cred = await signInWithGoogleResilient(googleProvider);
-                          if (!cred) {
-                            setIsSyncingLocalToCloud(false);
-                            return;
-                          }
-                          activeUser = cred.user;
-                        }
-                        if (!isUserAdmin(activeUser)) {
-                          setLocalCloudSyncBannerNotice({
-                            type: 'error',
-                            text: `Signed in as ${activeUser?.email || 'a non-admin account'}. Please choose ${ADMIN_EMAIL} to upload jobs to Cloud.`,
-                          });
-                          setIsSyncingLocalToCloud(false);
-                          return;
-                        }
-                        const ownerEmail = activeUser?.email || ADMIN_EMAIL;
-                        await establishDeveloperGoogleSession(ownerEmail).catch(() => {});
-                        const res = await syncLocalVacanciesToFirestoreCloud(unsyncedLocalVacancies);
-                        if (res.syncedVacancies.length > 0) {
-                          await syncVacanciesToServerCatalog(res.syncedVacancies, { mode: 'merge' }).catch(() => {});
-                          const refreshed = await fetchPublishedVacancies().catch(() => []);
-                          if (refreshed.length > 0) setVacancies(refreshed);
-                        }
-                        if (res.failed > 0) {
-                          setUnsyncedLocalVacancies((prev) =>
-                            prev.filter((v) => !res.syncedIds.includes(v.id))
-                          );
-                          setLocalCloudSyncBannerNotice({
-                            type: 'error',
-                            text: `Uploaded ${res.synced} jobs, ${res.failed} failed${res.error ? ` (${res.error})` : ''}. Tap Sync again to retry.`,
-                          });
-                        } else {
-                          setUnsyncedLocalVacancies([]);
-                          setLocalCloudSyncBannerNotice({
-                            type: 'success',
-                            text: `Uploaded ${res.synced} job${res.synced === 1 ? '' : 's'} to Cloud Database! Every user's phone now opens your Telegram links immediately.`,
-                          });
-                        }
-                      } catch (err: any) {
-                        setLocalCloudSyncBannerNotice({
-                          type: 'error',
-                          text: err?.message || 'Cloud sync sign-in was cancelled or blocked. Please try again.',
-                        });
-                      } finally {
-                        setIsSyncingLocalToCloud(false);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold whitespace-nowrap shadow-xs cursor-pointer disabled:opacity-60"
-                  >
-                    <UploadCloud className="w-4 h-4" />
-                    <span>
-                      {isSyncingLocalToCloud
-                        ? 'Uploading to Cloud...'
-                        : `Sync ${unsyncedLocalVacancies.length} Job${unsyncedLocalVacancies.length === 1 ? '' : 's'} to Cloud Now`}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLocalCloudSyncBannerDismissed(true)}
-                    className="p-1.5 text-amber-800 hover:text-amber-950 cursor-pointer"
-                    aria-label="Dismiss local cloud sync alert"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Main Content Area */}
       <main className="flex-1">
@@ -4336,6 +4206,10 @@ export default function App() {
           setIsOwnerAuthorized(true);
           setAdminEmail(email);
           setIsAdminView(true);
+          const pendingLocal = getPendingLocalCloudSyncVacancies();
+          if (pendingLocal.length > 0) {
+            void pushVacanciesToBackendSilently(pendingLocal).catch(() => {});
+          }
         }}
         onOpenDashboard={() => setIsAdminView(true)}
         onLogout={async () => {
@@ -4357,6 +4231,10 @@ export default function App() {
               setIsOwnerAuthorized(true);
               setAdminEmail(email);
               setIsAdminView(true);
+              const pendingLocal = getPendingLocalCloudSyncVacancies();
+              if (pendingLocal.length > 0) {
+                void pushVacanciesToBackendSilently(pendingLocal).catch(() => {});
+              }
             }}
           />
         </Suspense>
@@ -4432,6 +4310,8 @@ export default function App() {
         onInstallNative={triggerNativeAppInstall}
         onDismiss={() => setIsInstallPopupOpen(false)}
       />
+      {/* Subtle admin-only background sync indicator (never rendered for regular visitors) */}
+      <BackgroundSyncIndicator isAdmin={isOwnerAuthorized} />
     </div>
   );
 }

@@ -2938,8 +2938,11 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
       }
 
       // STRICT RULE 2: Published vacancies synced by owner must satisfy all 6 mandatory requirements
+      // During silent background_auto_sync, if an already-posted job's deadline passed, preserve it as 'expired'
+      // so every user opening its Telegram link sees the full job details marked Closed/Expired.
+      let itemToStore = item;
       if (mode !== 'seed_if_empty' && item.status === 'published') {
-        const validation = validateVacancyStrict(item, { allowExpired: false });
+        const validation = validateVacancyStrict(item, { allowExpired: mode === 'background_auto_sync' });
         if (!validation.valid) {
           changedSet.delete(String(item.id));
           rejectedIncomplete.push({
@@ -2949,27 +2952,30 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
           });
           continue;
         }
+        if (mode === 'background_auto_sync' && !validateVacancyStrict(item, { allowExpired: false }).valid) {
+          itemToStore = { ...item, status: 'expired' };
+        }
       }
 
-      const prev = map.get(item.id);
-      if (!prev && item.status === 'published') {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+      const prev = map.get(itemToStore.id);
+      if (!prev && itemToStore.status === 'published') {
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = 'published';
-      } else if (prev && prev.status !== 'published' && item.status === 'published') {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+      } else if (prev && prev.status !== 'published' && itemToStore.status === 'published') {
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = 'published';
       } else if (
         prev &&
-        item.status === 'published' &&
-        (prev.applicationDeadline !== item.applicationDeadline || prev.salary !== item.salary || prev.title !== item.title)
+        itemToStore.status === 'published' &&
+        (prev.applicationDeadline !== itemToStore.applicationDeadline || prev.salary !== itemToStore.salary || prev.title !== itemToStore.title)
       ) {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = 'updated';
       }
-      map.set(item.id, item);
+      map.set(itemToStore.id, itemToStore);
     }
 
     const merged = Array.from(map.values()).filter((v) => hasValidVacancyDeadline(v));
@@ -2981,8 +2987,8 @@ export function registerUserNotificationAndAnalyticsRoutes(ctx: ServerUserEngine
     let emailsSent = 0;
     let pushSent = 0;
 
-    if (mode === 'seed_if_empty') {
-      // Initial seed updates recommendations quietly without blasting push
+    if (mode === 'seed_if_empty' || mode === 'background_auto_sync') {
+      // Quiet background catalog upload updates recommendations silently without spamming push alerts
       triggerBackgroundRecalcAllUsers({
         sendNotifications: false,
       });

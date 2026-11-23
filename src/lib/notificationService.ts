@@ -15,6 +15,9 @@ import {
   getOwnerAuthHeaders,
   sanitizeForFirestore,
   withTimeout,
+  beginBackgroundVacancySync,
+  endBackgroundVacancySync,
+  reportBackgroundVacancySyncError,
 } from './firebase';
 import {
   AdminSchedulerStatusResponse,
@@ -1964,7 +1967,7 @@ async function gatherFirestoreUsersSnapshot(): Promise<{
 export async function syncVacanciesToServerCatalog(
   vacancies: Vacancy[],
   options: {
-    mode?: 'merge' | 'replace' | 'seed_if_empty';
+    mode?: 'merge' | 'replace' | 'seed_if_empty' | 'background_auto_sync';
     changedVacancyId?: string;
     changedVacancyIds?: string[];
     changeType?: 'published' | 'updated';
@@ -1977,9 +1980,13 @@ export async function syncVacanciesToServerCatalog(
   pushSent?: number;
 } | null> {
   if (!Array.isArray(vacancies) || vacancies.length === 0) return null;
+  const shouldTrack = options.mode !== 'seed_if_empty';
+  if (shouldTrack) beginBackgroundVacancySync();
   try {
     const usersSnapshot =
-      options.mode !== 'seed_if_empty' ? await gatherFirestoreUsersSnapshot() : null;
+      options.mode !== 'seed_if_empty' && options.mode !== 'background_auto_sync'
+        ? await gatherFirestoreUsersSnapshot()
+        : null;
 
     const res = await withTimeout(
       fetch('/api/vacancies/sync', {
@@ -2004,7 +2011,19 @@ export async function syncVacanciesToServerCatalog(
     if (res && res.ok) {
       return await res.json().catch(() => null);
     }
-  } catch {}
+    if (shouldTrack) {
+      reportBackgroundVacancySyncError(
+        res ? `Server sync failed (HTTP ${res.status})` : 'Server sync timed out',
+        vacancies
+      );
+    }
+  } catch (err: any) {
+    if (shouldTrack) {
+      reportBackgroundVacancySyncError(err?.message || 'Network error during sync', vacancies);
+    }
+  } finally {
+    if (shouldTrack) endBackgroundVacancySync();
+  }
   return null;
 }
 

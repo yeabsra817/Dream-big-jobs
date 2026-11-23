@@ -5,6 +5,14 @@ export type GlobalOpportunityCategory =
   | 'conference_summit'
   | 'wash_opportunity';
 
+export type GlobalDiscoveryDepartment =
+  | 'banking_finance_jobs'
+  | 'wash_jobs'
+  | 'banking_wash_scholarships'
+  | 'banking_wash_training'
+  | 'banking_wash_conferences'
+  | 'permanent_residency_intelligence';
+
 export type GlobalOpportunitySubsection =
   | 'international_jobs'
   | 'scholarships'
@@ -12,9 +20,30 @@ export type GlobalOpportunitySubsection =
   | 'conferences_summits'
   | 'banking_finance'
   | 'wash_opportunities'
+  | 'permanent_residency'
   | 'recommended'
   | 'closing_soon'
   | 'saved';
+
+export type CanonicalVerificationTier =
+  | 'VERIFIED'
+  | 'PARTIALLY VERIFIED'
+  | 'PENDING VERIFICATION'
+  | 'EXPIRED'
+  | 'REJECTED / POTENTIAL SCAM';
+
+export type EmploymentVisaClassification =
+  | 'confirmed_visa_sponsorship'
+  | 'confirmed_international_recruitment'
+  | 'relocation_assistance'
+  | 'work_permit_assistance'
+  | 'no_sponsorship_stated'
+  | 'not_eligible_international';
+
+export type PermanentResidencyPathwayType =
+  | 'direct_pr'
+  | 'route_to_pr'
+  | 'temporary_work_permit';
 
 export type GlobalVerificationStatus =
   | 'Verified and Open'
@@ -74,12 +103,14 @@ export type SectorTag =
 export interface OpportunityFundingRecord {
   id: string;
   opportunityId: string;
-  fundingLevel: 'fully_funded' | 'partially_funded' | 'self_funded' | 'not_confirmed';
+  fundingLevel: 'fully_funded' | 'partially_funded' | 'free' | 'self_funded' | 'not_confirmed';
   fundingSummary: string;
   transparencyTags: FundingTransparencyCategory[];
   tuitionCovered: 'yes' | 'partial' | 'no' | 'not_confirmed';
   airfareCovered: 'yes' | 'partial' | 'no' | 'not_confirmed';
   accommodationCovered: 'yes' | 'partial' | 'no' | 'not_confirmed';
+  insuranceCovered?: 'yes' | 'partial' | 'no' | 'not_confirmed';
+  livingAllowanceCovered?: 'yes' | 'partial' | 'no' | 'not_confirmed';
   visaSupportType:
     | 'employer_sponsored_visa'
     | 'visa_fees_funded'
@@ -88,6 +119,8 @@ export interface OpportunityFundingRecord {
     | 'visa_free_not_sponsorship'
     | 'none'
     | 'not_confirmed';
+  employmentVisaClassification?: EmploymentVisaClassification;
+  employmentVisaLabel?: string;
   visaSupportSummary: string;
   visaMandatoryRulePassed?: boolean;
   visaRejectionReason?: string | null;
@@ -164,13 +197,16 @@ export interface GlobalOpportunity {
   officialDomain: string;
 
   // Status & Verification Badges (Fields 4-5, 20)
+  department?: GlobalDiscoveryDepartment;
   applicationStatus: ApplicationLifecycleStatus;
   verificationStatus: GlobalVerificationStatus;
+  verificationTier?: CanonicalVerificationTier;
   hasVerifiedBadge: boolean;
   httpStatusCode: number | null;
   robotsAllowed: boolean;
   verificationNotes: string;
   sourceEvidenceSnippet: string;
+  publicationDate?: string | null;
 
   // Embedded Normalized Structured Sub-Records (Fields 6-19)
   funding: OpportunityFundingRecord;
@@ -191,6 +227,63 @@ export interface GlobalOpportunity {
   discoveredAt: string;
   lastVerifiedAt: string;
   updatedAt: string;
+}
+
+export interface PermanentResidencyCountryRecord {
+  id: string;
+  country: string;
+  region: 'North America' | 'Oceania' | 'Europe' | 'Asia' | 'Middle East';
+  programName: string;
+  pathwayClassification: PermanentResidencyPathwayType;
+  pathwayClassificationLabel: string;
+  officialAuthority: string;
+  officialApplicationUrl: string;
+  shortageOccupationListUrl: string;
+  officialDomain: string;
+  httpStatus: number | null;
+  verificationTier: CanonicalVerificationTier;
+  sourceEvidenceExcerpt: string;
+  professionalOccupationsInDemand: string[];
+  labourOccupationsInDemand: string[];
+  bankingFinanceOccupations: string[];
+  washWaterOccupations: string[];
+  foreignApplicantsEligible: boolean;
+  ethiopianCitizensEligible: 'confirmed' | 'eligible_general_third_country' | 'verify_embassy';
+  ethiopianEligibilityNotes: string;
+  educationRequirement: string;
+  experienceRequirement: string;
+  languageRequirement: string;
+  ageRestriction: string;
+  skillsAssessmentRequired: string;
+  permanentResidencyRoute: string;
+  employerSponsorshipOptions: string;
+  familyRelocationOptions: string;
+  governmentApplicationFees: string;
+  officialDisclaimer: string;
+  lastVerifiedAt: string;
+}
+
+export interface PermanentResidencyAssessmentResult {
+  pathwayId: string;
+  country: string;
+  programName: string;
+  pathwayClassification: PermanentResidencyPathwayType;
+  readinessStatus: 'Potentially Eligible — Verify Official Criteria' | 'Partial Fit — Additional Requirements Needed' | 'Not Currently Matched';
+  matchedCriteria: string[];
+  missingOrUnverifiedCriteria: string[];
+  disclaimer: string;
+}
+
+export interface DepartmentRunSummary {
+  department: GlobalDiscoveryDepartment;
+  label: string;
+  status: 'success' | 'partial' | 'failed';
+  candidatesFound: number;
+  verifiedCount: number;
+  partiallyVerifiedCount: number;
+  pendingCount: number;
+  rejectedOrExpiredCount: number;
+  errors: string[];
 }
 
 export interface MonitoredPortalCheck {
@@ -311,19 +404,36 @@ export interface DiscoveryJobLogRecord {
   attemptNumber?: number;
   maxAttempts?: number;
   skippedOverlap?: boolean;
+  departmentSummaries?: DepartmentRunSummary[];
   errors: string[];
 }
 
 export interface VerificationMonitoringSummary {
   totalDiscoveredAllTime: number;
   activeVerifiedCount: number;
+  verifiedTierCount?: number;
+  partiallyVerifiedTierCount?: number;
+  pendingVerificationCount?: number;
   totalRejectedCount: number;
   autoUnpublishedCount: number;
   rejectedDueToVisaCount: number;
   rejectedDueToProfessionalRestrictionCount: number;
   expiredCount: number;
+  duplicatesSkippedLastRun?: number;
   archivedRecordsCount: number;
   sourceFailuresCount: number;
+  failedSourcesList?: string[];
+  bankingJobsCount?: number;
+  washJobsCount?: number;
+  visaSponsoredJobsCount?: number;
+  scholarshipsCount?: number;
+  fullyFundedScholarshipsCount?: number;
+  trainingCount?: number;
+  conferencesCount?: number;
+  permanentResidencyPathwaysCount?: number;
+  countriesSeekingWorkersCount?: number;
+  professionalShortageOccupationsCount?: number;
+  labourShortageOccupationsCount?: number;
   lastVerificationAt: string | null;
   lastVerificationAtEat: string | null;
 }
@@ -391,6 +501,8 @@ export interface GlobalOpportunitiesApiResponse {
   totalStoredAllStatuses: number;
   countsBySubsection: Record<GlobalOpportunitySubsection, number>;
   opportunities: GlobalOpportunityWithMatch[];
+  permanentResidencyPathways?: PermanentResidencyCountryRecord[];
+  permanentResidencyAssessments?: PermanentResidencyAssessmentResult[];
   sources: OpportunitySourceRecord[];
   lastDiscoveryRun: DiscoveryJobLogRecord | null;
   schedulerInfo?: AutonomousSchedulerInfo;

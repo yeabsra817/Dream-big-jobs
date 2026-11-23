@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict';
 import * as http from 'node:http';
 import {
+  classifyEmploymentVisaStatus,
   classifyFundingAndVisaTransparency,
+  classifyOpportunityDepartment,
   computeOpportunityFingerprint,
   computeVerificationOutcome,
   detectSectorsFromText,
+  EMPLOYMENT_VISA_LABELS,
   evaluateMandatoryVisaCompliance,
   evaluateOpportunityDeadline,
   evaluateOpportunityForUser,
+  evaluatePermanentResidencyEligibility,
   evaluateProfessionalRestrictionCompliance,
   isOpportunityActiveAndDisplayable,
   MINIMUM_FULL_DAYS_REMAINING,
   recommendOpportunitiesForUser,
 } from '../src/utils/opportunityIntelligenceEngine';
 import { validateOfficialExternalUrl } from '../serverGlobalOpportunities';
-import { GlobalOpportunity } from '../src/types/globalOpportunities';
+import { GlobalOpportunity, PermanentResidencyCountryRecord } from '../src/types/globalOpportunities';
 import { DEFAULT_JOB_SEEKER_PROFILE, JobSeekerProfile } from '../src/types/jobSeeker';
 
 let passed = 0;
@@ -343,7 +347,7 @@ async function main() {
     assert.equal(shortRes.hasVerifiedBadge, false);
     assert.equal(shortRes.isPubliclyDisplayable, false);
 
-    // Fails mandatory visa rule even with live URL & >= 3 days
+    // Fails mandatory visa rule when strictVisaOnly is enforced even with live URL & >= 3 days
     const noVisaRes = computeVerificationOutcome({
       urlVerified: true,
       organizationAuthentic: true,
@@ -354,9 +358,11 @@ async function main() {
       category: 'university_scholarship',
       title: 'Banking & Finance MSc Scholarship',
       isBankingFinance: true,
+      strictVisaOnly: true,
     });
     assert.equal(noVisaRes.isPubliclyDisplayable, false);
     assert.equal(noVisaRes.rejectionCategory, 'visa');
+    assert.equal(noVisaRes.verificationTier, 'REJECTED / POTENTIAL SCAM');
 
     // Fails professional restriction even with visa fees funded
     const wrongDomainRes = computeVerificationOutcome({
@@ -372,6 +378,7 @@ async function main() {
     });
     assert.equal(wrongDomainRes.isPubliclyDisplayable, false);
     assert.equal(wrongDomainRes.rejectionCategory, 'professional_restriction');
+    assert.equal(wrongDomainRes.verificationTier, 'REJECTED / POTENTIAL SCAM');
 
     // Passes ALL gates: live official URL, >=3d, visa fees funded, WASH scholarship
     const fullPass = computeVerificationOutcome({
@@ -389,6 +396,129 @@ async function main() {
     assert.equal(fullPass.hasVerifiedBadge, true);
     assert.equal(fullPass.visaCompliancePassed, true);
     assert.equal(fullPass.professionalRestrictionPassed, true);
+    assert.equal(fullPass.verificationTier, 'VERIFIED');
+
+    // Transparent 6-tier employment visa status: genuine official Banking job without explicit visa wording => PARTIALLY VERIFIED (never falsely marked Visa Sponsored)
+    const noSponsorshipStatedJob = computeVerificationOutcome({
+      urlVerified: true,
+      organizationAuthentic: true,
+      applicationStatus: 'open',
+      deadlineEval: dlOk,
+      funding: {
+        fundingLevel: 'not_confirmed',
+        visaSupportType: 'not_confirmed',
+        visaSupportSummary: 'No sponsorship stated',
+        employmentVisaClassification: 'no_sponsorship_stated',
+      },
+      eligibility: { ethiopianEligible: 'not_confirmed' },
+      category: 'international_job',
+      title: 'Senior AML Compliance & Banking Risk Officer',
+      isBankingFinance: true,
+    });
+    assert.equal(noSponsorshipStatedJob.isPubliclyDisplayable, true);
+    assert.equal(noSponsorshipStatedJob.verificationTier, 'PARTIALLY VERIFIED');
+    assert.notEqual(noSponsorshipStatedJob.verificationStatus, 'Visa Sponsored');
+  });
+
+  await runTest('6-Tier Employment Visa Classification & 5-Department Routing: accurate transparent labels without exaggeration', () => {
+    const sponsored = classifyEmploymentVisaStatus({
+      fullText: 'Employer-sponsored work visa and Skilled Worker visa sponsorship provided for international banking hires.',
+    });
+    assert.equal(sponsored.classification, 'confirmed_visa_sponsorship');
+    assert.equal(sponsored.label, EMPLOYMENT_VISA_LABELS.confirmed_visa_sponsorship);
+
+    const intlRecruit = classifyEmploymentVisaStatus({
+      fullText: 'UN International Professional P-3 vacancy open to applicants of all nationalities.',
+    });
+    assert.equal(intlRecruit.classification, 'confirmed_international_recruitment');
+
+    const relocation = classifyEmploymentVisaStatus({
+      fullText: 'Comprehensive relocation assistance and moving allowance offered to successful candidate.',
+    });
+    assert.equal(relocation.classification, 'relocation_assistance');
+
+    const permit = classifyEmploymentVisaStatus({
+      fullText: 'Work permit assistance available through HR immigration team.',
+    });
+    assert.equal(permit.classification, 'work_permit_assistance');
+
+    const noneStated = classifyEmploymentVisaStatus({
+      fullText: 'Senior Internal Auditor required for European banking operations team.',
+    });
+    assert.equal(noneStated.classification, 'no_sponsorship_stated');
+
+    const notEligible = classifyEmploymentVisaStatus({
+      fullText: 'Candidates must already have unrestricted right to work; no visa sponsorship available.',
+    });
+    assert.equal(notEligible.classification, 'not_eligible_international');
+
+    assert.equal(classifyOpportunityDepartment('international_job', true, false), 'banking_finance_jobs');
+    assert.equal(classifyOpportunityDepartment('wash_opportunity', false, true), 'wash_jobs');
+    assert.equal(classifyOpportunityDepartment('university_scholarship', true, false), 'banking_wash_scholarships');
+    assert.equal(classifyOpportunityDepartment('professional_training', false, true), 'banking_wash_training');
+    assert.equal(classifyOpportunityDepartment('conference_summit', true, false), 'banking_wash_conferences');
+  });
+
+  await runTest('Official Permanent Residency Eligibility Engine: distinguishes direct PR vs route to PR and never claims shortage = automatic PR', () => {
+    const samplePr: PermanentResidencyCountryRecord = {
+      id: 'pr_canada_express_entry',
+      country: 'Canada',
+      region: 'North America',
+      programName: 'Express Entry — Federal Skilled Worker & Category-Based Draws',
+      pathwayClassification: 'direct_pr',
+      pathwayClassificationLabel: 'Direct Permanent Residency Pathway',
+      officialAuthority: 'Immigration, Refugees and Citizenship Canada (IRCC)',
+      officialApplicationUrl: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html',
+      shortageOccupationListUrl: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/rounds-invitations/category-based-selection.html',
+      officialDomain: 'www.canada.ca',
+      httpStatus: 200,
+      verificationTier: 'VERIFIED',
+      sourceEvidenceExcerpt: 'Official IRCC Express Entry Federal Skilled Worker pathway.',
+      professionalOccupationsInDemand: ['Financial Auditors and Accountants', 'Civil Engineers'],
+      labourOccupationsInDemand: ['Plumbers', 'Electricians'],
+      bankingFinanceOccupations: ['Financial Auditors and Accountants', 'Banking Managers'],
+      washWaterOccupations: ['Civil Engineers', 'Water Treatment Operators'],
+      foreignApplicantsEligible: true,
+      ethiopianCitizensEligible: 'confirmed',
+      ethiopianEligibilityNotes: 'Open to eligible skilled applicants worldwide including Ethiopian citizens.',
+      educationRequirement: 'Post-secondary degree with ECA',
+      experienceRequirement: 'Minimum 1 year skilled experience',
+      languageRequirement: 'IELTS / CELPIP CLB 7+',
+      ageRestriction: 'Points decrease gradually after age 29',
+      skillsAssessmentRequired: 'Educational Credential Assessment (ECA)',
+      permanentResidencyRoute: 'Direct Permanent Residency upon Invitation to Apply (ITA)',
+      employerSponsorshipOptions: 'Optional LMIA job offer adds CRS points',
+      familyRelocationOptions: 'Spouse and dependent children included',
+      governmentApplicationFees: 'Verify current IRCC fees on canada.ca',
+      officialDisclaimer: 'Labour or skill shortages do NOT automatically grant permanent residency. Governed exclusively by IRCC.',
+      lastVerifiedAt: new Date().toISOString(),
+    };
+
+    const profile: JobSeekerProfile = {
+      ...DEFAULT_JOB_SEEKER_PROFILE,
+      uid: 'user_bank_eth',
+      email: 'hanna.auditor@example.com',
+      fullName: 'Hanna Bekele',
+      desiredJobTitle: 'Financial Auditor and Banking Risk Specialist',
+      preferredIndustry: 'Banking and Finance',
+      yearsOfExperience: '5 years',
+      skills: ['Financial Auditing', 'Risk Management', 'IFRS', 'Banking Operations'],
+      education: [
+        {
+          id: 'ed_bank_1',
+          institution: 'Addis Ababa University',
+          qualification: 'MSc Degree',
+          fieldOfStudy: 'Accounting and Finance',
+          graduationYear: '2019',
+        },
+      ],
+    };
+
+    const assessment = evaluatePermanentResidencyEligibility(samplePr, profile);
+    assert.equal(assessment.country, 'Canada');
+    assert.equal(assessment.pathwayClassification, 'direct_pr');
+    assert.ok(assessment.matchedCriteria.length >= 1, 'Expected matched criteria for financial/banking profile');
+    assert.ok(assessment.disclaimer.toLowerCase().includes('not automatically grant permanent residency'));
   });
 
   await runTest('Deduplication: produces identical fingerprints for normalized duplicate URLs/titles', () => {
@@ -817,11 +947,17 @@ async function main() {
         assert.equal(opp.isArchived, false, `Archived opp leaked into public API: ${opp.id}`);
         assert.ok(opp.deadline.fullDaysRemaining >= 3, `Opp with <3 days leaked: ${opp.id}`);
         assert.ok(opp.officialApplicationUrl.startsWith('https://'), `Non-HTTPS URL leaked: ${opp.id}`);
-        assert.equal(
-          evaluateMandatoryVisaCompliance(opp.category, opp.funding).passed,
-          true,
-          `Non-visa-compliant opp leaked into public API: ${opp.id}`
+        assert.ok(
+          opp.verificationTier === 'VERIFIED' || opp.verificationTier === 'PARTIALLY VERIFIED',
+          `Unexpected verificationTier leaked into public API: ${opp.id} (${opp.verificationTier})`
         );
+        if (opp.funding.employmentVisaClassification === 'confirmed_visa_sponsorship') {
+          assert.equal(
+            opp.funding.visaSupportType,
+            'employer_sponsored_visa',
+            `Visa sponsorship exaggerated without employer_sponsored_visa evidence: ${opp.id}`
+          );
+        }
         assert.equal(
           evaluateProfessionalRestrictionCompliance(opp.category, opp).passed,
           true,
@@ -829,6 +965,33 @@ async function main() {
         );
         assert.equal(isOpportunityActiveAndDisplayable(opp), true);
       }
+
+      // Verify Department 6 Official Government Permanent Residency & Labour Shortage Country Intelligence endpoint
+      assert.ok(
+        Array.isArray(listBody.permanentResidencyPathways) && listBody.permanentResidencyPathways.length >= 14,
+        `Expected >= 14 official government PR country pathways, got ${listBody.permanentResidencyPathways?.length}`
+      );
+      assert.ok(listBody.countsBySubsection?.permanent_residency >= 14);
+
+      const prRes = await fetch(`${baseUrl}/api/global-opportunities/permanent-residency`);
+      assert.equal(prRes.status, 200);
+      const prBody: any = await prRes.json();
+      assert.equal(prBody.success, true);
+      assert.ok(prBody.totalCountries >= 14);
+      assert.ok(prBody.directPrCount >= 3, 'Expected Direct PR pathways (e.g. Canada, Australia, New Zealand)');
+      assert.ok(prBody.routeToPrCount >= 5, 'Expected Route-to-PR pathways');
+      assert.ok(prBody.temporaryPermitCount >= 1, 'Expected Temporary Work Permit classification');
+      assert.ok(
+        prBody.disclaimer.toLowerCase().includes('do not automatically grant permanent residency'),
+        'Expected official PR non-guarantee disclaimer'
+      );
+      for (const pathway of prBody.pathways) {
+        assert.ok(pathway.officialApplicationUrl.startsWith('https://'), `Non-HTTPS PR portal URL: ${pathway.country}`);
+        assert.ok(pathway.shortageOccupationListUrl.startsWith('https://'), `Non-HTTPS shortage list URL: ${pathway.country}`);
+      }
+      console.log(
+        `   [Official PR Intelligence] ${prBody.totalCountries} countries (Direct PR=${prBody.directPrCount}, Route to PR=${prBody.routeToPrCount}, Temp Permit=${prBody.temporaryPermitCount})`
+      );
     });
 
     // -----------------------------------------------------------------------

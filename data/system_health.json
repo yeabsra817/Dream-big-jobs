@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-22T12:22:31.935Z",
+  "checkedAt": "2026-11-23T11:27:13.261Z",
   "overallStatus": "HEALTHY",
-  "serverUptimeSeconds": 120,
+  "serverUptimeSeconds": 1680,
   "storage": {
     "persistentDbWritable": true,
     "filesPresent": {
@@ -13,7 +13,7 @@
       "analytics_events": true
     },
     "backupCount": 3,
-    "latestBackupAt": "2026-11-22T07:28:48.760Z"
+    "latestBackupAt": "2026-11-23T10:52:58.802Z"
   },
   "telegramBot": {
     "configured": true,
@@ -23,8 +23,8 @@
     "channelId": "-1004499169829",
     "status": "CONNECTED",
     "statusCode": "connected",
-    "lastCheckedAt": "2026-11-22T12:22:31.866Z",
-    "lastSuccessfulTestAt": "2026-11-22T12:22:31.866Z",
+    "lastCheckedAt": "2026-11-23T11:27:13.209Z",
+    "lastSuccessfulTestAt": "2026-11-23T11:27:13.209Z",
     "lastError": null,
     "consecutiveFailures": 0,
     "reconnectAttempts": 0,

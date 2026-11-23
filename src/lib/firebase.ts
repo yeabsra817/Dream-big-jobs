@@ -507,13 +507,15 @@ export function getPendingLocalCloudSyncVacancies(
   for (const v of localMap.values()) {
     if (v.status === 'draft' || v.status === 'duplicate') continue;
     const isExplicitlyPending = pendingIds.has(v.id);
-    // Sync BOTH open and closed/expired locally-authored jobs missing from Cloud Firestore
-    // so even older Telegram links open cleanly on every phone (showing CLOSED if deadline passed).
-    const isMissingFromCloud =
-      knownCloudVacancyIds && knownCloudVacancyIds.size > 0
+    // Only flag open published vacancies as missing from knownCloudVacancyIds (since public cloud query only returns status === 'published')
+    // Closed/expired jobs are only included if explicitly marked pending upload.
+    const isMissingOpenFromCloud =
+      v.status === 'published' &&
+      knownCloudVacancyIds &&
+      knownCloudVacancyIds.size > 0
         ? !knownCloudVacancyIds.has(v.id)
         : false;
-    if (isExplicitlyPending || isMissingFromCloud) {
+    if (isExplicitlyPending || isMissingOpenFromCloud) {
       unsynced.push(v);
     }
   }
@@ -928,6 +930,225 @@ function buildSafeVacancyFirestorePayload(v: Vacancy): Record<string, any> {
   return sanitizeForFirestore(rawPayload);
 }
 
+// Reference-counted state tracker for active background vacancy uploads (admin transparency only)
+export type BackgroundVacancySyncStatus = 'idle' | 'syncing' | 'error';
+
+export interface BackgroundVacancySyncState {
+  status: BackgroundVacancySyncStatus;
+  isSyncing: boolean;
+  errorMessage: string | null;
+  failedCount: number;
+}
+
+let activeBackgroundVacancySyncCount = 0;
+let backgroundVacancySyncError: string | null = null;
+const failedBackgroundSyncVacancies = new Map<string, Vacancy>();
+const backgroundVacancySyncListeners = new Set<(isSyncing: boolean) => void>();
+const backgroundVacancySyncStateListeners = new Set<(state: BackgroundVacancySyncState) => void>();
+
+export function getBackgroundVacancySyncState(): BackgroundVacancySyncState {
+  const isSyncing = activeBackgroundVacancySyncCount > 0;
+  const status: BackgroundVacancySyncStatus = isSyncing
+    ? 'syncing'
+    : backgroundVacancySyncError
+      ? 'error'
+      : 'idle';
+  return {
+    status,
+    isSyncing,
+    errorMessage: isSyncing ? null : backgroundVacancySyncError,
+    failedCount: failedBackgroundSyncVacancies.size,
+  };
+}
+
+function notifyBackgroundVacancySyncListeners(): void {
+  const state = getBackgroundVacancySyncState();
+  backgroundVacancySyncListeners.forEach((listener) => {
+    try {
+      listener(state.isSyncing);
+    } catch {}
+  });
+  backgroundVacancySyncStateListeners.forEach((listener) => {
+    try {
+      listener(state);
+    } catch {}
+  });
+}
+
+export function beginBackgroundVacancySync(): void {
+  activeBackgroundVacancySyncCount += 1;
+  if (activeBackgroundVacancySyncCount === 1) {
+    backgroundVacancySyncError = null;
+    notifyBackgroundVacancySyncListeners();
+  }
+}
+
+export function reportBackgroundVacancySyncError(
+  message: string,
+  failedItems: Vacancy[] = []
+): void {
+  backgroundVacancySyncError = message || 'Background upload failed.';
+  for (const item of failedItems) {
+    if (item?.id) {
+      failedBackgroundSyncVacancies.set(item.id, item);
+    }
+  }
+  if (activeBackgroundVacancySyncCount === 0) {
+    notifyBackgroundVacancySyncListeners();
+  }
+}
+
+export function clearBackgroundVacancySyncError(): void {
+  backgroundVacancySyncError = null;
+  failedBackgroundSyncVacancies.clear();
+  notifyBackgroundVacancySyncListeners();
+}
+
+export function endBackgroundVacancySync(): void {
+  activeBackgroundVacancySyncCount = Math.max(0, activeBackgroundVacancySyncCount - 1);
+  if (activeBackgroundVacancySyncCount === 0) {
+    notifyBackgroundVacancySyncListeners();
+  }
+}
+
+export function isBackgroundVacancySyncing(): boolean {
+  return activeBackgroundVacancySyncCount > 0;
+}
+
+export function subscribeToBackgroundVacancySync(
+  listener: (isSyncing: boolean) => void
+): () => void {
+  backgroundVacancySyncListeners.add(listener);
+  listener(activeBackgroundVacancySyncCount > 0);
+  return () => {
+    backgroundVacancySyncListeners.delete(listener);
+  };
+}
+
+export function subscribeToBackgroundVacancySyncState(
+  listener: (state: BackgroundVacancySyncState) => void
+): () => void {
+  backgroundVacancySyncStateListeners.add(listener);
+  listener(getBackgroundVacancySyncState());
+  return () => {
+    backgroundVacancySyncStateListeners.delete(listener);
+  };
+}
+
+/**
+ * Re-triggers background synchronization for any failed or pending local vacancies
+ * to both the shared backend server catalog and Cloud Firestore (when admin Google auth is active).
+ */
+export async function retryBackgroundVacancySync(): Promise<boolean> {
+  const retryMap = new Map<string, Vacancy>();
+  failedBackgroundSyncVacancies.forEach((v, id) => retryMap.set(id, v));
+  getPendingLocalCloudSyncVacancies().forEach((v) => {
+    if (v?.id) retryMap.set(v.id, v);
+  });
+
+  const targets = Array.from(retryMap.values());
+  if (targets.length === 0) {
+    clearBackgroundVacancySyncError();
+    return true;
+  }
+
+  backgroundVacancySyncError = null;
+  let allOk = true;
+  beginBackgroundVacancySync();
+  try {
+    const backendOk = await pushVacanciesToBackendSilently(targets);
+    if (!backendOk) {
+      allOk = false;
+    }
+
+    if (auth.currentUser && isUserAdmin(auth.currentUser)) {
+      const cloudRes = await syncLocalVacanciesToFirestoreCloud(targets);
+      if (cloudRes.failed > 0) {
+        allOk = false;
+      }
+    }
+
+    if (allOk) {
+      failedBackgroundSyncVacancies.clear();
+      backgroundVacancySyncError = null;
+    }
+  } catch (err: any) {
+    allOk = false;
+    reportBackgroundVacancySyncError(err?.message || 'Background upload failed.', targets);
+  } finally {
+    endBackgroundVacancySync();
+  }
+  return allOk;
+}
+
+/**
+ * Silently uploads valid vacancies to the shared backend server catalog (/api/vacancies/sync)
+ * in safe chunks so EVERY user and EVERY Telegram deep-link immediately receives them
+ * automatically in the background (even during Developer Password admin sessions).
+ */
+export async function pushVacanciesToBackendSilently(vacancies: Vacancy[]): Promise<boolean> {
+  if (typeof window === 'undefined' || !Array.isArray(vacancies) || vacancies.length === 0) {
+    return false;
+  }
+  const eligible = vacancies.filter(
+    (v) => v && v.id && v.status !== 'draft' && v.status !== 'duplicate' && hasValidVacancyDeadline(v)
+  );
+  if (eligible.length === 0) return false;
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const activeEmail = auth.currentUser?.email || getActiveAdminSessionEmail() || '';
+  if (activeEmail) {
+    headers['x-user-email'] = activeEmail;
+    headers['x-admin-email'] = activeEmail;
+  }
+  if (auth.currentUser?.uid) {
+    headers['x-user-uid'] = auth.currentUser.uid;
+  }
+
+  let allSucceeded = true;
+  const failedItems: Vacancy[] = [];
+  let lastErrorMsg = '';
+  const CHUNK_SIZE = 40;
+  beginBackgroundVacancySync();
+  try {
+    for (let i = 0; i < eligible.length; i += CHUNK_SIZE) {
+      const chunk = eligible.slice(i, i + CHUNK_SIZE);
+      try {
+        const res = await withTimeout(
+          fetch('/api/vacancies/sync', {
+            method: 'POST',
+            headers,
+            credentials: 'include',
+            body: JSON.stringify({
+              vacancies: chunk,
+              mode: 'background_auto_sync',
+            }),
+          }),
+          10000,
+          null as any
+        );
+        if (!res || !res.ok) {
+          allSucceeded = false;
+          failedItems.push(...chunk);
+          lastErrorMsg = res ? `Server sync failed (HTTP ${res.status})` : 'Server sync timed out';
+        } else {
+          chunk.forEach((v) => failedBackgroundSyncVacancies.delete(v.id));
+        }
+      } catch (err: any) {
+        allSucceeded = false;
+        failedItems.push(...chunk);
+        lastErrorMsg = err?.message || 'Network error during upload';
+      }
+    }
+    if (!allSucceeded) {
+      reportBackgroundVacancySyncError(lastErrorMsg || 'Background upload failed.', failedItems);
+    }
+  } finally {
+    endBackgroundVacancySync();
+  }
+  return allSucceeded;
+}
+
 export async function saveVacancy(vacancy: Vacancy): Promise<void> {
   // STRICT RULE 1: Any vacancy without a real deadline is permanently deleted and never saved
   if (!hasValidVacancyDeadline(vacancy)) {
@@ -956,13 +1177,17 @@ export async function saveVacancy(vacancy: Vacancy): Promise<void> {
   // 1. Always persist to local cache first so admin edits are never lost
   saveVacancyToLocalCache(normalizedVacancy);
 
-  // If user is not authenticated with authorized Firebase Admin Google Auth, flag as pending cloud sync
+  // 1b. Silently auto-upload to backend server catalog immediately so ALL users & Telegram links work right away
+  void pushVacanciesToBackendSilently([normalizedVacancy]);
+
+  // If user is not authenticated with authorized Firebase Admin Google Auth, flag as pending Firestore mirror
   if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
     markVacanciesPendingCloudSync([normalizedVacancy.id]);
     return;
   }
 
   // 2. Cloud write with generous mobile-network timeout (15s)
+  beginBackgroundVacancySync();
   try {
     const cleanPayload = buildSafeVacancyFirestorePayload(normalizedVacancy);
     const writePromise = setDoc(doc(db, 'vacancies', normalizedVacancy.id), cleanPayload, { merge: true });
@@ -972,9 +1197,12 @@ export async function saveVacancy(vacancy: Vacancy): Promise<void> {
 
     await Promise.race([writePromise, timeoutPromise]);
     clearVacanciesPendingCloudSync([normalizedVacancy.id]);
-  } catch (err) {
+  } catch (err: any) {
     markVacanciesPendingCloudSync([normalizedVacancy.id]);
+    reportBackgroundVacancySyncError(err?.message || 'Cloud sync failed.', [normalizedVacancy]);
     console.warn(`Firestore sync note (${path}):`, err);
+  } finally {
+    endBackgroundVacancySync();
   }
 }
 
@@ -1012,6 +1240,9 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
     saveVacancyToLocalCache(v);
   }
 
+  // 1b. Silently auto-upload entire batch to backend server catalog immediately for ALL users
+  void pushVacanciesToBackendSilently(validToSave);
+
   if (!auth.currentUser || !isUserAdmin(auth.currentUser)) {
     markVacanciesPendingCloudSync(allIds);
     return;
@@ -1019,32 +1250,39 @@ export async function saveBatchVacancies(vacancies: Vacancy[]): Promise<void> {
 
   // 2. Safe 25-doc chunked commit with automatic per-doc fallback so 1 bad item never blocks the rest
   const CHUNK_SIZE = 25;
-  for (let i = 0; i < validToSave.length; i += CHUNK_SIZE) {
-    const chunk = validToSave.slice(i, i + CHUNK_SIZE);
-    try {
-      const batch = writeBatch(db);
-      for (const v of chunk) {
-        batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
-      }
-      await Promise.race([
-        batch.commit(),
-        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 18000)),
-      ]);
-      clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
-    } catch (chunkErr) {
-      console.warn('saveBatchVacancies chunk fallback to per-doc:', chunkErr);
-      for (const v of chunk) {
-        try {
-          await Promise.race([
-            setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
-            new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Doc timeout')), 10000)),
-          ]);
-          clearVacanciesPendingCloudSync([v.id]);
-        } catch {
-          markVacanciesPendingCloudSync([v.id]);
+  beginBackgroundVacancySync();
+  try {
+    for (let i = 0; i < validToSave.length; i += CHUNK_SIZE) {
+      const chunk = validToSave.slice(i, i + CHUNK_SIZE);
+      try {
+        const batch = writeBatch(db);
+        for (const v of chunk) {
+          batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
+        }
+        await Promise.race([
+          batch.commit(),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Batch commit timeout')), 18000)),
+        ]);
+        clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
+      } catch (chunkErr) {
+        console.warn('saveBatchVacancies chunk fallback to per-doc:', chunkErr);
+        for (const v of chunk) {
+          try {
+            await Promise.race([
+              setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Doc timeout')), 10000)),
+            ]);
+            clearVacanciesPendingCloudSync([v.id]);
+            failedBackgroundSyncVacancies.delete(v.id);
+          } catch (docErr: any) {
+            markVacanciesPendingCloudSync([v.id]);
+            reportBackgroundVacancySyncError(docErr?.message || 'Batch cloud upload failed.', [v]);
+          }
         }
       }
     }
+  } finally {
+    endBackgroundVacancySync();
   }
 }
 
@@ -1111,41 +1349,48 @@ export async function syncLocalVacanciesToFirestoreCloud(
   let lastError: string | undefined;
 
   const CHUNK_SIZE = 25;
-  for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
-    const chunk = candidates.slice(i, i + CHUNK_SIZE);
-    try {
-      const batch = writeBatch(db);
-      for (const v of chunk) {
-        batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
-      }
-      await Promise.race([
-        batch.commit(),
-        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud batch timeout')), 18000)),
-      ]);
-      for (const v of chunk) {
-        syncedVacancies.push(v);
-        syncedIds.push(v.id);
-      }
-      clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
-    } catch (batchErr: any) {
-      lastError = batchErr?.message || String(batchErr);
-      // Fallback to individual doc writes so 1 problematic doc never stops the rest
-      for (const v of chunk) {
-        try {
-          await Promise.race([
-            setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
-            new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud doc timeout')), 10000)),
-          ]);
+  beginBackgroundVacancySync();
+  try {
+    for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
+      const chunk = candidates.slice(i, i + CHUNK_SIZE);
+      try {
+        const batch = writeBatch(db);
+        for (const v of chunk) {
+          batch.set(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true });
+        }
+        await Promise.race([
+          batch.commit(),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud batch timeout')), 18000)),
+        ]);
+        for (const v of chunk) {
           syncedVacancies.push(v);
           syncedIds.push(v.id);
-          clearVacanciesPendingCloudSync([v.id]);
-        } catch (docErr: any) {
-          failed++;
-          lastError = docErr?.message || String(docErr);
-          markVacanciesPendingCloudSync([v.id]);
+        }
+        clearVacanciesPendingCloudSync(chunk.map((v) => v.id));
+      } catch (batchErr: any) {
+        lastError = batchErr?.message || String(batchErr);
+        // Fallback to individual doc writes so 1 problematic doc never stops the rest
+        for (const v of chunk) {
+          try {
+            await Promise.race([
+              setDoc(doc(db, 'vacancies', v.id), buildSafeVacancyFirestorePayload(v), { merge: true }),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Cloud doc timeout')), 10000)),
+            ]);
+            syncedVacancies.push(v);
+            syncedIds.push(v.id);
+            clearVacanciesPendingCloudSync([v.id]);
+            failedBackgroundSyncVacancies.delete(v.id);
+          } catch (docErr: any) {
+            failed++;
+            lastError = docErr?.message || String(docErr);
+            markVacanciesPendingCloudSync([v.id]);
+            reportBackgroundVacancySyncError(lastError || 'Cloud upload failed.', [v]);
+          }
         }
       }
     }
+  } finally {
+    endBackgroundVacancySync();
   }
 
   return {
