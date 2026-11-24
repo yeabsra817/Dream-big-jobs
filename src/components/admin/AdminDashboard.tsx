@@ -55,6 +55,7 @@ import { GlobalOpportunityAdminPanel } from './GlobalOpportunityAdminPanel';
 import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
+import { NexusClientFinderPanel } from './NexusClientFinderPanel';
 import {
   auth,
   googleProvider,
@@ -167,6 +168,7 @@ export const AdminDashboard: React.FC<Props> = ({
     | 'health'
     | 'alerts'
     | 'autoApply'
+    | 'nexusClientFinder'
     | 'persistence'
     | 'telegram'
     | 'settings'
@@ -687,6 +689,20 @@ export const AdminDashboard: React.FC<Props> = ({
               </button>
             )}
 
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('nexusClientFinder')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border ${
+                  activeTab === 'nexusClientFinder'
+                    ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
+                    : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/30'
+                }`}
+              >
+                <Globe className="w-4 h-4 text-emerald-400" />
+                <span>Nexus Client Finder</span>
+              </button>
+            )}
+
             <button
               onClick={() => setActiveTab('telegram')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
@@ -902,6 +918,10 @@ export const AdminDashboard: React.FC<Props> = ({
             immigrationPathways={immigrationPathways}
             scholarships={experienceScholarships}
           />
+        )}
+
+        {activeTab === 'nexusClientFinder' && isYeabsraOwner && (
+          <NexusClientFinderPanel adminEmail={adminEmail} />
         )}
 
         {activeTab === 'telegram' && (

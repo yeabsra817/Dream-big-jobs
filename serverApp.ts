@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
 import { registerGlobalOpportunitiesRoutes } from './serverGlobalOpportunities';
 import { registerWritingAssistantRoutes } from './serverWritingAssistant';
+import { registerNexusClientFinderRoutes } from './serverNexusClientFinder';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11387,6 +11388,19 @@ Return strict JSON:
 
   registerWritingAssistantRoutes({
     app,
+    getAiClient,
+  });
+
+  registerNexusClientFinderRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterEmail,
+    appendAuditLog,
     getAiClient,
   });
 

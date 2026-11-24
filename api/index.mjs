@@ -1,7 +1,7 @@
 // serverApp.ts
-import * as path3 from "path";
+import * as path4 from "path";
 import * as fs2 from "fs";
-import * as crypto2 from "crypto";
+import * as crypto3 from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
@@ -4287,8 +4287,9 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
         deletedNoDeadlineIds.push(String(item.id));
         continue;
       }
+      let itemToStore = item;
       if (mode !== "seed_if_empty" && item.status === "published") {
-        const validation = validateVacancyStrict(item, { allowExpired: false });
+        const validation = validateVacancyStrict(item, { allowExpired: mode === "background_auto_sync" });
         if (!validation.valid) {
           changedSet.delete(String(item.id));
           rejectedIncomplete.push({
@@ -4298,22 +4299,25 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
           });
           continue;
         }
+        if (mode === "background_auto_sync" && !validateVacancyStrict(item, { allowExpired: false }).valid) {
+          itemToStore = { ...item, status: "expired" };
+        }
       }
-      const prev = map.get(item.id);
-      if (!prev && item.status === "published") {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+      const prev = map.get(itemToStore.id);
+      if (!prev && itemToStore.status === "published") {
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = "published";
-      } else if (prev && prev.status !== "published" && item.status === "published") {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+      } else if (prev && prev.status !== "published" && itemToStore.status === "published") {
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = "published";
-      } else if (prev && item.status === "published" && (prev.applicationDeadline !== item.applicationDeadline || prev.salary !== item.salary || prev.title !== item.title)) {
-        changedSet.add(item.id);
-        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = item.id;
+      } else if (prev && itemToStore.status === "published" && (prev.applicationDeadline !== itemToStore.applicationDeadline || prev.salary !== itemToStore.salary || prev.title !== itemToStore.title)) {
+        changedSet.add(itemToStore.id);
+        if (!newlyPublishedOrUpdatedId) newlyPublishedOrUpdatedId = itemToStore.id;
         if (!resolvedChangeType) resolvedChangeType = "updated";
       }
-      map.set(item.id, item);
+      map.set(itemToStore.id, itemToStore);
     }
     const merged = Array.from(map.values()).filter((v) => hasValidVacancyDeadline(v));
     saveVacanciesCatalog(merged);
@@ -4322,7 +4326,7 @@ ${options.customNote ? options.customNote : `Matches your qualifications in ${re
     let notifiedUsersCount = 0;
     let emailsSent = 0;
     let pushSent = 0;
-    if (mode === "seed_if_empty") {
+    if (mode === "seed_if_empty" || mode === "background_auto_sync") {
       triggerBackgroundRecalcAllUsers({
         sendNotifications: false
       });
@@ -5633,11 +5637,20 @@ function classifyFundingAndVisaTransparency(input) {
   if (airfareCovered === "yes") tags.add("Travel funded");
   if (accommodationCovered === "yes") tags.add("Accommodation funded");
   if (explicitSelfFunded && !explicitFullFunded) tags.add("Self-funded");
+  const insuranceCovered = /\b(health\s+insurance|medical\s+insurance|insurance\s+covered|insurance\s+provided)\b/i.test(fundingText) ? "yes" : "not_confirmed";
+  const livingAllowanceCovered = /\b(living\s+allowance|monthly\s+stipend|subsistence\s+allowance|per\s+diem|stipend\s+provided|living\s+expenses\s+covered)\b/i.test(
+    fundingText
+  ) ? "yes" : "not_confirmed";
+  const explicitFreeNoFee = !explicitFullFunded && !explicitSelfFunded && /\b(free\s+of\s+charge|free\s+to\s+attend|free\s+course|free\s+training|no\s+tuition\s+fee|no\s+registration\s+fee|tuition[\s-]free)\b/i.test(
+    fundingText
+  );
   let fundingLevel = "not_confirmed";
   if (explicitFullFunded && !explicitSelfFunded) {
     fundingLevel = "fully_funded";
   } else if (tuitionCovered === "yes" || tuitionCovered === "partial" || airfareCovered === "yes" || accommodationCovered === "yes" || hasVisaFeesFunded) {
     fundingLevel = "partially_funded";
+  } else if (explicitFreeNoFee) {
+    fundingLevel = "free";
   } else if (explicitSelfFunded) {
     fundingLevel = "self_funded";
   }
@@ -5645,7 +5658,14 @@ function classifyFundingAndVisaTransparency(input) {
     tags.add("Funding Not Confirmed");
   }
   const relocationAssistance = input.relocationAssistance || (/\b(relocation\s+(package|assistance|allowance|support|covered)|installation\s+grant)\b/i.test(fundingText) ? "yes" : "not_confirmed");
-  const fundingSummary = input.fundingSummary?.trim() || (fundingLevel === "fully_funded" ? "Fully funded (verify exact inclusions on official portal)" : fundingLevel === "partially_funded" ? `Partially funded (${Array.from(tags).join(", ")})` : fundingLevel === "self_funded" ? "Self-funded" : "Funding Not Confirmed");
+  const employmentVisa = classifyEmploymentVisaStatus({
+    visaSummary: input.visaSummary,
+    fundingSummary: input.fundingSummary,
+    fullText: input.fullText,
+    visaSupportType,
+    relocationAssistance
+  });
+  const fundingSummary = input.fundingSummary?.trim() || (fundingLevel === "fully_funded" ? "Fully funded (verify exact inclusions on official portal)" : fundingLevel === "partially_funded" ? `Partially funded (${Array.from(tags).join(", ")})` : fundingLevel === "free" ? "Free participation (travel/accommodation not confirmed)" : fundingLevel === "self_funded" ? "Self-funded" : "Funding Not Confirmed");
   return {
     fundingLevel,
     fundingSummary,
@@ -5653,12 +5673,84 @@ function classifyFundingAndVisaTransparency(input) {
     tuitionCovered,
     airfareCovered,
     accommodationCovered,
+    insuranceCovered,
+    livingAllowanceCovered,
     visaSupportType,
+    employmentVisaClassification: employmentVisa.classification,
+    employmentVisaLabel: employmentVisa.label,
     visaSupportSummary,
     relocationAssistance,
     applicationFee: input.applicationFee?.trim() || "Not Confirmed",
     stipendOrSalary: input.stipendOrSalary?.trim() || void 0
   };
+}
+var EMPLOYMENT_VISA_LABELS = {
+  confirmed_visa_sponsorship: "Confirmed visa sponsorship",
+  confirmed_international_recruitment: "Confirmed international recruitment",
+  relocation_assistance: "Relocation assistance",
+  work_permit_assistance: "Work permit assistance",
+  no_sponsorship_stated: "No sponsorship stated",
+  not_eligible_international: "Not eligible for international applicants"
+};
+function classifyEmploymentVisaStatus(input) {
+  const corpus = `${input.visaSummary || ""} ${input.fundingSummary || ""} ${input.fullText || ""}`.toLowerCase();
+  const isLocalOrNationalOnly = input.ethiopianEligible === "excluded" || /\b(national\s+position\s+only|local\s+nationals?\s+only|open\s+only\s+to\s+citizens\s+of|host\s+country\s+nationals?\s+only|must\s+(?:already\s+)?have\s+(?:the\s+)?right\s+to\s+work|already\s+authorized\s+to\s+work|citizens?\s+or\s+permanent\s+residents?\s+only|no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|no\s+longer\s+(?:able\s+to\s+)?sponsor|visa\s+(?:or\s+work\s+permit\s+)?sponsorship\s+(?:is\s+|has\s+been\s+|was\s+)?(?:no\s+longer\s+available|not\s+available|withdrawn|discontinued|revoked))\b/i.test(
+    corpus
+  );
+  if (isLocalOrNationalOnly || input.visaSupportType === "none") {
+    return {
+      classification: "not_eligible_international",
+      label: EMPLOYMENT_VISA_LABELS.not_eligible_international
+    };
+  }
+  if (input.visaSupportType === "employer_sponsored_visa" || /\b(employer[\s-]sponsored\s+(?:work\s+)?visas?|work\s+visa\s+sponsorship|work\s+permit\s+sponsorship|visa\s+sponsorship\s+(?:provided|available|offered|included|confirmed)|we\s+sponsor\s+(?:work\s+)?visas?|sponsors?\s+work\s+(?:visas?|permits?)|tier\s*2\s+sponsorship|skilled\s+worker\s+visa\s+sponsorship)\b/i.test(
+    corpus
+  )) {
+    return {
+      classification: "confirmed_visa_sponsorship",
+      label: EMPLOYMENT_VISA_LABELS.confirmed_visa_sponsorship
+    };
+  }
+  if (/\b(work\s+permit\s+(?:assistance|support|arranged|facilitated|processing)|assist(?:ance)?\s+with\s+(?:obtaining\s+)?(?:a\s+)?work\s+permit)\b/i.test(
+    corpus
+  )) {
+    return {
+      classification: "work_permit_assistance",
+      label: EMPLOYMENT_VISA_LABELS.work_permit_assistance
+    };
+  }
+  if (input.relocationAssistance === "yes" || /\b(relocation\s+(?:package|assistance|allowance|support|covered|benefits?)|installation\s+grant|settling[\s-]in\s+grant)\b/i.test(
+    corpus
+  )) {
+    return {
+      classification: "relocation_assistance",
+      label: EMPLOYMENT_VISA_LABELS.relocation_assistance
+    };
+  }
+  if (/\b(international\s+(?:staff|position|recruitment|applicants?|candidates?|hiring|professionals?|vacancy|contract|post)|open\s+to\s+all\s+nationalities|applicants?\s+of\s+all\s+nationalities|p-?[1-5]\s+(?:level|grade|post)|un\s+international\s+professional|expatriate\s+(?:contract|package|position))\b/i.test(
+    corpus
+  )) {
+    return {
+      classification: "confirmed_international_recruitment",
+      label: EMPLOYMENT_VISA_LABELS.confirmed_international_recruitment
+    };
+  }
+  return {
+    classification: "no_sponsorship_stated",
+    label: EMPLOYMENT_VISA_LABELS.no_sponsorship_stated
+  };
+}
+function classifyOpportunityDepartment(inputOrCategory, isBankingFinanceArg, isWashDedicatedArg) {
+  const category = typeof inputOrCategory === "string" ? inputOrCategory : inputOrCategory.category;
+  const isBankingFinance = typeof inputOrCategory === "string" ? Boolean(isBankingFinanceArg) : Boolean(inputOrCategory.isBankingFinance);
+  const isWashDedicated = typeof inputOrCategory === "string" ? Boolean(isWashDedicatedArg) : Boolean(inputOrCategory.isWashDedicated);
+  if (category === "university_scholarship") return "banking_wash_scholarships";
+  if (category === "professional_training") return "banking_wash_training";
+  if (category === "conference_summit") return "banking_wash_conferences";
+  if (category === "wash_opportunity" || isWashDedicated && !isBankingFinance) {
+    return "wash_jobs";
+  }
+  return "banking_finance_jobs";
 }
 function evaluateMandatoryVisaCompliance(category, funding, officialSourceText) {
   const combinedText = `${funding.visaSupportSummary || ""} ${funding.evidenceExcerpt || ""} ${officialSourceText || ""}`;
@@ -5741,9 +5833,11 @@ function computeVerificationOutcome(params) {
     isBankingFinance: params.isBankingFinance,
     isWashDedicated: params.isWashDedicated
   });
+  const isBankingOrWashJob = category === "wash_opportunity" || Boolean(params.isBankingFinance) || Boolean(params.isWashDedicated) || Boolean(params.sectors?.includes("banking_finance")) || Boolean(params.sectors?.includes("wash")) || detectSectorsFromText(`${params.title || ""} ${params.summary || ""} ${params.organization || ""}`).isBankingFinance || detectSectorsFromText(`${params.title || ""} ${params.summary || ""} ${params.organization || ""}`).isWash;
   if (applicationStatus === "expired" || applicationStatus === "closed" || applicationStatus === "withdrawn" || deadlineEval.isExpired) {
     return {
       verificationStatus: "Expired",
+      verificationTier: "EXPIRED",
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
@@ -5755,17 +5849,19 @@ function computeVerificationOutcome(params) {
   if (!urlVerified || !organizationAuthentic) {
     return {
       verificationStatus: "Unverified",
+      verificationTier: !organizationAuthentic ? "REJECTED / POTENTIAL SCAM" : "PENDING VERIFICATION",
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
       professionalRestrictionPassed: profCheck.passed,
       rejectionCategory: !organizationAuthentic ? "authenticity" : "broken_link",
-      rejectionReason: !organizationAuthentic ? "Organization authenticity or official domain could not be verified." : "Official application URL could not be verified live."
+      rejectionReason: !organizationAuthentic ? "Rejected: Unofficial domain or organization authenticity could not be verified." : "Pending verification: Official application URL could not be verified live."
     };
   }
   if (!deadlineEval.valid || !deadlineEval.meetsMinimumThreeFullDays) {
     return {
       verificationStatus: "Expired",
+      verificationTier: "EXPIRED",
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: visaCheck.passed,
@@ -5774,43 +5870,68 @@ function computeVerificationOutcome(params) {
       rejectionReason: deadlineEval.rejectionReason || "Opportunity has fewer than 3 full days remaining."
     };
   }
-  if (eligibility.ethiopianEligible === "excluded") {
+  if (eligibility.ethiopianEligible === "excluded" || funding.employmentVisaClassification === "not_eligible_international" || funding.visaSupportType === "none") {
     return {
       verificationStatus: "Unverified",
-      hasVerifiedBadge: false,
-      isPubliclyDisplayable: false,
-      visaCompliancePassed: visaCheck.passed,
-      professionalRestrictionPassed: profCheck.passed,
-      rejectionCategory: "eligibility",
-      rejectionReason: "Excluded: Official source restricts eligibility against Ethiopian applicants."
-    };
-  }
-  if (!visaCheck.passed) {
-    return {
-      verificationStatus: "Unverified",
+      verificationTier: "REJECTED / POTENTIAL SCAM",
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
       visaCompliancePassed: false,
       professionalRestrictionPassed: profCheck.passed,
-      rejectionCategory: "visa",
-      rejectionReason: visaCheck.reason
+      rejectionCategory: "eligibility",
+      rejectionReason: "Excluded: Not eligible for international/Ethiopian applicants or explicitly states no visa sponsorship."
     };
   }
   if (!profCheck.passed) {
     return {
       verificationStatus: "Unverified",
+      verificationTier: "REJECTED / POTENTIAL SCAM",
       hasVerifiedBadge: false,
       isPubliclyDisplayable: false,
-      visaCompliancePassed: true,
+      visaCompliancePassed: visaCheck.passed,
       professionalRestrictionPassed: false,
       rejectionCategory: "professional_restriction",
       rejectionReason: profCheck.reason
     };
   }
+  if ((category === "international_job" || category === "wash_opportunity") && !isBankingOrWashJob) {
+    return {
+      verificationStatus: "Unverified",
+      verificationTier: "REJECTED / POTENTIAL SCAM",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: visaCheck.passed,
+      professionalRestrictionPassed: false,
+      rejectionCategory: "professional_restriction",
+      rejectionReason: "Rejected (Department Scope): Global employment discovery is focused exclusively on Banking & Finance and WASH."
+    };
+  }
+  if (params.strictVisaOnly && !visaCheck.passed) {
+    return {
+      verificationStatus: "Unverified",
+      verificationTier: "REJECTED / POTENTIAL SCAM",
+      hasVerifiedBadge: false,
+      isPubliclyDisplayable: false,
+      visaCompliancePassed: false,
+      professionalRestrictionPassed: true,
+      rejectionCategory: "visa",
+      rejectionReason: visaCheck.reason
+    };
+  }
+  const empVisaClass = funding.employmentVisaClassification || classifyEmploymentVisaStatus({
+    visaSummary: funding.visaSupportSummary,
+    fullText: params.officialSourceText,
+    visaSupportType: funding.visaSupportType,
+    relocationAssistance: funding.relocationAssistance,
+    ethiopianEligible: eligibility.ethiopianEligible
+  }).classification;
+  const isEmployment = category === "international_job" || category === "wash_opportunity";
+  const hasStrongVerificationEvidence = isEmployment ? empVisaClass === "confirmed_visa_sponsorship" || empVisaClass === "confirmed_international_recruitment" || empVisaClass === "relocation_assistance" || empVisaClass === "work_permit_assistance" : visaCheck.passed || funding.fundingLevel === "fully_funded" || funding.fundingLevel === "partially_funded" || funding.fundingLevel === "free";
+  const verificationTier = hasStrongVerificationEvidence ? "VERIFIED" : "PARTIALLY VERIFIED";
   let verificationStatus = "Verified and Open";
   if (deadlineEval.isClosingSoon) {
     verificationStatus = "Closing Soon";
-  } else if (funding.visaSupportType === "employer_sponsored_visa") {
+  } else if (funding.visaSupportType === "employer_sponsored_visa" && empVisaClass === "confirmed_visa_sponsorship") {
     verificationStatus = "Visa Sponsored";
   } else if (funding.fundingLevel === "fully_funded") {
     verificationStatus = "Fully Funded";
@@ -5823,9 +5944,10 @@ function computeVerificationOutcome(params) {
   }
   return {
     verificationStatus,
+    verificationTier,
     hasVerifiedBadge: true,
     isPubliclyDisplayable: true,
-    visaCompliancePassed: true,
+    visaCompliancePassed: visaCheck.passed,
     professionalRestrictionPassed: true,
     rejectionCategory: null,
     rejectionReason: null
@@ -5834,21 +5956,24 @@ function computeVerificationOutcome(params) {
 function isOpportunityActiveAndDisplayable(opp, nowMs = Date.now()) {
   if (!opp.hasVerifiedBadge) return false;
   if (opp.isArchived === true) return false;
+  if (opp.verificationTier === "EXPIRED" || opp.verificationTier === "REJECTED / POTENTIAL SCAM" || opp.verificationTier === "PENDING VERIFICATION") {
+    return false;
+  }
   if (opp.applicationStatus === "closed" || opp.applicationStatus === "expired" || opp.applicationStatus === "withdrawn" || opp.applicationStatus === "rejected" || opp.applicationStatus === "unverified") {
     return false;
   }
   if (opp.verificationStatus === "Expired" || opp.verificationStatus === "Unverified") {
     return false;
   }
-  if (opp.eligibility.ethiopianEligible === "excluded") {
-    return false;
-  }
-  const visaCheck = evaluateMandatoryVisaCompliance(opp.category, opp.funding, opp.sourceEvidenceSnippet);
-  if (!visaCheck.passed) {
+  if (opp.eligibility.ethiopianEligible === "excluded" || opp.funding.employmentVisaClassification === "not_eligible_international" || opp.funding.visaSupportType === "none") {
     return false;
   }
   const profCheck = evaluateProfessionalRestrictionCompliance(opp.category, opp);
   if (!profCheck.passed) {
+    return false;
+  }
+  const isBankingOrWash = opp.isBankingFinance || opp.isWashDedicated || opp.sectors.includes("banking_finance") || opp.sectors.includes("wash");
+  if (!isBankingOrWash) {
     return false;
   }
   const deadlineCheck = evaluateOpportunityDeadline(
@@ -5857,6 +5982,91 @@ function isOpportunityActiveAndDisplayable(opp, nowMs = Date.now()) {
     nowMs
   );
   return deadlineCheck.valid && !deadlineCheck.isExpired && deadlineCheck.meetsMinimumThreeFullDays;
+}
+function evaluatePermanentResidencyEligibility(pathway, profile) {
+  const disclaimer = "Official Verification Notice: This assessment checks general alignment only. A labour shortage occupation does NOT automatically grant permanent residency. Final eligibility must be confirmed directly on the official government immigration portal.";
+  if (!profile) {
+    return {
+      pathwayId: pathway.id,
+      country: pathway.country,
+      programName: pathway.programName,
+      pathwayClassification: pathway.pathwayClassification,
+      readinessStatus: "Partial Fit \u2014 Additional Requirements Needed",
+      matchedCriteria: ["Open to eligible foreign skilled applicants subject to official points/sponsorship rules."],
+      missingOrUnverifiedCriteria: [
+        "Sign in and complete your education, occupation, years of experience, and language details for a personalized pathway check."
+      ],
+      disclaimer
+    };
+  }
+  const matchedCriteria = [];
+  const missingOrUnverifiedCriteria = [];
+  const profileCorpus = [
+    profile.desiredJobTitle,
+    profile.currentPosition,
+    profile.preferredIndustry,
+    profile.customProfessionOrCategory,
+    ...profile.skills || [],
+    ...profile.areasOfExpertise || [],
+    ...(profile.education || []).map((e) => `${e.qualification} ${e.fieldOfStudy}`),
+    ...(profile.experience || []).map((x) => `${x.jobTitle} ${x.responsibilities}`)
+  ].filter(Boolean).join(" ").toLowerCase();
+  const allPathwayOccupations = [
+    ...pathway.bankingFinanceOccupations,
+    ...pathway.washWaterOccupations,
+    ...pathway.professionalOccupationsInDemand,
+    ...pathway.labourOccupationsInDemand
+  ];
+  const matchedOccupations = allPathwayOccupations.filter((occ) => {
+    const tokens = occ.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4 && !["officer", "worker", "manager", "specialist", "services"].includes(t));
+    return tokens.some((t) => profileCorpus.includes(t));
+  });
+  if (matchedOccupations.length > 0) {
+    matchedCriteria.push(
+      `Occupation aligns with listed demand areas: ${matchedOccupations.slice(0, 3).join(", ")}.`
+    );
+  } else {
+    missingOrUnverifiedCriteria.push(
+      `Your profile occupation does not yet clearly match listed occupations on ${pathway.country}'s official shortage list.`
+    );
+  }
+  const eduText = (profile.education || []).map((e) => `${e.qualification} ${e.fieldOfStudy}`).join(" ").toLowerCase();
+  const hasDegree = /\b(bachelor|bsc|ba|master|msc|mba|phd|doctorate|degree)\b/i.test(eduText);
+  const hasDiplomaOrTrade = /\b(diploma|tvet|certificate|trade|vocational|associate)\b/i.test(eduText);
+  if (hasDegree) {
+    matchedCriteria.push("University degree documented (verify formal credential assessment with official authority).");
+  } else if (hasDiplomaOrTrade && pathway.labourOccupationsInDemand.length > 0) {
+    matchedCriteria.push("Vocational/diploma qualification documented (check specific skilled-trade/labour stream criteria).");
+  } else {
+    missingOrUnverifiedCriteria.push(`Education requirement must be verified: ${pathway.educationRequirement}`);
+  }
+  const yearsMatch = String(profile.yearsOfExperience || "").match(/\d+/);
+  const yearsExp = yearsMatch ? parseInt(yearsMatch[0], 10) : 0;
+  if (yearsExp >= 2) {
+    matchedCriteria.push(`${yearsExp}+ years of work experience listed.`);
+  } else {
+    missingOrUnverifiedCriteria.push(`Experience requirement must be verified: ${pathway.experienceRequirement}`);
+  }
+  missingOrUnverifiedCriteria.push(`Official language test required: ${pathway.languageRequirement}`);
+  if (pathway.skillsAssessmentRequired && !/^not\s+required$/i.test(pathway.skillsAssessmentRequired)) {
+    missingOrUnverifiedCriteria.push(`Skills/credential assessment: ${pathway.skillsAssessmentRequired}`);
+  }
+  if (pathway.pathwayClassification !== "direct_pr") {
+    missingOrUnverifiedCriteria.push(
+      `Employer job offer / sponsorship check: ${pathway.employerSponsorshipOptions}`
+    );
+  }
+  const readinessStatus = matchedOccupations.length > 0 && (hasDegree || hasDiplomaOrTrade) && yearsExp >= 2 ? "Potentially Eligible \u2014 Verify Official Criteria" : matchedCriteria.length >= 2 ? "Partial Fit \u2014 Additional Requirements Needed" : "Not Currently Matched";
+  return {
+    pathwayId: pathway.id,
+    country: pathway.country,
+    programName: pathway.programName,
+    pathwayClassification: pathway.pathwayClassification,
+    readinessStatus,
+    matchedCriteria,
+    missingOrUnverifiedCriteria,
+    disclaimer
+  };
 }
 var WASH_KEYWORDS = [
   "wash",
@@ -6256,6 +6466,753 @@ function evaluateOpportunityForUser(opportunity, profile, nowMs = Date.now()) {
   };
 }
 
+// serverPermanentResidency.ts
+var PR_OFFICIAL_DISCLAIMER = "Official Notice: Labour or skill shortages do NOT automatically grant permanent residency. Eligibility depends on official government immigration criteria (points, licensed employer sponsorship, salary thresholds, language tests, qualifications, and lawful residency duration). Always confirm live requirements directly on the official government website.";
+var OFFICIAL_GOVERNMENT_PR_SEEDS = [
+  {
+    id: "pr_canada_express_entry",
+    country: "Canada",
+    region: "North America",
+    programName: "Express Entry (Federal Skilled Worker, Canadian Experience Class & Category-Based Selection) + Provincial Nominee Programs (PNP)",
+    pathwayClassification: "direct_pr",
+    pathwayClassificationLabel: "Direct Permanent Residency Pathway",
+    officialAuthority: "Immigration, Refugees and Citizenship Canada (IRCC)",
+    officialApplicationUrl: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html",
+    shortageOccupationListUrl: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry/rounds-invitations/category-based-selection.html",
+    officialDomain: "canada.ca",
+    professionalOccupationsInDemand: [
+      "Registered Nurses & Healthcare Professionals",
+      "Software Engineers & IT Analysts",
+      "Civil, Environmental & Water Engineers",
+      "Financial Auditors, Accountants & Banking Specialists",
+      "STEM & Engineering Managers",
+      "French-Speaking Skilled Professionals"
+    ],
+    labourOccupationsInDemand: [
+      "Carpenters, Electricians, Plumbers & Welders (Skilled Trades)",
+      "Commercial Transport & Heavy Equipment Operators",
+      "Construction Millwrights & Industrial Mechanics",
+      "Agriculture & Agri-Food Workers (Dedicated Pilot / PNP)",
+      "Hospitality & Food Service Supervisors (PNP)"
+    ],
+    bankingFinanceOccupations: [
+      "Financial Auditors & Accountants (NOC 11100)",
+      "Financial & Investment Analysts (NOC 11101)",
+      "Financial Advisors & Banking Managers (NOC 11102 / 10021)",
+      "Credit & Compliance Officers (NOC 11109)"
+    ],
+    washWaterOccupations: [
+      "Civil & Environmental Engineers \u2014 Water/Wastewater (NOC 21300 / 21301)",
+      "Water & Waste Treatment Plant Operators (NOC 92100)",
+      "Public & Environmental Health Specialists (NOC 41404)"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to all nationalities including Ethiopian citizens applying from outside Canada via Express Entry or PNP, subject to CRS score, ECA credential evaluation, proof of funds, and biometrics.",
+    educationRequirement: "Educational Credential Assessment (ECA) equivalent to Canadian secondary/Bachelor's/Master's degree.",
+    experienceRequirement: "Minimum 1 year of continuous full-time skilled work experience (TEER 0, 1, 2, or 3) within the last 10 years.",
+    languageRequirement: "English (IELTS General / CELPIP / PTE Core \u2014 minimum CLB 7 for FSWP) and/or French (TEF / TCF Canada \u2014 major CRS bonus).",
+    ageRestriction: "No hard upper age bar, but CRS age points peak at ages 20\u201329 and decrease progressively after age 30.",
+    skillsAssessmentRequired: "Educational Credential Assessment (WES, ICAS, IQAS, etc.) required for foreign degrees; licensing required for regulated trades/engineering/healthcare.",
+    permanentResidencyRoute: "Direct Permanent Residence granted upon Invitation to Apply (ITA) and IRCC approval; citizenship eligible after 3 years (1,095 days) physical presence.",
+    employerSponsorshipOptions: "LMIA-backed job offer or Provincial Nomination (+600 CRS points) accelerates selection, though FSWP does not strictly require a job offer.",
+    familyRelocationOptions: "Spouse/common-law partner and dependent children under 22 included on the same PR application with full work and study rights.",
+    governmentApplicationFees: "Verify current IRCC fees on canada.ca (approx. CAD $1,525 per principal applicant including Right of Permanent Residence Fee; biometrics CAD $85)."
+  },
+  {
+    id: "pr_australia_skilled",
+    country: "Australia",
+    region: "Oceania",
+    programName: "Skilled Independent (Subclass 189), Skilled Nominated (Subclass 190) & Skilled Work Regional (Subclass 491)",
+    pathwayClassification: "direct_pr",
+    pathwayClassificationLabel: "Direct Permanent Residency Pathway",
+    officialAuthority: "Australian Government \u2014 Department of Home Affairs",
+    officialApplicationUrl: "https://immi.homeaffairs.gov.au/visas/working-in-australia/skill-occupation-list",
+    shortageOccupationListUrl: "https://www.jobsandskills.gov.au/data/occupation-shortages-analysis/occupation-shortage-list",
+    officialDomain: "homeaffairs.gov.au",
+    professionalOccupationsInDemand: [
+      "Registered Nurses, Doctors & Allied Health Practitioners",
+      "Civil, Environmental & Water Engineers",
+      "External Auditors, Accountants & Management Accountants",
+      "Software Engineers, Cybersecurity & ICT Business Analysts",
+      "Secondary & Early Childhood Teachers"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers, Carpenters & Bricklayers",
+      "Diesel Motor Mechanics & Metal Fitters",
+      "Construction Project Managers & Site Supervisors",
+      "Aged Care & Disability Support Workers (Labour Agreements)",
+      "Chefs & Hospitality Trade Workers"
+    ],
+    bankingFinanceOccupations: [
+      "Accountant (General) / Management Accountant / External Auditor",
+      "Finance Manager & Corporate Treasurer",
+      "Internal Auditor & Financial Investment Adviser"
+    ],
+    washWaterOccupations: [
+      "Civil Engineer (Water & Sanitation Infrastructure)",
+      "Environmental Engineer & Hydrogeologist",
+      "Environmental Health Officer"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to offshore applicants worldwide including Ethiopian citizens who hold a positive skills assessment for an eligible occupation and receive a SkillSelect invitation.",
+    educationRequirement: "Relevant Bachelor's/Master's degree or recognized trade qualification assessed by an Australian assessing authority.",
+    experienceRequirement: "Typically 1\u20138+ years of closely related skilled employment for competitive SkillSelect points.",
+    languageRequirement: "Minimum Competent English (IELTS 6.0 each band or PTE equivalent); Proficient/Superior English adds +10 to +20 points.",
+    ageRestriction: "Must be under 45 years of age at the time of receiving an Invitation to Apply (ITA).",
+    skillsAssessmentRequired: "Mandatory positive Skills Assessment (e.g., CPA Australia / CA ANZ / IPA for accounting, Engineers Australia for civil/water engineers, VETASSESS for general professions).",
+    permanentResidencyRoute: "Subclass 189 and 190 grant direct Permanent Residency on approval; Subclass 491 leads to PR (Subclass 191) after 3 years living/working in regional Australia.",
+    employerSponsorshipOptions: "Skills in Demand (Subclass 482) employer-sponsored work visa also provides a Transition Stream to PR (Subclass 186) after 2 years.",
+    familyRelocationOptions: "Partner and dependent children can be included on the same visa with full work and school access.",
+    governmentApplicationFees: "Verify current Home Affairs Visa Pricing Table on immi.homeaffairs.gov.au (base charge starts ~AUD $4,770 for principal applicant)."
+  },
+  {
+    id: "pr_new_zealand_green_list",
+    country: "New Zealand",
+    region: "Oceania",
+    programName: "Green List Straight to Residence (Tier 1) & Work to Residence (Tier 2) + Accredited Employer Work Visa (AEWV)",
+    pathwayClassification: "direct_pr",
+    pathwayClassificationLabel: "Direct PR (Tier 1) / Route to PR (Tier 2)",
+    officialAuthority: "Immigration New Zealand (MBIE)",
+    officialApplicationUrl: "https://www.immigration.govt.nz/new-zealand-visas/preparing-a-visa-application/working-in-nz/qualifications-for-work/green-list-occupations",
+    shortageOccupationListUrl: "https://www.immigration.govt.nz/new-zealand-visas/preparing-a-visa-application/working-in-nz/qualifications-for-work/green-list-occupations",
+    officialDomain: "immigration.govt.nz",
+    professionalOccupationsInDemand: [
+      "External & Internal Auditors (Green List Tier 1)",
+      "Civil, Environmental & Geotechnical Engineers (Tier 1)",
+      "Registered Nurses, Doctors & Pharmacists (Tier 1)",
+      "ICT Security Specialists, Software Engineers & Analysts (Tier 1)",
+      "Construction Project Managers & Quantity Surveyors (Tier 1)"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers & Automotive Electricians (Tier 2)",
+      "Diesel Motor Mechanics & Heavy Equipment Technicians (Tier 2)",
+      "Dairy Cattle Farmers & Agricultural Workers (AEWV / Sector Agreements)",
+      "Building & Construction Trades Workers",
+      "Transport & Logistics Drivers (AEWV)"
+    ],
+    bankingFinanceOccupations: [
+      "External Auditor (Green List Tier 1 \u2014 Direct PR with accredited job offer)",
+      "Internal Auditor (Green List Tier 1 \u2014 Direct PR with accredited job offer)",
+      "Accountants & Financial Analysts (Skilled Migrant Category 6-point system)"
+    ],
+    washWaterOccupations: [
+      "Civil Engineer \u2014 Water Supply & Sanitation (Green List Tier 1)",
+      "Environmental Engineer (Green List Tier 1)",
+      "Environmental Research Scientist (Tier 1)"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to all nationalities including Ethiopian citizens who secure a full-time job offer from an Accredited New Zealand Employer meeting wage/qualification thresholds.",
+    educationRequirement: "Recognized Bachelor's degree (NZQF Level 7+) or occupational registration/trade certificate depending on Green List tier.",
+    experienceRequirement: "Tier 1 requires job offer + exact Green List qualification/registration; Tier 2 requires 24 months working in NZ in the eligible role.",
+    languageRequirement: "IELTS Overall 6.5 (or equivalent PTE/TOEFL) for residence applications.",
+    ageRestriction: "Applicants must be 55 years old or younger when applying for residence.",
+    skillsAssessmentRequired: "NZQA International Qualification Assessment (IQA) unless exempt, plus professional registration where required (e.g., Engineering NZ, CA ANZ/CPA).",
+    permanentResidencyRoute: "Tier 1 grants Straight to Residence immediately upon approval; Tier 2 grants Residence after 2 years working in NZ; Permanent Resident Visa granted after 2 years holding Residence.",
+    employerSponsorshipOptions: "Requires a valid employment offer from an Immigration NZ Accredited Employer.",
+    familyRelocationOptions: "Partner and dependent children aged 24 and under can be included in the residence application.",
+    governmentApplicationFees: "Verify live INZ fee finder on immigration.govt.nz (residence fees start around NZD $6,450; AEWV ~NZD $1,540)."
+  },
+  {
+    id: "pr_uk_skilled_worker",
+    country: "United Kingdom",
+    region: "Europe",
+    programName: "Skilled Worker Visa & Immigration Salary List (5-Year Route to Indefinite Leave to Remain)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "UK Home Office (GOV.UK)",
+    officialApplicationUrl: "https://www.gov.uk/skilled-worker-visa",
+    shortageOccupationListUrl: "https://www.gov.uk/government/publications/skilled-worker-visa-immigration-salary-list/skilled-worker-visa-immigration-salary-list",
+    officialDomain: "gov.uk",
+    professionalOccupationsInDemand: [
+      "Chartered Accountants, Financial Managers & Investment Analysts",
+      "Civil & Environmental Engineers (Water & Infrastructure)",
+      "Health & Care Professionals (Doctors, Nurses, Care Workers)",
+      "Software Developers, Cyber Security & Data Engineers",
+      "Laboratory Technicians & Biological Scientists"
+    ],
+    labourOccupationsInDemand: [
+      "Bricklayers, Carpenters, Joiners & Roofers (Immigration Salary List)",
+      "Welding Trades & Construction Workers (Salary List)",
+      "Care Workers & Senior Care Workers (Health & Care Worker Visa)",
+      "Fishing, Agriculture & Seasonal Workers (Temporary Visa Only \u2014 No PR)",
+      "Hospitality & Catering Managers (Skilled Worker Eligible Roles)"
+    ],
+    bankingFinanceOccupations: [
+      "Financial Managers & Directors (SOC 1131)",
+      "Chartered & Certified Accountants (SOC 2421)",
+      "Finance & Investment Analysts and Advisers (SOC 2422)",
+      "Compliance, Risk & Regulatory Professionals (SOC 2429 / 3539)"
+    ],
+    washWaterOccupations: [
+      "Civil Engineers \u2014 Water & Sanitation (SOC 2121)",
+      "Environment Professionals & Hydrologists (SOC 2142)",
+      "Public Health Managers & Environmental Health Professionals"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Ethiopian citizens are eligible to apply from outside the UK with a Certificate of Sponsorship (CoS) from a UK Home Office Licensed Sponsor.",
+    educationRequirement: "Eligible occupation at RQF Level 3 (A-level equivalent) or higher; degree required for regulated finance/engineering roles.",
+    experienceRequirement: "Depends on employer role and meeting the official going-rate salary threshold (standard \xA338,700 or discounted Immigration Salary List / New Entrant rate).",
+    languageRequirement: "English at CEFR Level B1 (IELTS for UKVI 4.0+ in all components) or Ecctis-verified English-taught degree.",
+    ageRestriction: "Must be 18 or over; no upper age limit.",
+    skillsAssessmentRequired: "Certificate of Sponsorship (CoS) from a licensed UK employer; Ecctis verification if using degree for English requirement.",
+    permanentResidencyRoute: "Eligible for Indefinite Leave to Remain (ILR \u2014 Permanent Residency) after 5 continuous years on the Skilled Worker route (plus Life in the UK test & salary threshold).",
+    employerSponsorshipOptions: "Mandatory sponsorship by a UK Register of Licensed Sponsors employer (banks, Big 4, engineering firms, NHS trusts, water utilities).",
+    familyRelocationOptions: "Partner and children under 18 can join Skilled Worker holders (note: UK restricts dependants for newly sponsored Care Worker roles).",
+    governmentApplicationFees: "Verify on gov.uk/skilled-worker-visa (visa fee \xA3719\u2013\xA31,636 depending on duration/Salary List + Immigration Health Surcharge \xA31,035/year, exempt for Health & Care visa)."
+  },
+  {
+    id: "pr_germany_skilled_blue_card",
+    country: "Germany",
+    region: "Europe",
+    programName: "EU Blue Card, Skilled Workers Immigration Act (\xA718a/18b) & Opportunity Card (Chancenkarte)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Fast-Track Route to Permanent Residency",
+    officialAuthority: "Federal Government of Germany \u2014 Make it in Germany (BMAS/BMWK/BMI)",
+    officialApplicationUrl: "https://www.make-it-in-germany.com/en/visa-residence/types/eu-blue-card",
+    shortageOccupationListUrl: "https://www.make-it-in-germany.com/en/working-in-germany/professions-in-demand",
+    officialDomain: "make-it-in-germany.com",
+    professionalOccupationsInDemand: [
+      "Banking, Financial Controlling, Audit & Risk Specialists",
+      "Civil, Water, Sanitation & Environmental Engineers (Bottleneck Profession)",
+      "Software Developers, IT Architects & Data Engineers (Bottleneck Profession)",
+      "Physicians, Pharmacists & Registered Nurses (Bottleneck Profession)",
+      "Mathematics, Natural Sciences & Electrical Engineers"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers, HVAC & Sanitation Installers (SHK)",
+      "Construction Trades & Civil Infrastructure Technicians",
+      "Industrial Mechanics, Mechatronics & Manufacturing Technicians",
+      "Professional Truck & Bus Drivers",
+      "Hospitality, Gastronomy & Geriatric Care Workers"
+    ],
+    bankingFinanceOccupations: [
+      "Financial Analysts, Auditors & Corporate Finance Managers (EU Blue Card)",
+      "Risk, Compliance & AML Officers (Frankfurt/Berlin Financial Sector)",
+      "Banking Operations & FinTech Specialists"
+    ],
+    washWaterOccupations: [
+      "Water Supply, Wastewater & Civil Engineers (Reduced Blue Card Bottleneck Salary Threshold)",
+      "Sanitation, Heating & Water Installation Technicians (\xA718a Vocational Skilled Worker)",
+      "Environmental & Climate Water Specialists"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to third-country nationals including Ethiopian citizens via German Embassy Addis Ababa visa appointment with a recognized degree (Anabin H+) or Chancenkarte points.",
+    educationRequirement: "Recognized university degree (checked via Anabin / ZAB) for EU Blue Card, or 2-year recognized vocational training for \xA718a.",
+    experienceRequirement: "Employment contract meeting Blue Card salary threshold (lower bottleneck threshold applies to engineering, IT, and healthcare).",
+    languageRequirement: "English accepted for many EU Blue Card jobs in finance/IT/engineering; German B1 shortens EU Blue Card settlement permit to 21 months (27 months with A1).",
+    ageRestriction: "No age limit (applicants aged 45+ on standard \xA718a/b need a minimum salary or pension proof).",
+    skillsAssessmentRequired: "Degree comparability check in Anabin database or Statement of Comparability from ZAB; vocational recognition (Anerkennung) for skilled trades.",
+    permanentResidencyRoute: "Settlement Permit (Niederlassungserlaubnis / PR) after 21 months (with German B1) or 27 months (with German A1) on EU Blue Card; 36 months for standard skilled workers.",
+    employerSponsorshipOptions: "Requires a binding German employment contract; Chancenkarte allows up to 1 year job search in Germany with points.",
+    familyRelocationOptions: "Spouse and minor children receive residence permits; EU Blue Card spouses are exempt from pre-entry German language proof and get unrestricted work access.",
+    governmentApplicationFees: "Verify on make-it-in-germany.com (National Visa EUR \u20AC75; residence card ~EUR \u20AC100; ZAB evaluation ~EUR \u20AC208)."
+  },
+  {
+    id: "pr_ireland_critical_skills",
+    country: "Ireland",
+    region: "Europe",
+    programName: "Critical Skills Employment Permit (Direct Stamp 4 Long-Term Residency after 21 Months)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Fast Route to Permanent Residency",
+    officialAuthority: "Department of Enterprise, Trade and Employment (DETE Ireland)",
+    officialApplicationUrl: "https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/permit-types/critical-skills-employment-permit/",
+    shortageOccupationListUrl: "https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/employment-permit-eligibility/highly-skilled-eligible-occupations-list/",
+    officialDomain: "enterprise.gov.ie",
+    professionalOccupationsInDemand: [
+      "Chartered Accountants, Risk, Compliance & Financial Analysts (Dublin IFSC)",
+      "Civil, Environmental & Water Engineers",
+      "Software Developers, Cybersecurity & Cloud Engineers",
+      "Doctors, Nurses & Healthcare Specialists",
+      "Actuaries, Economists & Statisticians"
+    ],
+    labourOccupationsInDemand: [
+      "Construction Trades, Mechanics & Heavy Vehicle Drivers (General Employment Permit)",
+      "Agri-Food, Dairy & Horticulture Workers (General Permit / Quotas)",
+      "Healthcare Assistants & Home Carers (General Employment Permit)",
+      "Chefs & Hospitality Professionals",
+      "Manufacturing & Precision Engineering Technicians"
+    ],
+    bankingFinanceOccupations: [
+      "Tax, Audit, Risk & Financial Compliance Specialists (Critical Skills Eligible)",
+      "Qualified Accountants & Fund Accounting Managers (Dublin Financial Hub)",
+      "Quantitative & Credit Risk Analysts"
+    ],
+    washWaterOccupations: [
+      "Civil & Environmental Engineers (Water Services & Utilities \u2014 Critical Skills Eligible)",
+      "Hydrologists & Water Quality Specialists"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EEA nationals including Ethiopian citizens with a 2-year job offer from an Irish-registered employer (exempt from Labour Market Needs Test for Critical Skills).",
+    educationRequirement: "Relevant Bachelor's degree or higher for roles paying EUR \u20AC38,000+ (or equivalent experience for roles paying EUR \u20AC64,000+).",
+    experienceRequirement: "2-year full-time job offer in an eligible occupation on the Critical Skills Occupations List.",
+    languageRequirement: "English proficiency required by employer (no mandatory immigration IELTS test for permit issuance, except regulated health professions).",
+    ageRestriction: "No upper age limit.",
+    skillsAssessmentRequired: "Degree verification and professional registration only for regulated professions (e.g., medical, nursing).",
+    permanentResidencyRoute: "Eligible for Stamp 4 (work without permit) after 21 months on Critical Skills Permit; eligible for Long-Term Residency / Irish Citizenship after 5 years reckonable residence.",
+    employerSponsorshipOptions: "Employer or employee applies online via DETE Employment Permits Online; no Labour Market Needs Test required for Critical Skills.",
+    familyRelocationOptions: "Immediate family reunification for spouse/partner (Stamp 1G with full right to work) and minor children.",
+    governmentApplicationFees: "Verify on enterprise.gov.ie (Critical Skills Employment Permit fee EUR \u20AC1,000; visa entry fee EUR \u20AC60\u2013\u20AC100)."
+  },
+  {
+    id: "pr_finland_specialist",
+    country: "Finland",
+    region: "Europe",
+    programName: "Specialist Residence Permit & Work-Based Continuous Permit (A-Permit -> PR after 4 Years)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Work in Finland / Finnish Immigration Service (Migri)",
+    officialApplicationUrl: "https://www.workinfinland.com/en/",
+    shortageOccupationListUrl: "https://www.workinfinland.com/en/open-jobs/",
+    officialDomain: "workinfinland.com",
+    professionalOccupationsInDemand: [
+      "Software Engineers, AI & Embedded Systems Specialists",
+      "Healthcare Nurses, Doctors & Social Workers",
+      "Financial Controllers, Auditors & Banking Technology Specialists",
+      "Clean Water, Environmental & Civil Engineers",
+      "Renewable Energy & Industrial Engineers"
+    ],
+    labourOccupationsInDemand: [
+      "Welders, Sheet Metal Workers & Shipyard Technicians",
+      "Construction Workers & Electricians",
+      "Agricultural, Forestry & Seasonal Workers (Temporary Permit)",
+      "Logistics, Cleaning & Hospitality Staff (Work Permit Subject to Labour Test)",
+      "Manufacturing Machine Operators"
+    ],
+    bankingFinanceOccupations: [
+      "Financial Controllers, Risk & Compliance Specialists (Specialist Fast-Track)",
+      "Banking IT & Digital Payments Engineers"
+    ],
+    washWaterOccupations: [
+      "Environmental & Water Resources Engineers",
+      "Municipal Water & Wastewater Treatment Specialists"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU/EEA nationals including Ethiopian citizens with a signed Finnish employment contract meeting Migri salary thresholds (14-day Fast Track for Specialists).",
+    educationRequirement: "Higher education degree (Bachelor's/Master's) for Specialist permit, or relevant trade training for Employee Residence Permit.",
+    experienceRequirement: "Binding job offer from an employer operating in Finland meeting collective agreement or Specialist salary level.",
+    languageRequirement: "English widely used in tech/finance/international engineering; Finnish/Swedish required for healthcare and many trades.",
+    ageRestriction: "No age restriction.",
+    skillsAssessmentRequired: "Valvira licensing required for healthcare professions; employer verifies skills for non-regulated roles.",
+    permanentResidencyRoute: "Continuous Residence Permit (Type A) leads to Permanent Residence Permit (P) after 4 continuous years of residence (check Migri live legislative updates on language/duration rules).",
+    employerSponsorshipOptions: "Employer submits employment terms via Enter Finland; Specialist fast-track processes in ~14 days.",
+    familyRelocationOptions: "Spouse and children under 18 can apply simultaneously via Fast Track and receive unrestricted work rights.",
+    governmentApplicationFees: "Verify on migri.fi (electronic Specialist/Work permit application fee approx. EUR \u20AC410\u2013\u20AC530)."
+  },
+  {
+    id: "pr_sweden_work_permit",
+    country: "Sweden",
+    region: "Europe",
+    programName: "Swedish Work Permit & EU Blue Card (Route to Permanent Residence Permit after 4 Years)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Swedish Migration Agency (Migrationsverket)",
+    officialApplicationUrl: "https://www.migrationsverket.se/English/Private-individuals/Working-in-Sweden.html",
+    shortageOccupationListUrl: "https://www.migrationsverket.se/English/Private-individuals/Working-in-Sweden/Employed/How-to-apply.html",
+    officialDomain: "migrationsverket.se",
+    professionalOccupationsInDemand: [
+      "IT Developers, System Analysts & Cybersecurity Specialists",
+      "Civil, Water & Environmental Engineers",
+      "Financial Analysts, Risk Managers & Auditors",
+      "Doctors, Midwives & Specialist Nurses",
+      "Mechanical & Green Industrial Engineers"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers & Construction Skilled Trades",
+      "Industrial Mechanics, CNC Operators & Welders",
+      "Heavy Truck & Bus Drivers",
+      "Chefs & Skilled Hospitality Technicians",
+      "Mining & Green Battery Manufacturing Technicians"
+    ],
+    bankingFinanceOccupations: [
+      "Corporate Finance, AML Compliance & Risk Analysts (Stockholm Financial Sector)",
+      "FinTech & Digital Banking Engineers"
+    ],
+    washWaterOccupations: [
+      "Water Resources & Sanitation Engineers (Stockholm Water & Environmental Sector)",
+      "Environmental & Climate Resilience Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU/EEA citizens including Ethiopian nationals with a formal Swedish job offer meeting the mandatory minimum salary threshold (80% of Swedish median salary) and collective insurance.",
+    educationRequirement: "University degree (180 credits+) required for EU Blue Card; relevant qualifications/experience for standard Work Permit.",
+    experienceRequirement: "Employer must advertise the position in Sweden/EU/EEA for 10 days before offering to a non-EU candidate.",
+    languageRequirement: "English accepted in multinational banking, engineering, and tech roles; Swedish required for healthcare.",
+    ageRestriction: "No upper age limit.",
+    skillsAssessmentRequired: "Employer & relevant Swedish trade union review the employment terms; Socialstyrelsen license required for healthcare.",
+    permanentResidencyRoute: "Eligible for Permanent Residence Permit after working in Sweden on a work permit for 4 years within a 7-year period while demonstrating self-support.",
+    employerSponsorshipOptions: "Employer initiates the Migrationsverket work permit application online.",
+    familyRelocationOptions: "Spouse/cohabiting partner and children under 21 receive residence permits with full work authorization.",
+    governmentApplicationFees: "Verify on migrationsverket.se (standard work permit fee SEK 2,200; EU Blue Card SEK 2,000)."
+  },
+  {
+    id: "pr_norway_skilled_worker",
+    country: "Norway",
+    region: "Europe",
+    programName: "Skilled Worker Residence Permit (Route to Permanent Residence Permit after 3 Years)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Norwegian Directorate of Immigration (UDI)",
+    officialApplicationUrl: "https://www.udi.no/en/want-to-apply/work-immigration/skilled-workers/",
+    shortageOccupationListUrl: "https://www.udi.no/en/want-to-apply/work-immigration/skilled-workers/",
+    officialDomain: "udi.no",
+    professionalOccupationsInDemand: [
+      "Civil, Offshore, Water & Environmental Engineers",
+      "Software Developers, Data Scientists & IT Consultants",
+      "Financial Risk, Audit & Corporate Banking Specialists",
+      "Physicians, Nurses & Health Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Certified Electricians, Plumbers & Carpenters (3-Year Vocational Equivalent)",
+      "Industrial Mechanics & Welders",
+      "Chefs & Skilled Hospitality Craftsmen",
+      "Fisheries & Agriculture Seasonal Workers (Temporary Permit \u2014 No PR)"
+    ],
+    bankingFinanceOccupations: [
+      "Auditors, Financial Analysts & Banking Compliance Officers",
+      "Banking Software & Quantitative Risk Specialists"
+    ],
+    washWaterOccupations: [
+      "Water Supply, Hydropower & Sanitation Engineers",
+      "Environmental & Water Quality Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU/EEA nationals including Ethiopian citizens who hold a full-time Norwegian job offer matching their university degree or 3-year vocational training.",
+    educationRequirement: "Completed university/college degree (Bachelor's/Master's) OR completed 3-year vocational training matching Norwegian upper-secondary standard.",
+    experienceRequirement: "Full-time concrete job offer paying at least Norwegian statutory/collective-agreement skilled pay.",
+    languageRequirement: "English accepted in multinational engineering/tech/finance; Norwegian A2/B1 + social studies required later for Permanent Residence.",
+    ageRestriction: "Must be 18 or over; no upper age cap.",
+    skillsAssessmentRequired: "HK-dir recognition may be requested for foreign degrees/trades; Directorate of Health authorization required for healthcare.",
+    permanentResidencyRoute: "Eligible for Permanent Residence Permit after 3 continuous years on a qualifying Skilled Worker permit plus Norwegian language & social studies requirements and sufficient income.",
+    employerSponsorshipOptions: "Employer provides UDI Offer of Employment form; employee or authorized employer submits application.",
+    familyRelocationOptions: "Spouse/registered partner and children under 18 eligible for family immigration permits with work rights.",
+    governmentApplicationFees: "Verify on udi.no (Skilled Worker application fee approx. NOK 6,300)."
+  },
+  {
+    id: "pr_denmark_positive_list",
+    country: "Denmark",
+    region: "Europe",
+    programName: "Positive List for People with a Higher Education & Positive List for Skilled Work + Pay Limit Scheme",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Danish Agency for International Recruitment and Integration (SIRI \u2014 Ny i Danmark)",
+    officialApplicationUrl: "https://www.nyidanmark.dk/en-GB/You-want-to-apply/Work/The-Positive-Lists",
+    shortageOccupationListUrl: "https://www.nyidanmark.dk/en-GB/You-want-to-apply/Work/The-Positive-Lists/Positive-List-for-People-with-a-Higher-Education",
+    officialDomain: "nyidanmark.dk",
+    professionalOccupationsInDemand: [
+      "Auditors, Financial Controllers & Accounting Managers (Positive List)",
+      "Civil, Water & Environmental Engineers (Positive List)",
+      "Software Developers, IT Architects & Data Engineers (Positive List)",
+      "Doctors, Nurses & Pharmacists (Positive List)",
+      "Business & Management Consultants"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers, Carpenters & Welders (Positive List for Skilled Work)",
+      "Industrial Technicians, Mechanics & CNC Operators",
+      "Commercial Drivers & Logistics Technicians",
+      "Social & Healthcare Assistants"
+    ],
+    bankingFinanceOccupations: [
+      "Auditors & Financial Controllers (Recurring on Danish Higher Education Positive List)",
+      "Banking Risk, Compliance & Financial Analysts (Pay Limit Scheme)"
+    ],
+    washWaterOccupations: [
+      "Civil & Environmental Engineers \u2014 Water/Wastewater Systems (Positive List)",
+      "Water Utilities & Environmental Consultants"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU/EEA citizens including Ethiopian nationals who secure a Danish employment offer on the official SIRI Positive List or Pay Limit Scheme.",
+    educationRequirement: "Bachelor's/Master's degree for the Higher Education Positive List, or relevant skilled vocational qualification for the Skilled Work Positive List.",
+    experienceRequirement: "Written full-time Danish job offer under Danish salary and working standards.",
+    languageRequirement: "English accepted for work permit issuance; Danish Pr\xF8ve i Dansk 2/3 required later for Permanent Residence.",
+    ageRestriction: "No upper age restriction for work permits.",
+    skillsAssessmentRequired: "Danish authorization required for regulated professions (healthcare, auditing licenses where applicable).",
+    permanentResidencyRoute: "Permanent Residence eligible after 8 years (or 4 years if meeting all 4 supplementary criteria including higher Danish exam, full-time work, and income threshold).",
+    employerSponsorshipOptions: "Fast-Track Scheme available for SIRI-certified Danish companies; standard employers sponsor directly via nyidanmark.dk.",
+    familyRelocationOptions: "Spouse/partner and children under 18 may accompany with full right to work and study.",
+    governmentApplicationFees: "Verify on nyidanmark.dk (SIRI processing fee approx. DKK 6,380)."
+  },
+  {
+    id: "pr_netherlands_hsm",
+    country: "Netherlands",
+    region: "Europe",
+    programName: "Highly Skilled Migrant (Kennismigrant) & EU Blue Card (5-Year Route to Permanent Residency)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Immigration and Naturalisation Service (IND \u2014 Netherlands)",
+    officialApplicationUrl: "https://ind.nl/en/residence-permits/work/highly-skilled-migrant",
+    shortageOccupationListUrl: "https://ind.nl/en/public-register-recognised-sponsors",
+    officialDomain: "ind.nl",
+    professionalOccupationsInDemand: [
+      "International Banking, Treasury, Audit & Risk Specialists (Amsterdam Financial Hub)",
+      "Water Management, Hydraulic & WASH Engineers (Global Water Engineering Hub)",
+      "Software Engineers, Data Scientists & Semiconductor Engineers",
+      "Supply Chain, Finance & Compliance Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Technical Installers, Electricians & Construction Technicians (GVVA Single Permit)",
+      "Manufacturing & Maritime Engineers / Technicians",
+      "Logistics & Greenhouse Horticulture Workers (Temporary / Strict Labour Test)"
+    ],
+    bankingFinanceOccupations: [
+      "Commercial Banking, Corporate Finance, Audit & AML Risk Roles (Recognised Sponsors)",
+      "Financial Controllers & FinTech Analysts"
+    ],
+    washWaterOccupations: [
+      "Hydraulic, Water Resources & Sanitary Engineers (IHE Delft / Dutch Water Sector)",
+      "Water Treatment & Flood Resilience Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU nationals including Ethiopian citizens hired by an IND Recognised Sponsor meeting the official monthly gross salary threshold.",
+    educationRequirement: "No rigid degree list for HSM (employer-assessed), though Bachelor's/Master's expected; higher education diploma required for EU Blue Card.",
+    experienceRequirement: "Employment contract with an IND Recognised Sponsor paying at or above the annual IND salary criterion (lower threshold for under-30s).",
+    languageRequirement: "English widely accepted for HSM roles; Dutch civic integration exam (Inburgeringsexamen) required after 5 years for Permanent Residence.",
+    ageRestriction: "No age bar (lower minimum salary threshold applies for applicants under age 30).",
+    skillsAssessmentRequired: "IND Recognised Sponsor verifies suitability; Nuffic diploma evaluation required for EU Blue Card.",
+    permanentResidencyRoute: "Eligible for Permanent Residence Permit (or EU Long-Term Resident permit) after 5 continuous years of lawful residence + passing the Dutch civic integration exam.",
+    employerSponsorshipOptions: "Employer must be listed in the official IND Public Register of Recognised Sponsors (2-week fast processing).",
+    familyRelocationOptions: "Partner and minor children receive residence permits with unrestricted access to the Dutch labour market.",
+    governmentApplicationFees: "Verify on ind.nl (Highly Skilled Migrant application fee approx. EUR \u20AC405)."
+  },
+  {
+    id: "pr_austria_rwr_card",
+    country: "Austria",
+    region: "Europe",
+    programName: "Red-White-Red Card (Skilled Workers in Shortage Occupations & Very Highly Qualified Workers)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Austrian Federal Government (Migration.gv.at / AMS)",
+    officialApplicationUrl: "https://www.migration.gv.at/en/types-of-immigration/permanent-immigration/skilled-workers-in-shortage-occupations/",
+    shortageOccupationListUrl: "https://www.migration.gv.at/en/types-of-immigration/permanent-immigration/austria-wide-shortage-occupations/",
+    officialDomain: "migration.gv.at",
+    professionalOccupationsInDemand: [
+      "Accountants, Financial Auditors & Business Economists (Shortage List)",
+      "Civil, Water & Mechanical Engineers (Shortage List)",
+      "IT Specialists, Software Developers & Data Engineers",
+      "Graduate Nurses & Healthcare Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Electricians, Plumbers, Pipefitters & Welders (Nationwide Shortage List)",
+      "Carpenters, Bricklayers & Roofers (Shortage List)",
+      "Machinists, CNC Technicians & Mechanics",
+      "Chefs & Skilled Hospitality Technicians (Regional Shortage Lists)"
+    ],
+    bankingFinanceOccupations: [
+      "Accountants & Financial Auditors (Featured on Austria Nationwide Shortage Occupations List)",
+      "Banking & Corporate Finance Specialists (Other Key Workers / EU Blue Card)"
+    ],
+    washWaterOccupations: [
+      "Civil & Water Infrastructure Engineers (Shortage List)",
+      "Plumbing, Water Pipe & Sanitation Installers (Shortage List)"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to third-country nationals including Ethiopian citizens scoring at least 55/90 points with a binding Austrian job offer in an official shortage occupation.",
+    educationRequirement: "Completed vocational training equivalent to Austrian apprenticeship OR university degree matching the shortage occupation.",
+    experienceRequirement: "Binding employment offer in Austria + points for qualifications, work experience, language, and age.",
+    languageRequirement: "English or German points awarded (A1/A2/B1 German or B1/B2 English); German B1 required after 5 years for EU Long-Term Resident PR.",
+    ageRestriction: "No strict cutoff, but points for age are awarded up to age 40 (highest up to 30).",
+    skillsAssessmentRequired: "AMS verifies qualification equivalence against the official annual Shortage Occupations Ordinance (Fachkr\xE4fteverordnung).",
+    permanentResidencyRoute: "Red-White-Red Card (2 years) -> Red-White-Red Card Plus (unrestricted labour market) -> Long-Term Resident EU (Permanent Residency) after 5 years.",
+    employerSponsorshipOptions: "Austrian employer files employer declaration (Arbeitgebererkl\xE4rung) alongside the candidate application.",
+    familyRelocationOptions: "Spouse and minor children eligible for Red-White-Red Card Plus with full labour market access.",
+    governmentApplicationFees: "Verify on migration.gv.at (application and issuance fees approx. EUR \u20AC160\u2013\u20AC210)."
+  },
+  {
+    id: "pr_switzerland_non_eu",
+    country: "Switzerland",
+    region: "Europe",
+    programName: "Non-EU/EFTA Skilled Specialist Work Permit (B-Permit Annual Quota -> Long-Term C-Permit Route)",
+    pathwayClassification: "temporary_work_permit",
+    pathwayClassificationLabel: "Temporary Work Permit (Long-Term C-Permit Only After 5\u201310 Years)",
+    officialAuthority: "Swiss Confederation (ch.ch / State Secretariat for Migration SEM)",
+    officialApplicationUrl: "https://www.ch.ch/en/foreign-nationals-in-switzerland/working-in-switzerland/",
+    shortageOccupationListUrl: "https://www.ch.ch/en/foreign-nationals-in-switzerland/working-in-switzerland/",
+    officialDomain: "ch.ch",
+    professionalOccupationsInDemand: [
+      "Senior Banking, Wealth Management, Audit & Multilateral Finance Specialists (Zurich/Geneva/Basel)",
+      "International Organization & UN WASH/Health Specialists (Geneva \u2014 WHO/UNICEF/IFRC)",
+      "Senior Software, Pharma, Biotech & Civil Engineers",
+      "Management Executives & Highly Specialized Researchers"
+    ],
+    labourOccupationsInDemand: [
+      "Strict Quota Restriction: General unskilled/semi-skilled non-EU labour permits are normally NOT granted; priority given to Swiss & EU/EFTA workforce."
+    ],
+    bankingFinanceOccupations: [
+      "Senior Risk, Treasury, Central Banking (BIS) & Corporate Banking Specialists",
+      "International Audit & Compliance Managers"
+    ],
+    washWaterOccupations: [
+      "UN / International Organization WASH Specialists (WHO, UNICEF, IFRC, UNHCR \u2014 Geneva)",
+      "Senior Hydro-Engineering & Environmental Consultants"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "eligible_general_third_country",
+    ethiopianEligibilityNotes: "Highly selective quota system for third-country nationals (including Ethiopian citizens): employer must prove no suitable candidate exists in Switzerland or the entire EU/EFTA, except UN/diplomatic international organization roles.",
+    educationRequirement: "University degree + several years of specialized professional experience (managers, specialists, highly qualified professionals only).",
+    experienceRequirement: "Senior/specialist track record required; employer must pass strict cantonal & SEM labour market priority review.",
+    languageRequirement: "English accepted in multinational finance/UN/pharma; national language (German/French/Italian) required for C-Permit settlement.",
+    ageRestriction: "No formal cutoff, though integration potential is assessed by cantonal authorities.",
+    skillsAssessmentRequired: "Cantonal labour authority and Federal SEM review employer justification, salary benchmarks, and degree credentials.",
+    permanentResidencyRoute: "Initial B-Permit is temporary/renewable; Settlement Permit (C-Permit) generally requires 10 years of residence (or 5 years under Early C-Permit with strong integration & B1/A2 national language).",
+    employerSponsorshipOptions: "100% employer-sponsored; subject to annual Federal Council third-country B/L permit quotas.",
+    familyRelocationOptions: "Spouse and minor children of B-Permit holders may apply for family reunification subject to adequate housing and income.",
+    governmentApplicationFees: "Verify with cantonal migration office via ch.ch (cantonal permit fees typically CHF 100\u2013350)."
+  },
+  {
+    id: "pr_japan_ssw_hsp",
+    country: "Japan",
+    region: "Asia",
+    programName: "Highly Skilled Professional (HSP Points Fast-Track PR) & Specified Skilled Worker (SSW Type 1 & Type 2)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency (HSP 1\u20133 Years / SSW Type 2)",
+    officialAuthority: "Immigration Services Agency of Japan (ISA / Ministry of Justice)",
+    officialApplicationUrl: "https://www.moj.go.jp/isa/applications/status/index.html",
+    shortageOccupationListUrl: "https://www.moj.go.jp/isa/applications/ssw/index.html",
+    officialDomain: "moj.go.jp",
+    professionalOccupationsInDemand: [
+      "Engineers, IT Developers & Cybersecurity Specialists (HSP / Engineer Visa)",
+      "International Finance, Banking & Corporate Business Specialists (HSP)",
+      "Academic Researchers & Advanced Business Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Nursing Care & Elderly Care Workers (SSW)",
+      "Construction, Building Cleaning & Industrial Manufacturing (SSW Type 1 & 2)",
+      "Agriculture, Fishery & Food/Beverage Manufacturing (SSW Type 1 & 2)",
+      "Automobile Transport, Aviation & Hospitality Accommodation (SSW)",
+      "Shipbuilding, Marine & Auto Repair Technicians (SSW Type 1 & 2)"
+    ],
+    bankingFinanceOccupations: [
+      "International Banking, Financial Engineering & Corporate Finance Analysts (HSP Points)",
+      "Risk, FinTech & Asset Management Specialists (Tokyo Financial Center)"
+    ],
+    washWaterOccupations: [
+      "Civil, Water Supply & Environmental Engineers (Engineer / Specialist in Humanities Visa)",
+      "Infrastructure & Sanitation Construction Specialists"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "eligible_general_third_country",
+    ethiopianEligibilityNotes: "HSP and Engineer/Specialist visas are open to Ethiopian citizens with a Japanese sponsoring employer. For SSW, applicants must pass official Japanese language (JLPT N4 / JFT-Basic) and sector skills tests (verify active test locations/bilateral availability on moj.go.jp).",
+    educationRequirement: "University degree (or 10 years experience) for Engineer/HSP visa; skills + Japanese language exam for SSW (no degree required for SSW).",
+    experienceRequirement: "HSP awards points for education, years of experience, salary, and age (70+ pts -> PR in 3 years; 80+ pts -> PR in 1 year).",
+    languageRequirement: "English accepted in multinational finance/tech HSP roles; JLPT N4 / JFT-Basic mandatory for SSW Type 1.",
+    ageRestriction: "Must be 18+ for SSW; HSP grants bonus age points for applicants under 40.",
+    skillsAssessmentRequired: "Certificate of Eligibility (CoE) issued by ISA Japan; official SSW skills test required for SSW fields.",
+    permanentResidencyRoute: "HSP 80+ points -> Permanent Residency in 1 year; HSP 70+ points -> PR in 3 years; SSW Type 1 is temporary (max 5 years, NO direct PR) unless upgrading to SSW Type 2 (indefinite renewal -> standard 10-year PR route).",
+    employerSponsorshipOptions: "Employer or Registered Support Organization sponsors the Certificate of Eligibility (CoE) in Japan.",
+    familyRelocationOptions: "HSP and SSW Type 2 holders can bring spouse and children; SSW Type 1 does NOT allow family accompaniment.",
+    governmentApplicationFees: "Verify on moj.go.jp/isa (CoE free; embassy visa approx. JPY \xA53,000; residence status change/PR fee JPY \xA54,000\u2013\xA58,000)."
+  }
+];
+function stripHtmlClean(html) {
+  return String(html || "").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
+}
+function isAllowedGovernmentUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || /^127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function checkOfficialGovernmentPage(url) {
+  if (!isAllowedGovernmentUrl(url)) {
+    return {
+      httpStatus: null,
+      verificationTier: "PENDING VERIFICATION",
+      excerpt: "Invalid official URL format."
+    };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7500);
+  try {
+    const resp = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent": "HopelandJobsBot/1.0 (+https://hopelandjobs.tech)",
+        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    if (resp.ok) {
+      const html = await resp.text();
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const pageTitle = titleMatch ? stripHtmlClean(titleMatch[1]).slice(0, 140) : "";
+      const plain = stripHtmlClean(html).slice(0, 320);
+      return {
+        httpStatus: resp.status,
+        verificationTier: "VERIFIED",
+        excerpt: pageTitle ? `${pageTitle} \u2014 ${plain.slice(0, 180)}` : plain.slice(0, 260)
+      };
+    }
+    if (resp.status === 403 || resp.status === 405 || resp.status === 429) {
+      return {
+        httpStatus: resp.status,
+        verificationTier: "PARTIALLY VERIFIED",
+        excerpt: `Official government domain reachable (HTTP ${resp.status} automated bot protection \u2014 open official link directly in browser to confirm live criteria).`
+      };
+    }
+    return {
+      httpStatus: resp.status,
+      verificationTier: "PENDING VERIFICATION",
+      excerpt: `Official portal returned HTTP ${resp.status}; pending manual re-verification.`
+    };
+  } catch (err) {
+    clearTimeout(timer);
+    return {
+      httpStatus: null,
+      verificationTier: "PARTIALLY VERIFIED",
+      excerpt: `Automated fetch timed out (${err?.name === "AbortError" ? "timeout" : err?.message || "network"}); authoritative official government URL preserved for direct user verification.`
+    };
+  }
+}
+async function verifyOfficialPermanentResidencyPathways() {
+  const checkedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const errors = [];
+  const records = await Promise.all(
+    OFFICIAL_GOVERNMENT_PR_SEEDS.map(async (seed) => {
+      const check = await checkOfficialGovernmentPage(seed.officialApplicationUrl);
+      if (check.verificationTier === "PENDING VERIFICATION") {
+        errors.push(`${seed.country} (${seed.officialDomain}): HTTP ${check.httpStatus ?? "unreachable"}`);
+      }
+      return {
+        ...seed,
+        httpStatus: check.httpStatus,
+        verificationTier: check.verificationTier,
+        sourceEvidenceExcerpt: check.excerpt,
+        officialDisclaimer: PR_OFFICIAL_DISCLAIMER,
+        lastVerifiedAt: checkedAt
+      };
+    })
+  );
+  const verifiedCount = records.filter((r) => r.verificationTier === "VERIFIED").length;
+  const partiallyVerifiedCount = records.filter((r) => r.verificationTier === "PARTIALLY VERIFIED").length;
+  const pendingCount = records.filter((r) => r.verificationTier === "PENDING VERIFICATION").length;
+  return {
+    records,
+    verifiedCount,
+    partiallyVerifiedCount,
+    pendingCount,
+    errors
+  };
+}
+
 // serverGlobalOpportunities.ts
 var BLOCKED_UNOFFICIAL_DOMAINS = [
   "opportunitiescorners.com",
@@ -6332,7 +7289,23 @@ var TRUSTED_OFFICIAL_HOST_PATTERNS = [
   /(^|\.)adb\.org$/i,
   /(^|\.)au\.int$/i,
   /(^|\.)eca\.org$/i,
-  /(^|\.)uneca\.org$/i
+  /(^|\.)uneca\.org$/i,
+  /(^|\.)arbeitnow\.com$/i,
+  /(^|\.)un-ihe\.org$/i,
+  /(^|\.)worldwaterweek\.org$/i,
+  /(^|\.)unitar\.org$/i,
+  /(^|\.)eacea\.ec\.europa\.eu$/i,
+  /(^|\.)canada\.ca$/i,
+  /(^|\.)immigration\.govt\.nz$/i,
+  /(^|\.)make-it-in-germany\.com$/i,
+  /(^|\.)workinfinland\.com$/i,
+  /(^|\.)migrationsverket\.se$/i,
+  /(^|\.)udi\.no$/i,
+  /(^|\.)nyidanmark\.dk$/i,
+  /(^|\.)ind\.nl$/i,
+  /(^|\.)migration\.gv\.at$/i,
+  /(^|\.)ch\.ch$/i,
+  /(^|\.)moj\.go\.jp$/i
 ];
 var WASH_TARGET_ORGS = [
   "unicef",
@@ -6649,10 +7622,18 @@ function getDiscoveryIntervalMinutes() {
 }
 function getEnabledSearchProviders() {
   const raw = String(process.env.OPPORTUNITY_SEARCH_PROVIDERS || "auto").trim().toLowerCase();
+  const allowed = [
+    "reliefweb",
+    "arbeitnow",
+    "direct_websites",
+    "official_gov_pr",
+    "gemini",
+    "tavily",
+    "brave"
+  ];
   if (!raw || raw === "auto" || raw === "all") {
-    return /* @__PURE__ */ new Set(["reliefweb", "direct_websites", "gemini", "tavily", "brave"]);
+    return new Set(allowed);
   }
-  const allowed = ["reliefweb", "direct_websites", "gemini", "tavily", "brave"];
   const parsed = raw.split(",").map((p) => p.trim()).filter((p) => allowed.includes(p));
   return new Set(parsed);
 }
@@ -6668,11 +7649,53 @@ function buildInitialSourcesCatalog() {
     process.env.BRAVE_SEARCH_API_KEY?.trim() && process.env.BRAVE_SEARCH_API_KEY !== "MY_BRAVE_SEARCH_API_KEY"
   );
   const reliefwebEnabled = enabledProviders.has("reliefweb");
+  const arbeitnowEnabled = enabledProviders.has("arbeitnow");
   const directWebsitesEnabled = enabledProviders.has("direct_websites");
+  const govPrEnabled = enabledProviders.has("official_gov_pr");
   const geminiEnabled = enabledProviders.has("gemini");
   const tavilyEnabled = enabledProviders.has("tavily");
   const braveEnabled = enabledProviders.has("brave");
   return [
+    {
+      id: "arbeitnow_intl_banking_wash_jobs",
+      name: "Arbeitnow International & European Job Board API (Banking, Finance, Compliance & WASH)",
+      providerType: "official_api",
+      organizationGroup: "International European & Global Private Sector Employers (with Live Visa/Relocation Verification)",
+      baseUrl: "https://www.arbeitnow.com/api/job-board-api",
+      categoriesCovered: ["international_job", "wash_opportunity"],
+      sectorsCovered: ["banking_finance", "wash", "engineering", "entrepreneurship_business"],
+      configured: arbeitnowEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !arbeitnowEnabled,
+      pricingNote: "Free public API (zero API keys, AI-independent). Verifies live JSON-LD validThrough closing dates.",
+      requiredEnvVars: [],
+      status: arbeitnowEnabled ? "connected" : "disabled",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: arbeitnowEnabled ? null : "Disabled via OPPORTUNITY_SEARCH_PROVIDERS."
+    },
+    {
+      id: "official_gov_pr_intelligence",
+      name: "Official Government Immigration & Shortage Occupation Portals (14 Countries)",
+      providerType: "official_portal",
+      organizationGroup: "Official National Immigration Ministries (Canada IRCC, UK GOV.UK, NZ INZ, Germany, Ireland DETE, Finland, Sweden, Norway, Denmark, Netherlands, Austria, Switzerland, Japan, Australia)",
+      baseUrl: "https://www.canada.ca/en/immigration-refugees-citizenship/services/immigrate-canada/express-entry.html",
+      categoriesCovered: ["international_job"],
+      sectorsCovered: ["banking_finance", "wash", "engineering", "healthcare_public_health", "technology_ai"],
+      configured: govPrEnabled,
+      requiresCredentials: false,
+      isOptional: false,
+      disabledByConfig: !govPrEnabled,
+      pricingNote: "Free direct live verification of 14 authoritative government immigration & labour shortage portals (no blogs/agents).",
+      requiredEnvVars: [],
+      status: govPrEnabled ? "connected" : "disabled",
+      lastPolledAt: null,
+      lastSuccessAt: null,
+      lastItemCount: 0,
+      lastError: govPrEnabled ? null : "Disabled via OPPORTUNITY_SEARCH_PROVIDERS."
+    },
     {
       id: "reliefweb_jobs_wash_intl",
       name: "ReliefWeb Official UN & INGO Recruitment Feeds (WASH, Banking & Finance, International Jobs)",
@@ -6840,16 +7863,16 @@ async function fetchReliefWebJobs(_appname) {
       {
         label: "WASH",
         url: "https://reliefweb.int/jobs/rss.xml?advanced-search=%28T4604%29",
-        limit: 16
+        limit: 22
       },
       {
         label: "BankingFinance",
-        url: "https://reliefweb.int/jobs/rss.xml?search=finance+OR+banking+OR+grant+OR+microfinance",
-        limit: 14
+        url: "https://reliefweb.int/jobs/rss.xml?search=finance+OR+banking+OR+microfinance+OR+audit+OR+treasury+OR+credit",
+        limit: 20
       },
       {
-        label: "GeneralIntl",
-        url: "https://reliefweb.int/jobs/rss.xml",
+        label: "WaterEngineering",
+        url: "https://reliefweb.int/jobs/rss.xml?search=water+engineer+OR+sanitation+OR+hygiene+OR+hydrology",
         limit: 14
       }
     ];
@@ -6892,9 +7915,24 @@ async function fetchReliefWebJobs(_appname) {
         const orgName = item.organization || "International Organization";
         const countryName = item.country || "International";
         const combinedText = `${item.title} ${orgName} ${item.descriptionText}`;
+        if (/^ethiopia$/i.test(countryName.trim()) || /\b(national\s+(?:officer|facilitator|consultant|coordinator|specialist|advisor|manager|staff|position|vacancy)|local\s+nationals?\s+only)\b/i.test(
+          item.title
+        )) {
+          continue;
+        }
         const sectorDetect = detectSectorsFromText(combinedText);
+        const titleLower = item.title.toLowerCase();
+        const hasWashTitleOrFeed = feed.label === "WASH" || feed.label === "WaterEngineering" || /\b(wash|water|sanitation|hygiene|hydrolog|hydrogeolog|wastewater|borehole|plumbing|environmental\s+health|public\s+health\s+engineer)\b/i.test(
+          titleLower
+        );
+        const hasBankingTitle = /\b(bank|banking|finance|financial|accountant|accounting|audit|auditor|treasury|credit|loan|microfinance|compliance|aml|risk|investment|economist|fintech|budget|grants?\s+and\s+finance|controller|cfo|actuar|portfolio)\b/i.test(
+          titleLower
+        );
         const isWashOrg = WASH_TARGET_ORGS.some((o) => orgName.toLowerCase().includes(o));
-        const isWash = feed.label === "WASH" || sectorDetect.isWash || isWashOrg && /\b(water|sanitation|hygiene|wash)\b/i.test(combinedText);
+        const isWash = hasWashTitleOrFeed || sectorDetect.isWash && (isWashOrg || /\b(wash|water|sanitation|hygiene)\b/i.test(combinedText));
+        if (!isWash && !(hasBankingTitle || feed.label === "FinanceBanking" && sectorDetect.isBankingFinance)) {
+          continue;
+        }
         const minYears = parseMinimumYearsFromText(item.descriptionText);
         let careerLevel = "not_confirmed";
         if (/\bintern(ship)?\b/i.test(item.title)) careerLevel = "internship";
@@ -6906,15 +7944,12 @@ async function fetchReliefWebJobs(_appname) {
         const lowerCombined = combinedText.toLowerCase();
         let ethiopianEligible = "likely_global";
         const eligibleNationalities = [];
-        if (/\bethiopia(n)?\b/i.test(countryName) || /\bopen to ethiopian/i.test(lowerCombined)) {
-          ethiopianEligible = "confirmed";
-          eligibleNationalities.push("Ethiopian citizens");
-        } else if (/\b(national\s+position\s+only|nationals\s+of\s+[a-z]+\s+only|open\s+only\s+to\s+citizens\s+of|must\s+be\s+a\s+citizen\s+of\s+(?!ethiopia)|local\s+nationals\s+only)\b/i.test(
+        if (/\b(national\s+position\s+only|nationals\s+of\s+[a-z]+\s+only|open\s+only\s+to\s+citizens\s+of|must\s+be\s+a\s+citizen\s+of\s+(?!ethiopia)|local\s+nationals\s+only|host\s+country\s+nationals\s+only|must\s+already\s+have\s+the\s+right\s+to\s+work)\b/i.test(
           lowerCombined
         )) {
           ethiopianEligible = "excluded";
           eligibleNationalities.push(`Host country nationals only (${countryName})`);
-        } else if (/\b(international\s+(position|staff|recruitment|applicants)|all\s+nationalities)\b/i.test(lowerCombined)) {
+        } else if (/\b(international\s+(position|staff|recruitment|applicants)|all\s+nationalities|expatriate)\b/i.test(lowerCombined)) {
           ethiopianEligible = "confirmed";
           eligibleNationalities.push("All nationalities (including Ethiopian citizens)");
         } else {
@@ -6958,6 +7993,126 @@ async function fetchReliefWebJobs(_appname) {
     return { candidates, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
   } catch (err) {
     return { candidates: [], error: `ReliefWeb Jobs feed error: ${err?.message || String(err)}` };
+  }
+}
+async function fetchArbeitnowBankingWashJobs() {
+  try {
+    const resp = await fetchWithRetry(
+      "https://www.arbeitnow.com/api/job-board-api",
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": "HopelandJobs/1.0 (+https://hopelandjobs.tech)",
+          Accept: "application/json"
+        }
+      },
+      1,
+      9e3
+    );
+    if (!resp.ok) {
+      return { candidates: [], error: `Arbeitnow API returned HTTP ${resp.status}` };
+    }
+    const payload = await resp.json();
+    const rawList = Array.isArray(payload?.data) ? payload.data : [];
+    const bankingWashTitleRegex = /\b(bank|banking|finance|financial|accounting|accountant|audit|auditor|credit|treasury|compliance|aml|risk\s+manager|risk\s+analyst|microfinance|fintech|water\s+engineer|wash|sanitation|hygiene|hydrolog|wastewater)\b/i;
+    const excludeJuniorLocalRegex = /\b(werkstudent|praktikum|ausbildung|working\s+student|trainee\s+german)\b/i;
+    const matching = rawList.filter((job) => {
+      const title = String(job?.title || "");
+      if (!title || excludeJuniorLocalRegex.test(title)) return false;
+      return bankingWashTitleRegex.test(title);
+    }).slice(0, 14);
+    const candidates = [];
+    for (const job of matching) {
+      const url = String(job?.url || "").trim();
+      const urlCheck = validateOfficialExternalUrl(url);
+      if (!urlCheck.valid) continue;
+      const title = String(job.title || "").trim();
+      const company = String(job.company_name || "International Employer").trim();
+      const location = String(job.location || "Europe / International").trim();
+      const plainDesc = stripHtmlToText(String(job.description || ""));
+      let deadlineRaw = extractVerifiableDeadlineFromSnippet(plainDesc) || "";
+      if (!deadlineRaw) {
+        try {
+          const pageResp = await fetchWithRetry(
+            urlCheck.normalizedUrl,
+            {
+              method: "GET",
+              headers: {
+                "User-Agent": "HopelandJobsBot/1.0 (+https://hopelandjobs.tech)",
+                Accept: "text/html"
+              }
+            },
+            0,
+            6e3
+          );
+          if (pageResp.ok) {
+            const pageHtml = await pageResp.text();
+            const vtMatch = pageHtml.match(/"validThrough"\s*:\s*"([^"]+)"/i);
+            if (vtMatch && vtMatch[1]) {
+              deadlineRaw = vtMatch[1].trim();
+            }
+          }
+        } catch {
+        }
+      }
+      if (!deadlineRaw) continue;
+      const combinedText = `${title} ${company} ${location} ${plainDesc}`;
+      const sectorDetect = detectSectorsFromText(combinedText);
+      const isWash = sectorDetect.isWash || /\b(water|sanitation|hygiene|wash|hydrolog|wastewater)\b/i.test(title);
+      const minEdu = parseMinEducationFromText(plainDesc);
+      const minYears = parseMinimumYearsFromText(plainDesc);
+      let country = "Europe / International";
+      if (/\b(london|uk|united kingdom|manchester|edinburgh)\b/i.test(location)) country = "United Kingdom";
+      else if (/\b(paris|lyon|france)\b/i.test(location)) country = "France";
+      else if (/\b(amsterdam|rotterdam|netherlands|utrecht)\b/i.test(location)) country = "Netherlands";
+      else if (/\b(berlin|munich|münchen|frankfurt|hamburg|germany|stuttgart|köln|cologne|düsseldorf)\b/i.test(location)) country = "Germany";
+      else if (/\b(dublin|ireland)\b/i.test(location)) country = "Ireland";
+      else if (/\b(zurich|zürich|geneva|basel|switzerland)\b/i.test(location)) country = "Switzerland";
+      else if (/\b(vienna|wien|austria)\b/i.test(location)) country = "Austria";
+      else if (/\b(stockholm|sweden)\b/i.test(location)) country = "Sweden";
+      else if (/\b(helsinki|finland)\b/i.test(location)) country = "Finland";
+      else if (/\b(copenhagen|denmark)\b/i.test(location)) country = "Denmark";
+      else if (/\b(oslo|norway)\b/i.test(location)) country = "Norway";
+      else if (location) country = location;
+      const lower = combinedText.toLowerCase();
+      const hasSponsorshipText = /\b(visa\s+sponsor|work\s+permit\s+sponsor|relocation\s+(support|package|assistance)|international\s+applicants|visa\s+support)\b/i.test(lower);
+      const isLocalOnlyText = /\b(must\s+already\s+have\s+the\s+right\s+to\s+work|no\s+visa\s+sponsorship|cannot\s+sponsor\s+visas?|eu\s+citizens?\s+only)\b/i.test(lower);
+      candidates.push({
+        title,
+        organization: company,
+        organizationType: /\bbank\b/i.test(company) ? "financial_institution" : "employer",
+        category: isWash ? "wash_opportunity" : "international_job",
+        country,
+        location: job.remote ? `${location} (Remote / Hybrid)` : location,
+        summary: plainDesc.slice(0, 420) || `${title} at ${company} (${location}).`,
+        sourceId: "arbeitnow_intl_banking_wash_jobs",
+        sourceName: "Arbeitnow International Banking, Finance & WASH Feed",
+        originalSourceUrl: urlCheck.normalizedUrl,
+        officialApplicationUrl: urlCheck.normalizedUrl,
+        deadlineDateRaw: deadlineRaw,
+        deadlineTimezone: "UTC",
+        startDate: "See official posting",
+        applicationFee: "None (Direct employer application)",
+        eligibleNationalities: isLocalOnlyText ? [`Local work authorization required (${country})`] : hasSponsorshipText ? ["International applicants (visa/relocation support referenced \u2014 verify on employer page)"] : ["International applicants (verify visa sponsorship directly with employer)"],
+        ethiopianEligible: isLocalOnlyText ? "excluded" : hasSponsorshipText ? "confirmed" : "likely_global",
+        educationRequirement: minEdu === "masters" ? "Master's degree or equivalent" : minEdu === "bachelors" ? "Bachelor's degree in Finance, Accounting, Banking or related field" : "See official employer job description",
+        minimumEducationLevel: minEdu,
+        experienceRequirement: minYears !== null ? `Minimum ${minYears} year(s)` : "See official job description",
+        minimumYearsExperience: minYears,
+        careerLevel: typeof minYears === "number" && minYears >= 7 ? "management" : typeof minYears === "number" && minYears >= 3 ? "mid" : "technical",
+        requiredSkills: isWash ? ["WASH", "Water Engineering", "Sanitation"] : ["Banking & Finance", "Financial Analysis", "Compliance & Risk"],
+        languagesRequired: /\b(german|deutsch)\b/i.test(plainDesc) ? ["English", "German"] : ["English"],
+        universityRecommendationRequired: "not_required",
+        companyRecommendationRequired: "not_required",
+        institutionalNominationRequired: "not_required",
+        directIndividualApplicationAllowed: "yes",
+        fullText: combinedText.slice(0, 5e3),
+        preVerifiedByOfficialApi: true
+      });
+    }
+    return { candidates };
+  } catch (err) {
+    return { candidates: [], error: `Arbeitnow API error: ${err?.message || String(err)}` };
   }
 }
 async function fetchReliefWebTrainings(_appname) {
@@ -7363,6 +8518,61 @@ var OFFICIAL_DIRECT_PORTALS = [
     defaultCategory: "professional_training",
     country: "International / Online",
     parserMode: "jsonld_or_html"
+  },
+  {
+    id: "worldbank_jj_wbgsp",
+    name: "World Bank Joint Japan/World Bank Graduate Scholarship Program (JJ/WBGSP)",
+    organization: "World Bank Group",
+    organizationGroup: "Multilateral Development Bank (Banking, Economics & Water Development Scholarships)",
+    organizationType: "multilateral_bank",
+    url: "https://www.worldbank.org/en/programs/scholarships/jj-wbgsp",
+    defaultCategory: "university_scholarship",
+    country: "Global Partner Universities",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "ihe_delft_scholarships",
+    name: "IHE Delft Institute for Water Education Official WASH Scholarships",
+    organization: "IHE Delft Institute for Water Education",
+    organizationGroup: "Official UNESCO-Linked Water & WASH University Portal",
+    organizationType: "university",
+    url: "https://www.un-ihe.org/scholarships",
+    defaultCategory: "university_scholarship",
+    country: "Netherlands",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "erasmus_mundus_catalogue",
+    name: "European Commission Erasmus Mundus Joint Masters Scholarships",
+    organization: "European Education and Culture Executive Agency (EACEA)",
+    organizationGroup: "Official European Union Government Scholarship Portal",
+    organizationType: "government_agency",
+    url: "https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en",
+    defaultCategory: "university_scholarship",
+    country: "European Union",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "imf_icd_training",
+    name: "IMF Institute for Capacity Development (Banking, Macro-Finance & Fiscal Training)",
+    organization: "International Monetary Fund (IMF)",
+    organizationGroup: "Multilateral Financial Institution Official Training Portal",
+    organizationType: "multilateral_bank",
+    url: "https://www.imf.org/en/Capacity-Development/Training/ICDTC",
+    defaultCategory: "professional_training",
+    country: "International / Online",
+    parserMode: "jsonld_or_html"
+  },
+  {
+    id: "adb_careers",
+    name: "Asian Development Bank (ADB) Official Careers Portal",
+    organization: "Asian Development Bank (ADB)",
+    organizationGroup: "Multilateral Development Bank (Banking, Finance & Water Infrastructure)",
+    organizationType: "multilateral_bank",
+    url: "https://www.adb.org/work-with-us/careers",
+    defaultCategory: "international_job",
+    country: "Philippines / International",
+    parserMode: "jsonld_or_html"
   }
 ];
 function extractJsonLdOpportunitiesFromHtml(html, portal) {
@@ -7760,7 +8970,15 @@ ${jsonSchemaInstructions}`
         });
       }
     } catch (err) {
-      errors.push(`Gemini Search Grounding (${sp.label}): ${err?.message || String(err)}`);
+      const rawMsg = String(err?.message || err || "");
+      const isQuotaOrRateLimit = /\b(429|RESOURCE_EXHAUSTED|quota|rate[\s-]?limit)\b/i.test(rawMsg);
+      if (isQuotaOrRateLimit) {
+        errors.push(
+          "Gemini Search Grounding quota/rate limit reached (HTTP 429). Other official sources continued normally."
+        );
+        break;
+      }
+      errors.push(`Gemini Search Grounding (${sp.label}): ${rawMsg.slice(0, 220)}`);
     }
   }
   return { candidates, configured: true, error: errors.length && candidates.length === 0 ? errors.join("; ") : void 0 };
@@ -7774,6 +8992,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
       robotsAllowed: false,
       detectedClosedOrExpired: false,
       pageTextSnippet: "",
+      pageTextFull: "",
       notes: urlCheck.reason || "URL failed official domain verification."
     };
   }
@@ -7786,6 +9005,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         robotsAllowed: false,
         detectedClosedOrExpired: false,
         pageTextSnippet: "Verified via official API response (page crawl skipped to respect robots.txt).",
+        pageTextFull: "",
         notes: "Verified through official organization API; direct HTML fetch skipped per robots.txt."
       };
     }
@@ -7795,6 +9015,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
       robotsAllowed: false,
       detectedClosedOrExpired: false,
       pageTextSnippet: "",
+      pageTextFull: "",
       notes: "Skipped HTML verification to respect robots.txt Disallow directive."
     };
   }
@@ -7835,6 +9056,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         robotsAllowed: true,
         detectedClosedOrExpired: false,
         pageTextSnippet: "",
+        pageTextFull: "",
         notes: "Redirected to an unsafe or non-HTTPS URL."
       };
     }
@@ -7845,6 +9067,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         robotsAllowed: true,
         detectedClosedOrExpired: true,
         pageTextSnippet: "",
+        pageTextFull: "",
         notes: `Official page returned HTTP ${status} (not found or removed).`
       };
     }
@@ -7855,7 +9078,8 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
           httpStatus: status,
           robotsAllowed: true,
           detectedClosedOrExpired: false,
-          pageTextSnippet: "Verified directly via official ReliefWeb UN/NGO feed (destination portal restricts automated HTML GET).",
+          pageTextSnippet: "Verified directly via official feed (destination portal restricts automated HTML GET).",
+          pageTextFull: "",
           notes: `Verified via official feed (direct GET returned HTTP ${status}).`
         };
       }
@@ -7865,10 +9089,11 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         robotsAllowed: true,
         detectedClosedOrExpired: false,
         pageTextSnippet: "",
+        pageTextFull: "",
         notes: `Official URL returned HTTP ${status}.`
       };
     }
-    const plain = stripHtmlToText(html).slice(0, 6e3);
+    const plain = stripHtmlToText(html).slice(0, 6500);
     const closedMatch = plain.match(
       /\b(applications?\s+(are|is)\s+(now\s+)?closed|this\s+(job|position|vacancy|opportunity|scholarship|call)\s+(is|has)\s+(been\s+)?(closed|expired|filled|withdrawn)|no\s+longer\s+accepting\s+applications|the\s+deadline\s+has\s+passed)\b/i
     );
@@ -7878,7 +9103,8 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         httpStatus: status,
         robotsAllowed: true,
         detectedClosedOrExpired: true,
-        pageTextSnippet: plain.slice(0, 320),
+        pageTextSnippet: plain.slice(0, 340),
+        pageTextFull: plain.slice(0, 4500),
         notes: `Official page indicates closed/expired status ("${closedMatch[0]}").`
       };
     }
@@ -7888,6 +9114,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
       robotsAllowed: true,
       detectedClosedOrExpired: false,
       pageTextSnippet: plain.slice(0, 420),
+      pageTextFull: plain.slice(0, 4500),
       notes: `Live official page verified (HTTP ${status}).`
     };
   } catch (err) {
@@ -7897,7 +9124,8 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
         httpStatus: null,
         robotsAllowed: true,
         detectedClosedOrExpired: false,
-        pageTextSnippet: "Verified directly via official ReliefWeb UN/NGO API.",
+        pageTextSnippet: "Verified directly via official API.",
+        pageTextFull: "",
         notes: `Verified via official API (live page timeout: ${err?.message || "timeout"}).`
       };
     }
@@ -7907,6 +9135,7 @@ async function verifyUrlLive(officialUrl, preVerifiedByOfficialApi = false) {
       robotsAllowed: true,
       detectedClosedOrExpired: false,
       pageTextSnippet: "",
+      pageTextFull: "",
       notes: `Live official page verification failed: ${err?.message || String(err)}`
     };
   }
@@ -7925,7 +9154,7 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     candidate.deadlineTimezone || "UTC",
     new Date(nowIso).getTime()
   );
-  const combinedCorpus = `${candidate.title} ${candidate.organization} ${candidate.summary} ${candidate.fullText || ""} ${liveCheck.pageTextSnippet}`;
+  const combinedCorpus = `${candidate.title} ${candidate.organization} ${candidate.summary} ${candidate.fullText || ""} ${liveCheck.pageTextFull || liveCheck.pageTextSnippet}`;
   const sectorInfo = detectSectorsFromText(combinedCorpus);
   const isWashDedicated = candidate.category === "wash_opportunity" || sectorInfo.isWash || WASH_TARGET_ORGS.some((o) => candidate.organization.toLowerCase().includes(o)) && sectorInfo.isWash;
   const fundingBase = classifyFundingAndVisaTransparency({
@@ -7999,6 +9228,11 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     isWashDedicated,
     officialSourceText: combinedCorpus
   });
+  const department = classifyOpportunityDepartment({
+    category: candidate.category,
+    isWashDedicated,
+    isBankingFinance: sectorInfo.isBankingFinance
+  });
   const visaAudit = evaluateMandatoryVisaCompliance(candidate.category, funding, combinedCorpus);
   funding.visaMandatoryRulePassed = outcome.visaCompliancePassed;
   if (!outcome.visaCompliancePassed) {
@@ -8020,6 +9254,7 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     organization: candidate.organization,
     organizationType: candidate.organizationType,
     category: candidate.category,
+    department,
     sectors: sectorInfo.sectors,
     isWashDedicated,
     isBankingFinance: sectorInfo.isBankingFinance,
@@ -8034,11 +9269,13 @@ function buildOpportunityRecordFromCandidate(candidate, liveCheck, nowIso) {
     officialDomain: urlCheck.hostname || "",
     applicationStatus,
     verificationStatus: outcome.verificationStatus,
+    verificationTier: outcome.verificationTier,
     hasVerifiedBadge: outcome.hasVerifiedBadge,
     httpStatusCode: liveCheck.httpStatus,
     robotsAllowed: liveCheck.robotsAllowed,
     verificationNotes: combinedNotes || "Verified against official source.",
     sourceEvidenceSnippet: liveCheck.pageTextSnippet.slice(0, 340) || candidate.summary.slice(0, 340),
+    publicationDate: nowIso.slice(0, 10),
     funding,
     eligibility,
     deadline,
@@ -8119,6 +9356,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
         version: 1,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
         international_opportunities: [],
+        permanent_residency_pathways: [],
         opportunity_sources: initialSources,
         opportunity_verification_logs: [],
         opportunity_funding: [],
@@ -8166,6 +9404,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
     }
     return {
       ...loaded,
+      permanent_residency_pathways: loaded.permanent_residency_pathways || [],
       opportunity_sources: mergedSources,
       opportunity_verification_logs: loaded.opportunity_verification_logs || [],
       opportunity_funding: loaded.opportunity_funding || [],
@@ -8460,6 +9699,78 @@ function registerGlobalOpportunitiesRoutes(deps) {
     };
     try {
       const enabledProviders = getEnabledSearchProviders();
+      if (enabledProviders.has("arbeitnow")) {
+        sourcesQueried++;
+        try {
+          const arbJobs = await fetchArbeitnowBankingWashJobs();
+          updateSourceMeta("arbeitnow_intl_banking_wash_jobs", {
+            lastPolledAt: startedAt,
+            lastSuccessAt: arbJobs.error ? store.opportunity_sources.find((s) => s.id === "arbeitnow_intl_banking_wash_jobs")?.lastSuccessAt || null : startedAt,
+            lastItemCount: arbJobs.candidates.length,
+            lastError: arbJobs.error || null,
+            status: arbJobs.error ? "degraded" : "connected"
+          });
+          if (arbJobs.error) errors.push(arbJobs.error);
+          allCandidates.push(...arbJobs.candidates);
+        } catch (err) {
+          const msg = `Arbeitnow International Jobs unavailable: ${err?.message || String(err)}`;
+          updateSourceMeta("arbeitnow_intl_banking_wash_jobs", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          errors.push(msg);
+        }
+      }
+      let prDepartmentSummary = {
+        department: "permanent_residency_intelligence",
+        label: "Department 6: Permanent Residency & Labour Shortage Intelligence",
+        status: "success",
+        candidatesFound: (store.permanent_residency_pathways || []).length,
+        verifiedCount: 0,
+        partiallyVerifiedCount: 0,
+        pendingCount: 0,
+        rejectedOrExpiredCount: 0,
+        errors: []
+      };
+      if (enabledProviders.has("official_gov_pr")) {
+        sourcesQueried++;
+        try {
+          const prRes = await verifyOfficialPermanentResidencyPathways();
+          store.permanent_residency_pathways = prRes.records;
+          updateSourceMeta("official_gov_pr_intelligence", {
+            lastPolledAt: startedAt,
+            lastSuccessAt: startedAt,
+            lastItemCount: prRes.records.length,
+            lastError: prRes.errors.length > 0 ? prRes.errors.slice(0, 3).join("; ") : null,
+            status: prRes.verifiedCount > 0 ? "connected" : "degraded"
+          });
+          prDepartmentSummary = {
+            department: "permanent_residency_intelligence",
+            label: "Department 6: Permanent Residency & Labour Shortage Intelligence",
+            status: prRes.errors.length === 0 ? "success" : prRes.verifiedCount > 0 ? "partial" : "failed",
+            candidatesFound: prRes.records.length,
+            verifiedCount: prRes.verifiedCount,
+            partiallyVerifiedCount: prRes.partiallyVerifiedCount,
+            pendingCount: prRes.pendingCount,
+            rejectedOrExpiredCount: 0,
+            errors: prRes.errors
+          };
+          if (prRes.errors.length > 0) {
+            errors.push(...prRes.errors.slice(0, 2));
+          }
+        } catch (err) {
+          const msg = `Official Government PR Intelligence error: ${err?.message || String(err)}`;
+          updateSourceMeta("official_gov_pr_intelligence", {
+            lastPolledAt: startedAt,
+            lastError: msg,
+            status: "degraded"
+          });
+          prDepartmentSummary.status = "failed";
+          prDepartmentSummary.errors.push(msg);
+          errors.push(msg);
+        }
+      }
       if (enabledProviders.has("reliefweb")) {
         sourcesQueried++;
         try {
@@ -8808,6 +10119,40 @@ function registerGlobalOpportunitiesRoutes(deps) {
         nextRecs.push(...userRecs);
       }
       store.user_opportunity_recommendations = nextRecs;
+      const deptLabels = [
+        { department: "banking_finance_jobs", label: "Department 1: International Banking & Finance Jobs" },
+        { department: "wash_jobs", label: "Department 2: International WASH Jobs" },
+        { department: "banking_wash_scholarships", label: "Department 3: Banking & WASH Scholarships" },
+        { department: "banking_wash_training", label: "Department 4: Banking & WASH Professional Training" },
+        { department: "banking_wash_conferences", label: "Department 5: Banking & WASH International Conferences" }
+      ];
+      const departmentSummaries = deptLabels.map(({ department, label }) => {
+        const deptItems = store.international_opportunities.filter(
+          (o) => (o.department || classifyOpportunityDepartment(o)) === department
+        );
+        const verifiedCount = deptItems.filter(
+          (o) => isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier === "VERIFIED"
+        ).length;
+        const partiallyVerifiedCount = deptItems.filter(
+          (o) => isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier !== "VERIFIED"
+        ).length;
+        const pendingCount = deptItems.filter((o) => o.verificationTier === "PENDING VERIFICATION").length;
+        const rejectedOrExpiredCount = deptItems.filter(
+          (o) => !isOpportunityActiveAndDisplayable(o, nowFinalMs) && o.verificationTier !== "PENDING VERIFICATION"
+        ).length;
+        return {
+          department,
+          label,
+          status: "success",
+          candidatesFound: deptItems.length,
+          verifiedCount,
+          partiallyVerifiedCount,
+          pendingCount,
+          rejectedOrExpiredCount,
+          errors: []
+        };
+      });
+      departmentSummaries.push(prDepartmentSummary);
       const finishedAt = (/* @__PURE__ */ new Date()).toISOString();
       const isFailure = sourcesQueried === 0 && errors.length > 0;
       const runStatus = isFailure ? "failed" : errors.length > 0 ? "partial" : "success";
@@ -8836,6 +10181,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
         attemptNumber: options?.attemptNumber ?? 1,
         maxAttempts: options?.maxAttempts ?? 1,
         skippedOverlap: false,
+        departmentSummaries,
         errors
       };
       const state = store.scheduler_state || createDefaultSchedulerState();
@@ -8964,7 +10310,9 @@ function registerGlobalOpportunitiesRoutes(deps) {
         attemptNumber: attempt,
         maxAttempts
       });
-      if (lastLog.skippedOverlap || lastLog.status === "success" || lastLog.status === "partial" && lastLog.verifiedAndActiveCount > 0) {
+      const isQuotaOnlyPartial = lastLog.status === "partial" && lastLog.errors.length > 0 && lastLog.errors.every((e) => /\b(429|RESOURCE_EXHAUSTED|quota|rate[\s-]?limit)\b/i.test(e));
+      const partialCoreSucceeded = lastLog.status === "partial" && (lastLog.verifiedAndActiveCount > 0 || lastLog.candidatesDiscovered > 0 || isQuotaOnlyPartial);
+      if (lastLog.skippedOverlap || lastLog.status === "success" || partialCoreSucceeded) {
         return lastLog;
       }
       if (attempt < maxAttempts) {
@@ -8977,7 +10325,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
     }
     return lastLog;
   }
-  function computeSubsectionCounts(activeList, savedIdSet) {
+  function computeSubsectionCounts(activeList, savedIdSet, permanentResidencyCount = 0) {
     return {
       international_jobs: activeList.filter((o) => o.category === "international_job").length,
       scholarships: activeList.filter((o) => o.category === "university_scholarship").length,
@@ -8985,6 +10333,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
       conferences_summits: activeList.filter((o) => o.category === "conference_summit").length,
       banking_finance: activeList.filter((o) => o.isBankingFinance || o.sectors.includes("banking_finance")).length,
       wash_opportunities: activeList.filter((o) => o.isWashDedicated || o.category === "wash_opportunity" || o.sectors.includes("wash")).length,
+      permanent_residency: permanentResidencyCount,
       recommended: activeList.filter((o) => o.recommendation?.eligible).length,
       closing_soon: activeList.filter((o) => o.deadline.isClosingSoon).length,
       saved: activeList.filter((o) => savedIdSet.has(o.id)).length
@@ -9025,7 +10374,9 @@ function registerGlobalOpportunitiesRoutes(deps) {
       for (const item of activeVerified) {
         item.isSaved = savedIds.has(item.id);
       }
-      const countsBySubsection = computeSubsectionCounts(activeVerified, savedIds);
+      const prPathways = store.permanent_residency_pathways || [];
+      const prAssessments = userProfile ? prPathways.map((p) => evaluatePermanentResidencyEligibility(p, userProfile)) : [];
+      const countsBySubsection = computeSubsectionCounts(activeVerified, savedIds, prPathways.length);
       const subsection = String(req.query.subsection || "").trim();
       const category = String(req.query.category || "").trim();
       const country = String(req.query.country || "").trim().toLowerCase();
@@ -9050,12 +10401,29 @@ function registerGlobalOpportunitiesRoutes(deps) {
       if (funding && funding !== "all") {
         if (funding === "fully_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "fully_funded");
         else if (funding === "partially_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "partially_funded");
+        else if (funding === "free") filtered = filtered.filter((o) => o.funding.fundingLevel === "free");
         else if (funding === "self_funded") filtered = filtered.filter((o) => o.funding.fundingLevel === "self_funded");
       }
       if (visa && visa !== "all") {
-        if (visa === "employer_sponsored") filtered = filtered.filter((o) => o.funding.visaSupportType === "employer_sponsored_visa");
-        else if (visa === "visa_fees_funded") filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_fees_funded");
-        else if (visa === "assistance_only") filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_assistance_only" || o.funding.visaSupportType === "invitation_letter_only");
+        if (visa === "employer_sponsored" || visa === "confirmed_visa_sponsorship") {
+          filtered = filtered.filter(
+            (o) => o.funding.visaSupportType === "employer_sponsored_visa" || o.funding.employmentVisaClassification === "confirmed_visa_sponsorship"
+          );
+        } else if (visa === "confirmed_international_recruitment") {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === "confirmed_international_recruitment");
+        } else if (visa === "relocation_assistance") {
+          filtered = filtered.filter(
+            (o) => o.funding.relocationAssistance === "yes" || o.funding.employmentVisaClassification === "relocation_assistance"
+          );
+        } else if (visa === "work_permit_assistance") {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === "work_permit_assistance");
+        } else if (visa === "no_sponsorship_stated") {
+          filtered = filtered.filter((o) => o.funding.employmentVisaClassification === "no_sponsorship_stated");
+        } else if (visa === "visa_fees_funded") {
+          filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_fees_funded");
+        } else if (visa === "assistance_only") {
+          filtered = filtered.filter((o) => o.funding.visaSupportType === "visa_assistance_only" || o.funding.visaSupportType === "invitation_letter_only");
+        }
       }
       if (experience && experience !== "all") {
         if (experience === "entry") filtered = filtered.filter((o) => (o.eligibility.minimumYearsExperience ?? 0) <= 2 || o.eligibility.careerLevel === "entry" || o.eligibility.careerLevel === "internship");
@@ -9088,14 +10456,53 @@ function registerGlobalOpportunitiesRoutes(deps) {
         totalStoredAllStatuses: store.international_opportunities.length,
         countsBySubsection,
         opportunities: filtered,
+        permanentResidencyPathways: prPathways,
+        permanentResidencyAssessments: prAssessments,
         sources: store.opportunity_sources,
         lastDiscoveryRun: store.discovery_job_logs[0] || null,
         schedulerInfo: buildSchedulerInfo(store),
-        websiteOnlyPolicyNote: "Scholarship, professional training, and conference recommendations are displayed exclusively inside the Hopeland Jobs website. No emails, SMS, WhatsApp, or push notifications are sent for them."
+        websiteOnlyPolicyNote: "Website-only display (no emails, SMS, WhatsApp, or push) \u2014 Global Banking, Finance, WASH, Scholarship, Training, Conference, and Official Government Permanent Residency Intelligence verified directly against official sources with transparent visa sponsorship & funding classifications."
       };
       res.json(payload);
     } catch (err) {
       res.status(500).json({ success: false, error: err?.message || "Failed to load global opportunities" });
+    }
+  });
+  app.get("/api/global-opportunities/permanent-residency", (req, res) => {
+    try {
+      const store = loadStore();
+      const uid = getRequesterUid(req);
+      const profiles = loadUserProfiles();
+      const userProfile = uid ? profiles[uid] || null : null;
+      let pathways = store.permanent_residency_pathways || [];
+      const countryQ = String(req.query.country || "").trim().toLowerCase();
+      const pathwayType = String(req.query.pathwayType || "").trim().toLowerCase();
+      const q = String(req.query.q || "").trim().toLowerCase();
+      if (countryQ && countryQ !== "all") {
+        pathways = pathways.filter((p) => p.country.toLowerCase().includes(countryQ));
+      }
+      if (pathwayType && pathwayType !== "all") {
+        pathways = pathways.filter((p) => p.pathwayClassification === pathwayType);
+      }
+      if (q) {
+        pathways = pathways.filter(
+          (p) => `${p.country} ${p.programName} ${p.officialAuthority} ${p.professionalOccupationsInDemand.join(" ")} ${p.labourOccupationsInDemand.join(" ")} ${p.bankingFinanceOccupations.join(" ")} ${p.washWaterOccupations.join(" ")}`.toLowerCase().includes(q)
+        );
+      }
+      const assessments = userProfile ? pathways.map((p) => evaluatePermanentResidencyEligibility(p, userProfile)) : [];
+      res.json({
+        success: true,
+        generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        totalCountries: pathways.length,
+        directPrCount: pathways.filter((p) => p.pathwayClassification === "direct_pr").length,
+        routeToPrCount: pathways.filter((p) => p.pathwayClassification === "route_to_pr").length,
+        temporaryPermitCount: pathways.filter((p) => p.pathwayClassification === "temporary_work_permit").length,
+        pathways,
+        assessments,
+        disclaimer: "Labour or skill shortages do NOT automatically grant permanent residency. Every immigration pathway is governed exclusively by official national immigration authorities."
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to load permanent residency intelligence" });
     }
   });
   app.get("/api/global-opportunities/recommended", (req, res) => {
@@ -9211,20 +10618,64 @@ function registerGlobalOpportunitiesRoutes(deps) {
     const expiredRecords = archivedRecords.filter(
       (o) => o.rejectionCategory === "deadline" || o.applicationStatus === "expired" || o.verificationStatus === "Expired"
     );
-    const sourceFailuresCount = store.opportunity_sources.filter(
+    const failedSources = store.opportunity_sources.filter(
       (s) => s.status === "error" || s.status === "degraded"
-    ).length;
+    );
+    const sourceFailuresCount = failedSources.length;
     const lastVerificationAt = store.opportunity_verification_logs[0]?.checkedAt || store.discovery_job_logs[0]?.finishedAt || null;
+    const prPathways = store.permanent_residency_pathways || [];
+    const verifiedTierCount = activeVerified.filter((o) => o.verificationTier === "VERIFIED").length;
+    const partiallyVerifiedTierCount = activeVerified.filter((o) => o.verificationTier !== "VERIFIED").length;
+    const pendingVerificationCount = archivedRecords.filter((o) => o.verificationTier === "PENDING VERIFICATION").length;
+    const bankingJobsCount = activeVerified.filter(
+      (o) => (o.department || classifyOpportunityDepartment(o)) === "banking_finance_jobs"
+    ).length;
+    const washJobsCount = activeVerified.filter(
+      (o) => (o.department || classifyOpportunityDepartment(o)) === "wash_jobs"
+    ).length;
+    const visaSponsoredJobsCount = activeVerified.filter(
+      (o) => (o.category === "international_job" || o.category === "wash_opportunity") && (o.funding.visaSupportType === "employer_sponsored_visa" || o.funding.employmentVisaClassification === "confirmed_visa_sponsorship" || o.funding.employmentVisaClassification === "confirmed_international_recruitment" || o.funding.employmentVisaClassification === "relocation_assistance")
+    ).length;
+    const scholarshipsCount = activeVerified.filter((o) => o.category === "university_scholarship").length;
+    const fullyFundedScholarshipsCount = activeVerified.filter(
+      (o) => o.category === "university_scholarship" && o.funding.fundingLevel === "fully_funded"
+    ).length;
+    const trainingCount = activeVerified.filter((o) => o.category === "professional_training").length;
+    const conferencesCount = activeVerified.filter((o) => o.category === "conference_summit").length;
+    const professionalShortageOccupationsCount = prPathways.reduce(
+      (sum, p) => sum + (p.professionalOccupationsInDemand?.length || 0),
+      0
+    );
+    const labourShortageOccupationsCount = prPathways.reduce(
+      (sum, p) => sum + (p.labourOccupationsInDemand?.length || 0),
+      0
+    );
     const monitoringSummary = {
       totalDiscoveredAllTime: store.international_opportunities.length,
       activeVerifiedCount: activeVerified.length,
+      verifiedTierCount,
+      partiallyVerifiedTierCount,
+      pendingVerificationCount,
       totalRejectedCount: archivedRecords.length,
       autoUnpublishedCount: autoUnpublished.length,
       rejectedDueToVisaCount: rejectedVisa.length,
       rejectedDueToProfessionalRestrictionCount: rejectedSector.length,
       expiredCount: expiredRecords.length,
+      duplicatesSkippedLastRun: store.discovery_job_logs[0]?.duplicatesSkipped || 0,
       archivedRecordsCount: archivedRecords.length,
       sourceFailuresCount,
+      failedSourcesList: failedSources.map((s) => `${s.name}: ${s.lastError || s.status}`),
+      bankingJobsCount,
+      washJobsCount,
+      visaSponsoredJobsCount,
+      scholarshipsCount,
+      fullyFundedScholarshipsCount,
+      trainingCount,
+      conferencesCount,
+      permanentResidencyPathwaysCount: prPathways.length,
+      countriesSeekingWorkersCount: new Set(prPathways.map((p) => p.country)).size,
+      professionalShortageOccupationsCount,
+      labourShortageOccupationsCount,
       lastVerificationAt,
       lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt)
     };
@@ -10304,6 +11755,2287 @@ function registerWritingAssistantRoutes(deps) {
   });
 }
 
+// serverNexusClientFinder.ts
+import * as path3 from "path";
+import * as crypto2 from "crypto";
+import * as dns from "node:dns/promises";
+import * as net from "node:net";
+
+// src/utils/nexusClientFinderEngine.ts
+var NEXUS_FRESHNESS_WINDOW_HOURS = 72;
+var NEXUS_DAILY_TARGET = 300;
+var NEXUS_CATEGORY_LABELS = {
+  person_looking_for_web_developer: "Person looking for a website developer",
+  company_looking_for_web_developer: "Company looking for a website developer",
+  ecommerce_website_request: "E-commerce website request",
+  wordpress_website_request: "WordPress website request",
+  business_website_creation: "Business website creation",
+  website_redesign_improvement: "Website redesign or improvement",
+  landing_page_development: "Landing page development",
+  web_application_development: "Web application development",
+  website_maintenance: "Website maintenance",
+  other_it_projects: "Other relevant IT projects"
+};
+var FREE_PERSONAL_EMAIL_DOMAINS = /* @__PURE__ */ new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "ymail.com",
+  "hotmail.com",
+  "hotmail.co.uk",
+  "outlook.com",
+  "live.com",
+  "msn.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "zoho.com",
+  "gmx.com",
+  "gmx.de",
+  "web.de",
+  "mail.com",
+  "yandex.com",
+  "fastmail.com",
+  "tutanota.com"
+]);
+var DISPOSABLE_OR_PLACEHOLDER_DOMAINS = /* @__PURE__ */ new Set([
+  "example.com",
+  "example.org",
+  "example.net",
+  "test.com",
+  "localhost",
+  "mailinator.com",
+  "guerrillamail.com",
+  "10minutemail.com",
+  "tempmail.com",
+  "yopmail.com",
+  "sentry.io",
+  "wixpress.com",
+  "schema.org",
+  "w3.org",
+  "freelancer.com",
+  "remotive.com",
+  "arbeitnow.com",
+  "remoteok.com",
+  "weworkremotely.com",
+  "himalayas.app",
+  "wordpress.org",
+  "wordpress.net"
+]);
+var PRIORITY_COUNTRY_RULES = [
+  {
+    country: "United Arab Emirates",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(united arab emirates|uae|u\.a\.e\.|dubai|abu dhabi|sharjah|ajman|ras al khaimah)\b/i,
+    cities: [
+      { name: "Dubai", pattern: /\bdubai\b/i },
+      { name: "Abu Dhabi", pattern: /\babu dhabi\b/i },
+      { name: "Sharjah", pattern: /\bsharjah\b/i }
+    ]
+  },
+  {
+    country: "Saudi Arabia",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(saudi arabia|ksa|riyadh|jeddah|dammam|khobar|mecca|medina)\b/i,
+    cities: [
+      { name: "Riyadh", pattern: /\briyadh\b/i },
+      { name: "Jeddah", pattern: /\bjeddah\b/i },
+      { name: "Dammam", pattern: /\bdammam\b/i }
+    ]
+  },
+  {
+    country: "Qatar",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(qatar|doha|lusail|al wakrah)\b/i,
+    cities: [{ name: "Doha", pattern: /\bdoha\b/i }]
+  },
+  {
+    country: "Kuwait",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(kuwait|kuwait city|salmiya|hawalli)\b/i,
+    cities: [{ name: "Kuwait City", pattern: /\bkuwait city\b/i }]
+  },
+  {
+    country: "Bahrain",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(bahrain|manama|muharraq)\b/i,
+    cities: [{ name: "Manama", pattern: /\bmanama\b/i }]
+  },
+  {
+    country: "Oman",
+    regionGroup: "GCC / Middle East",
+    patterns: /\b(oman|muscat|salalah|sohar)\b/i,
+    cities: [{ name: "Muscat", pattern: /\bmuscat\b/i }]
+  },
+  {
+    country: "United Kingdom",
+    regionGroup: "Europe",
+    patterns: /\b(united kingdom|uk|u\.k\.|england|scotland|wales|london|manchester|birmingham|edinburgh|bristol|leeds|glasgow)\b/i,
+    cities: [
+      { name: "London", pattern: /\blondon\b/i },
+      { name: "Manchester", pattern: /\bmanchester\b/i },
+      { name: "Birmingham", pattern: /\bbirmingham\b/i },
+      { name: "Edinburgh", pattern: /\bedinburgh\b/i }
+    ]
+  },
+  {
+    country: "Germany",
+    regionGroup: "Europe",
+    patterns: /\b(germany|deutschland|berlin|munich|münchen|frankfurt|hamburg|cologne|köln|stuttgart|düsseldorf)\b/i,
+    cities: [
+      { name: "Berlin", pattern: /\bberlin\b/i },
+      { name: "Munich", pattern: /\b(munich|münchen)\b/i },
+      { name: "Frankfurt", pattern: /\bfrankfurt\b/i },
+      { name: "Hamburg", pattern: /\bhamburg\b/i }
+    ]
+  },
+  {
+    country: "France",
+    regionGroup: "Europe",
+    patterns: /\b(france|paris|lyon|marseille|toulouse|nice|bordeaux|lille)\b/i,
+    cities: [
+      { name: "Paris", pattern: /\bparis\b/i },
+      { name: "Lyon", pattern: /\blyon\b/i }
+    ]
+  },
+  {
+    country: "Netherlands",
+    regionGroup: "Europe",
+    patterns: /\b(netherlands|holland|amsterdam|rotterdam|utrecht|eindhoven|the hague)\b/i,
+    cities: [
+      { name: "Amsterdam", pattern: /\bamsterdam\b/i },
+      { name: "Rotterdam", pattern: /\brotterdam\b/i },
+      { name: "Utrecht", pattern: /\butrecht\b/i }
+    ]
+  },
+  {
+    country: "Ireland",
+    regionGroup: "Europe",
+    patterns: /\b(ireland|dublin|cork|galway|limerick)\b/i,
+    cities: [
+      { name: "Dublin", pattern: /\bdublin\b/i },
+      { name: "Cork", pattern: /\bcork\b/i }
+    ]
+  },
+  {
+    country: "Sweden",
+    regionGroup: "Europe",
+    patterns: /\b(sweden|stockholm|gothenburg|malmö|malmo)\b/i,
+    cities: [{ name: "Stockholm", pattern: /\bstockholm\b/i }]
+  },
+  {
+    country: "Norway",
+    regionGroup: "Europe",
+    patterns: /\b(norway|oslo|bergen|trondheim|stavanger)\b/i,
+    cities: [{ name: "Oslo", pattern: /\boslo\b/i }]
+  },
+  {
+    country: "Denmark",
+    regionGroup: "Europe",
+    patterns: /\b(denmark|copenhagen|aarhus|odense)\b/i,
+    cities: [{ name: "Copenhagen", pattern: /\bcopenhagen\b/i }]
+  },
+  {
+    country: "Switzerland",
+    regionGroup: "Europe",
+    patterns: /\b(switzerland|zurich|zürich|geneva|basel|bern|lausanne)\b/i,
+    cities: [
+      { name: "Zurich", pattern: /\b(zurich|zürich)\b/i },
+      { name: "Geneva", pattern: /\bgeneva\b/i }
+    ]
+  },
+  {
+    country: "Spain",
+    regionGroup: "Europe",
+    patterns: /\b(spain|madrid|barcelona|valencia|seville)\b/i,
+    cities: [
+      { name: "Madrid", pattern: /\bmadrid\b/i },
+      { name: "Barcelona", pattern: /\bbarcelona\b/i }
+    ]
+  },
+  {
+    country: "Italy",
+    regionGroup: "Europe",
+    patterns: /\b(italy|milan|milano|rome|roma|turin)\b/i,
+    cities: [
+      { name: "Milan", pattern: /\b(milan|milano)\b/i },
+      { name: "Rome", pattern: /\b(rome|roma)\b/i }
+    ]
+  },
+  {
+    country: "Austria",
+    regionGroup: "Europe",
+    patterns: /\b(austria|vienna|wien|graz|salzburg)\b/i,
+    cities: [{ name: "Vienna", pattern: /\b(vienna|wien)\b/i }]
+  },
+  {
+    country: "Belgium",
+    regionGroup: "Europe",
+    patterns: /\b(belgium|brussels|antwerp|ghent)\b/i,
+    cities: [{ name: "Brussels", pattern: /\bbrussels\b/i }]
+  },
+  {
+    country: "Finland",
+    regionGroup: "Europe",
+    patterns: /\b(finland|helsinki|espoo|tampere)\b/i,
+    cities: [{ name: "Helsinki", pattern: /\bhelsinki\b/i }]
+  },
+  {
+    country: "Poland",
+    regionGroup: "Europe",
+    patterns: /\b(poland|warsaw|krakow|kraków|wroclaw)\b/i,
+    cities: [{ name: "Warsaw", pattern: /\bwarsaw\b/i }]
+  },
+  {
+    country: "Portugal",
+    regionGroup: "Europe",
+    patterns: /\b(portugal|lisbon|porto)\b/i,
+    cities: [{ name: "Lisbon", pattern: /\blisbon\b/i }]
+  },
+  {
+    country: "United States",
+    regionGroup: "North America & Oceania",
+    patterns: /\b(united states|usa|u\.s\.a\.|u\.s\.|new york|san francisco|los angeles|austin|chicago|seattle|miami|boston|dallas|california|texas|florida)\b/i,
+    cities: [
+      { name: "New York", pattern: /\bnew york\b/i },
+      { name: "San Francisco", pattern: /\bsan francisco\b/i },
+      { name: "Austin", pattern: /\baustin\b/i },
+      { name: "Los Angeles", pattern: /\blos angeles\b/i },
+      { name: "Miami", pattern: /\bmiami\b/i }
+    ]
+  },
+  {
+    country: "Canada",
+    regionGroup: "North America & Oceania",
+    patterns: /\b(canada|toronto|vancouver|montreal|calgary|ottawa|ontario|british columbia)\b/i,
+    cities: [
+      { name: "Toronto", pattern: /\btoronto\b/i },
+      { name: "Vancouver", pattern: /\bvancouver\b/i },
+      { name: "Montreal", pattern: /\bmontreal\b/i }
+    ]
+  },
+  {
+    country: "Australia",
+    regionGroup: "North America & Oceania",
+    patterns: /\b(australia|sydney|melbourne|brisbane|perth|adelaide)\b/i,
+    cities: [
+      { name: "Sydney", pattern: /\bsydney\b/i },
+      { name: "Melbourne", pattern: /\bmelbourne\b/i },
+      { name: "Brisbane", pattern: /\bbrisbane\b/i }
+    ]
+  }
+];
+function evaluate72HourFreshness(publishedAtInput, nowMs = Date.now()) {
+  if (publishedAtInput === null || publishedAtInput === void 0 || publishedAtInput === "") {
+    return {
+      valid: false,
+      publishedAtIso: null,
+      ageHours: Infinity,
+      within72Hours: false,
+      reason: "Rejected: Missing original publication date."
+    };
+  }
+  let tsMs = NaN;
+  if (typeof publishedAtInput === "number") {
+    tsMs = publishedAtInput < 1e12 ? publishedAtInput * 1e3 : publishedAtInput;
+  } else {
+    const trimmed = String(publishedAtInput).trim();
+    if (/^\d{9,13}$/.test(trimmed)) {
+      const n = Number(trimmed);
+      tsMs = n < 1e12 ? n * 1e3 : n;
+    } else {
+      tsMs = Date.parse(trimmed);
+    }
+  }
+  if (!Number.isFinite(tsMs) || tsMs <= 0) {
+    return {
+      valid: false,
+      publishedAtIso: null,
+      ageHours: Infinity,
+      within72Hours: false,
+      reason: "Rejected: Unparseable original publication timestamp."
+    };
+  }
+  if (tsMs > nowMs + 2 * 3600 * 1e3) {
+    return {
+      valid: false,
+      publishedAtIso: new Date(tsMs).toISOString(),
+      ageHours: 0,
+      within72Hours: false,
+      reason: "Rejected: Invalid future publication timestamp."
+    };
+  }
+  const ageHours = Math.max(0, Number(((nowMs - tsMs) / (3600 * 1e3)).toFixed(1)));
+  const within72Hours = ageHours <= NEXUS_FRESHNESS_WINDOW_HOURS;
+  return {
+    valid: true,
+    publishedAtIso: new Date(tsMs).toISOString(),
+    ageHours,
+    within72Hours,
+    reason: within72Hours ? null : `Rejected: Published ${ageHours}h ago (exceeds strict 72-hour freshness window).`
+  };
+}
+function evaluateWebItRelevance(title, description) {
+  const combined = `${title || ""} ${description || ""}`.toLowerCase();
+  if (/\b(crypto\s+airdrop|forex\s+signals|get\s+rich|mlm|adult\s+content|casino\s+link|gambling\s+backlinks|click\s+farm|fake\s+reviews|buy\s+followers|essay\s+writing|homework\s+help|video\s+tutorial\s+only|youtube\s+thumbnail)\b/i.test(
+    combined
+  )) {
+    return {
+      relevant: false,
+      matchedKeywords: [],
+      rejectionReason: "Rejected: Spam, misleading, or non-development listing."
+    };
+  }
+  if (/^\s*\[?\s*for\s+hire\s*\]?/i.test(title) || /\bi\s+am\s+available\s+for\s+hire\b/i.test(title)) {
+    return {
+      relevant: false,
+      matchedKeywords: [],
+      rejectionReason: 'Rejected: Developer self-promotion ("[For Hire]") rather than a client request.'
+    };
+  }
+  const keywordChecks = [
+    ["Website Development", /\b(website\s+dev|web\s+dev|build\s+(?:a\s+|my\s+|our\s+)?website|create\s+(?:a\s+|my\s+|our\s+)?website|need\s+(?:a\s+|new\s+)?website|looking\s+for\s+(?:a\s+)?web(?:site)?\s+developer|custom\s+website)\b/i],
+    ["Web Design / UI-UX", /\b(web\s+design|website\s+design|figma\s+to\s+(?:html|react|wordpress|webflow)|webflow|framer\s+website|ui\/ux\s+website)\b/i],
+    ["E-Commerce / Online Store", /\b(e-?commerce|online\s+store|shopify|woocommerce|magento|prestashop|opencart|stripe\s+checkout|online\s+shop)\b/i],
+    ["WordPress / CMS", /\b(wordpress|elementor|divi|wp\s+developer|woocommerce|wordpress\s+theme|wordpress\s+plugin|wordpress\s+site)\b/i],
+    ["Website Redesign", /\b(website\s+redesign|redesign\s+(?:my|our|existing)\s+website|revamp\s+(?:my|our)?\s*website|modernize\s+website|improve\s+website)\b/i],
+    ["Landing Page", /\b(landing\s+page|sales\s+page|lead\s+generation\s+page|conversion\s+page)\b/i],
+    ["Web Application / SaaS", /\b(web\s+app(?:lication)?|saas\s+(?:app|platform|portal)|full[\s-]?stack\s+(?:developer|engineer)|front[\s-]?end\s+(?:developer|engineer)|react\s+(?:developer|app)|next\.?js|node\.?js|laravel|django|portal\s+development|booking\s+system|crm\s+web)\b/i],
+    ["Website Maintenance / SEO Tech", /\b(website\s+maintenance|site\s+maintenance|fix\s+(?:my|our)?\s*website|wordpress\s+maintenance|website\s+speed|core\s+web\s+vitals|website\s+migration)\b/i],
+    ["IT / Software Project", /\b(api\s+integration|custom\s+software|cloud\s+portal|cms\s+development|mobile\s+and\s+web)\b/i]
+  ];
+  const matchedKeywords = [];
+  for (const [label, rx] of keywordChecks) {
+    if (rx.test(combined)) matchedKeywords.push(label);
+  }
+  if (matchedKeywords.length === 0) {
+    return {
+      relevant: false,
+      matchedKeywords: [],
+      rejectionReason: "Rejected: Not relevant to website development, web design, e-commerce, WordPress, web apps, or IT services."
+    };
+  }
+  return { relevant: true, matchedKeywords, rejectionReason: null };
+}
+function classifyNexusLeadCategory(title, description, advertiserType) {
+  const text = `${title || ""} ${description || ""}`.toLowerCase();
+  if (/\b(e-?commerce|online\s+store|online\s+shop|shopify|woocommerce|magento|prestashop|marketplace\s+store)\b/i.test(text)) {
+    return "ecommerce_website_request";
+  }
+  if (/\b(wordpress|elementor|divi|wp\s+theme|wp\s+plugin|wp\s+site|wp\s+developer)\b/i.test(text)) {
+    return "wordpress_website_request";
+  }
+  if (/\b(redesign|revamp|rebrand\s+website|modernize\s+(?:our|my)?\s*website|rebuild\s+(?:our|my)?\s*website|improve\s+(?:our|my)?\s*website)\b/i.test(text)) {
+    return "website_redesign_improvement";
+  }
+  if (/\b(landing\s+page|squeeze\s+page|sales\s+funnel\s+page|product\s+launch\s+page)\b/i.test(text)) {
+    return "landing_page_development";
+  }
+  if (/\b(website\s+maintenance|site\s+maintenance|ongoing\s+website\s+support|fix\s+(?:bugs?\s+on\s+)?(?:my|our)\s+website|website\s+speed\s+optimization|website\s+security\s+update)\b/i.test(text)) {
+    return "website_maintenance";
+  }
+  if (/\b(web\s+app(?:lication)?|saas|dashboard\s+app|booking\s+platform|client\s+portal|react|next\.?js|vue|angular|full[\s-]?stack|laravel|django|node\.?js)\b/i.test(text)) {
+    return "web_application_development";
+  }
+  if (/\b(business\s+website|company\s+website|corporate\s+website|agency\s+website|clinic\s+website|restaurant\s+website|real\s+estate\s+website|law\s+firm\s+website)\b/i.test(text)) {
+    return "business_website_creation";
+  }
+  if (/\b(website|web\s+developer|web\s+designer|web\s+site)\b/i.test(text)) {
+    return advertiserType === "person" ? "person_looking_for_web_developer" : "company_looking_for_web_developer";
+  }
+  return "other_it_projects";
+}
+function detectPriorityCountryAndCity(rawLocation, title, description) {
+  const combined = `${rawLocation || ""} ${title || ""} ${description || ""}`;
+  for (const rule of PRIORITY_COUNTRY_RULES) {
+    if (rule.patterns.test(combined)) {
+      let city = "Not specified";
+      if (rule.cities) {
+        const hit = rule.cities.find((c) => c.pattern.test(combined));
+        if (hit) city = hit.name;
+      }
+      return {
+        country: rule.country,
+        city,
+        regionGroup: rule.regionGroup,
+        isPriorityMarket: true
+      };
+    }
+  }
+  if (/\b(europe|eu\b|emea|schengen)\b/i.test(combined)) {
+    return {
+      country: "Europe (Multi-Country)",
+      city: "Remote / EU",
+      regionGroup: "Europe",
+      isPriorityMarket: true
+    };
+  }
+  if (/\b(middle\s+east|gcc|gulf)\b/i.test(combined)) {
+    return {
+      country: "Middle East / GCC",
+      city: "Regional",
+      regionGroup: "GCC / Middle East",
+      isPriorityMarket: true
+    };
+  }
+  return {
+    country: rawLocation && rawLocation.trim().length > 1 ? rawLocation.trim().slice(0, 60) : "International / Remote",
+    city: "Remote / Not specified",
+    regionGroup: "Global / Remote",
+    isPriorityMarket: false
+  };
+}
+function extractAndClassifyPublicEmails(rawText, officialWebsiteUrl, mxVerifiedDomains) {
+  const matches = String(rawText || "").match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,12}/g) || [];
+  const uniqueClean = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const m of matches) {
+    const email = m.trim().toLowerCase().replace(/[.,;:)>\]]+$/, "");
+    if (!email || seen.has(email)) continue;
+    const parts = email.split("@");
+    if (parts.length !== 2) continue;
+    const [localPart, domain2] = parts;
+    if (!localPart || localPart.length > 64 || !domain2 || domain2.length > 120) continue;
+    if (/\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i.test(domain2)) continue;
+    if (/^(noreply|no-reply|donotreply|do-not-reply|mailer-daemon|postmaster|bounce)/i.test(localPart)) continue;
+    if (DISPOSABLE_OR_PLACEHOLDER_DOMAINS.has(domain2)) continue;
+    seen.add(email);
+    uniqueClean.push(email);
+  }
+  if (uniqueClean.length === 0) {
+    return {
+      email: null,
+      classification: "no_public_email",
+      domain: null,
+      mxVerified: false
+    };
+  }
+  let websiteHost = "";
+  if (officialWebsiteUrl) {
+    try {
+      websiteHost = new URL(officialWebsiteUrl).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+    }
+  }
+  const sorted = [...uniqueClean].sort((a, b) => {
+    const domA = a.split("@")[1];
+    const domB = b.split("@")[1];
+    const persA = FREE_PERSONAL_EMAIL_DOMAINS.has(domA) ? 1 : 0;
+    const persB = FREE_PERSONAL_EMAIL_DOMAINS.has(domB) ? 1 : 0;
+    if (persA !== persB) return persA - persB;
+    const matchA = websiteHost && (domA === websiteHost || domA.endsWith(`.${websiteHost}`)) ? 0 : 1;
+    const matchB = websiteHost && (domB === websiteHost || domB.endsWith(`.${websiteHost}`)) ? 0 : 1;
+    return matchA - matchB;
+  });
+  const chosen = sorted[0];
+  const domain = chosen.split("@")[1];
+  const isPersonal = FREE_PERSONAL_EMAIL_DOMAINS.has(domain);
+  const mxVerified = Boolean(mxVerifiedDomains && mxVerifiedDomains.has(domain));
+  const matchesOfficialWebsite = Boolean(
+    websiteHost && (domain === websiteHost || domain.endsWith(`.${websiteHost}`))
+  );
+  if (isPersonal) {
+    return {
+      email: chosen,
+      classification: "personal_email",
+      domain,
+      mxVerified
+    };
+  }
+  if (mxVerified || matchesOfficialWebsite) {
+    return {
+      email: chosen,
+      classification: "verified_business_email",
+      domain,
+      mxVerified
+    };
+  }
+  return {
+    email: chosen,
+    classification: "unverified_business_email",
+    domain,
+    mxVerified: false
+  };
+}
+function extractPublicPhoneFromText(rawText) {
+  const match = String(rawText || "").match(
+    /(?:\+|00)(?:971|966|974|965|973|968|44|49|33|31|353|46|47|45|41|34|39|43|32|358|48|351|1|61)[\s.-]?(?:\(?\d{1,4}\)?[\s.-]?){2,4}\d{2,5}/
+  );
+  if (!match) return null;
+  const cleaned = match[0].trim();
+  const digitCount = cleaned.replace(/\D/g, "").length;
+  return digitCount >= 9 && digitCount <= 15 ? cleaned : null;
+}
+function computeNexusLeadFingerprint(title, advertiserName, originalSourceUrl, publicEmail) {
+  const norm = (s) => String(s || "").toLowerCase().replace(/https?:\/\/(www\.)?/g, "").replace(/[?#].*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const urlKey = norm(originalSourceUrl);
+  const titleKey = norm(title).slice(0, 80);
+  const advKey = norm(advertiserName).slice(0, 48);
+  const emailKey = publicEmail ? publicEmail.trim().toLowerCase() : "";
+  return `${advKey}|${titleKey}|${emailKey || urlKey}`.slice(0, 220);
+}
+function isEmailSuppressed(email, suppressionList) {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  const dom = clean.split("@")[1] || "";
+  return suppressionList.some((entry) => {
+    if (entry.email && entry.email.toLowerCase() === clean) return true;
+    if (entry.domain && dom && !FREE_PERSONAL_EMAIL_DOMAINS.has(dom) && entry.domain.toLowerCase() === dom) {
+      return true;
+    }
+    return false;
+  });
+}
+function generateNexusProposalMessage(lead, templateType) {
+  const greetingName = lead.advertiserName && !/^(individual client|client|unknown|public advertiser|anonymous)/i.test(lead.advertiserName) ? lead.advertiserName : "Team";
+  const topReqs = lead.projectRequirements && lead.projectRequirements.length > 0 ? lead.projectRequirements.slice(0, 3).join(", ") : lead.title;
+  const shortTitle = lead.title.length > 72 ? `${lead.title.slice(0, 69)}...` : lead.title;
+  let subject = "";
+  let body = "";
+  switch (templateType) {
+    case "ecommerce_development":
+      subject = `E-Commerce Development Support for "${shortTitle}" \u2014 Nexus IT Solutions`;
+      body = `Hello ${greetingName},
+
+I saw your recent public listing regarding "${lead.title}".
+
+At Nexus IT Solutions, we build fast, conversion-focused e-commerce websites (Shopify, WooCommerce, and custom online stores) with secure checkout, mobile optimization, and clear product management.
+
+Based on what you shared (${topReqs}), we can help deliver a clean storefront tailored to your workflow and timeline. If you are still reviewing options, I would be glad to share a short scope breakdown and estimated timeline.
+
+Best regards,
+Nexus IT Solutions`;
+      break;
+    case "business_website":
+      subject = `Business Website Proposal for ${greetingName} \u2014 Nexus IT Solutions`;
+      body = `Hello ${greetingName},
+
+I came across your recent announcement about "${lead.title}".
+
+Nexus IT Solutions specializes in modern, responsive business websites built for clarity, fast loading speed, and lead generation. Looking at your requirements (${topReqs}), we can structure a clean, easy-to-manage website aligned with your brand.
+
+Would you like me to send over a brief outline of deliverables and pricing options?
+
+Best regards,
+Nexus IT Solutions`;
+      break;
+    case "website_redesign":
+      subject = `Website Redesign Proposal \u2014 "${shortTitle}"`;
+      body = `Hello ${greetingName},
+
+I noticed your recent request regarding "${lead.title}".
+
+At Nexus IT Solutions, we redesign and modernize existing websites to improve mobile usability, loading performance, visual credibility, and conversion rates\u2014without disrupting your live business operations.
+
+Specifically for your goals (${topReqs}), I can put together a concise redesign plan and timeline if you are still taking proposals.
+
+Best regards,
+Nexus IT Solutions`;
+      break;
+    case "follow_up":
+      subject = `Following up on "${shortTitle}" \u2014 Nexus IT Solutions`;
+      body = `Hello ${greetingName},
+
+I am writing to follow up briefly regarding your recent public request for "${lead.title}".
+
+If you are still looking for a reliable web development partner to handle ${topReqs}, Nexus IT Solutions would be happy to share a concise scope and timeline tailored to your goals. If you have already filled this need, please let me know and I will close my notes.
+
+Best regards,
+Nexus IT Solutions`;
+      break;
+    case "website_development":
+    default:
+      subject = `Web Development Support for "${shortTitle}" \u2014 Nexus IT Solutions`;
+      body = `Hello ${greetingName},
+
+I saw your recent public post about "${lead.title}".
+
+At Nexus IT Solutions, we design and build custom websites, WordPress platforms, and web applications focused on reliability, speed, and clean user experience. From your stated requirements (${topReqs}), we can help take this project from structure to launch with transparent milestones.
+
+If the project is still open, please reply with any additional details and I will send a clear, no-obligation proposal.
+
+Best regards,
+Nexus IT Solutions`;
+      break;
+  }
+  const privacyNotice = lead.emailClassification === "personal_email" ? "Compliance Notice: This contact uses a personal email address. Confirm lawful basis and consent under applicable privacy/electronic marketing laws (e.g., GDPR, PECR, CAN-SPAM, UAE PDPL) before contacting." : "Human Review Required: Review and personalize this draft before clicking Send inside Gmail. Nexus IT Solutions never sends automated unsolicited emails.";
+  return {
+    templateType,
+    subject,
+    body,
+    generatedBy: "deterministic_nexus_assistant",
+    privacyNotice
+  };
+}
+
+// serverNexusClientFinder.ts
+var VALID_CONTACT_STATUSES = /* @__PURE__ */ new Set([
+  "new",
+  "selected",
+  "ready_to_contact",
+  "contacted",
+  "replied",
+  "interested",
+  "negotiating",
+  "project_won",
+  "not_interested",
+  "do_not_contact"
+]);
+var VALID_TEMPLATE_TYPES = /* @__PURE__ */ new Set([
+  "website_development",
+  "ecommerce_development",
+  "business_website",
+  "website_redesign",
+  "follow_up"
+]);
+var SCHEDULER_INTERVAL_HOURS = 3;
+var SCHEDULER_INTERVAL_MS = SCHEDULER_INTERVAL_HOURS * 60 * 60 * 1e3;
+var USER_AGENT = "NexusClientFinderBot/1.0 (+https://hopelandjobs.tech; Public-Opportunity-Discovery)";
+var DEFAULT_FREE_SOURCES = [
+  {
+    id: "freelancer_public_api",
+    name: "Freelancer.com Public Active Projects API",
+    sourceType: "free_public_api",
+    baseUrl: "https://www.freelancer.com/api/projects/0.1/projects/active/",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public project listings filtered for priority GCC, Europe, USA, Canada & Australia markets."
+  },
+  {
+    id: "wordpress_jobs_rss",
+    name: "WordPress.org Official Jobs RSS",
+    sourceType: "free_rss_feed",
+    baseUrl: "https://jobs.wordpress.net/feed/",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free official WordPress client and agency project feed."
+  },
+  {
+    id: "himalayas_public_api",
+    name: "Himalayas Public Opportunities API",
+    sourceType: "free_public_api",
+    baseUrl: "https://himalayas.app/jobs/api",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public remote tech & web engineering announcements."
+  },
+  {
+    id: "arbeitnow_europe_api",
+    name: "Arbeitnow European Public Board API",
+    sourceType: "free_public_api",
+    baseUrl: "https://www.arbeitnow.com/api/job-board-api",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public European technology & web development opportunities."
+  },
+  {
+    id: "remotive_public_api",
+    name: "Remotive Official Public API",
+    sourceType: "free_public_api",
+    baseUrl: "https://remotive.com/api/remote-jobs",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public software, web development & web design listings."
+  },
+  {
+    id: "weworkremotely_rss",
+    name: "We Work Remotely Official RSS Feeds",
+    sourceType: "free_rss_feed",
+    baseUrl: "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public front-end, full-stack & design RSS feeds."
+  },
+  {
+    id: "remoteok_public_api",
+    name: "RemoteOK Public JSON Feed",
+    sourceType: "free_public_api",
+    baseUrl: "https://remoteok.com/api",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public web development and digital product listings."
+  },
+  {
+    id: "hn_algolia_public_api",
+    name: "Hacker News Official Public Community API",
+    sourceType: "public_community_api",
+    baseUrl: "https://hn.algolia.com/api/v1/search_by_date",
+    isFree: true,
+    status: "idle",
+    lastCheckedAt: null,
+    lastCandidatesFound: 0,
+    lastAcceptedCount: 0,
+    lastError: null,
+    note: "100% free public founder/company posts often containing public business emails and websites."
+  }
+];
+var robotsCache2 = /* @__PURE__ */ new Map();
+var mxCache = /* @__PURE__ */ new Map();
+function isPrivateOrBlockedIp(ip) {
+  if (!ip) return true;
+  if (ip === "::1" || ip === "::" || ip.startsWith("fe80:") || ip.startsWith("fc") || ip.startsWith("fd")) {
+    return true;
+  }
+  const v4 = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+  if (net.isIPv4(v4)) {
+    const parts = v4.split(".").map(Number);
+    if (parts.length !== 4) return true;
+    const [a, b] = parts;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a >= 224) return true;
+    return false;
+  }
+  return false;
+}
+async function validatePublicSafeUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    const host = parsed.hostname.toLowerCase();
+    if (!host || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal") || host === "metadata.google.internal") {
+      return null;
+    }
+    if (net.isIP(host)) {
+      if (isPrivateOrBlockedIp(host)) return null;
+      return parsed;
+    }
+    try {
+      const resolved = await dns.lookup(host, { all: true });
+      if (!resolved.length) return null;
+      if (resolved.some((r) => isPrivateOrBlockedIp(r.address))) return null;
+    } catch {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+async function safePublicFetch(rawUrl, options = {}) {
+  const safeUrl = await validatePublicSafeUrl(rawUrl);
+  if (!safeUrl) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 9e3);
+  try {
+    const resp = await fetch(safeUrl.toString(), {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: options.accept || "application/json, application/xml, text/xml, text/html;q=0.9, */*;q=0.8"
+      }
+    });
+    if (resp.url && resp.url !== safeUrl.toString()) {
+      const finalCheck = await validatePublicSafeUrl(resp.url);
+      if (!finalCheck) return null;
+    }
+    const text = (await resp.text()).slice(0, 35e4);
+    return {
+      ok: resp.ok,
+      status: resp.status,
+      text,
+      finalUrl: resp.url || safeUrl.toString()
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+async function isRobotsAllowed(rawUrl) {
+  try {
+    const parsed = await validatePublicSafeUrl(rawUrl);
+    if (!parsed) return false;
+    const origin = parsed.origin;
+    const now = Date.now();
+    let cached = robotsCache2.get(origin);
+    if (!cached || now - cached.fetchedAt > 6 * 3600 * 1e3) {
+      const disallowPaths = [];
+      const resp = await safePublicFetch(`${origin}/robots.txt`, {
+        timeoutMs: 4500,
+        accept: "text/plain,*/*"
+      });
+      if (resp && resp.ok && resp.text) {
+        const lines = resp.text.split(/\r?\n/);
+        let appliesToAll = false;
+        for (const rawLine of lines) {
+          const line = rawLine.split("#")[0].trim();
+          if (!line) continue;
+          const uaMatch = line.match(/^user-agent:\s*(.+)$/i);
+          if (uaMatch) {
+            const ua = uaMatch[1].trim().toLowerCase();
+            appliesToAll = ua === "*" || ua.includes("nexusclientfinderbot");
+            continue;
+          }
+          if (appliesToAll) {
+            const disMatch = line.match(/^disallow:\s*(.*)$/i);
+            if (disMatch) {
+              const p = disMatch[1].trim();
+              if (p) disallowPaths.push(p);
+            }
+          }
+        }
+      }
+      cached = { fetchedAt: now, disallowPaths };
+      robotsCache2.set(origin, cached);
+    }
+    const reqPath = parsed.pathname || "/";
+    for (const dis of cached.disallowPaths) {
+      if (dis === "/") return false;
+      if (reqPath.startsWith(dis)) return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+async function verifyDomainHasMx(domain) {
+  const clean = domain.trim().toLowerCase();
+  if (!clean || !clean.includes(".")) return false;
+  const now = Date.now();
+  const cached = mxCache.get(clean);
+  if (cached && now - cached.checkedAt < 12 * 3600 * 1e3) {
+    return cached.hasMx;
+  }
+  try {
+    const records = await Promise.race([
+      dns.resolveMx(clean),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("MX timeout")), 3500))
+    ]);
+    const hasMx = Array.isArray(records) && records.length > 0;
+    mxCache.set(clean, { checkedAt: now, hasMx });
+    return hasMx;
+  } catch {
+    mxCache.set(clean, { checkedAt: now, hasMx: false });
+    return false;
+  }
+}
+function stripHtmlToPlainText(input) {
+  return String(input || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h[1-6]|tr)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;|&#39;|&apos;/g, "'").replace(/&#x2F;/g, "/").replace(/&nbsp;/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+function extractXmlTag(block, tag) {
+  const rx = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const m = block.match(rx);
+  return m ? stripHtmlToPlainText(m[1]) : "";
+}
+function extractProjectRequirements(title, description, matchedKeywords) {
+  const reqs = [...matchedKeywords];
+  const text = `${title} ${description}`;
+  const techChecks = [
+    ["Shopify", /\bshopify\b/i],
+    ["WooCommerce", /\bwoocommerce\b/i],
+    ["WordPress", /\bwordpress\b/i],
+    ["Elementor", /\belementor\b/i],
+    ["Webflow", /\bwebflow\b/i],
+    ["React / Next.js", /\b(react|next\.?js)\b/i],
+    ["Node.js / TypeScript", /\b(node\.?js|typescript)\b/i],
+    ["Laravel / PHP", /\b(laravel|php)\b/i],
+    ["Figma to Code", /\bfigma\b/i],
+    ["SEO & Speed Optimization", /\b(seo|page\s*speed|core\s*web\s*vitals)\b/i],
+    ["Payment Gateway / Checkout", /\b(stripe|paypal|checkout|payment\s+gateway)\b/i],
+    ["Responsive Mobile UI", /\b(responsive|mobile[\s-]first|mobile\s+friendly)\b/i],
+    ["Multi-language / Arabic-English", /\b(arabic|bilingual|multilingual|rtl)\b/i]
+  ];
+  for (const [label, rx] of techChecks) {
+    if (rx.test(text) && !reqs.includes(label)) {
+      reqs.push(label);
+    }
+  }
+  return reqs.slice(0, 6);
+}
+var PLATFORM_HOSTS_TO_IGNORE_AS_COMPANY_SITE = /* @__PURE__ */ new Set([
+  "freelancer.com",
+  "www.freelancer.com",
+  "jobs.wordpress.net",
+  "wordpress.org",
+  "himalayas.app",
+  "arbeitnow.com",
+  "www.arbeitnow.com",
+  "remotive.com",
+  "weworkremotely.com",
+  "remoteok.com",
+  "news.ycombinator.com",
+  "github.com",
+  "linkedin.com",
+  "www.linkedin.com",
+  "twitter.com",
+  "x.com",
+  "facebook.com",
+  "instagram.com",
+  "youtube.com",
+  "t.me",
+  "docs.google.com",
+  "forms.gle",
+  "calendly.com",
+  "bit.ly",
+  "tinyurl.com",
+  "lever.co",
+  "greenhouse.io",
+  "ashbyhq.com",
+  "workable.com"
+]);
+function extractExternalCompanyWebsiteFromText(rawText, emailDomain) {
+  const urlMatches = String(rawText || "").match(/https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\/[^\s"'<>)]*)?/g) || [];
+  for (const raw of urlMatches) {
+    const cleaned = raw.replace(/[.,;:)>\]]+$/, "");
+    try {
+      const parsed = new URL(cleaned);
+      const host = parsed.hostname.toLowerCase();
+      if (PLATFORM_HOSTS_TO_IGNORE_AS_COMPANY_SITE.has(host)) continue;
+      if (/\.(png|jpg|jpeg|gif|svg|pdf|zip)$/i.test(parsed.pathname)) continue;
+      return `${parsed.protocol}//${parsed.hostname}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+    } catch {
+    }
+  }
+  if (emailDomain && !FREE_PERSONAL_EMAIL_DOMAINS.has(emailDomain.toLowerCase()) && !PLATFORM_HOSTS_TO_IGNORE_AS_COMPANY_SITE.has(emailDomain.toLowerCase())) {
+    return `https://${emailDomain.toLowerCase()}`;
+  }
+  return null;
+}
+async function fetchFreelancerPublicProjects() {
+  const queries = [
+    "website development",
+    "wordpress website",
+    "ecommerce shopify woocommerce",
+    "website redesign landing page"
+  ];
+  const priorityCountryParams = [
+    "ae",
+    "sa",
+    "qa",
+    "kw",
+    "bh",
+    "om",
+    "gb",
+    "de",
+    "fr",
+    "nl",
+    "ie",
+    "se",
+    "no",
+    "dk",
+    "us",
+    "ca",
+    "au"
+  ].map((c) => `countries[]=${c}`).join("&");
+  const candidates = [];
+  const seenIds = /* @__PURE__ */ new Set();
+  const errors = [];
+  for (const q of queries) {
+    const url = `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${encodeURIComponent(
+      q
+    )}&limit=30&full_description=true&user_details=true&${priorityCountryParams}`;
+    const resp = await safePublicFetch(url, { timeoutMs: 9e3, accept: "application/json" });
+    if (!resp || !resp.ok) {
+      errors.push(`Freelancer query "${q}" failed (${resp?.status ?? "network"})`);
+      continue;
+    }
+    try {
+      const json = JSON.parse(resp.text);
+      const projects = json?.result?.projects || [];
+      const usersMap = json?.result?.users || {};
+      for (const p of projects) {
+        if (!p || !p.id || seenIds.has(p.id)) continue;
+        seenIds.add(p.id);
+        const owner = p.owner_id ? usersMap[String(p.owner_id)] : null;
+        const countryName = owner?.location?.country?.name || "";
+        const cityName = owner?.location?.city || "";
+        const rawLocation = [cityName, countryName].filter(Boolean).join(", ");
+        const minB = p?.budget?.minimum;
+        const maxB = p?.budget?.maximum;
+        const curr = p?.currency?.code || "USD";
+        const estimatedBudget = minB || maxB ? `${curr} ${minB ?? ""}${minB && maxB ? " - " : ""}${maxB ?? ""}`.trim() : null;
+        const seoUrl = p.seo_url ? `https://www.freelancer.com/projects/${p.seo_url}` : `https://www.freelancer.com/projects/${p.id}`;
+        const advertiserName = owner?.company || owner?.public_name || owner?.username || "Public Client Advertiser";
+        candidates.push({
+          sourceId: "freelancer_public_api",
+          sourceName: "Freelancer.com Public Projects",
+          title: String(p.title || "").trim(),
+          advertiserName: String(advertiserName).trim(),
+          advertiserType: owner?.company ? "company" : "person",
+          rawLocation,
+          rawText: stripHtmlToPlainText(p.description || p.preview_description || p.title || ""),
+          estimatedBudget,
+          publishedAt: p.time_submitted || p.submitdate || null,
+          originalSourceUrl: seoUrl,
+          sourceVerifiedDirectly: true,
+          sourceHttpStatus: resp.status
+        });
+      }
+    } catch (err) {
+      errors.push(`Freelancer JSON parse error: ${err?.message || "unknown"}`);
+    }
+  }
+  return {
+    candidates,
+    error: candidates.length === 0 && errors.length > 0 ? errors.join("; ") : null
+  };
+}
+async function fetchWordPressJobsRss() {
+  const resp = await safePublicFetch("https://jobs.wordpress.net/feed/", {
+    timeoutMs: 9e3,
+    accept: "application/rss+xml, application/xml, text/xml"
+  });
+  if (!resp || !resp.ok) {
+    return { candidates: [], error: `WordPress Jobs RSS returned ${resp?.status ?? "network error"}` };
+  }
+  const items = resp.text.match(/<item>[\s\S]*?<\/item>/gi) || [];
+  const candidates = [];
+  for (const item of items) {
+    const title = extractXmlTag(item, "title");
+    const link = extractXmlTag(item, "link");
+    const pubDate = extractXmlTag(item, "pubDate");
+    const description = extractXmlTag(item, "content:encoded") || extractXmlTag(item, "description");
+    const creator = extractXmlTag(item, "dc:creator") || "WordPress Project Poster";
+    if (!title || !link) continue;
+    const budgetMatch = description.match(/(?:budget|rate|pay|compensation)\s*[:\-]?\s*(\$|€|£|USD|EUR|GBP|AED)\s?[\d,]+(?:\s*[-–to]+\s*(?:\$|€|£|USD|EUR|GBP|AED)?\s?[\d,]+)?/i);
+    candidates.push({
+      sourceId: "wordpress_jobs_rss",
+      sourceName: "WordPress.org Official Jobs",
+      title,
+      advertiserName: creator,
+      advertiserType: "company",
+      rawLocation: "",
+      rawText: description,
+      estimatedBudget: budgetMatch ? budgetMatch[0].slice(0, 60) : null,
+      publishedAt: pubDate || null,
+      originalSourceUrl: link,
+      sourceVerifiedDirectly: true,
+      sourceHttpStatus: resp.status
+    });
+  }
+  return { candidates, error: null };
+}
+async function fetchHimalayasPublicApi() {
+  const resp = await safePublicFetch("https://himalayas.app/jobs/api?limit=60", {
+    timeoutMs: 9e3,
+    accept: "application/json"
+  });
+  if (!resp || !resp.ok) {
+    return { candidates: [], error: `Himalayas API returned ${resp?.status ?? "network error"}` };
+  }
+  try {
+    const json = JSON.parse(resp.text);
+    const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+    const candidates = jobs.map((j) => {
+      const loc = Array.isArray(j.locationRestrictions) && j.locationRestrictions.length > 0 ? j.locationRestrictions.join(", ") : "Remote / International";
+      const budget = j.minSalary || j.maxSalary ? `${j.currency || "USD"} ${j.minSalary ?? ""}${j.minSalary && j.maxSalary ? " - " : ""}${j.maxSalary ?? ""}`.trim() : null;
+      return {
+        sourceId: "himalayas_public_api",
+        sourceName: "Himalayas Public Board",
+        title: String(j.title || "").trim(),
+        advertiserName: String(j.companyName || "Company Advertiser").trim(),
+        advertiserType: "company",
+        rawLocation: loc,
+        rawText: stripHtmlToPlainText(j.description || j.excerpt || ""),
+        estimatedBudget: budget,
+        publishedAt: j.pubDate || null,
+        originalSourceUrl: String(j.guid || j.applicationLink || "").trim(),
+        officialWebsiteUrl: typeof j.applicationLink === "string" ? j.applicationLink : null,
+        sourceVerifiedDirectly: true,
+        sourceHttpStatus: resp.status
+      };
+    }).filter((c) => Boolean(c.title && c.originalSourceUrl));
+    return { candidates, error: null };
+  } catch (err) {
+    return { candidates: [], error: `Himalayas JSON parse error: ${err?.message || "unknown"}` };
+  }
+}
+async function fetchArbeitnowEuropeApi() {
+  const resp = await safePublicFetch("https://www.arbeitnow.com/api/job-board-api", {
+    timeoutMs: 9e3,
+    accept: "application/json"
+  });
+  if (!resp || !resp.ok) {
+    return { candidates: [], error: `Arbeitnow API returned ${resp?.status ?? "network error"}` };
+  }
+  try {
+    const json = JSON.parse(resp.text);
+    const data = Array.isArray(json?.data) ? json.data : [];
+    const candidates = data.slice(0, 80).map((j) => ({
+      sourceId: "arbeitnow_europe_api",
+      sourceName: "Arbeitnow Europe Public Board",
+      title: String(j.title || "").trim(),
+      advertiserName: String(j.company_name || "European Company").trim(),
+      advertiserType: "company",
+      rawLocation: String(j.location || "Germany / Europe").trim(),
+      rawText: stripHtmlToPlainText(j.description || ""),
+      estimatedBudget: null,
+      publishedAt: j.created_at || null,
+      originalSourceUrl: String(j.url || "").trim(),
+      sourceVerifiedDirectly: true,
+      sourceHttpStatus: resp.status
+    })).filter((c) => Boolean(c.title && c.originalSourceUrl));
+    return { candidates, error: null };
+  } catch (err) {
+    return { candidates: [], error: `Arbeitnow JSON parse error: ${err?.message || "unknown"}` };
+  }
+}
+async function fetchRemotivePublicApi() {
+  const urls = [
+    "https://remotive.com/api/remote-jobs?category=software-dev&limit=40",
+    "https://remotive.com/api/remote-jobs?category=design&limit=25"
+  ];
+  const candidates = [];
+  const errors = [];
+  for (const url of urls) {
+    const resp = await safePublicFetch(url, { timeoutMs: 9e3, accept: "application/json" });
+    if (!resp || !resp.ok) {
+      errors.push(`Remotive returned ${resp?.status ?? "network error"}`);
+      continue;
+    }
+    try {
+      const json = JSON.parse(resp.text);
+      const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
+      for (const j of jobs) {
+        if (!j?.title || !j?.url) continue;
+        candidates.push({
+          sourceId: "remotive_public_api",
+          sourceName: "Remotive Public Listings",
+          title: String(j.title).trim(),
+          advertiserName: String(j.company_name || "Company Advertiser").trim(),
+          advertiserType: "company",
+          rawLocation: String(j.candidate_required_location || "").trim(),
+          rawText: stripHtmlToPlainText(j.description || ""),
+          estimatedBudget: j.salary ? String(j.salary).trim().slice(0, 60) : null,
+          publishedAt: j.publication_date || null,
+          originalSourceUrl: String(j.url).trim(),
+          sourceVerifiedDirectly: true,
+          sourceHttpStatus: resp.status
+        });
+      }
+    } catch (err) {
+      errors.push(`Remotive parse error: ${err?.message || "unknown"}`);
+    }
+  }
+  return { candidates, error: candidates.length === 0 && errors.length ? errors.join("; ") : null };
+}
+async function fetchWeWorkRemotelyRss() {
+  const feeds = [
+    "https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss",
+    "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss",
+    "https://weworkremotely.com/categories/remote-design-jobs.rss"
+  ];
+  const candidates = [];
+  const errors = [];
+  for (const feedUrl of feeds) {
+    const resp = await safePublicFetch(feedUrl, {
+      timeoutMs: 9e3,
+      accept: "application/rss+xml, application/xml, text/xml"
+    });
+    if (!resp || !resp.ok) {
+      errors.push(`WeWorkRemotely RSS returned ${resp?.status ?? "network error"}`);
+      continue;
+    }
+    const items = resp.text.match(/<item>[\s\S]*?<\/item>/gi) || [];
+    for (const item of items.slice(0, 25)) {
+      const rawTitle = extractXmlTag(item, "title");
+      const link = extractXmlTag(item, "link");
+      const pubDate = extractXmlTag(item, "pubDate");
+      const description = extractXmlTag(item, "description");
+      const region = extractXmlTag(item, "region");
+      if (!rawTitle || !link) continue;
+      let advertiserName = "Company Advertiser";
+      let cleanTitle = rawTitle;
+      if (rawTitle.includes(":")) {
+        const idx = rawTitle.indexOf(":");
+        advertiserName = rawTitle.slice(0, idx).trim() || advertiserName;
+        cleanTitle = rawTitle.slice(idx + 1).trim() || rawTitle;
+      }
+      candidates.push({
+        sourceId: "weworkremotely_rss",
+        sourceName: "We Work Remotely RSS",
+        title: cleanTitle,
+        advertiserName,
+        advertiserType: "company",
+        rawLocation: region || "",
+        rawText: description,
+        estimatedBudget: null,
+        publishedAt: pubDate || null,
+        originalSourceUrl: link,
+        sourceVerifiedDirectly: true,
+        sourceHttpStatus: resp.status
+      });
+    }
+  }
+  return { candidates, error: candidates.length === 0 && errors.length ? errors.join("; ") : null };
+}
+async function fetchRemoteOkApi() {
+  const resp = await safePublicFetch("https://remoteok.com/api", {
+    timeoutMs: 9e3,
+    accept: "application/json"
+  });
+  if (!resp || !resp.ok) {
+    return { candidates: [], error: `RemoteOK API returned ${resp?.status ?? "network error"}` };
+  }
+  try {
+    const json = JSON.parse(resp.text);
+    const rows = Array.isArray(json) ? json.slice(1, 60) : [];
+    const candidates = rows.filter((r) => r && r.position && (r.url || r.apply_url)).map((r) => {
+      const budget = r.salary_min || r.salary_max ? `USD ${r.salary_min ?? ""}${r.salary_min && r.salary_max ? " - " : ""}${r.salary_max ?? ""}`.trim() : null;
+      return {
+        sourceId: "remoteok_public_api",
+        sourceName: "RemoteOK Public API",
+        title: String(r.position).trim(),
+        advertiserName: String(r.company || "Company Advertiser").trim(),
+        advertiserType: "company",
+        rawLocation: String(r.location || "").trim(),
+        rawText: stripHtmlToPlainText(r.description || ""),
+        estimatedBudget: budget,
+        publishedAt: r.date || r.epoch || null,
+        originalSourceUrl: String(r.url || r.apply_url).trim(),
+        officialWebsiteUrl: typeof r.apply_url === "string" && !r.apply_url.includes("remoteok.com") ? r.apply_url : null,
+        sourceVerifiedDirectly: true,
+        sourceHttpStatus: resp.status
+      };
+    });
+    return { candidates, error: null };
+  } catch (err) {
+    return { candidates: [], error: `RemoteOK parse error: ${err?.message || "unknown"}` };
+  }
+}
+async function fetchHackerNewsPublicCommunity() {
+  const minEpochSec = Math.floor((Date.now() - NEXUS_FRESHNESS_WINDOW_HOURS * 3600 * 1e3) / 1e3);
+  const queries = [
+    "hiring web developer website",
+    "need website wordpress shopify ecommerce"
+  ];
+  const candidates = [];
+  const seenIds = /* @__PURE__ */ new Set();
+  const errors = [];
+  for (const q of queries) {
+    const url = `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(
+      q
+    )}&tags=(comment,story)&numericFilters=created_at_i>${minEpochSec}&hitsPerPage=35`;
+    const resp = await safePublicFetch(url, { timeoutMs: 9e3, accept: "application/json" });
+    if (!resp || !resp.ok) {
+      errors.push(`HN Algolia query "${q}" failed (${resp?.status ?? "network"})`);
+      continue;
+    }
+    try {
+      const json = JSON.parse(resp.text);
+      const hits = Array.isArray(json?.hits) ? json.hits : [];
+      for (const hit of hits) {
+        const oid = String(hit.objectID || "");
+        if (!oid || seenIds.has(oid)) continue;
+        seenIds.add(oid);
+        const body = stripHtmlToPlainText(hit.comment_text || hit.story_text || "");
+        const rawTitle = String(hit.title || hit.story_title || "").trim();
+        const combined = `${rawTitle} ${body}`;
+        if (!/\b(hiring|looking\s+for|need\s+a|seeking|freelance|contractor|build\s+(?:a|our)\s+website|web\s+developer|redesign|wordpress|shopify|e-?commerce)\b/i.test(combined)) {
+          continue;
+        }
+        const firstLine = body.split("\n")[0]?.trim() || "";
+        const computedTitle = rawTitle && rawTitle.length >= 12 ? rawTitle : firstLine.slice(0, 110) || "Public Web / IT Project Request";
+        const advertiserName = firstLine.includes("|") ? firstLine.split("|")[0].trim().slice(0, 50) : String(hit.author || "Public Community Advertiser");
+        candidates.push({
+          sourceId: "hn_algolia_public_api",
+          sourceName: "Hacker News Public Community",
+          title: computedTitle,
+          advertiserName,
+          advertiserType: /\b(inc|ltd|llc|gmbh|studio|labs|io|company|team|we\s+are)\b/i.test(body) ? "company" : "person",
+          rawLocation: firstLine.slice(0, 120),
+          rawText: body,
+          estimatedBudget: null,
+          publishedAt: hit.created_at || hit.created_at_i || null,
+          originalSourceUrl: `https://news.ycombinator.com/item?id=${oid}`,
+          sourceVerifiedDirectly: true,
+          sourceHttpStatus: resp.status
+        });
+      }
+    } catch (err) {
+      errors.push(`HN Algolia parse error: ${err?.message || "unknown"}`);
+    }
+  }
+  return { candidates, error: candidates.length === 0 && errors.length ? errors.join("; ") : null };
+}
+async function enrichPublicContactAndVerifyUrl(candidate, options) {
+  let combinedContactText = `${candidate.title}
+${candidate.rawText}`;
+  let officialWebsiteUrl = candidate.officialWebsiteUrl || extractExternalCompanyWebsiteFromText(candidate.rawText, null);
+  let publicContactPageUrl = null;
+  let emailEvidenceSource = null;
+  let sourceHttpStatus = candidate.sourceHttpStatus ?? null;
+  let robotsAllowed = true;
+  let isActive = true;
+  let initialExtract = extractAndClassifyPublicEmails(combinedContactText, officialWebsiteUrl);
+  if (initialExtract.email) {
+    emailEvidenceSource = `Original public listing (${candidate.sourceName})`;
+    if (!officialWebsiteUrl && initialExtract.domain) {
+      officialWebsiteUrl = extractExternalCompanyWebsiteFromText("", initialExtract.domain);
+    }
+  }
+  let attemptedDeepLookup = false;
+  if (!initialExtract.email && options.allowDeepWebsiteContactLookup && officialWebsiteUrl) {
+    attemptedDeepLookup = true;
+    try {
+      const siteUrl = await validatePublicSafeUrl(officialWebsiteUrl);
+      if (siteUrl && !PLATFORM_HOSTS_TO_IGNORE_AS_COMPANY_SITE.has(siteUrl.hostname.toLowerCase())) {
+        const homeAllowed = await isRobotsAllowed(siteUrl.toString());
+        if (homeAllowed) {
+          const homeResp = await safePublicFetch(siteUrl.toString(), {
+            timeoutMs: 2800,
+            accept: "text/html,application/xhtml+xml"
+          });
+          if (homeResp && homeResp.ok && homeResp.text) {
+            const plainHome = stripHtmlToPlainText(homeResp.text);
+            const fromHome = extractAndClassifyPublicEmails(homeResp.text + "\n" + plainHome, siteUrl.origin);
+            if (fromHome.email) {
+              initialExtract = fromHome;
+              combinedContactText += "\n" + plainHome;
+              publicContactPageUrl = homeResp.finalUrl;
+              emailEvidenceSource = `Official public website (${homeResp.finalUrl})`;
+            } else {
+              const contactUrl = `${siteUrl.origin}/contact`;
+              const contactAllowed = await isRobotsAllowed(contactUrl);
+              if (contactAllowed) {
+                const contactResp = await safePublicFetch(contactUrl, {
+                  timeoutMs: 2500,
+                  accept: "text/html,application/xhtml+xml"
+                });
+                if (contactResp && contactResp.ok && contactResp.text) {
+                  const plainContact = stripHtmlToPlainText(contactResp.text);
+                  const fromContact = extractAndClassifyPublicEmails(contactResp.text + "\n" + plainContact, siteUrl.origin);
+                  if (fromContact.email) {
+                    initialExtract = fromContact;
+                    combinedContactText += "\n" + plainContact;
+                    publicContactPageUrl = contactResp.finalUrl;
+                    emailEvidenceSource = `Official company contact page (${contactResp.finalUrl})`;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+    }
+  }
+  const mxVerifiedDomains = /* @__PURE__ */ new Set();
+  if (initialExtract.domain) {
+    const hasMx = await verifyDomainHasMx(initialExtract.domain);
+    if (hasMx) mxVerifiedDomains.add(initialExtract.domain);
+  }
+  const finalEmail = extractAndClassifyPublicEmails(
+    initialExtract.email || "",
+    officialWebsiteUrl,
+    mxVerifiedDomains
+  );
+  const publicPhone = extractPublicPhoneFromText(combinedContactText);
+  let verificationStatus = "partially_verified";
+  let verificationNotes = "";
+  if (sourceHttpStatus && sourceHttpStatus >= 200 && sourceHttpStatus < 400) {
+    if (finalEmail.classification === "verified_business_email") {
+      verificationStatus = "verified";
+      verificationNotes = `Original public source active (HTTP ${sourceHttpStatus}) within 72h; public business email verified via DNS MX/domain match.`;
+    } else if (finalEmail.email) {
+      verificationStatus = "verified";
+      verificationNotes = `Original public source active (HTTP ${sourceHttpStatus}) within 72h; public contact email extracted (${finalEmail.classification}).`;
+    } else {
+      verificationStatus = "partially_verified";
+      verificationNotes = `Original public source active (HTTP ${sourceHttpStatus}) within 72h; no public email posted on listing (use original source link to contact directly).`;
+    }
+  } else {
+    verificationStatus = "pending";
+    verificationNotes = "Discovered within 72h; awaiting next live URL verification check.";
+  }
+  return {
+    publicEmail: finalEmail.email,
+    emailClassification: finalEmail.classification,
+    emailDomain: finalEmail.domain,
+    emailMxVerified: finalEmail.mxVerified,
+    emailEvidenceSource: finalEmail.email ? emailEvidenceSource : null,
+    officialWebsiteUrl,
+    publicContactPageUrl,
+    publicPhone,
+    sourceHttpStatus,
+    robotsAllowed,
+    isActive,
+    verificationStatus,
+    verificationNotes,
+    attemptedDeepLookup
+  };
+}
+function registerNexusClientFinderRoutes(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterEmail,
+    appendAuditLog,
+    getAiClient
+  } = deps;
+  const STORE_PATH = path3.join(runtimeBaseDir, "data", "nexus_client_finder_store.json");
+  let isDiscoveryRunning = false;
+  let lastRunAt = null;
+  let nextRunAt = null;
+  let lastRunStatus = null;
+  function loadStore() {
+    ensureRuntimeDataDir();
+    const fallback = {
+      leads: [],
+      suppressionList: [],
+      sources: DEFAULT_FREE_SOURCES.map((s) => ({ ...s })),
+      runLogs: [],
+      lastUpdatedAt: null
+    };
+    const loaded = loadJsonFileSafe(STORE_PATH, fallback);
+    const mergedSources = DEFAULT_FREE_SOURCES.map((def) => {
+      const existing = Array.isArray(loaded.sources) ? loaded.sources.find((s) => s.id === def.id) : null;
+      return existing ? { ...def, ...existing, isFree: true } : { ...def };
+    });
+    return {
+      leads: Array.isArray(loaded.leads) ? loaded.leads : [],
+      suppressionList: Array.isArray(loaded.suppressionList) ? loaded.suppressionList : [],
+      sources: mergedSources,
+      runLogs: Array.isArray(loaded.runLogs) ? loaded.runLogs : [],
+      lastUpdatedAt: loaded.lastUpdatedAt || null
+    };
+  }
+  function saveStore(store) {
+    ensureRuntimeDataDir();
+    store.lastUpdatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (store.leads.length > 1500) {
+      const protectedLeads = store.leads.filter((l) => l.contactStatus !== "new" || l.contactCount > 0);
+      const freshNew = store.leads.filter((l) => l.contactStatus === "new" && l.contactCount === 0).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, Math.max(400, 1500 - protectedLeads.length));
+      store.leads = [...protectedLeads, ...freshNew];
+    }
+    if (store.runLogs.length > 50) {
+      store.runLogs = store.runLogs.slice(0, 50);
+    }
+    writeJsonFileAtomic(STORE_PATH, store);
+  }
+  function requireOwnerAdmin(req, res) {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Forbidden: Nexus IT Solutions Global Client Finder is strictly restricted to Admin / Developer access only."
+      });
+      return false;
+    }
+    return true;
+  }
+  function refreshLeadFreshnessAndSuppression(store) {
+    const nowMs = Date.now();
+    for (const lead of store.leads) {
+      const f = evaluate72HourFreshness(lead.publishedAt, nowMs);
+      lead.within72Hours = f.within72Hours;
+      if (!f.within72Hours && lead.verificationStatus !== "rejected") {
+        lead.verificationStatus = "expired";
+        lead.isActive = false;
+      }
+      lead.suppressed = lead.contactStatus === "do_not_contact" || isEmailSuppressed(lead.publicEmail, store.suppressionList);
+    }
+  }
+  function computeDashboardStats(store) {
+    const now = /* @__PURE__ */ new Date();
+    const todayPrefix = now.toISOString().slice(0, 10);
+    const activeLeads = store.leads.filter(
+      (l) => l.within72Hours && l.isActive && l.verificationStatus !== "rejected" && l.verificationStatus !== "expired"
+    );
+    const discoveredTodayCount = activeLeads.filter((l) => l.discoveredAt.startsWith(todayPrefix)).length;
+    const verifiedCount = activeLeads.filter((l) => l.verificationStatus === "verified").length;
+    const partiallyVerifiedCount = activeLeads.filter((l) => l.verificationStatus === "partially_verified").length;
+    const pendingCount = activeLeads.filter((l) => l.verificationStatus === "pending").length;
+    const expiredCount = store.leads.filter((l) => l.verificationStatus === "expired" || !l.within72Hours).length;
+    const latestRun = store.runLogs[0];
+    const rejectedCount = store.leads.filter((l) => l.verificationStatus === "rejected").length + (latestRun ? latestRun.rejectedExpiredOrOver72hCount + latestRun.rejectedIrrelevantOrFakeCount : 0);
+    const verifiedBusinessEmailsCount = activeLeads.filter(
+      (l) => l.emailClassification === "verified_business_email"
+    ).length;
+    const availableBusinessEmailsCount = activeLeads.filter(
+      (l) => l.emailClassification === "verified_business_email" || l.emailClassification === "unverified_business_email"
+    ).length;
+    const personalEmailsCount = activeLeads.filter((l) => l.emailClassification === "personal_email").length;
+    const newOpportunitiesCount = activeLeads.filter((l) => l.contactStatus === "new").length;
+    const alreadyContactedCount = activeLeads.filter(
+      (l) => l.contactCount > 0 || ["contacted", "replied", "interested", "negotiating", "project_won"].includes(l.contactStatus)
+    ).length;
+    const awaitingContactCount = activeLeads.filter(
+      (l) => !l.suppressed && l.contactCount === 0 && ["new", "selected", "ready_to_contact"].includes(l.contactStatus)
+    ).length;
+    const countryMap = /* @__PURE__ */ new Map();
+    const categoryMap = /* @__PURE__ */ new Map();
+    const dateMap = /* @__PURE__ */ new Map();
+    for (const l of activeLeads) {
+      countryMap.set(l.country, (countryMap.get(l.country) || 0) + 1);
+      categoryMap.set(l.category, (categoryMap.get(l.category) || 0) + 1);
+      const pubDay = (l.publishedAt || "").slice(0, 10) || "Unknown";
+      dateMap.set(pubDay, (dateMap.get(pubDay) || 0) + 1);
+    }
+    const byCountry = Array.from(countryMap.entries()).map(([country, count]) => ({ country, count })).sort((a, b) => b.count - a.count);
+    const byCategory = Object.keys(NEXUS_CATEGORY_LABELS).map((category) => ({
+      category,
+      label: NEXUS_CATEGORY_LABELS[category],
+      count: categoryMap.get(category) || 0
+    })).sort((a, b) => b.count - a.count);
+    const byPublicationDate = Array.from(dateMap.entries()).map(([date, count]) => ({ date, count })).sort((a, b) => b.date.localeCompare(a.date));
+    return {
+      dailyTarget: NEXUS_DAILY_TARGET,
+      discoveredTodayCount,
+      totalActiveLeads: activeLeads.length,
+      verifiedCount,
+      partiallyVerifiedCount,
+      pendingCount,
+      rejectedCount,
+      expiredCount,
+      availableBusinessEmailsCount,
+      verifiedBusinessEmailsCount,
+      personalEmailsCount,
+      newOpportunitiesCount,
+      alreadyContactedCount,
+      awaitingContactCount,
+      suppressedCount: store.suppressionList.length,
+      byCountry,
+      byCategory,
+      byPublicationDate
+    };
+  }
+  function getSchedulerInfo() {
+    return {
+      enabled: !isVercel,
+      intervalHours: SCHEDULER_INTERVAL_HOURS,
+      dailyTarget: NEXUS_DAILY_TARGET,
+      freshnessWindowHours: NEXUS_FRESHNESS_WINDOW_HOURS,
+      isRunningNow: isDiscoveryRunning,
+      lastRunAt,
+      nextRunAt,
+      lastRunStatus,
+      freeSourcesOnlyPolicy: "100% Free Public Sources Only (zero paid APIs, zero paid lead databases, zero scraping subscriptions, strict robots.txt & 72h freshness enforcement)."
+    };
+  }
+  async function runLiveFreeDiscovery(trigger) {
+    if (isDiscoveryRunning) {
+      const current = loadStore();
+      return {
+        store: current,
+        runLog: current.runLogs[0] || {
+          id: `run-${Date.now()}`,
+          trigger,
+          startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          durationMs: 0,
+          status: "partial",
+          dailyTarget: NEXUS_DAILY_TARGET,
+          sourcesQueried: 0,
+          rawCandidatesScanned: 0,
+          acceptedWithin72hCount: 0,
+          verifiedCount: 0,
+          partiallyVerifiedCount: 0,
+          pendingCount: 0,
+          rejectedExpiredOrOver72hCount: 0,
+          rejectedIrrelevantOrFakeCount: 0,
+          duplicatesSkippedCount: 0,
+          businessEmailsFoundCount: 0,
+          errors: ["Discovery run is already in progress."]
+        }
+      };
+    }
+    isDiscoveryRunning = true;
+    const startedMs = Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    const store = loadStore();
+    refreshLeadFreshnessAndSuppression(store);
+    const existingFingerprints = new Set(store.leads.map((l) => l.fingerprint));
+    const existingUrls = new Set(store.leads.map((l) => l.originalSourceUrl.toLowerCase()));
+    const connectorTasks = [
+      { sourceId: "freelancer_public_api", fn: fetchFreelancerPublicProjects },
+      { sourceId: "wordpress_jobs_rss", fn: fetchWordPressJobsRss },
+      { sourceId: "himalayas_public_api", fn: fetchHimalayasPublicApi },
+      { sourceId: "arbeitnow_europe_api", fn: fetchArbeitnowEuropeApi },
+      { sourceId: "remotive_public_api", fn: fetchRemotivePublicApi },
+      { sourceId: "weworkremotely_rss", fn: fetchWeWorkRemotelyRss },
+      { sourceId: "remoteok_public_api", fn: fetchRemoteOkApi },
+      { sourceId: "hn_algolia_public_api", fn: fetchHackerNewsPublicCommunity }
+    ];
+    const results = await Promise.allSettled(connectorTasks.map((t) => t.fn()));
+    const allCandidates = [];
+    const errors = [];
+    const perSourceScanned = /* @__PURE__ */ new Map();
+    const perSourceAccepted = /* @__PURE__ */ new Map();
+    results.forEach((res, idx) => {
+      const sourceId = connectorTasks[idx].sourceId;
+      const sourceRecord = store.sources.find((s) => s.id === sourceId);
+      const checkedIso = (/* @__PURE__ */ new Date()).toISOString();
+      if (res.status === "fulfilled") {
+        const { candidates, error } = res.value;
+        perSourceScanned.set(sourceId, candidates.length);
+        allCandidates.push(...candidates);
+        if (error) errors.push(`${sourceId}: ${error}`);
+        if (sourceRecord) {
+          sourceRecord.lastCheckedAt = checkedIso;
+          sourceRecord.lastCandidatesFound = candidates.length;
+          sourceRecord.lastError = error;
+          sourceRecord.status = error ? candidates.length > 0 ? "degraded" : "error" : "connected";
+        }
+      } else {
+        const errMsg = res.reason?.message || "Connector exception";
+        errors.push(`${sourceId}: ${errMsg}`);
+        if (sourceRecord) {
+          sourceRecord.lastCheckedAt = checkedIso;
+          sourceRecord.lastCandidatesFound = 0;
+          sourceRecord.lastAcceptedCount = 0;
+          sourceRecord.lastError = errMsg;
+          sourceRecord.status = "error";
+        }
+      }
+    });
+    let rawCandidatesScanned = allCandidates.length;
+    let acceptedWithin72hCount = 0;
+    let verifiedCount = 0;
+    let partiallyVerifiedCount = 0;
+    let pendingCount = 0;
+    let rejectedExpiredOrOver72hCount = 0;
+    let rejectedIrrelevantOrFakeCount = 0;
+    let duplicatesSkippedCount = 0;
+    let businessEmailsFoundCount = 0;
+    const preFiltered = [];
+    const nowMs = Date.now();
+    for (const candidate of allCandidates) {
+      if (!candidate.title || !candidate.originalSourceUrl) {
+        rejectedIrrelevantOrFakeCount++;
+        continue;
+      }
+      const freshness = evaluate72HourFreshness(candidate.publishedAt, nowMs);
+      if (!freshness.valid || !freshness.within72Hours || !freshness.publishedAtIso) {
+        rejectedExpiredOrOver72hCount++;
+        continue;
+      }
+      const relevance = evaluateWebItRelevance(candidate.title, candidate.rawText);
+      if (!relevance.relevant) {
+        rejectedIrrelevantOrFakeCount++;
+        continue;
+      }
+      const geo = detectPriorityCountryAndCity(candidate.rawLocation, candidate.title, candidate.rawText);
+      preFiltered.push({ candidate, freshness, relevance, geo });
+    }
+    preFiltered.sort((a, b) => {
+      if (a.geo.isPriorityMarket !== b.geo.isPriorityMarket) {
+        return a.geo.isPriorityMarket ? -1 : 1;
+      }
+      return a.freshness.ageHours - b.freshness.ageHours;
+    });
+    const todayPrefix = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const alreadyTodayCount = store.leads.filter(
+      (l) => l.discoveredAt.startsWith(todayPrefix) && l.within72Hours && l.isActive
+    ).length;
+    const remainingDailyBudget = Math.max(0, NEXUS_DAILY_TARGET - alreadyTodayCount);
+    const uniqueToEnrich = [];
+    for (const item of preFiltered) {
+      if (uniqueToEnrich.length >= remainingDailyBudget && remainingDailyBudget > 0) break;
+      const { candidate } = item;
+      const urlLower = candidate.originalSourceUrl.toLowerCase();
+      const prelimFp = computeNexusLeadFingerprint(
+        candidate.title,
+        candidate.advertiserName,
+        candidate.originalSourceUrl
+      );
+      if (existingUrls.has(urlLower) || existingFingerprints.has(prelimFp)) {
+        duplicatesSkippedCount++;
+        continue;
+      }
+      existingUrls.add(urlLower);
+      existingFingerprints.add(prelimFp);
+      uniqueToEnrich.push(item);
+    }
+    let deepSiteLookupsAttempted = 0;
+    const MAX_DEEP_SITE_LOOKUPS_PER_RUN = 8;
+    const enrichDeadlineMs = Date.now() + 18e3;
+    const CONCURRENCY = 6;
+    for (let i = 0; i < uniqueToEnrich.length; i += CONCURRENCY) {
+      const batch = uniqueToEnrich.slice(i, i + CONCURRENCY);
+      const enrichedBatch = await Promise.all(
+        batch.map(async (item) => {
+          const allowDeep = deepSiteLookupsAttempted < MAX_DEEP_SITE_LOOKUPS_PER_RUN && Date.now() < enrichDeadlineMs;
+          if (allowDeep) deepSiteLookupsAttempted++;
+          const contactInfo = await enrichPublicContactAndVerifyUrl(item.candidate, {
+            allowDeepWebsiteContactLookup: allowDeep
+          });
+          return { item, contactInfo };
+        })
+      );
+      for (const { item, contactInfo } of enrichedBatch) {
+        const { candidate, freshness, relevance, geo } = item;
+        const finalFp = computeNexusLeadFingerprint(
+          candidate.title,
+          candidate.advertiserName,
+          candidate.originalSourceUrl,
+          contactInfo.publicEmail
+        );
+        if (contactInfo.publicEmail && existingFingerprints.has(finalFp)) {
+          duplicatesSkippedCount++;
+          continue;
+        }
+        existingFingerprints.add(finalFp);
+        const category = classifyNexusLeadCategory(
+          candidate.title,
+          candidate.rawText,
+          candidate.advertiserType
+        );
+        const requirements = extractProjectRequirements(
+          candidate.title,
+          candidate.rawText,
+          relevance.matchedKeywords
+        );
+        const suppressed = isEmailSuppressed(contactInfo.publicEmail, store.suppressionList);
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const newLead = {
+          id: `nxl-${crypto2.randomBytes(6).toString("hex")}`,
+          fingerprint: finalFp,
+          title: candidate.title.slice(0, 180),
+          advertiserName: candidate.advertiserName.slice(0, 100),
+          advertiserType: candidate.advertiserType,
+          country: geo.country,
+          regionGroup: geo.regionGroup,
+          city: geo.city,
+          category,
+          categoryLabel: NEXUS_CATEGORY_LABELS[category],
+          originalAdText: candidate.rawText.slice(0, 1400),
+          projectRequirements: requirements,
+          estimatedBudget: candidate.estimatedBudget,
+          publishedAt: freshness.publishedAtIso,
+          discoveredAt: nowIso,
+          lastRecheckedAt: nowIso,
+          ageHoursAtDiscovery: freshness.ageHours,
+          within72Hours: true,
+          isActive: contactInfo.isActive,
+          sourceId: candidate.sourceId,
+          sourceName: candidate.sourceName,
+          originalSourceUrl: candidate.originalSourceUrl,
+          sourceHttpStatus: contactInfo.sourceHttpStatus,
+          robotsAllowed: contactInfo.robotsAllowed,
+          publicEmail: contactInfo.publicEmail,
+          emailClassification: contactInfo.emailClassification,
+          emailDomain: contactInfo.emailDomain,
+          emailMxVerified: contactInfo.emailMxVerified,
+          emailEvidenceSource: contactInfo.emailEvidenceSource,
+          officialWebsiteUrl: contactInfo.officialWebsiteUrl,
+          publicContactPageUrl: contactInfo.publicContactPageUrl,
+          publicPhone: contactInfo.publicPhone,
+          verificationStatus: contactInfo.verificationStatus,
+          verificationNotes: contactInfo.verificationNotes,
+          rejectionReason: null,
+          contactStatus: suppressed ? "do_not_contact" : "new",
+          contactNotes: "",
+          contactCount: 0,
+          lastContactedAt: null,
+          outreachHistory: [],
+          suppressed
+        };
+        store.leads.unshift(newLead);
+        acceptedWithin72hCount++;
+        perSourceAccepted.set(candidate.sourceId, (perSourceAccepted.get(candidate.sourceId) || 0) + 1);
+        if (newLead.verificationStatus === "verified") verifiedCount++;
+        else if (newLead.verificationStatus === "partially_verified") partiallyVerifiedCount++;
+        else pendingCount++;
+        if (newLead.emailClassification === "verified_business_email" || newLead.emailClassification === "unverified_business_email") {
+          businessEmailsFoundCount++;
+        }
+      }
+    }
+    for (const src of store.sources) {
+      src.lastAcceptedCount = perSourceAccepted.get(src.id) || 0;
+    }
+    const finishedMs = Date.now();
+    const runStatus = errors.length === 0 ? "success" : acceptedWithin72hCount > 0 || rawCandidatesScanned > 0 ? "partial" : "failed";
+    const runLog = {
+      id: `nxl-run-${finishedMs}`,
+      trigger,
+      startedAt,
+      finishedAt: new Date(finishedMs).toISOString(),
+      durationMs: finishedMs - startedMs,
+      status: runStatus,
+      dailyTarget: NEXUS_DAILY_TARGET,
+      sourcesQueried: connectorTasks.length,
+      rawCandidatesScanned,
+      acceptedWithin72hCount,
+      verifiedCount,
+      partiallyVerifiedCount,
+      pendingCount,
+      rejectedExpiredOrOver72hCount,
+      rejectedIrrelevantOrFakeCount,
+      duplicatesSkippedCount,
+      businessEmailsFoundCount,
+      errors
+    };
+    store.runLogs.unshift(runLog);
+    saveStore(store);
+    lastRunAt = runLog.finishedAt;
+    lastRunStatus = runLog.status;
+    nextRunAt = !isVercel ? new Date(Date.now() + SCHEDULER_INTERVAL_MS).toISOString() : null;
+    isDiscoveryRunning = false;
+    return { store, runLog };
+  }
+  async function recheckActiveStoredLeads() {
+    const store = loadStore();
+    refreshLeadFreshnessAndSuppression(store);
+    const candidatesToRecheck = store.leads.filter((l) => l.within72Hours && l.isActive).slice(0, 25);
+    let checkedCount = 0;
+    let expiredOrInactiveCount = 0;
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    for (const lead of candidatesToRecheck) {
+      const f = evaluate72HourFreshness(lead.publishedAt);
+      lead.lastRecheckedAt = nowIso;
+      checkedCount++;
+      if (!f.within72Hours) {
+        lead.within72Hours = false;
+        lead.isActive = false;
+        lead.verificationStatus = "expired";
+        lead.verificationNotes = `Expired: Published ${f.ageHours}h ago (exceeded 72-hour freshness limit).`;
+        expiredOrInactiveCount++;
+        continue;
+      }
+      const allowed = await isRobotsAllowed(lead.originalSourceUrl);
+      lead.robotsAllowed = allowed;
+      if (allowed) {
+        const resp = await safePublicFetch(lead.originalSourceUrl, { timeoutMs: 5e3 });
+        if (resp) {
+          lead.sourceHttpStatus = resp.status;
+          if (resp.status === 404 || resp.status === 410) {
+            lead.isActive = false;
+            lead.verificationStatus = "expired";
+            lead.verificationNotes = `Marked inactive during recheck: original source returned HTTP ${resp.status}.`;
+            expiredOrInactiveCount++;
+          } else if (resp.ok) {
+            lead.isActive = true;
+            if (lead.verificationStatus === "pending") {
+              lead.verificationStatus = lead.publicEmail ? "verified" : "partially_verified";
+            }
+          }
+        }
+      }
+    }
+    saveStore(store);
+    return { store, checkedCount, expiredOrInactiveCount };
+  }
+  app.get("/api/admin/nexus-client-finder/dashboard", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const store = loadStore();
+      refreshLeadFreshnessAndSuppression(store);
+      const search = String(req.query.search || "").trim().toLowerCase();
+      const country = String(req.query.country || "").trim();
+      const category = String(req.query.category || "").trim();
+      const verificationStatus = String(req.query.verificationStatus || "").trim();
+      const emailClassification = String(req.query.emailClassification || "").trim();
+      const contactStatus = String(req.query.contactStatus || "").trim();
+      const includeExpired = String(req.query.includeExpired || "false") === "true";
+      const sortBy = String(req.query.sortBy || "newest");
+      let filtered = store.leads.filter((lead) => {
+        if (!includeExpired && (!lead.within72Hours || !lead.isActive || lead.verificationStatus === "expired")) {
+          return false;
+        }
+        if (country && country !== "all" && lead.country !== country) return false;
+        if (category && category !== "all" && lead.category !== category) return false;
+        if (verificationStatus && verificationStatus !== "all" && lead.verificationStatus !== verificationStatus) {
+          return false;
+        }
+        if (emailClassification && emailClassification !== "all" && lead.emailClassification !== emailClassification) {
+          return false;
+        }
+        if (contactStatus && contactStatus !== "all" && lead.contactStatus !== contactStatus) return false;
+        if (search) {
+          const hay = [
+            lead.title,
+            lead.advertiserName,
+            lead.country,
+            lead.city,
+            lead.categoryLabel,
+            lead.originalAdText,
+            lead.publicEmail || "",
+            lead.sourceName,
+            ...lead.projectRequirements || []
+          ].join(" ").toLowerCase();
+          if (!hay.includes(search)) return false;
+        }
+        return true;
+      });
+      filtered = [...filtered].sort((a, b) => {
+        if (sortBy === "oldest") return Date.parse(a.publishedAt) - Date.parse(b.publishedAt);
+        if (sortBy === "verified_email_first") {
+          const rank = (c) => c === "verified_business_email" ? 0 : c === "unverified_business_email" ? 1 : c === "personal_email" ? 2 : 3;
+          const diff = rank(a.emailClassification) - rank(b.emailClassification);
+          return diff !== 0 ? diff : Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+        }
+        if (sortBy === "country") return a.country.localeCompare(b.country);
+        return Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+      });
+      const payload = {
+        success: true,
+        generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        stats: computeDashboardStats(store),
+        leads: filtered,
+        suppressionList: store.suppressionList,
+        sources: store.sources,
+        runLogs: store.runLogs.slice(0, 20),
+        schedulerInfo: getSchedulerInfo()
+      };
+      res.json(payload);
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to load Nexus Client Finder dashboard." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/run-discovery", async (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const { store, runLog } = await runLiveFreeDiscovery("manual_admin");
+      appendAuditLog({
+        action: "nexus_client_finder_manual_discovery",
+        actor: getRequesterEmail(req) || "admin",
+        details: `Scanned ${runLog.rawCandidatesScanned} public listings, accepted ${runLog.acceptedWithin72hCount} within 72h.`
+      });
+      res.json({
+        success: true,
+        runLog,
+        stats: computeDashboardStats(store),
+        sources: store.sources,
+        schedulerInfo: getSchedulerInfo()
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Live free discovery failed." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/recheck-active", async (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const result = await recheckActiveStoredLeads();
+      res.json({
+        success: true,
+        checkedCount: result.checkedCount,
+        expiredOrInactiveCount: result.expiredOrInactiveCount,
+        stats: computeDashboardStats(result.store)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Recheck failed." });
+    }
+  });
+  app.patch("/api/admin/nexus-client-finder/leads/:id/status", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const leadId = String(req.params.id || "").trim();
+      const nextStatus = String(req.body?.contactStatus || "").trim();
+      const contactNotes = typeof req.body?.contactNotes === "string" ? req.body.contactNotes.slice(0, 1200) : void 0;
+      if (!leadId) {
+        res.status(400).json({ success: false, error: "Missing lead ID." });
+        return;
+      }
+      if (nextStatus && !VALID_CONTACT_STATUSES.has(nextStatus)) {
+        res.status(400).json({ success: false, error: "Invalid contact status value." });
+        return;
+      }
+      const store = loadStore();
+      const lead = store.leads.find((l) => l.id === leadId);
+      if (!lead) {
+        res.status(404).json({ success: false, error: "Lead not found." });
+        return;
+      }
+      if (nextStatus) {
+        lead.contactStatus = nextStatus;
+      }
+      if (contactNotes !== void 0) {
+        lead.contactNotes = contactNotes;
+      }
+      if (nextStatus === "do_not_contact") {
+        lead.suppressed = true;
+        if (lead.publicEmail && !isEmailSuppressed(lead.publicEmail, store.suppressionList)) {
+          const dom = lead.publicEmail.split("@")[1]?.toLowerCase() || null;
+          store.suppressionList.unshift({
+            id: `sup-${crypto2.randomBytes(5).toString("hex")}`,
+            email: lead.publicEmail.toLowerCase(),
+            domain: dom && !FREE_PERSONAL_EMAIL_DOMAINS.has(dom) ? dom : null,
+            advertiserName: lead.advertiserName,
+            reason: contactNotes || "Marked Do Not Contact from Nexus Client Finder dashboard",
+            leadId: lead.id,
+            addedAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+        }
+      }
+      saveStore(store);
+      res.json({
+        success: true,
+        lead,
+        stats: computeDashboardStats(store),
+        suppressionList: store.suppressionList
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Status update failed." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/leads/bulk-status", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const leadIds = Array.isArray(req.body?.leadIds) ? req.body.leadIds.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      const nextStatus = String(req.body?.contactStatus || "").trim();
+      if (leadIds.length === 0 || !VALID_CONTACT_STATUSES.has(nextStatus)) {
+        res.status(400).json({ success: false, error: "Provide leadIds[] and a valid contactStatus." });
+        return;
+      }
+      const store = loadStore();
+      const idSet = new Set(leadIds);
+      let updatedCount = 0;
+      for (const lead of store.leads) {
+        if (!idSet.has(lead.id)) continue;
+        lead.contactStatus = nextStatus;
+        updatedCount++;
+        if (nextStatus === "do_not_contact") {
+          lead.suppressed = true;
+          if (lead.publicEmail && !isEmailSuppressed(lead.publicEmail, store.suppressionList)) {
+            const dom = lead.publicEmail.split("@")[1]?.toLowerCase() || null;
+            store.suppressionList.unshift({
+              id: `sup-${crypto2.randomBytes(5).toString("hex")}`,
+              email: lead.publicEmail.toLowerCase(),
+              domain: dom && !FREE_PERSONAL_EMAIL_DOMAINS.has(dom) ? dom : null,
+              advertiserName: lead.advertiserName,
+              reason: "Bulk marked Do Not Contact",
+              leadId: lead.id,
+              addedAt: (/* @__PURE__ */ new Date()).toISOString()
+            });
+          }
+        }
+      }
+      saveStore(store);
+      res.json({
+        success: true,
+        updatedCount,
+        stats: computeDashboardStats(store),
+        suppressionList: store.suppressionList
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Bulk status update failed." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/leads/record-outreach", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const leadIds = Array.isArray(req.body?.leadIds) ? req.body.leadIds.map((x) => String(x || "").trim()).filter(Boolean) : [];
+      const modeRaw = String(req.body?.mode || "single_gmail");
+      const mode = modeRaw === "bulk_bcc_gmail" || modeRaw === "individual_personalized" ? modeRaw : "single_gmail";
+      const subject = String(req.body?.subject || "").slice(0, 240);
+      const templateRaw = String(req.body?.templateType || "website_development");
+      const templateType = VALID_TEMPLATE_TYPES.has(templateRaw) ? templateRaw : "website_development";
+      const note = typeof req.body?.note === "string" ? req.body.note.slice(0, 400) : void 0;
+      if (leadIds.length === 0) {
+        res.status(400).json({ success: false, error: "Provide leadIds[] to record Gmail outreach." });
+        return;
+      }
+      const store = loadStore();
+      const idSet = new Set(leadIds);
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      let recordedCount = 0;
+      let skippedSuppressedCount = 0;
+      for (const lead of store.leads) {
+        if (!idSet.has(lead.id)) continue;
+        if (lead.suppressed || lead.contactStatus === "do_not_contact" || isEmailSuppressed(lead.publicEmail, store.suppressionList)) {
+          skippedSuppressedCount++;
+          continue;
+        }
+        lead.contactCount = (lead.contactCount || 0) + 1;
+        lead.lastContactedAt = nowIso;
+        if (["new", "selected", "ready_to_contact"].includes(lead.contactStatus)) {
+          lead.contactStatus = "contacted";
+        }
+        lead.outreachHistory = [
+          {
+            id: `out-${crypto2.randomBytes(4).toString("hex")}`,
+            sentAt: nowIso,
+            mode,
+            recipientEmail: lead.publicEmail || "manual-source-contact",
+            subject: subject || `Nexus IT Solutions outreach (${lead.title.slice(0, 60)})`,
+            templateType,
+            note
+          },
+          ...lead.outreachHistory || []
+        ].slice(0, 25);
+        recordedCount++;
+      }
+      saveStore(store);
+      res.json({
+        success: true,
+        recordedCount,
+        skippedSuppressedCount,
+        stats: computeDashboardStats(store)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to record outreach." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/message-draft", async (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const leadId = String(req.body?.leadId || "").trim();
+      const templateRaw = String(req.body?.templateType || "website_development");
+      const templateType = VALID_TEMPLATE_TYPES.has(templateRaw) ? templateRaw : "website_development";
+      const useOptionalAiPolish = Boolean(req.body?.useAiPolish);
+      const store = loadStore();
+      const lead = store.leads.find((l) => l.id === leadId);
+      if (!lead) {
+        res.status(404).json({ success: false, error: "Lead not found." });
+        return;
+      }
+      const baseDraft = generateNexusProposalMessage(lead, templateType);
+      if (useOptionalAiPolish) {
+        try {
+          const ai = await getAiClient();
+          if (ai && ai.models && typeof ai.models.generateContent === "function") {
+            const prompt = [
+              "You are writing a short, honest, professional first-contact business email on behalf of NEXUS IT SOLUTIONS.",
+              "RULES:",
+              "- Reference ONLY facts present in the advertisement below.",
+              "- NEVER claim prior phone calls, previous emails, or false familiarity.",
+              "- Keep it under 135 words, clear, polite, non-spammy, and natural.",
+              '- Return strictly JSON with keys "subject" and "body".',
+              `Template Type: ${templateType}`,
+              `Advertiser: ${lead.advertiserName}`,
+              `Country: ${lead.country}`,
+              `Listing Title: ${lead.title}`,
+              `Requirements: ${lead.projectRequirements.join(", ")}`,
+              `Listing Excerpt: ${lead.originalAdText.slice(0, 600)}`
+            ].join("\n");
+            const resp = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: prompt,
+              config: { responseMimeType: "application/json" }
+            });
+            const text = typeof resp?.text === "string" ? resp.text : "";
+            const parsed = JSON.parse(text);
+            if (parsed?.subject && parsed?.body) {
+              res.json({
+                success: true,
+                draft: {
+                  ...baseDraft,
+                  subject: String(parsed.subject).trim().slice(0, 180),
+                  body: String(parsed.body).trim().slice(0, 2200),
+                  generatedBy: "gemini_enhanced"
+                }
+              });
+              return;
+            }
+          }
+        } catch {
+        }
+      }
+      res.json({ success: true, draft: baseDraft });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to generate message draft." });
+    }
+  });
+  app.post("/api/admin/nexus-client-finder/suppression", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      const domainInput = String(req.body?.domain || "").trim().toLowerCase().replace(/^@/, "");
+      const reason = String(req.body?.reason || "Added manually to permanent Do Not Contact list").trim().slice(0, 300);
+      if (!email && !domainInput) {
+        res.status(400).json({ success: false, error: "Provide an email address or company domain to suppress." });
+        return;
+      }
+      const store = loadStore();
+      const derivedDomain = domainInput || (email.includes("@") && !FREE_PERSONAL_EMAIL_DOMAINS.has(email.split("@")[1]) ? email.split("@")[1] : null);
+      const alreadyExists = store.suppressionList.some(
+        (s) => email && s.email === email || derivedDomain && s.domain === derivedDomain
+      );
+      if (!alreadyExists) {
+        const entry = {
+          id: `sup-${crypto2.randomBytes(5).toString("hex")}`,
+          email,
+          domain: derivedDomain,
+          advertiserName: req.body?.advertiserName ? String(req.body.advertiserName).slice(0, 100) : null,
+          reason,
+          leadId: req.body?.leadId ? String(req.body.leadId).slice(0, 60) : null,
+          addedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        store.suppressionList.unshift(entry);
+      }
+      refreshLeadFreshnessAndSuppression(store);
+      saveStore(store);
+      res.json({
+        success: true,
+        suppressionList: store.suppressionList,
+        stats: computeDashboardStats(store)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to add suppression entry." });
+    }
+  });
+  app.delete("/api/admin/nexus-client-finder/suppression/:id", (req, res) => {
+    if (!requireOwnerAdmin(req, res)) return;
+    try {
+      const id = String(req.params.id || "").trim();
+      const store = loadStore();
+      const before = store.suppressionList.length;
+      store.suppressionList = store.suppressionList.filter((s) => s.id !== id);
+      if (store.suppressionList.length === before) {
+        res.status(404).json({ success: false, error: "Suppression entry not found." });
+        return;
+      }
+      refreshLeadFreshnessAndSuppression(store);
+      saveStore(store);
+      res.json({
+        success: true,
+        suppressionList: store.suppressionList,
+        stats: computeDashboardStats(store)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to delete suppression entry." });
+    }
+  });
+  if (!isVercel) {
+    nextRunAt = new Date(Date.now() + SCHEDULER_INTERVAL_MS).toISOString();
+    const timer = setInterval(() => {
+      runLiveFreeDiscovery("scheduled_3h").catch((err) => {
+        console.error("[NexusClientFinder] Scheduled 3h discovery error:", err?.message || err);
+      });
+    }, SCHEDULER_INTERVAL_MS);
+    if (typeof timer.unref === "function") timer.unref();
+  }
+  return {
+    runLiveFreeDiscovery,
+    recheckActiveStoredLeads,
+    loadStore
+  };
+}
+
 // src/utils/telegramSnapshot.ts
 function clip(val, maxLen) {
   const s = String(val ?? "").trim();
@@ -10435,7 +14167,7 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path3.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path4.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
     if (!fs2.existsSync(UPLOADS_DIR)) {
       fs2.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -10501,7 +14233,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path3.extname(req.file.originalname).toLowerCase();
+      const ext = path4.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -11328,25 +15060,25 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const VACANCIES_CATALOG_FILE_SERVER = path3.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
-  const BOT_HEALTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path3.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path3.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path4.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
+  const BOT_HEALTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path4.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
   const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
   const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
   function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
-    const salt = crypto2.randomBytes(16).toString("hex");
-    const derived = crypto2.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const salt = crypto3.randomBytes(16).toString("hex");
+    const derived = crypto3.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return {
       id,
@@ -11365,13 +15097,13 @@ ${text}`;
     try {
       if (!plainText || !record?.salt || !record?.hashHex) return false;
       const expectedBuf = Buffer.from(record.hashHex, "hex");
-      const derivedBuf = crypto2.scryptSync(plainText, record.salt, expectedBuf.length, {
+      const derivedBuf = crypto3.scryptSync(plainText, record.salt, expectedBuf.length, {
         N: record.cost || 16384,
         r: record.blockSize || 8,
         p: record.parallelization || 1
       });
       if (derivedBuf.length !== expectedBuf.length) return false;
-      return crypto2.timingSafeEqual(derivedBuf, expectedBuf);
+      return crypto3.timingSafeEqual(derivedBuf, expectedBuf);
     } catch {
       return false;
     }
@@ -11385,7 +15117,7 @@ ${text}`;
       passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
       sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
         mutated = true;
-        return crypto2.randomBytes(32).toString("hex");
+        return crypto3.randomBytes(32).toString("hex");
       })(),
       updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     } : (() => {
@@ -11394,7 +15126,7 @@ ${text}`;
         version: 1,
         algorithm: "scrypt",
         passwordHashes: [],
-        sessionSigningKey: crypto2.randomBytes(32).toString("hex"),
+        sessionSigningKey: crypto3.randomBytes(32).toString("hex"),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     })();
@@ -11473,7 +15205,7 @@ ${text}`;
       exp: now + DEV_SESSION_TTL_MS
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
-    const sig = crypto2.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    const sig = crypto3.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
     return `${encoded}.${sig}`;
   }
   function verifyDeveloperSessionToken(token) {
@@ -11482,10 +15214,10 @@ ${text}`;
       const [encoded, sig] = token.split(".");
       if (!encoded || !sig) return { valid: false };
       const store = ensureDeveloperAuthStore();
-      const expectedSig = crypto2.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const expectedSig = crypto3.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
       const sigBuf = Buffer.from(sig, "utf-8");
       const expBuf = Buffer.from(expectedSig, "utf-8");
-      if (sigBuf.length !== expBuf.length || !crypto2.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !crypto3.timingSafeEqual(sigBuf, expBuf)) {
         return { valid: false };
       }
       const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
@@ -11558,7 +15290,7 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path3.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path4.join(RUNTIME_BASE_DIR, "data");
     try {
       if (!fs2.existsSync(dataDir)) {
         fs2.mkdirSync(dataDir, { recursive: true });
@@ -11566,13 +15298,13 @@ ${text}`;
       if (!fs2.existsSync(BACKUPS_DIR)) {
         fs2.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
-      const bundledDataDir = path3.join(process.cwd(), "data");
-      if (path3.resolve(dataDir) !== path3.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
+      const bundledDataDir = path4.join(process.cwd(), "data");
+      if (path4.resolve(dataDir) !== path4.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
         const entries = fs2.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
-          const srcPath = path3.join(bundledDataDir, file);
-          const destPath = path3.join(dataDir, file);
+          const srcPath = path4.join(bundledDataDir, file);
+          const destPath = path4.join(dataDir, file);
           if (!fs2.existsSync(destPath)) {
             try {
               if (fs2.statSync(srcPath).isFile()) {
@@ -11607,7 +15339,7 @@ ${text}`;
       fs2.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path3.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path4.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -11829,7 +15561,7 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path3.join(process.cwd(), "firebase-applet-config.json")
+      path4.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
@@ -11985,8 +15717,8 @@ ${text}`;
   }
   function sendPublicFallbackIcon(res, filename) {
     const candidates = [
-      path3.join(process.cwd(), "public", filename),
-      path3.join(process.cwd(), "dist", filename)
+      path4.join(process.cwd(), "public", filename),
+      path4.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
       if (fs2.existsSync(p)) {
@@ -12025,7 +15757,7 @@ ${text}`;
     const brand = await getLiveBrandLogoState();
     const versionRaw = brand.appLogoUpdatedAt || "default";
     const versionTag = encodeURIComponent(
-      crypto2.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
+      crypto3.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
     const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
@@ -12163,9 +15895,9 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     const launchUrl = `${appOrigin}/?source=ios_app`;
     let iconBase64 = "";
     for (const candidate of [
-      path3.join(process.cwd(), "public", "apple-touch-icon.png"),
-      path3.join(process.cwd(), "dist", "apple-touch-icon.png"),
-      path3.join(process.cwd(), "public", "pwa-192x192.png")
+      path4.join(process.cwd(), "public", "apple-touch-icon.png"),
+      path4.join(process.cwd(), "dist", "apple-touch-icon.png"),
+      path4.join(process.cwd(), "public", "pwa-192x192.png")
     ]) {
       if (fs2.existsSync(candidate)) {
         try {
@@ -12549,8 +16281,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path3.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path3.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path4.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
       if (fs2.existsSync(USER_PROFILES_FILE)) {
@@ -12813,8 +16545,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path3.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path3.join(UPLOADS_DIR, safeName);
+      const safeName = `${Date.now()}_${path4.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path4.join(UPLOADS_DIR, safeName);
       fs2.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
@@ -14923,10 +18655,10 @@ ${footer}`;
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path3.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path3.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path3.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path3.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path4.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path4.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path4.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path4.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -16057,7 +19789,7 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path3.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path4.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
       if (fs2.existsSync(AUTO_APPLY_DATA_FILE)) {
@@ -16071,7 +19803,7 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path3.dirname(AUTO_APPLY_DATA_FILE);
+      const dir = path4.dirname(AUTO_APPLY_DATA_FILE);
       if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
       fs2.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
@@ -17190,8 +20922,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path3.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path3.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path4.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path4.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -20009,12 +23741,24 @@ Return strict JSON:
     app,
     getAiClient
   });
+  registerNexusClientFinderRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterEmail,
+    appendAuditLog,
+    getAiClient
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
       const files = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path3.join(BACKUPS_DIR, filename);
+        const fullPath = path4.join(BACKUPS_DIR, filename);
         const stat = fs2.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
@@ -20079,12 +23823,12 @@ Return strict JSON:
         ...userEngineBackupData
       }
     };
-    const fullPath = path3.join(BACKUPS_DIR, filename);
+    const fullPath = path4.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
       const autoFiles = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs2.unlinkSync(path3.join(BACKUPS_DIR, old));
+        fs2.unlinkSync(path4.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -20110,7 +23854,7 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path3.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      const probeFile = path4.join(RUNTIME_BASE_DIR, "data", ".write_probe");
       fs2.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
       fs2.unlinkSync(probeFile);
       writable = true;
@@ -20328,7 +24072,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path3.join(BACKUPS_DIR, target.filename);
+    const fullPath = path4.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });

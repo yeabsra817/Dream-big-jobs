@@ -1,5 +1,19 @@
 [
   {
+    "id": "aud_1795539980304_tmvew",
+    "action": "nexus_client_finder_manual_discovery",
+    "actorEmail": "system",
+    "severity": "info",
+    "timestamp": "2026-11-24T17:06:20.304Z"
+  },
+  {
+    "id": "aud_1795539850417_ppwgt",
+    "action": "nexus_client_finder_manual_discovery",
+    "actorEmail": "system",
+    "severity": "info",
+    "timestamp": "2026-11-24T17:04:10.417Z"
+  },
+  {
     "id": "aud_1795350123647_30to7",
     "action": "staff_profile_updated",
     "actorEmail": "nexusitsoultion@gmail.com",
