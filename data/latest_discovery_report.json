@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-11-25T07:35:22.028Z",
-  "generatedAtEat": "25 Nov 2026, 10:35:22 EAT (Africa/Addis_Ababa)",
+  "generatedAt": "2026-11-25T12:58:25.193Z",
+  "generatedAtEat": "25 Nov 2026, 15:58:25 EAT (Africa/Addis_Ababa)",
   "trigger": "github_actions_cron",
   "status": "partial",
-  "durationMs": 98513,
+  "durationMs": 68807,
   "sourcesQueried": 5,
-  "candidatesDiscovered": 74,
-  "verifiedAndActiveCount": 74,
-  "verifiedTierCount": 28,
-  "partiallyVerifiedTierCount": 46,
-  "duplicatesSkipped": 60,
-  "rejectedUnderThreeDaysCount": 5,
-  "rejectedBrokenOrClosedCount": 1,
+  "candidatesDiscovered": 80,
+  "verifiedAndActiveCount": 93,
+  "verifiedTierCount": 39,
+  "partiallyVerifiedTierCount": 54,
+  "duplicatesSkipped": 41,
+  "rejectedUnderThreeDaysCount": 4,
+  "rejectedBrokenOrClosedCount": 0,
   "rejectedDueToVisaCount": 0,
-  "rejectedDueToProfessionalRestrictionCount": 13,
+  "rejectedDueToProfessionalRestrictionCount": 8,
   "permanentResidencyCountriesTotal": 24,
   "permanentResidencyVerifiedHttp200": 18,
   "departmentSummaries": [
@@ -21,20 +21,20 @@
       "department": "banking_finance_jobs",
       "label": "Department 1: International Banking & Finance Jobs",
       "status": "success",
-      "candidatesFound": 48,
-      "verifiedCount": 24,
-      "partiallyVerifiedCount": 12,
+      "candidatesFound": 63,
+      "verifiedCount": 34,
+      "partiallyVerifiedCount": 16,
       "pendingCount": 0,
-      "rejectedOrExpiredCount": 12,
+      "rejectedOrExpiredCount": 13,
       "errors": []
     },
     {
       "department": "wash_jobs",
       "label": "Department 2: International WASH Jobs",
       "status": "success",
-      "candidatesFound": 41,
-      "verifiedCount": 3,
-      "partiallyVerifiedCount": 27,
+      "candidatesFound": 46,
+      "verifiedCount": 4,
+      "partiallyVerifiedCount": 31,
       "pendingCount": 0,
       "rejectedOrExpiredCount": 11,
       "errors": []
@@ -82,8 +82,8 @@
       "pendingCount": 3,
       "rejectedOrExpiredCount": 0,
       "errors": [
-        "Poland (gov.pl): HTTP 404",
         "Luxembourg (guichet.public.lu): HTTP 404",
+        "Poland (gov.pl): HTTP 404",
         "Malta (identita.gov.mt): HTTP 404"
       ]
     }
@@ -93,7 +93,7 @@
       "id": "arbeitnow_intl_banking_wash_jobs",
       "name": "Arbeitnow International & European Job Board API (Banking, Finance, Compliance & WASH)",
       "status": "connected",
-      "lastItemCount": 11,
+      "lastItemCount": 14,
       "lastError": null
     },
     {
@@ -101,13 +101,13 @@
       "name": "Official Government Immigration & Shortage Occupation Portals (14 Countries)",
       "status": "connected",
       "lastItemCount": 24,
-      "lastError": "Poland (gov.pl): HTTP 404; Luxembourg (guichet.public.lu): HTTP 404; Malta (identita.gov.mt): HTTP 404"
+      "lastError": "Luxembourg (guichet.public.lu): HTTP 404; Poland (gov.pl): HTTP 404; Malta (identita.gov.mt): HTTP 404"
     },
     {
       "id": "reliefweb_jobs_wash_intl",
       "name": "ReliefWeb Official UN & INGO Recruitment Feeds (WASH, Banking & Finance, International Jobs)",
       "status": "connected",
-      "lastItemCount": 34,
+      "lastItemCount": 37,
       "lastError": null
     },
     {
@@ -147,8 +147,8 @@
     }
   ],
   "errors": [
-    "Poland (gov.pl): HTTP 404",
-    "Luxembourg (guichet.public.lu): HTTP 404"
+    "Luxembourg (guichet.public.lu): HTTP 404",
+    "Poland (gov.pl): HTTP 404"
   ],
   "sampleActiveOpportunities": [
     {
@@ -229,17 +229,6 @@
       "officialUrl": "https://reliefweb.int/training/4239367/professional-certificate-health-safety-environment-hse-arabic-version"
     },
     {
-      "title": "Program Manager CRCSU",
-      "organization": "DT Global",
-      "department": "wash_jobs",
-      "country": "Australia",
-      "verificationTier": "PARTIALLY VERIFIED",
-      "visaClassification": "No sponsorship stated",
-      "deadline": "6 Dec 2026",
-      "daysRemaining": 11,
-      "officialUrl": "https://reliefweb.int/job/4239189/program-manager-crcsu"
-    },
-    {
       "title": "Call for Expression of Interest: DEC Middle East Humanitarian Appeal Post Appeal Review",
       "organization": "Disasters Emergency Committee",
       "department": "wash_jobs",
@@ -282,6 +271,17 @@
       "deadline": "31 Dec 2026",
       "daysRemaining": 36,
       "officialUrl": "https://reliefweb.int/job/4239325/program-manager-international-hire"
+    },
+    {
+      "title": "Shelter and WASH Specialist Lebanon",
+      "organization": "Norwegian Refugee Council",
+      "department": "wash_jobs",
+      "country": "Lebanon",
+      "verificationTier": "PARTIALLY VERIFIED",
+      "visaClassification": "No sponsorship stated",
+      "deadline": "14 Dec 2026",
+      "daysRemaining": 19,
+      "officialUrl": "https://reliefweb.int/job/4239449/shelter-and-wash-specialist-lebanon"
     }
   ]
 }
