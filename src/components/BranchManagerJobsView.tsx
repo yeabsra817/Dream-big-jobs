@@ -40,6 +40,7 @@ import {
   searchBranchManagerJobs,
   triggerBranchManagerLiveDiscovery,
 } from '../lib/branchManagerJobsService';
+import { fetchAutonomousDiscoveryStatus } from '../lib/autonomousDiscoveryService';
 
 interface Props {
   onBack: () => void;
@@ -142,6 +143,36 @@ export const BranchManagerJobsView: React.FC<Props> = ({
       cancelled = true;
     };
   }, [isSignedIn, userProfile?.uid, syncBuffers]);
+
+  // Silent auto-refresh whenever the 1-minute autonomous discovery worker updates verified $3,000+ results
+  useEffect(() => {
+    let active = true;
+    let lastSeenSuccessAt: string | null = null;
+    const poll = async () => {
+      const st = await fetchAutonomousDiscoveryStatus();
+      if (!active || !st?.lastSuccessfulSearchAt) return;
+      if (lastSeenSuccessAt && st.lastSuccessfulSearchAt !== lastSeenSuccessAt) {
+        try {
+          const fresh = await searchBranchManagerJobs({
+            profile: isOwnerAccountProfile ? undefined : profile,
+            regionFilter: 'ALL',
+            positionFilter: 'ALL',
+            minSalaryUsd: Math.max(3000, profile.minimumMonthlyGrossUsd || 3000),
+          });
+          if (active) setResponse(fresh);
+        } catch {
+          // Preserve existing displayed jobs on transient poll failure
+        }
+      }
+      lastSeenSuccessAt = st.lastSuccessfulSearchAt;
+    };
+    poll();
+    const timer = window.setInterval(poll, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isOwnerAccountProfile, profile]);
 
   const handleRunLiveScan = async () => {
     setIsScanningLive(true);

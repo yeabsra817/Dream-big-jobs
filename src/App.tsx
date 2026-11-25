@@ -175,6 +175,7 @@ import { AmharicSignupPromoModal } from './components/AmharicSignupPromoModal';
 import { PWAInstallPromptModal } from './components/PWAInstallPromptModal';
 import { AppDownloadReminderBanner } from './components/AppDownloadReminderBanner';
 import { OptionalBenefitsShowcase } from './components/OptionalBenefitsShowcase';
+import { AutonomousDiscoveryHomepageSection } from './components/AutonomousDiscoveryHomepageSection';
 import { usePWAInstall } from './hooks/usePWAInstall';
 import {
   fetchCustomerVisitCount,
@@ -3557,6 +3558,14 @@ export default function App() {
                 </div>
               </section>
             )}
+
+            {/* 4C. INTERNATIONAL JOBS OPPORTUNITY & VISA-SPONSORED JOBS $3,000+ (Side-by-Side + Live 1-Min Autonomous Monitor) */}
+            <AutonomousDiscoveryHomepageSection
+              onOpenInternationalOpportunities={() =>
+                handleOpenExpansionView('international-opportunities')
+              }
+              onOpenVisaSponsored3kJobs={() => handleOpenExpansionView('branch-manager-jobs')}
+            />
 
             {/* 5. FEATURED COMPANIES SLIDER SECTION (Blue Background #1E40AF-#0F3D8A) */}
             {siteContent.showFeaturedCompanies && (

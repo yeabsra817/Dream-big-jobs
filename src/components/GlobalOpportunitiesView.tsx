@@ -41,6 +41,7 @@ import {
   toggleSavedGlobalOpportunity,
   triggerAdminGlobalDiscovery,
 } from '../lib/globalOpportunitiesService';
+import { fetchAutonomousDiscoveryStatus } from '../lib/autonomousDiscoveryService';
 import {
   formatRecommendationSummary,
   MINIMUM_FULL_DAYS_REMAINING,
@@ -227,6 +228,35 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Silent auto-refresh whenever the 1-minute autonomous worker finishes a newer successful search
+  useEffect(() => {
+    let active = true;
+    let lastSeenSuccessAt: string | null = null;
+    const poll = async () => {
+      const st = await fetchAutonomousDiscoveryStatus();
+      if (!active || !st?.lastSuccessfulSearchAt) return;
+      if (lastSeenSuccessAt && st.lastSuccessfulSearchAt !== lastSeenSuccessAt) {
+        try {
+          const resp = await fetchGlobalOpportunities(
+            {},
+            userProfile?.uid || null,
+            userProfile?.email || null
+          );
+          if (active) setData(resp);
+        } catch {
+          // Keep current list on transient poll failure
+        }
+      }
+      lastSeenSuccessAt = st.lastSuccessfulSearchAt;
+    };
+    poll();
+    const timer = window.setInterval(poll, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [userProfile?.uid, userProfile?.email]);
 
   // Distinct countries for Country filter dropdown
   const availableCountries = useMemo(() => {

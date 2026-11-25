@@ -1,0 +1,1191 @@
+{
+  "version": 1,
+  "workerStartedAt": "2026-11-25T13:55:54.202Z",
+  "intervalSeconds": 60,
+  "activeLock": null,
+  "lastCycleAt": "2026-11-25T14:20:26.854Z",
+  "lastCycleStatus": "success",
+  "lastSuccessfulSearchAt": "2026-11-25T14:20:26.854Z",
+  "lastSuccessfulSearchAtEat": "25 Nov 2026, 17:20:26 EAT (Africa/Addis_Ababa)",
+  "lastFailedSearchAt": null,
+  "lastFailedSearchAtEat": null,
+  "nextScheduledSearchAt": "2026-11-25T14:21:26.854Z",
+  "nextScheduledSearchAtEat": "25 Nov 2026, 17:21:26 EAT (Africa/Addis_Ababa)",
+  "lastError": null,
+  "consecutiveFailures": 0,
+  "totalCyclesCompleted": 24,
+  "totalSkippedOverlaps": 0,
+  "lastPreflightOk": true,
+  "lastPreflightMessage": "Node v22.23.5 + writable atomic data storage verified",
+  "counts": {
+    "opportunitiesDiscovered": 2221,
+    "opportunitiesVerified": 127,
+    "opportunitiesRejected": 2080,
+    "newMatchingOpportunities": 10,
+    "globalVerifiedCount": 39,
+    "globalActiveCount": 93,
+    "prCountriesVerifiedCount": 18,
+    "visa3kVerifiedCount": 1,
+    "visa3kAuditedCount": 2045
+  },
+  "sources": {
+    "gh_monzo": {
+      "id": "gh_monzo",
+      "name": "Monzo Bank Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:15:16.652Z",
+      "nextAllowedPollAt": "2026-11-25T14:21:16.652Z",
+      "lastStatus": "ok",
+      "lastItemCount": 53,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_adyen": {
+      "id": "gh_adyen",
+      "name": "Adyen Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:16:18.680Z",
+      "nextAllowedPollAt": "2026-11-25T14:22:18.680Z",
+      "lastStatus": "ok",
+      "lastItemCount": 243,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_n26": {
+      "id": "gh_n26",
+      "name": "N26 Bank Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:16:19.485Z",
+      "nextAllowedPollAt": "2026-11-25T14:22:19.485Z",
+      "lastStatus": "ok",
+      "lastItemCount": 21,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_wise": {
+      "id": "gh_wise",
+      "name": "Wise Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:17:20.972Z",
+      "nextAllowedPollAt": "2026-11-25T14:23:20.972Z",
+      "lastStatus": "ok",
+      "lastItemCount": 18,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_sumup": {
+      "id": "gh_sumup",
+      "name": "SumUp Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:17:21.693Z",
+      "nextAllowedPollAt": "2026-11-25T14:23:21.693Z",
+      "lastStatus": "ok",
+      "lastItemCount": 324,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_tide": {
+      "id": "gh_tide",
+      "name": "Tide Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:17:22.626Z",
+      "nextAllowedPollAt": "2026-11-25T14:23:22.626Z",
+      "lastStatus": "ok",
+      "lastItemCount": 91,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_gocardless": {
+      "id": "gh_gocardless",
+      "name": "GoCardless Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:18:24.243Z",
+      "nextAllowedPollAt": "2026-11-25T14:24:24.243Z",
+      "lastStatus": "ok",
+      "lastItemCount": 27,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_transfergo": {
+      "id": "gh_transfergo",
+      "name": "TransferGo Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:18:25.079Z",
+      "nextAllowedPollAt": "2026-11-25T14:24:25.079Z",
+      "lastStatus": "ok",
+      "lastItemCount": 18,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_careem": {
+      "id": "gh_careem",
+      "name": "Careem Pay / Careem Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:18:25.836Z",
+      "nextAllowedPollAt": "2026-11-25T14:24:25.836Z",
+      "lastStatus": "ok",
+      "lastItemCount": 11,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "gh_stripe": {
+      "id": "gh_stripe",
+      "name": "Stripe Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:19:27.714Z",
+      "nextAllowedPollAt": "2026-11-25T14:25:27.714Z",
+      "lastStatus": "ok",
+      "lastItemCount": 771,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "ashby_pleo": {
+      "id": "ashby_pleo",
+      "name": "Pleo Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:19:29.182Z",
+      "nextAllowedPollAt": "2026-11-25T14:25:29.182Z",
+      "lastStatus": "ok",
+      "lastItemCount": 32,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "ashby_mollie": {
+      "id": "ashby_mollie",
+      "name": "Mollie Official Careers",
+      "category": "employer_careers",
+      "minPollIntervalSec": 360,
+      "lastPolledAt": "2026-11-25T14:19:29.832Z",
+      "nextAllowedPollAt": "2026-11-25T14:25:29.832Z",
+      "lastStatus": "ok",
+      "lastItemCount": 48,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "arbeitnow_eu_live": {
+      "id": "arbeitnow_eu_live",
+      "name": "Arbeitnow Europe Official Job Feed",
+      "category": "employer_careers",
+      "minPollIntervalSec": 300,
+      "lastPolledAt": "2026-11-25T14:20:25.278Z",
+      "nextAllowedPollAt": "2026-11-25T14:25:25.278Z",
+      "lastStatus": "ok",
+      "lastItemCount": 300,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "open_er_api_fx": {
+      "id": "open_er_api_fx",
+      "name": "Open Exchange Rates USD FX Feed",
+      "category": "gov_portal",
+      "minPollIntervalSec": 1800,
+      "lastPolledAt": "2026-11-25T14:07:58.695Z",
+      "nextAllowedPollAt": "2026-11-25T14:37:58.695Z",
+      "lastStatus": "ok",
+      "lastItemCount": 2044,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    },
+    "global_6dept_official_sweep": {
+      "id": "global_6dept_official_sweep",
+      "name": "6-Department Global Official Portals (UN, World Bank, ReliefWeb, Scholarships, Gov PR)",
+      "category": "intl_org",
+      "minPollIntervalSec": 900,
+      "lastPolledAt": "2026-11-25T14:01:05.875Z",
+      "nextAllowedPollAt": "2026-11-25T14:16:05.875Z",
+      "lastStatus": "ok",
+      "lastItemCount": 82,
+      "consecutiveErrors": 0,
+      "lastError": null,
+      "backoffUntil": null
+    }
+  },
+  "seenFingerprints": {
+    "1ab9a1e77a696c8debcf39c7": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "visa_3k",
+      "title": "Finance Controller",
+      "employer": "Dtact",
+      "notified": false
+    },
+    "1586eec102f78448d8d0fc30": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Stage of afstuderen Finance: Memoriaal Boekingen",
+      "employer": "Voortman Steel Machinery",
+      "notified": false
+    },
+    "5e661efb5d63fe3c7ede40f2": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Stagiair (HBO)",
+      "employer": "ALTRAD SERVICES B.V.",
+      "notified": false
+    },
+    "33bfbf099c1f62901b00f0b6": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Group Accounting & Reporting Specialist (m/f/d)",
+      "employer": "Swissbit",
+      "notified": false
+    },
+    "f631d931c9f2d05e35a9ee5b": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Head of Finance (m/w/d)",
+      "employer": "Rotzinger Group",
+      "notified": false
+    },
+    "536ba2f442ed0e2fb223bc62": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "[ VO2 FORCE ] - Business Analyst Senior – Salesforce Financial Services Cloud",
+      "employer": "VO2 Group",
+      "notified": false
+    },
+    "959affcc3c29e65fe444e2c6": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Data Scientist",
+      "employer": "Elevenlabs",
+      "notified": false
+    },
+    "e1556d4dad01fabace3968a1": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior Analytics Engineer – Finance",
+      "employer": "Scan Com",
+      "notified": false
+    },
+    "84f1cc3d1e01bb41bc263da8": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Accountant (all genders)",
+      "employer": "Code Gaia",
+      "notified": false
+    },
+    "bf16a67d5afc47902a6055b2": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Head of Finance (m/f/d)",
+      "employer": "L1VE GmbH",
+      "notified": false
+    },
+    "9bcb6fc76009a45c075f0c7e": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Solutions Architect, Onchain Compliance - EMEA",
+      "employer": "TRM Labs",
+      "notified": false
+    },
+    "cc3a763bb107be75706795f1": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Financial Consultant (w/m/d)",
+      "employer": "Odoo DE GmbH",
+      "notified": false
+    },
+    "eee6e6fecde09f732190fa21": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Wertpapierspezialist*in Private Banking",
+      "employer": "Volksbank Lübeck eG",
+      "notified": false
+    },
+    "f52c80504b7d69885378e744": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Head of Finance & Controlling (m/w/d)",
+      "employer": "Hello Lemon GmbH",
+      "notified": false
+    },
+    "b6e07de8ed9badd4223f90c4": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Regulatory Compliance Officer",
+      "employer": "Mollie",
+      "notified": false
+    },
+    "3267937df71b1bce5a42c102": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior IT & Cybersecurity Auditor",
+      "employer": "SwissPeak Partners GmbH",
+      "notified": false
+    },
+    "438ba8fdc972de31cf5759ae": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "VP Embedded Finance & Strategic Partnerships (m/w/d) 80-100%",
+      "employer": "bexio ag",
+      "notified": false
+    },
+    "e0606a621e3c9b6a7ab8f6e4": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Operations Specialist H/F",
+      "employer": "Marsorobotics",
+      "notified": false
+    },
+    "ae12c56b0b467fb12f6809f1": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "(Associate) Finance Manager (f/m/d)",
+      "employer": "Moss",
+      "notified": false
+    },
+    "2cacd7dd38427bbdee2bf800": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Accountant (w/m/d)",
+      "employer": "Zeal Network",
+      "notified": false
+    },
+    "2420fe42f6b77583fd8a4a93": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior/ Principal Group Accounting Manager (m/w/d)",
+      "employer": "FINN",
+      "notified": false
+    },
+    "7056f2d4c0f5c476c778b677": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "SAP Finance oder Sales (FI/CO/SD) Architect (m/w/d)",
+      "employer": "Natuvion GmbH",
+      "notified": false
+    },
+    "ae62c93d2c4e00c9218e7270": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Group Finance Contractor",
+      "employer": "Mollie",
+      "notified": false
+    },
+    "27f99531dbedb6255249a131": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior Product Manager, Financial Statement Suite",
+      "employer": "Datasnipper",
+      "notified": false
+    },
+    "9743c8a2b346197c8dbd7c8c": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Anti-Corruption & Trade Compliance Legal Counsel",
+      "employer": "Mistral.ai",
+      "notified": false
+    },
+    "d7ddb464261d7b5b2794c9e7": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior Data Engineer - Financial Flows",
+      "employer": "Kpler",
+      "notified": false
+    },
+    "fb0038c2ddf4690ec4f14165": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Senior financial Writer at SetSales",
+      "employer": "Setsales",
+      "notified": false
+    },
+    "0b3be0a3da017a5efb3d5182": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Product Manager, Finance Engineering",
+      "employer": "Deliveroo",
+      "notified": false
+    },
+    "9d606d6f741dfa6785759a3b": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Business Partner (m/w/d)",
+      "employer": "Rohlik",
+      "notified": false
+    },
+    "c58ac47214884bb0975423b3": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "FINANCE DIRECTOR (m/w/d)",
+      "employer": "Valpeo.com",
+      "notified": false
+    },
+    "24ac70276b942662057550e9": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Assistant (gn) | Avalmanagement & Warenkreditversicherung",
+      "employer": "Ideematec Deutschland GmbH",
+      "notified": false
+    },
+    "4b13a3d034cd906e72ddd7b6": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Manager (m/f/x)",
+      "employer": "Nickel",
+      "notified": false
+    },
+    "843d967de28b04c42abee057": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Manager (m/w/d)",
+      "employer": "Matera GmbH",
+      "notified": false
+    },
+    "4453c05eb0b861748d8c818b": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Consultant (m/w/d) - IT Security und Compliance",
+      "employer": "EWERK GROUP",
+      "notified": false
+    },
+    "7b32d2f9b34ec708dbe76da2": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Finance Lead (m/w/d)",
+      "employer": "FENKA Robotics GmbH",
+      "notified": false
+    },
+    "6d8b23e19a8dafa64f4e74f8": {
+      "firstSeenAt": "2026-11-25T13:56:03.077Z",
+      "lastSeenAt": "2026-11-25T14:20:26.002Z",
+      "stream": "global_opportunity",
+      "title": "Country Support Officer - West & Central Africa (national applicants only)",
+      "employer": "International NGO Safety Organisation",
+      "notified": false
+    },
+    "e22b1eeb09eabcfa5ef20ac1": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Senior Financial Controller",
+      "employer": "Skynrg",
+      "notified": true
+    },
+    "31e158b1585f409d1ceb9c1b": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "General Accountant - Accounts Payable",
+      "employer": "remotewoman",
+      "notified": true
+    },
+    "74cfd8ee635c3bdf76b3ca58": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Credit Analyst Intern (Jan 2027)",
+      "employer": "Lendable",
+      "notified": true
+    },
+    "80bd5a8b5d0d28ad1885520e": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Associate Director - Strategy Analytics  (Credit Cards)",
+      "employer": "Lendable",
+      "notified": true
+    },
+    "ddd9a7e23e284ef69feb1f5a": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "FinTech Operations Graduate (Customer Support)",
+      "employer": "Lendable",
+      "notified": true
+    },
+    "dfbdbfd9217537639d1bea3f": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Senior Value Engineer - (Banking)",
+      "employer": "celonis",
+      "notified": true
+    },
+    "3ed1dcc324dcae1210e183c1": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Sachbearbeiter Forderungsmanagement / Credit & Collection Specialist (m/w/d) mit Italienisch",
+      "employer": "Ricoh Business Services",
+      "notified": true
+    },
+    "8cbcdc1bf938d8adef1f8c8b": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Business & Financial Analyst (all genders)",
+      "employer": "Foodji GmbH",
+      "notified": true
+    },
+    "805fe1e469894ad40db6eb2a": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "Geschäftsleiter Markt - SumUp Bank (Managing Director, Front Office)",
+      "employer": "sumup",
+      "notified": true
+    },
+    "d333d05159f46f3d1934d6d4": {
+      "firstSeenAt": "2026-11-25T14:02:08.763Z",
+      "lastSeenAt": "2026-11-25T14:04:16.880Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Internal Audit Manager (f/m/d)",
+      "employer": "raisin",
+      "notified": true
+    }
+  },
+  "baselineSeeded": true,
+  "recentNotifications": [
+    {
+      "id": "match_e22b1eeb09eabcfa5ef20ac1_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Senior Financial Controller",
+      "employer": "Skynrg",
+      "country": "Netherlands",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.nl/jobs/companies/skynrg/senior-financial-controller-amsterdam-69626",
+      "emailSent": true
+    },
+    {
+      "id": "match_31e158b1585f409d1ceb9c1b_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "General Accountant - Accounts Payable",
+      "employer": "remotewoman",
+      "country": "Spain, Canada",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.fr/jobs/companies/remotewoman/general-accountant-accounts-payable-spain-canada-409437",
+      "emailSent": true
+    },
+    {
+      "id": "match_74cfd8ee635c3bdf76b3ca58_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Credit Analyst Intern (Jan 2027)",
+      "employer": "Lendable",
+      "country": "United Kingdom",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.co.uk/jobs/companies/lendable/credit-analyst-intern-jan-2027-london-454345",
+      "emailSent": true
+    },
+    {
+      "id": "match_80bd5a8b5d0d28ad1885520e_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Associate Director - Strategy Analytics  (Credit Cards)",
+      "employer": "Lendable",
+      "country": "United Kingdom",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.co.uk/jobs/companies/lendable/associate-director-strategy-analytics-credit-cards-london-246208",
+      "emailSent": true
+    },
+    {
+      "id": "match_ddd9a7e23e284ef69feb1f5a_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "FinTech Operations Graduate (Customer Support)",
+      "employer": "Lendable",
+      "country": "Chatham",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.co.uk/jobs/companies/lendable/fintech-operations-graduate-customer-support-chatham-460043",
+      "emailSent": true
+    },
+    {
+      "id": "match_dfbdbfd9217537639d1bea3f_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Senior Value Engineer - (Banking)",
+      "employer": "celonis",
+      "country": "United Kingdom",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.co.uk/jobs/companies/celonis/senior-value-engineer-banking-london-475677",
+      "emailSent": true
+    },
+    {
+      "id": "match_3ed1dcc324dcae1210e183c1_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Sachbearbeiter Forderungsmanagement / Credit & Collection Specialist (m/w/d) mit Italienisch",
+      "employer": "Ricoh Business Services",
+      "country": "Hanover",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.com/jobs/companies/ricoh-business-services/sachbearbeiter-forderungsmanagement-credit-collection-specialist-mit-italienisch-hanover-138317",
+      "emailSent": true
+    },
+    {
+      "id": "match_8cbcdc1bf938d8adef1f8c8b_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Business & Financial Analyst (all genders)",
+      "employer": "Foodji GmbH",
+      "country": "Germany",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.com/jobs/companies/foodji-gmbh/senior-business-financial-analyst-all-genders-munchen-356061",
+      "emailSent": true
+    },
+    {
+      "id": "match_805fe1e469894ad40db6eb2a_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "Geschäftsleiter Markt - SumUp Bank (Managing Director, Front Office)",
+      "employer": "sumup",
+      "country": "Germany",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.com/jobs/companies/sumup/geschaftsleiter-markt-sumup-bank-managing-director-front-office-berlin-284116",
+      "emailSent": true
+    },
+    {
+      "id": "match_d333d05159f46f3d1934d6d4_1795615329749",
+      "discoveredAt": "2026-11-25T14:02:08.763Z",
+      "stream": "global_opportunity",
+      "title": "(Senior) Internal Audit Manager (f/m/d)",
+      "employer": "raisin",
+      "country": "Germany",
+      "salaryDisplay": "Funding Not Confirmed",
+      "matchScore": 82,
+      "officialUrl": "https://www.arbeitnow.com/jobs/companies/raisin/senior-internal-audit-manager-berlin-berlin-349209",
+      "emailSent": true
+    }
+  ],
+  "incidents": [],
+  "cycleHistory": [
+    {
+      "cycleId": "auto1m_1795616423094_0476ac",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:20:23.094Z",
+      "finishedAt": "2026-11-25T14:20:26.854Z",
+      "durationMs": 3760,
+      "status": "success",
+      "sourcesPolled": [
+        "Public Web Crawler (3 pages, +1 new domains)",
+        "Arbeitnow Europe Official Job Feed"
+      ],
+      "candidatesScanned": 333,
+      "newlyDiscovered": 299,
+      "verifiedCount": 127,
+      "rejectedCount": 2080,
+      "duplicatesSkipped": 2,
+      "newMatchingCount": 0,
+      "crawlerPagesProcessed": 3,
+      "crawlerNewDomainsFound": 1,
+      "crawlerOpportunitiesExtracted": 33,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616367711_ba9496",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:19:27.711Z",
+      "finishedAt": "2026-11-25T14:19:31.547Z",
+      "durationMs": 3836,
+      "status": "success",
+      "sourcesPolled": [
+        "Stripe Official Careers",
+        "Pleo Official Careers",
+        "Mollie Official Careers"
+      ],
+      "candidatesScanned": 851,
+      "newlyDiscovered": 851,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616304239_cab2a1",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:18:24.239Z",
+      "finishedAt": "2026-11-25T14:18:27.705Z",
+      "durationMs": 3466,
+      "status": "success",
+      "sourcesPolled": [
+        "GoCardless Official Careers",
+        "TransferGo Official Careers",
+        "Careem Pay / Careem Official Careers"
+      ],
+      "candidatesScanned": 56,
+      "newlyDiscovered": 56,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616240970_116559",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:17:20.970Z",
+      "finishedAt": "2026-11-25T14:17:24.235Z",
+      "durationMs": 3265,
+      "status": "success",
+      "sourcesPolled": [
+        "Wise Official Careers",
+        "SumUp Official Careers",
+        "Tide Official Careers"
+      ],
+      "candidatesScanned": 433,
+      "newlyDiscovered": 433,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616178678_bc0def",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:16:18.678Z",
+      "finishedAt": "2026-11-25T14:16:20.966Z",
+      "durationMs": 2288,
+      "status": "success",
+      "sourcesPolled": [
+        "Adyen Official Careers",
+        "N26 Bank Official Careers"
+      ],
+      "candidatesScanned": 264,
+      "newlyDiscovered": 264,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616116649_1f0eea",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:15:16.649Z",
+      "finishedAt": "2026-11-25T14:15:18.668Z",
+      "durationMs": 2019,
+      "status": "success",
+      "sourcesPolled": [
+        "Monzo Bank Official Careers"
+      ],
+      "candidatesScanned": 53,
+      "newlyDiscovered": 53,
+      "verifiedCount": 94,
+      "rejectedCount": 2082,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795616054398_82bb33",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:14:14.398Z",
+      "finishedAt": "2026-11-25T14:14:16.645Z",
+      "durationMs": 2247,
+      "status": "success",
+      "sourcesPolled": [
+        "Arbeitnow Europe Official Job Feed"
+      ],
+      "candidatesScanned": 300,
+      "newlyDiscovered": 298,
+      "verifiedCount": 94,
+      "rejectedCount": 2082,
+      "duplicatesSkipped": 2,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615991283_890711",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:13:11.283Z",
+      "finishedAt": "2026-11-25T14:13:14.394Z",
+      "durationMs": 3111,
+      "status": "success",
+      "sourcesPolled": [
+        "Stripe Official Careers",
+        "Pleo Official Careers",
+        "Mollie Official Careers"
+      ],
+      "candidatesScanned": 851,
+      "newlyDiscovered": 851,
+      "verifiedCount": 94,
+      "rejectedCount": 2082,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615927963_65b55c",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:12:07.963Z",
+      "finishedAt": "2026-11-25T14:12:11.279Z",
+      "durationMs": 3316,
+      "status": "success",
+      "sourcesPolled": [
+        "GoCardless Official Careers",
+        "TransferGo Official Careers",
+        "Careem Pay / Careem Official Careers"
+      ],
+      "candidatesScanned": 56,
+      "newlyDiscovered": 56,
+      "verifiedCount": 94,
+      "rejectedCount": 2081,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615864658_a9934b",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:11:04.658Z",
+      "finishedAt": "2026-11-25T14:11:07.958Z",
+      "durationMs": 3300,
+      "status": "success",
+      "sourcesPolled": [
+        "Wise Official Careers",
+        "SumUp Official Careers",
+        "Tide Official Careers"
+      ],
+      "candidatesScanned": 433,
+      "newlyDiscovered": 433,
+      "verifiedCount": 94,
+      "rejectedCount": 2081,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615802094_84bd51",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:10:02.094Z",
+      "finishedAt": "2026-11-25T14:10:04.653Z",
+      "durationMs": 2559,
+      "status": "success",
+      "sourcesPolled": [
+        "Adyen Official Careers",
+        "N26 Bank Official Careers"
+      ],
+      "candidatesScanned": 267,
+      "newlyDiscovered": 267,
+      "verifiedCount": 94,
+      "rejectedCount": 2082,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615740412_53a934",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:09:00.412Z",
+      "finishedAt": "2026-11-25T14:09:02.090Z",
+      "durationMs": 1678,
+      "status": "success",
+      "sourcesPolled": [
+        "Monzo Bank Official Careers"
+      ],
+      "candidatesScanned": 53,
+      "newlyDiscovered": 53,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615678692_ab5316",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:07:58.692Z",
+      "finishedAt": "2026-11-25T14:08:00.409Z",
+      "durationMs": 1717,
+      "status": "success",
+      "sourcesPolled": [
+        "Open Exchange Rates USD FX Feed"
+      ],
+      "candidatesScanned": 2044,
+      "newlyDiscovered": 89,
+      "verifiedCount": 94,
+      "rejectedCount": 2079,
+      "duplicatesSkipped": 4,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615616444_677099",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:06:56.444Z",
+      "finishedAt": "2026-11-25T14:06:58.687Z",
+      "durationMs": 2243,
+      "status": "success",
+      "sourcesPolled": [
+        "Arbeitnow Europe Official Job Feed"
+      ],
+      "candidatesScanned": 300,
+      "newlyDiscovered": 298,
+      "verifiedCount": 94,
+      "rejectedCount": 2064,
+      "duplicatesSkipped": 2,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615553361_9942b7",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:05:53.361Z",
+      "finishedAt": "2026-11-25T14:05:56.439Z",
+      "durationMs": 3078,
+      "status": "success",
+      "sourcesPolled": [
+        "Stripe Official Careers",
+        "Pleo Official Careers",
+        "Mollie Official Careers"
+      ],
+      "candidatesScanned": 850,
+      "newlyDiscovered": 850,
+      "verifiedCount": 94,
+      "rejectedCount": 2066,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615490693_1b5b1b",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:04:50.693Z",
+      "finishedAt": "2026-11-25T14:04:53.357Z",
+      "durationMs": 2664,
+      "status": "success",
+      "sourcesPolled": [
+        "GoCardless Official Careers",
+        "TransferGo Official Careers",
+        "Careem Pay / Careem Official Careers"
+      ],
+      "candidatesScanned": 56,
+      "newlyDiscovered": 56,
+      "verifiedCount": 94,
+      "rejectedCount": 2067,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615454721_2e24f0",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:04:14.721Z",
+      "finishedAt": "2026-11-25T14:04:17.774Z",
+      "durationMs": 3053,
+      "status": "success",
+      "sourcesPolled": [
+        "Wise Official Careers",
+        "SumUp Official Careers",
+        "Tide Official Careers"
+      ],
+      "candidatesScanned": 433,
+      "newlyDiscovered": 433,
+      "verifiedCount": 107,
+      "rejectedCount": 2057,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615391598_c5157c",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:03:11.598Z",
+      "finishedAt": "2026-11-25T14:03:14.718Z",
+      "durationMs": 3120,
+      "status": "success",
+      "sourcesPolled": [
+        "Monzo Bank Official Careers",
+        "Adyen Official Careers",
+        "N26 Bank Official Careers"
+      ],
+      "candidatesScanned": 320,
+      "newlyDiscovered": 320,
+      "verifiedCount": 107,
+      "rejectedCount": 2057,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615265872_47c9fd",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:01:05.872Z",
+      "finishedAt": "2026-11-25T14:02:11.595Z",
+      "durationMs": 65723,
+      "status": "success",
+      "sourcesPolled": [
+        "6-Department Global Official Portals (UN, World Bank, ReliefWeb, Scholarships, Gov PR)"
+      ],
+      "candidatesScanned": 82,
+      "newlyDiscovered": 0,
+      "verifiedCount": 107,
+      "rejectedCount": 2057,
+      "duplicatesSkipped": 48,
+      "newMatchingCount": 10,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615203177_68aeed",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T14:00:03.177Z",
+      "finishedAt": "2026-11-25T14:00:05.868Z",
+      "durationMs": 2691,
+      "status": "success",
+      "sourcesPolled": [
+        "Arbeitnow Europe Official Job Feed",
+        "Open Exchange Rates USD FX Feed"
+      ],
+      "candidatesScanned": 2346,
+      "newlyDiscovered": 387,
+      "verifiedCount": 94,
+      "rejectedCount": 2081,
+      "duplicatesSkipped": 6,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615140033_a16721",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T13:59:00.033Z",
+      "finishedAt": "2026-11-25T13:59:03.174Z",
+      "durationMs": 3141,
+      "status": "success",
+      "sourcesPolled": [
+        "Stripe Official Careers",
+        "Pleo Official Careers",
+        "Mollie Official Careers"
+      ],
+      "candidatesScanned": 850,
+      "newlyDiscovered": 850,
+      "verifiedCount": 94,
+      "rejectedCount": 2068,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615077394_92a05c",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T13:57:57.394Z",
+      "finishedAt": "2026-11-25T13:58:00.031Z",
+      "durationMs": 2637,
+      "status": "success",
+      "sourcesPolled": [
+        "GoCardless Official Careers",
+        "TransferGo Official Careers",
+        "Careem Pay / Careem Official Careers"
+      ],
+      "candidatesScanned": 56,
+      "newlyDiscovered": 56,
+      "verifiedCount": 94,
+      "rejectedCount": 2069,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795615014540_1cb3c2",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T13:56:54.540Z",
+      "finishedAt": "2026-11-25T13:56:57.391Z",
+      "durationMs": 2851,
+      "status": "success",
+      "sourcesPolled": [
+        "Wise Official Careers",
+        "SumUp Official Careers",
+        "Tide Official Careers"
+      ],
+      "candidatesScanned": 433,
+      "newlyDiscovered": 433,
+      "verifiedCount": 94,
+      "rejectedCount": 2069,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    },
+    {
+      "cycleId": "auto1m_1795614961156_bd7d04",
+      "trigger": "internal_1min_worker",
+      "startedAt": "2026-11-25T13:56:01.156Z",
+      "finishedAt": "2026-11-25T13:56:03.908Z",
+      "durationMs": 2752,
+      "status": "success",
+      "sourcesPolled": [
+        "Monzo Bank Official Careers",
+        "Adyen Official Careers",
+        "N26 Bank Official Careers"
+      ],
+      "candidatesScanned": 320,
+      "newlyDiscovered": 320,
+      "verifiedCount": 94,
+      "rejectedCount": 2070,
+      "duplicatesSkipped": 0,
+      "newMatchingCount": 0,
+      "error": null
+    }
+  ]
+}

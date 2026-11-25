@@ -8,6 +8,7 @@ import { registerWritingAssistantRoutes } from './serverWritingAssistant';
 import { registerNexusClientFinderRoutes } from './serverNexusClientFinder';
 import { registerGlobalMigrationHubRoutes } from './serverGlobalMigrationHub';
 import { registerBranchManagerJobsRoutes } from './serverBranchManagerJobs';
+import { registerAutonomousDiscoveryWorker } from './serverAutonomousDiscoveryWorker';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11373,7 +11374,7 @@ Return strict JSON:
     pushAdminNotification,
   });
 
-  registerGlobalOpportunitiesRoutes({
+  const globalOpportunitiesController = registerGlobalOpportunitiesRoutes({
     app,
     runtimeBaseDir: RUNTIME_BASE_DIR,
     isVercel: IS_VERCEL,
@@ -11416,7 +11417,7 @@ Return strict JSON:
     getRequesterUid,
   });
 
-  registerBranchManagerJobsRoutes({
+  const branchManagerController = registerBranchManagerJobsRoutes({
     app,
     runtimeBaseDir: RUNTIME_BASE_DIR,
     isVercel: IS_VERCEL,
@@ -11425,6 +11426,20 @@ Return strict JSON:
     writeJsonFileAtomic,
     isPersistentOwnerRequest,
     getRequesterUid,
+  });
+
+  registerAutonomousDiscoveryWorker({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    appendAuditLog,
+    pushAdminNotification,
+    globalOpportunitiesController,
+    branchManagerController,
   });
 
   function listPersistentBackups(): any[] {

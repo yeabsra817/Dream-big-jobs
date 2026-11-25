@@ -29,7 +29,7 @@ export interface RegisterBranchManagerJobsDeps {
  * Private saved profile strictly reserved for the authenticated owner account only.
  * NEVER returned to guests or any other signed-in user.
  */
-const OWNER_PRIVATE_SAVED_PROFILE: BranchManagerProfileInput = {
+export const OWNER_PRIVATE_SAVED_PROFILE: BranchManagerProfileInput = {
   profileLabel: 'Saved Branch Manager Profile (Owner Account)',
   nationality: 'Ethiopian',
   currentResidence: 'Ethiopia',
@@ -84,7 +84,7 @@ export interface RawDiscoveredBranchJob {
   ethiopianEligibleHint?: 'confirmed' | 'likely_global' | 'not_confirmed' | 'excluded';
 }
 
-interface BranchManagerJobsStore {
+export interface BranchManagerJobsStore {
   version: number;
   updatedAt: string;
   lastDiscoveryAt: string;
@@ -1180,7 +1180,7 @@ export function evaluateBranchManagerJobs(params: {
   };
 }
 
-const LIVE_GREENHOUSE_BANKING_BOARDS: Array<{
+export const LIVE_GREENHOUSE_BANKING_BOARDS: Array<{
   slug: string;
   employerName: string;
   employerType: string;
@@ -1197,7 +1197,7 @@ const LIVE_GREENHOUSE_BANKING_BOARDS: Array<{
   { slug: 'stripe', employerName: 'Stripe', employerType: 'Global Financial Infrastructure Institution' },
 ];
 
-const LIVE_ASHBY_BANKING_BOARDS: Array<{
+export const LIVE_ASHBY_BANKING_BOARDS: Array<{
   slug: string;
   employerName: string;
   employerType: string;
@@ -1206,7 +1206,7 @@ const LIVE_ASHBY_BANKING_BOARDS: Array<{
   { slug: 'mollie', employerName: 'Mollie', employerType: 'European Regulated Payments Institution' },
 ];
 
-async function fetchLiveFxRates(): Promise<{
+export async function fetchLiveFxRates(): Promise<{
   rates: Record<string, number>;
   updatedAt: string;
   sourceNote: string;
@@ -1609,4 +1609,66 @@ export function registerBranchManagerJobsRoutes(deps: RegisterBranchManagerJobsD
       });
     }
   });
+
+  return {
+    loadStore,
+    saveStore,
+    runLiveDiscoveryIfNeeded,
+    loadExistingGlobalOpps,
+    mergeIncrementalCandidates(params: {
+      sourceLabel: string;
+      idPrefix: string;
+      incomingCandidates: RawDiscoveredBranchJob[];
+      fxUpdate?: { rates: Record<string, number>; updatedAt: string; sourceNote: string };
+    }) {
+      const store = loadStore();
+      if (params.fxUpdate) {
+        store.fxRatesUsdBase = params.fxUpdate.rates;
+        store.fxUpdatedAt = params.fxUpdate.updatedAt;
+        store.fxSourceNote = params.fxUpdate.sourceNote;
+      }
+      // Replace stale records only for the specific refreshed source prefix while preserving all other discovered records
+      const retained = store.rawCandidates.filter((c) => !c.id.startsWith(params.idPrefix));
+      const seenUrls = new Set(retained.map((c) => c.applicationUrl.toLowerCase()));
+      let newlyAdded = 0;
+      let duplicatesSkipped = 0;
+      const merged = [...retained];
+      for (const item of params.incomingCandidates) {
+        const key = String(item.applicationUrl || '').trim().toLowerCase();
+        if (!key) continue;
+        if (seenUrls.has(key)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        seenUrls.add(key);
+        merged.push(item);
+        newlyAdded++;
+      }
+      store.rawCandidates = merged;
+      if (!store.sourcesChecked.includes(params.sourceLabel)) {
+        store.sourcesChecked = [...store.sourcesChecked, params.sourceLabel];
+      }
+      store.lastDiscoveryAt = new Date().toISOString();
+      saveStore(store);
+      return {
+        store,
+        newlyAdded,
+        duplicatesSkipped,
+        totalCandidates: merged.length,
+      };
+    },
+    evaluateForOwner() {
+      const store = loadStore();
+      return evaluateBranchManagerJobs({
+        rawCandidates: store.rawCandidates,
+        profileInput: OWNER_PRIVATE_SAVED_PROFILE,
+        isOwnerAccountProfile: true,
+        fxRatesUsdBase: store.fxRatesUsdBase,
+        fxUpdatedAt: store.fxUpdatedAt,
+        fxSourceNote: store.fxSourceNote,
+        sourcesChecked: store.sourcesChecked,
+        lastDiscoveryAt: store.lastDiscoveryAt,
+      });
+    },
+  };
 }

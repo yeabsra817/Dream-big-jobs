@@ -1,8 +1,8 @@
 {
   "status": "CONNECTED",
   "statusCode": "connected",
-  "lastCheckedAt": "2026-11-25T13:01:58.523Z",
-  "lastSuccessfulTestAt": "2026-11-25T13:01:58.523Z",
+  "lastCheckedAt": "2026-11-25T13:55:29.794Z",
+  "lastSuccessfulTestAt": "2026-11-25T13:55:29.794Z",
   "lastError": null,
   "consecutiveFailures": 0,
   "reconnectAttempts": 0,
@@ -10,5 +10,5 @@
   "channelName": "@hopelandJobsEthiopia",
   "channelId": "-1004499169829",
   "lastSource": "auto_monitor",
-  "updatedAt": "2026-11-25T13:01:58.523Z"
+  "updatedAt": "2026-11-25T13:55:29.794Z"
 }

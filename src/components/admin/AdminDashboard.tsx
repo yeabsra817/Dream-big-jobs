@@ -56,6 +56,7 @@ import { SystemPersistenceCenter } from './SystemPersistenceCenter';
 import { UserAnalyticsCenter } from './UserAnalyticsCenter';
 import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
 import { NexusClientFinderPanel } from './NexusClientFinderPanel';
+import { AutonomousCrawlerOpsPanel } from './AutonomousCrawlerOpsPanel';
 import {
   auth,
   googleProvider,
@@ -158,6 +159,7 @@ export const AdminDashboard: React.FC<Props> = ({
     | 'bulk'
     | 'siteEditor'
     | 'international'
+    | 'autonomousOps'
     | 'telegramQueue'
     | 'manual'
     | 'duplicates'
@@ -560,6 +562,20 @@ export const AdminDashboard: React.FC<Props> = ({
 
             {isYeabsraOwner && (
               <button
+                onClick={() => setActiveTab('autonomousOps')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
+                  activeTab === 'autonomousOps'
+                    ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
+                    : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/35'
+                }`}
+              >
+                <HeartPulse className="w-4 h-4 text-emerald-400" />
+                <span>Autonomous Crawler &amp; Ops</span>
+              </button>
+            )}
+
+            {isYeabsraOwner && (
+              <button
                 onClick={() => setActiveTab('nexusClientFinder')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
                   activeTab === 'nexusClientFinder'
@@ -826,6 +842,10 @@ export const AdminDashboard: React.FC<Props> = ({
               onSyncInternationalState={onSyncInternationalState}
             />
           </div>
+        )}
+
+        {activeTab === 'autonomousOps' && isYeabsraOwner && (
+          <AutonomousCrawlerOpsPanel adminEmail={adminEmail} />
         )}
 
         {activeTab === 'telegramQueue' && (
