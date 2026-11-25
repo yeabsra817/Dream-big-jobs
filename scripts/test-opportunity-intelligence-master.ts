@@ -344,8 +344,8 @@ async function runMasterAcceptanceTests() {
   );
 
   // =========================================================================
-  // TEST 5: International banking job with verified visa sponsorship & >$3,000/mo
-  // -> MUST BE ALLOWED
+  // TEST 5: International banking job with verified visa sponsorship (NO $3,000 salary threshold)
+  // -> MUST BE ALLOWED regardless of salary amount or undisclosed salary
   // =========================================================================
   const allowedIntlBankRes = engine.ingestAndVerifyCandidate(db, {
     category: 'job',
@@ -366,18 +366,38 @@ async function runMasterAcceptanceTests() {
     allowedIntlBankRes.record,
     BRANCH_BANKING_REFERENCE_PROFILE
   );
-  assert.equal(allowedIntlBankRes.record.status, 'published', 'TEST 5: Verified visa + >$3k banking job must publish');
+  assert.equal(allowedIntlBankRes.record.status, 'published', 'TEST 5: Verified visa banking job must publish');
   assert.equal(allowedIntlBankRes.record.visa.verified, true);
-  assert.equal(allowedIntlBankRes.record.salary.meetsAbove3000UsdMonthly, true);
+  assert.equal(allowedIntlBankRes.record.visa.transparencyStatus, 'VISA SPONSORSHIP CONFIRMED');
   assert.equal(allowedEval.eligible, true, 'TEST 5: Must be allowed for Branch Manager profile');
+
+  // Also verify international Branch Manager with salary < $3,000 and undisclosed salary are BOTH allowed when visa sponsorship is confirmed
+  const lowSalaryIntlBankRes = engine.ingestAndVerifyCandidate(db, {
+    category: 'job',
+    title: 'Branch Manager - Retail Operations',
+    employer: 'Baltic Nordic Bank',
+    country: 'Estonia',
+    city: 'Tallinn',
+    region: 'Europe',
+    description:
+      'Lead branch banking operations, retail deposits, credit operations, and branch staff supervision. Requires 8 years banking and 3 years management. Employer provides full Estonian work visa sponsorship.',
+    compensationRaw: 'EUR 2,200 per month gross',
+    explicitVisaNote: 'Employer provides confirmed work visa sponsorship for international candidates.',
+    officialApplicationUrl: 'https://careers.balticnordicbank.ee/jobs/branch-manager-5002',
+    sourceName: 'Baltic Nordic Bank Careers',
+    deadlineRaw: in14Days,
+  });
+  assert.equal(lowSalaryIntlBankRes.record.status, 'published', 'TEST 5B: Intl Branch Manager < $3,000 MUST publish');
+  assert.equal(lowSalaryIntlBankRes.record.isBranchBankingMatch, true, 'TEST 5B: Intl Branch Manager < $3,000 MUST match Branch Banking (no $3k floor)');
+
   console.log(
-    `[PASS] TEST 5: Allowed "${allowedIntlBankRes.record.title}" at ${allowedIntlBankRes.record.employer} (${allowedIntlBankRes.record.salary.salaryDisplay}, Visa: ${allowedIntlBankRes.record.visa.statusLabel}).`
+    `[PASS] TEST 5: Allowed "${allowedIntlBankRes.record.title}" (${allowedIntlBankRes.record.salary.salaryDisplay}) AND <$3,000 intl Branch Manager "${lowSalaryIntlBankRes.record.title}" (${lowSalaryIntlBankRes.record.salary.salaryDisplay}) with confirmed visa sponsorship.`
   );
 
   // =========================================================================
-  // TEST 6: International job WITHOUT verified work visa sponsorship
-  // (plus scholarship with invitation letter only / applicant-paid visa)
-  // -> MUST BE REJECTED
+  // TEST 6: International opportunities WITHOUT confirmed work visa sponsorship
+  // -> Transparently labeled with exact Section 3 visa status; EXCLUDED from Branch Banking
+  //    (NEVER misclassified as VISA SPONSORSHIP CONFIRMED)
   // =========================================================================
   const noVisaJobRes = engine.ingestAndVerifyCandidate(db, {
     category: 'job',
@@ -408,20 +428,20 @@ async function runMasterAcceptanceTests() {
     deadlineRaw: in14Days,
   });
 
-  assert.equal(noVisaJobRes.record.status, 'rejected', 'TEST 6: International job without visa sponsorship MUST be rejected');
+  assert.equal(noVisaJobRes.record.status, 'published', 'TEST 6: International job without visa sponsorship publishes transparently so user decides');
+  assert.equal(noVisaJobRes.record.visa.verified, false, 'TEST 6: Must NOT be marked verified visa sponsorship');
+  assert.equal(noVisaJobRes.record.visa.transparencyStatus, 'VISA SPONSORSHIP NOT OFFERED');
+  assert.equal(noVisaJobRes.record.isBranchBankingMatch, false, 'TEST 6: Branch Banking MUST exclude unconfirmed/not-offered visa jobs');
+
+  assert.equal(inviteOnlyConfRes.record.status, 'published', 'TEST 6: Invitation-letter-only conference publishes transparently');
+  assert.equal(inviteOnlyConfRes.record.visa.verified, false, 'TEST 6: Invitation-letter-only MUST NEVER be classified as confirmed visa sponsorship');
   assert.ok(
-    noVisaJobRes.record.rejectionCodes.includes('visa_sponsorship_unconfirmed'),
-    `TEST 6: Expected visa_sponsorship_unconfirmed, got ${noVisaJobRes.record.rejectionCodes.join(', ')}`
-  );
-  assert.equal(inviteOnlyConfRes.record.status, 'rejected', 'TEST 6: Invitation-letter-only conference MUST be rejected');
-  assert.ok(
-    inviteOnlyConfRes.record.rejectionCodes.includes('invitation_letter_only') ||
-      inviteOnlyConfRes.record.rejectionCodes.includes('visa_cost_applicant_paid') ||
-      inviteOnlyConfRes.record.rejectionCodes.includes('visa_sponsorship_unconfirmed'),
-    'TEST 6: Conference must fail invitation-letter-only / visa-fee filter'
+    inviteOnlyConfRes.record.visa.transparencyStatus === 'VISA SPONSORSHIP NOT OFFERED' ||
+      inviteOnlyConfRes.record.visa.transparencyStatus === 'VISA SPONSORSHIP REQUIRES CONFIRMATION',
+    `TEST 6: Unexpected visa status for invite-only conference: ${inviteOnlyConfRes.record.visa.transparencyStatus}`
   );
   console.log(
-    `[PASS] TEST 6: Rejected international job without visa [${noVisaJobRes.record.rejectionCodes.join(', ')}] & invitation-only conference [${inviteOnlyConfRes.record.rejectionCodes.join(', ')}].`
+    `[PASS] TEST 6: Transparently labeled no-visa job [${noVisaJobRes.record.visa.transparencyStatus}, BranchMatch=${noVisaJobRes.record.isBranchBankingMatch}] & invite-only conference [${inviteOnlyConfRes.record.visa.transparencyStatus}].`
   );
 
   // =========================================================================

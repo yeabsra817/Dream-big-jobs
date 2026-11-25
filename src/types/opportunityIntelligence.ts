@@ -71,10 +71,41 @@ export type RejectionReasonCode =
   | 'invalid_official_url'
   | 'duplicate_prevented';
 
+export type VisaTransparencyStatus =
+  | 'VISA SPONSORSHIP CONFIRMED'
+  | 'VISA SPONSORSHIP NOT OFFERED'
+  | 'VISA SPONSORSHIP NOT SPECIFIED'
+  | 'VISA SPONSORSHIP REQUIRES CONFIRMATION'
+  | 'Visa sponsorship not applicable — domestic opportunity';
+
+export type DeadlineStatusLabel =
+  | 'OPEN — ACCEPTING APPLICATIONS'
+  | 'CLOSING SOON'
+  | 'DEADLINE PASSED'
+  | 'APPLICATIONS CLOSED'
+  | 'DEADLINE NOT PUBLISHED'
+  | 'NOT YET OPEN';
+
+export type WorkModeType = 'remote' | 'hybrid' | 'onsite' | 'not_specified';
+
+export interface ApplicationLinkVerificationRecord {
+  status: 'VERIFIED' | 'NOT VERIFIED';
+  priorityTier: 1 | 2 | 3 | 4 | 0;
+  priorityLabel: string;
+  directApplicationUrl: string;
+  httpStatus: number | null;
+  titleMatched: boolean;
+  employerMatched: boolean;
+  isGenericHomepage: boolean;
+  isSearchResultUrl: boolean;
+  checkedAt: string;
+  note: string;
+}
+
 export interface SalaryNormalizationRecord {
   opportunityId: string;
   disclosed: boolean;
-  salaryDisplay: string; // e.g., "Not Disclosed" or "$4,800 / month (Gross)"
+  salaryDisplay: string; // e.g., "Salary not disclosed" or "USD 2,500 / month (Gross)"
   period: 'monthly' | 'annual' | 'unknown';
   taxBasis: 'gross' | 'net' | 'not_specified';
   originalCurrency: string | null;
@@ -83,13 +114,13 @@ export interface SalaryNormalizationRecord {
   normalizedMonthlyUsd: number | null;
   normalizedAnnualUsd: number | null;
   exchangeRateUsed: string;
-  meetsAbove3000UsdMonthly: boolean;
   verifiedAt: string;
 }
 
 export interface VisaAuthorizationRecord {
   opportunityId: string;
   environment: OpportunityEnvironment;
+  transparencyStatus: VisaTransparencyStatus;
   conditionMet:
     | 'A_employer_work_visa'
     | 'B_work_permit_immigration'
@@ -97,12 +128,17 @@ export interface VisaAuthorizationRecord {
     | 'domestic_not_required'
     | 'none';
   verified: boolean;
+  visaSponsored: boolean;
+  workPermitSponsored: boolean;
+  internationalApplicantsWelcome: boolean;
   visaFeesCovered: 'yes' | 'no' | 'not_confirmed';
   relocationSupport: 'yes' | 'no' | 'not_confirmed';
   relocationDetails: string;
   invitationLetterOnly: boolean;
   touristEntryRejected: boolean;
   sponsorshipStatement: string;
+  evidenceQuote: string | null;
+  evidenceSourceUrl: string | null;
   statusLabel: string;
   lastVerifiedAt: string;
 }
@@ -176,18 +212,27 @@ export interface CanonicalOpportunityRecord {
   country: string;
   city: string;
   region: string;
+  workMode: WorkModeType;
   sector: ProfessionalSector;
   secondarySectors: ProfessionalSector[];
   seniorityLevel: CareerSeniorityLevel;
   actualResponsibilities: string[];
   descriptionSummary: string;
+  publishedDate: string | null;
   officialApplicationUrl: string;
+  applicationLinkVerification: ApplicationLinkVerificationRecord;
   primarySourceUrl: string;
   primarySourceName: string;
   sourceUrls: string[];
   sourceNames: string[];
   deadlineRaw: string;
+  deadlineDateExact: string | null;
+  deadlineTime: string | null;
+  deadlineTimezone: string | null;
   deadlineIso: string | null;
+  deadlineStatusLabel: DeadlineStatusLabel;
+  deadlineLastVerifiedAt: string;
+  deadlineEvidence: string | null;
   fullDaysRemaining: number | null;
   salary: SalaryNormalizationRecord;
   visa: VisaAuthorizationRecord;

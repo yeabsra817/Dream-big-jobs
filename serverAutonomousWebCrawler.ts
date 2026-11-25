@@ -1133,8 +1133,12 @@ export class AutonomousWebCrawler {
         db.domains[candidate.sourceDomain].opportunitiesFoundCount++;
       }
 
-      // If it has verified salary & visa/international relevance, also forward into the Branch Manager $3,000+ evaluation pool
-      if (salaryInfo.salaryMonthlyUsd && salaryInfo.salaryMonthlyUsd >= 3000) {
+      // Forward verified banking, branch management, finance, and international roles into the Branch Banking evaluation pool (NO minimum salary restriction!)
+      if (
+        /\b(bank|banking|branch\s+manager|retail\s+banking|credit\s+manager|relationship\s+manager|finance\s+manager|financial\s+controller|compliance\s+manager|risk\s+manager|microfinance|treasury)\b/i.test(
+          `${cleanTitle} ${cleanEmployer} ${combined}`
+        )
+      ) {
         counters.publishedBranchCandidates.push({
           id: `bm_web_${fp}`,
           title: cleanTitle,

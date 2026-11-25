@@ -83,12 +83,12 @@ async function runTests() {
     console.log('✅ Test 1 passed: 4-region scope enforced & local African/non-allowed continents rejected');
   }
 
-  // Test 2: Guaranteed Base Salary Parser & Currency Conversion (strictly > $3,000/mo, no undisclosed, no bonus-only)
+  // Test 2: Base Salary Parser & Currency Conversion (NO $3,000 threshold; undisclosed -> "Salary not disclosed")
   {
     const gbp = parseGuaranteedBaseSalaryUsd('Guaranteed base salary: £60,000 - £72,000 per year.');
     assert.equal(gbp.disclosed, true);
     assert.equal(gbp.currency, 'GBP');
-    assert.ok(gbp.baseMonthlyUsd > 3000, '£60k/yr must exceed $3,000/mo USD');
+    assert.ok(gbp.baseMonthlyUsd > 3000, '£60k/yr parses accurately');
     assert.ok(gbp.originalSalaryDisplay.includes('£60,000'));
     assert.ok(gbp.usdEquivalentDisplay.includes('$'));
 
@@ -99,19 +99,22 @@ async function runTests() {
 
     const lowEur = parseGuaranteedBaseSalaryUsd('Base salary: €24,000 per year.');
     assert.equal(lowEur.disclosed, true);
-    assert.ok(lowEur.baseMonthlyUsd < 3000, '€24k/yr must be below $3,000/mo');
+    assert.ok(lowEur.baseMonthlyUsd < 3000, '€24k/yr parses accurately below $3,000/mo without rejection');
 
     const undisclosed = parseGuaranteedBaseSalaryUsd('Competitive salary plus performance bonus and benefits.');
     assert.equal(undisclosed.disclosed, false);
+    assert.equal(undisclosed.originalSalaryDisplay, 'Salary not disclosed');
+    assert.equal(undisclosed.usdEquivalentDisplay, 'Salary not disclosed');
 
     const revenueOnly = parseGuaranteedBaseSalaryUsd('We raised $50,000,000 Series B funding and process $500,000 volume.');
     assert.equal(revenueOnly.disclosed, false);
+    assert.equal(revenueOnly.originalSalaryDisplay, 'Salary not disclosed');
 
     passed += 1;
-    console.log('✅ Test 2 passed: Guaranteed base salary parser & FX conversion verified');
+    console.log('✅ Test 2 passed: Salary parser & FX conversion verified (undisclosed -> "Salary not disclosed")');
   }
 
-  // Test 3: Strict 6-Gate Filtering & Section 8 Ranking
+  // Test 3: Strict Branch Banking Verification (NO $3,000 salary threshold, strict confirmed visa sponsorship & direct URL)
   {
     const candidates: RawDiscoveredBranchJob[] = [
       makeRawJob({ id: 'pass_europe_uk' }),
@@ -139,43 +142,58 @@ async function runTests() {
         descriptionText:
           'Base salary: USD 84,000 per year. Full international visa sponsorship and relocation package provided.',
       }),
-      // Should FAIL: undisclosed salary
+      // MUST PASS: undisclosed salary with confirmed visa sponsorship (Section 1: NEVER exclude for undisclosed salary)
       makeRawJob({
-        id: 'fail_no_salary',
+        id: 'pass_undisclosed_salary',
         title: 'Finance Manager',
         descriptionText:
           'Competitive package. We offer full visa sponsorship for international applicants.',
       }),
-      // Should FAIL: salary below $3,000/mo
+      // MUST PASS: salary below $3,000/mo with confirmed visa sponsorship (Section 1 & 2: NO USD 3,000 restriction!)
       makeRawJob({
-        id: 'fail_low_salary',
+        id: 'pass_low_salary',
         title: 'Credit Operations Manager',
         employerName: 'EuroCredit GmbH',
         locationRaw: 'Berlin, Germany',
         descriptionText:
           'Base salary: EUR 28,000 per year. We offer full visa sponsorship for international applicants.',
       }),
-      // Should FAIL: no visa sponsorship
+      // MUST FAIL: no visa sponsorship
       makeRawJob({
         id: 'fail_no_visa',
         title: 'Financial Controller',
         descriptionText:
           'Base salary: £85,000 per year. Applicants must already have the right to work; no visa sponsorship available.',
       }),
-      // Should FAIL: unrelated high-salary role (Software Engineer)
+      // MUST FAIL: employer previously sponsored other employees (NOT current confirmation!)
+      makeRawJob({
+        id: 'fail_past_sponsorship_only',
+        title: 'Branch Operations Manager',
+        employerName: 'Nordic Retail Group',
+        locationRaw: 'Stockholm, Sweden',
+        descriptionText:
+          'Base salary: SEK 55,000 per month. Company has previously sponsored visas for employees on a case-by-case basis.',
+      }),
+      // MUST FAIL: search-result URL instead of direct official application link
+      makeRawJob({
+        id: 'fail_search_url',
+        title: 'Retail Branch Manager',
+        applicationUrl: 'https://careers.sc.com/jobs?search=branch-manager&q=london',
+      }),
+      // MUST FAIL: unrelated role (Software Engineer)
       makeRawJob({
         id: 'fail_unrelated_role',
         title: 'Senior Software Engineer',
         descriptionText:
           'Base salary: £120,000 per year. Full visa sponsorship available for international applicants.',
       }),
-      // Should FAIL: USA outside allowed 4 regions
+      // MUST FAIL: USA outside allowed 4 regions
       makeRawJob({
         id: 'fail_usa',
         title: 'Branch Manager',
         locationRaw: 'New York, United States',
       }),
-      // Should FAIL: local non-international African employer
+      // MUST FAIL: local non-international African employer
       makeRawJob({
         id: 'fail_local_africa',
         title: 'Branch Manager',
@@ -190,33 +208,50 @@ async function runTests() {
     });
 
     const ids = res.jobs.map((j) => j.id);
-    assert.equal(res.jobs.length, 4, `Expected exactly 4 verified jobs, got ${res.jobs.length}: ${ids.join(', ')}`);
+    assert.equal(res.jobs.length, 6, `Expected exactly 6 verified jobs (including undisclosed & <$3k salary), got ${res.jobs.length}: ${ids.join(', ')}`);
     assert.ok(ids.includes('pass_europe_uk'));
     assert.ok(ids.includes('pass_scandinavia'));
     assert.ok(ids.includes('pass_middle_east'));
     assert.ok(ids.includes('pass_africa_intl'));
+    assert.ok(ids.includes('pass_undisclosed_salary'), 'Undisclosed salary with confirmed visa sponsorship MUST pass');
+    assert.ok(ids.includes('pass_low_salary'), 'Salary below $3,000/mo with confirmed visa sponsorship MUST pass');
+    assert.ok(!ids.includes('fail_past_sponsorship_only'), 'Past-sponsorship-only MUST NOT be classified as confirmed');
+    assert.ok(!ids.includes('fail_search_url'), 'Search-result URL MUST be rejected');
 
-    assert.equal(res.audit.excludedUndisclosedSalary, 1);
-    assert.equal(res.audit.excludedBelow3000Usd, 1);
-    assert.equal(res.audit.excludedEthiopianIneligible, 1);
+    assert.equal(res.audit.excludedUndisclosedSalary, 0, 'Must NEVER exclude undisclosed salary');
+    assert.equal(res.audit.excludedBelow3000Usd, 0, 'Must NEVER exclude salary below $3,000');
     assert.equal(res.audit.excludedNonMatchingRole, 1);
     assert.equal(res.audit.excludedOutsideAllowedRegions, 1);
     assert.equal(res.audit.excludedLocalAfricanNonInternational, 1);
 
-    // Verify all 19 required fields present on every approved job
+    const undisclosedJob = res.jobs.find((j) => j.id === 'pass_undisclosed_salary')!;
+    assert.equal(undisclosedJob.salaryDisclosed, false);
+    assert.equal(undisclosedJob.originalSalaryDisplay, 'Salary not disclosed');
+    assert.equal(undisclosedJob.usdEquivalentDisplay, 'Salary not disclosed');
+
+    const lowSalaryJob = res.jobs.find((j) => j.id === 'pass_low_salary')!;
+    assert.equal(lowSalaryJob.salaryDisclosed, true);
+    assert.ok(lowSalaryJob.grossMonthlySalaryUsd < 3000);
+
+    // Verify all required Section 13 fields present on every approved job
     for (const j of res.jobs) {
-      assert.ok(j.grossMonthlySalaryUsd > 3000);
       assert.ok(j.originalSalaryDisplay.length > 3);
-      assert.ok(j.usdEquivalentDisplay.includes('$'));
+      assert.equal(j.visaTransparencyStatus, 'VISA SPONSORSHIP CONFIRMED');
       assert.ok(j.visaSponsorshipEvidence.length > 10);
       assert.ok(j.ethiopianEligibilityConfirmation.length > 10);
       assert.ok(j.officialApplicationUrl.startsWith('https://'));
+      assert.equal(j.applicationLinkStatus, 'VERIFIED');
+      assert.ok(j.deadlineStatusLabel && j.deadlineStatusLabel.length > 3);
+      assert.ok(j.lastVerifiedAt && j.lastVerifiedAt.length > 10);
+      assert.ok(
+        j.workMode === 'onsite' || j.workMode === 'hybrid' || j.workMode === 'remote' || j.workMode === 'not_specified'
+      );
       assert.ok(j.whyYouQualify.length >= 1);
       assert.ok(j.jobResponsibilities.length >= 1);
     }
 
     passed += 1;
-    console.log('✅ Test 3 passed: All 6 strict gates, audit counters & 19 required fields verified');
+    console.log('✅ Test 3 passed: Zero $3,000 restriction, undisclosed salary allowed, past-sponsorship & search URL rejected, Section 13 fields verified');
   }
 
   // Test 4: Strict Owner vs Public Privacy Isolation via HTTP Routes

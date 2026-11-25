@@ -69,11 +69,11 @@ export const AutonomousDiscoveryHomepageSection: React.FC<Props> = ({
 
   return (
     <section
-      aria-label="International Jobs Opportunity and Visa-Sponsored Jobs $3,000+"
+      aria-label="International Jobs Opportunity and Jobs for Branch Banking"
       className="bg-white py-10 sm:py-12 px-4 sm:px-6 lg:px-8 border-t border-slate-100"
     >
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Side-by-Side Homepage Cards: International Jobs Opportunity + Visa-Sponsored Jobs $3,000+ */}
+        {/* Side-by-Side Homepage Cards: International Jobs Opportunity + Jobs for Branch Banking */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* LEFT: Existing International Jobs Opportunity Section */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 flex flex-col justify-between gap-5">
@@ -86,9 +86,9 @@ export const AutonomousDiscoveryHomepageSection: React.FC<Props> = ({
                 International Jobs Opportunity
               </h2>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Verified international employer-sponsored roles, UN &amp; World Bank openings,
-                WASH vacancies, fully funded scholarships, training, and official government
-                permanent residency pathways for Ethiopian professionals.
+                Verified international roles, UN &amp; World Bank openings, WASH vacancies,
+                scholarships, conferences, training, and official permanent residency pathways with
+                transparent visa sponsorship statuses and direct official application links.
               </p>
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="bg-white rounded-xl border border-slate-200/80 p-3">
@@ -116,24 +116,25 @@ export const AutonomousDiscoveryHomepageSection: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* RIGHT (Immediately Beside It): Visa-Sponsored Jobs $3,000+ */}
+          {/* RIGHT (Immediately Beside It): Jobs for Branch Banking */}
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-6 flex flex-col justify-between gap-5">
             <div className="space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700">
-                <DollarSign className="w-4 h-4" />
-                <span>Strict 6-Gate $3,000+/mo Salary &amp; Visa Audit</span>
+                <ShieldCheck className="w-4 h-4" />
+                <span>Confirmed Visa Sponsorship · No Salary Restriction</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-[#0B132B]">
-                Visa-Sponsored Jobs $3,000+
+                Jobs for Branch Banking
               </h2>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Dedicated high-paying international banking, finance, accounting, branch management,
-                credit, and compliance roles with confirmed employer visa sponsorship, USD-converted
-                base salary above $3,000/month, and verified official employer links.
+                Dedicated international branch banking, retail banking management, banking
+                operations, credit, and risk leadership roles with confirmed employer visa
+                sponsorship, transparent salary reporting (&ldquo;Salary not disclosed&rdquo; when
+                unpublished), and verified direct APPLY NOW links.
               </p>
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="bg-white rounded-xl border border-emerald-200/80 p-3">
-                  <div className="text-xs text-slate-500 font-medium">Verified $3,000+ Matches</div>
+                  <div className="text-xs text-slate-500 font-medium">Confirmed Visa-Sponsored</div>
                   <div className="text-xl font-bold text-emerald-800 tabular-nums mt-0.5">
                     {counts ? counts.visa3kVerifiedCount.toLocaleString() : '—'}
                   </div>
@@ -153,7 +154,7 @@ export const AutonomousDiscoveryHomepageSection: React.FC<Props> = ({
               className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white text-sm font-bold transition-colors cursor-pointer"
             >
               <Briefcase className="w-4 h-4" />
-              <span>Open Visa-Sponsored Jobs $3,000+</span>
+              <span>Open Jobs for Branch Banking</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

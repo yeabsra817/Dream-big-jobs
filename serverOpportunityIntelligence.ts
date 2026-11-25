@@ -297,8 +297,7 @@ function inferUserProfileFromLegacy(uid: string, raw: any): UserProfessionalProf
     certifications: Array.isArray(raw?.certifications)
       ? raw.certifications.map((c: any) => (typeof c === 'string' ? c : c?.name || '')).filter(Boolean)
       : [],
-    minimumSalaryUsdMonthly:
-      professionalSector === 'branch_banking' ? 3000 : Number(raw?.minimumSalaryUsdMonthly || 0) || null,
+    minimumSalaryUsdMonthly: null,
     careerLevel,
     preferredLocations: Array.isArray(raw?.preferredLocations) ? raw.preferredLocations : [],
     preferredEnvironment: 'both',
@@ -510,9 +509,20 @@ export class OpportunityIntelligenceEngine {
       };
 
       // Check if a previously PUBLISHED opportunity lost visa sponsorship or failed deadline on recheck (TEST 8!)
-      if (existing.status === 'published' && verified.status !== 'published') {
+      const branchVisaLost =
+        existing.isBranchBankingMatch &&
+        existing.environment === 'international' &&
+        (Boolean(raw.visaSponsorshipRevoked) ||
+          verified.visa.transparencyStatus !== 'VISA SPONSORSHIP CONFIRMED');
+      if (
+        existing.status === 'published' &&
+        (verified.status !== 'published' || Boolean(raw.visaSponsorshipRevoked) || branchVisaLost)
+      ) {
         const unpublishReason =
-          verified.rejectionExplanations.join(' | ') || 'Failed recheck verification rules.';
+          verified.rejectionExplanations.join(' | ') ||
+          (raw.visaSponsorshipRevoked || branchVisaLost
+            ? 'Confirmed work visa sponsorship was revoked or removed during recheck.'
+            : 'Failed recheck verification rules.');
         const updated: CanonicalOpportunityRecord = {
           ...existing,
           ...verified,
@@ -551,20 +561,43 @@ export class OpportunityIntelligenceEngine {
         return { record: updated, outcome: 'auto_unpublished' };
       }
 
-      // Check for material change (deadline extended, new salary published, or >20h repeat 24h discovery refresh)
+      // Check for Section 11 meaningful changes ONLY (never repeat notifications for unchanged duplicates):
+      // 1. New or extended application deadline
+      // 2. Confirmed visa sponsorship added/upgraded
+      // 3. Officially reopened application
+      // 4. Corrected direct application link
       const deadlineChanged =
-        Boolean(verified.deadlineIso && existing.deadlineIso && verified.deadlineIso !== existing.deadlineIso);
-      const salaryMateriallyChanged =
-        (!existing.salary.disclosed && verified.salary.disclosed) ||
-        (existing.salary.normalizedMonthlyUsd !== null &&
-          verified.salary.normalizedMonthlyUsd !== null &&
-          Math.abs(existing.salary.normalizedMonthlyUsd - verified.salary.normalizedMonthlyUsd) >= 250);
+        Boolean(verified.deadlineIso && existing.deadlineIso && verified.deadlineIso !== existing.deadlineIso) ||
+        Boolean(!existing.deadlineIso && verified.deadlineIso);
+      const visaConfirmedUpgraded =
+        existing.visa.transparencyStatus !== 'VISA SPONSORSHIP CONFIRMED' &&
+        verified.visa.transparencyStatus === 'VISA SPONSORSHIP CONFIRMED';
+      const officiallyReopened =
+        (existing.status === 'unpublished' || existing.status === 'expired') &&
+        verified.status === 'published';
+      const existingLinkPriority = existing.applicationLinkVerification?.priorityTier || 4;
+      const verifiedLinkPriority = verified.applicationLinkVerification?.priorityTier || 4;
+      const applicationUrlCorrected =
+        Boolean(
+          verified.urlFingerprint &&
+            existing.urlFingerprint &&
+            verified.urlFingerprint !== existing.urlFingerprint &&
+            verified.applicationLinkVerification?.status === 'VERIFIED' &&
+            (existing.applicationLinkVerification?.status !== 'VERIFIED' ||
+              verifiedLinkPriority < existingLinkPriority)
+        );
       const hoursSinceLastVerify =
         (nowMs - Date.parse(existing.lastVerifiedAt || existing.updatedAt || nowIso)) / (1000 * 60 * 60);
       const isRepeatDailyRefresh = hoursSinceLastVerify >= 20;
 
-      if (deadlineChanged || salaryMateriallyChanged) {
+      if (deadlineChanged || visaConfirmedUpgraded || officiallyReopened || applicationUrlCorrected) {
         const nextVersion = existing.updateVersion + 1;
+        const changeNotes: string[] = [];
+        if (deadlineChanged) changeNotes.push(`application deadline updated to ${verified.deadlineRaw}`);
+        if (visaConfirmedUpgraded) changeNotes.push('employer visa sponsorship now confirmed');
+        if (officiallyReopened) changeNotes.push('application officially reopened');
+        if (applicationUrlCorrected) changeNotes.push('direct official application link corrected');
+
         const updated: CanonicalOpportunityRecord = {
           ...existing,
           ...verified,
@@ -576,6 +609,7 @@ export class OpportunityIntelligenceEngine {
           sourceUrls: mergedSourceUrls,
           sourceNames: mergedSourceNames,
           lastVerifiedAt: nowIso,
+          deadlineLastVerifiedAt: nowIso,
           updatedAt: nowIso,
         };
         collection[existingIdx] = updated;
@@ -594,11 +628,7 @@ export class OpportunityIntelligenceEngine {
           newStatus: updated.status,
           passed: updated.status === 'published',
           rejectionCodes: updated.rejectionCodes,
-          explanation: `Material update detected (v${nextVersion}): ${
-            deadlineChanged ? `deadline updated to ${updated.deadlineRaw}` : ''
-          }${deadlineChanged && salaryMateriallyChanged ? '; ' : ''}${
-            salaryMateriallyChanged ? `salary updated to ${updated.salary.salaryDisplay}` : ''
-          }.`,
+          explanation: `Meaningful update detected (v${nextVersion}): ${changeNotes.join('; ')}.`,
           sourceUrl: updated.officialApplicationUrl,
         });
         return { record: updated, outcome: 'material_updated' };
@@ -613,6 +643,8 @@ export class OpportunityIntelligenceEngine {
       existing.sourceNames = mergedSourceNames;
       existing.referenceNumber = existing.referenceNumber || verified.referenceNumber;
       existing.fullDaysRemaining = verified.fullDaysRemaining;
+      existing.deadlineStatusLabel = verified.deadlineStatusLabel;
+      existing.deadlineLastVerifiedAt = nowIso;
       existing.lastVerifiedAt = nowIso;
       if (isRepeatDailyRefresh) {
         existing.updatedAt = nowIso;
@@ -697,15 +729,19 @@ export class OpportunityIntelligenceEngine {
           nowMs,
           Boolean(livePatch?.isClosedOrWithdrawn)
         );
-        const visaStillConfirmed =
-          opp.environment === 'ethiopia_domestic'
-            ? true
-            : Boolean(opp.visa.verified && !livePatch?.visaSponsorshipRevoked);
+        const visaRevoked = Boolean(livePatch?.visaSponsorshipRevoked);
+        const branchVisaLost =
+          opp.isBranchBankingMatch &&
+          opp.environment === 'international' &&
+          (visaRevoked || opp.visa.transparencyStatus !== 'VISA SPONSORSHIP CONFIRMED');
 
         opp.lastVerifiedAt = nowIso;
+        opp.deadlineLastVerifiedAt = nowIso;
         opp.fullDaysRemaining = deadlineEval.fullDaysRemaining;
+        opp.deadlineStatusLabel = deadlineEval.deadlineStatusLabel;
+        opp.deadlineEvidence = deadlineEval.deadlineEvidence;
 
-        if (!deadlineEval.passed || !visaStillConfirmed) {
+        if (!deadlineEval.passed || visaRevoked || branchVisaLost) {
           const reasons: string[] = [];
           const codes = [...opp.rejectionCodes];
 
@@ -713,22 +749,29 @@ export class OpportunityIntelligenceEngine {
             codes.push(deadlineEval.rejectionCode);
             reasons.push(deadlineEval.explanation);
           }
-          if (!visaStillConfirmed) {
+          if (visaRevoked || branchVisaLost) {
             codes.push('visa_sponsorship_unconfirmed');
+            opp.isBranchBankingMatch = false;
             opp.visa = {
               ...opp.visa,
               verified: false,
               conditionMet: 'none',
-              statusLabel: 'Visa Sponsorship Revoked / Unconfirmed',
-              sponsorshipStatement: 'Confirmed visa sponsorship was removed during scheduled recheck.',
+              transparencyStatus: 'VISA SPONSORSHIP NOT OFFERED',
+              statusLabel: 'VISA SPONSORSHIP NOT OFFERED',
+              sponsorshipStatement: 'Confirmed visa sponsorship was revoked or removed during scheduled recheck.',
               lastVerifiedAt: nowIso,
             };
             db.opportunity_visa_status[opp.id] = opp.visa;
             reasons.push('Confirmed work visa sponsorship is no longer valid at the official source.');
           }
 
-          opp.status = 'unpublished';
-          opp.verificationBadge = 'Unpublished After Recheck';
+          opp.status = deadlineEval.deadlineStatusLabel === 'DEADLINE PASSED' ? 'expired' : 'unpublished';
+          opp.verificationBadge =
+            deadlineEval.deadlineStatusLabel === 'DEADLINE PASSED'
+              ? 'DEADLINE PASSED — Removed from Active'
+              : deadlineEval.deadlineStatusLabel === 'APPLICATIONS CLOSED'
+              ? 'APPLICATIONS CLOSED — Removed from Active'
+              : 'Unpublished After Recheck';
           opp.rejectionCodes = Array.from(new Set(codes));
           opp.rejectionExplanations = Array.from(new Set([...opp.rejectionExplanations, ...reasons]));
           opp.unpublishedAt = nowIso;
@@ -1350,6 +1393,54 @@ export class OpportunityIntelligenceEngine {
         }
       }
 
+      // 2B. Broader Internet Discovery Ingestion (Section 7):
+      // Ingest verified official opportunities discovered beyond the 40 registered websites
+      // (government portals, UN agencies, banks, universities, NGOs, research institutes, conferences & training).
+      const broaderWebDb = this.loadJsonFileSafe<{ opportunities?: Record<string, any> }>(
+        path.join(this.runtimeBaseDir, 'data', 'autonomous_web_crawler_db.json'),
+        {}
+      );
+      const broaderItems = Object.values(broaderWebDb?.opportunities || {}).filter(
+        (item: any) => item && item.status === 'PUBLISHED' && item.officialApplicationUrl
+      );
+      for (const b of broaderItems.slice(0, 100)) {
+        const catRaw = String(b.category || 'job').toLowerCase();
+        const cat: OpportunityCategory = catRaw.includes('scholar')
+          ? 'scholarship'
+          : catRaw.includes('conf')
+          ? 'conference'
+          : catRaw.includes('train')
+          ? 'training'
+          : catRaw.includes('intern')
+          ? 'internship'
+          : 'job';
+        const res = this.ingestAndVerifyCandidate(
+          db,
+          {
+            category: cat,
+            title: String(b.title || ''),
+            employer: String(b.employer || 'Official Organization'),
+            country: String(b.country || 'International'),
+            city: String(b.location || ''),
+            description: String(b.summary || b.title || ''),
+            compensationRaw: String(b.salaryDisplay || ''),
+            explicitVisaNote: String(b.visaEvidence || ''),
+            officialApplicationUrl: String(b.officialApplicationUrl),
+            sourceUrl: String(b.sourcePageUrl || b.officialApplicationUrl),
+            sourceName: `Broader Internet Official Portal (${b.sourceDomain || 'Verified Source'})`,
+            deadlineRaw: b.deadlineRaw || null,
+            publishedDate: typeof b.discoveredAt === 'string' ? b.discoveredAt.slice(0, 10) : null,
+          },
+          { fxRatesUsdBase: fxRates, nowMs: startedMs }
+        );
+        verifiedCount++;
+        if (res.outcome === 'created') {
+          newDiscovered++;
+          if (res.record.status === 'published') publishedCount++;
+          else rejectedCount++;
+        }
+      }
+
       // 3. Live network monitoring across ALL 40 registered permanent sources in polite concurrent batches of 5
       const maxLive = Math.max(0, Math.min(40, options?.maxLiveNetworkSources ?? 40));
       const enabledSources = db.opportunity_sources.filter((s) => s.enabled).slice(0, maxLive);
@@ -1868,13 +1959,13 @@ export class OpportunityIntelligenceEngine {
 export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityIntelligenceDeps) {
   const engine = new OpportunityIntelligenceEngine(deps);
 
-  // 1. Dedicated Jobs for Branch Banking Special Feature API (Section 2 & 4)
+  // 1. Dedicated Jobs for Branch Banking Special Feature API (Section 1 & 2 — NO USD 3,000 minimum salary!)
   deps.app.get('/api/opportunity-intelligence/branch-banking', (req: Request, res: Response) => {
     try {
       const db = engine.loadDb();
       const envParam = String(req.query.environment || 'all').toLowerCase();
-      const minSalary = Math.max(3000, Number(req.query.minSalaryUsd || 3000) || 3000);
       const q = String(req.query.q || '').trim().toLowerCase();
+      const nowMs = Date.now();
 
       const allPublishedJobs = engine
         .getAllOpportunities(db)
@@ -1886,7 +1977,10 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
         employer: string;
         country: string;
         city: string;
+        workMode: string;
         environment: OpportunityEnvironment;
+        category: OpportunityCategory;
+        publishedDate: string | null;
         salary: string;
         salaryPeriod: string;
         salaryTaxBasis: string;
@@ -1895,11 +1989,19 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
         requiredManagerialExperience: string;
         actualResponsibilities: string[];
         visaSponsorshipStatus: string;
+        visaEvidence: string;
         visaFeesCovered: string;
         relocationSupport: string;
+        ethiopianEligibility: string;
         applicationDeadline: string;
+        deadlineStatusLabel: string;
+        deadlineTime: string | null;
+        deadlineTimezone: string | null;
         fullDaysRemaining: number | null;
+        officialSourceWebsite: string;
         officialApplicationLink: string;
+        applicationLinkStatus: string;
+        lastVerifiedAt: string;
         verificationStatus: string;
         whyMatchesReferenceProfile: string[];
         relevanceScore: number;
@@ -1907,12 +2009,20 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
 
       const customProfile: UserProfessionalProfileInput = {
         ...BRANCH_BANKING_REFERENCE_PROFILE,
-        minimumSalaryUsdMonthly: minSalary,
+        minimumSalaryUsdMonthly: null,
       };
 
       for (const opp of allPublishedJobs) {
         if (envParam === 'international' && opp.environment !== 'international') continue;
         if (envParam === 'ethiopia_domestic' && opp.environment !== 'ethiopia_domestic') continue;
+
+        // Dynamically recalculate days remaining & deadline status on every read (Section 4)
+        const liveDeadline = evaluateStrictThreeDayDeadline(
+          opp.deadlineDateExact || opp.deadlineRaw,
+          nowMs,
+          false
+        );
+        if (!liveDeadline.passed) continue;
 
         const evalRes = evaluateForBranchBankingSpecialFeature({
           title: opp.title,
@@ -1947,10 +2057,23 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
           employer: opp.employer,
           country: opp.country,
           city: opp.city,
+          workMode: opp.workMode || 'not_specified',
           environment: opp.environment,
-          salary: opp.salary.disclosed ? opp.salary.salaryDisplay : 'Not Disclosed',
-          salaryPeriod: opp.salary.period === 'annual' ? 'Annual' : opp.salary.period === 'monthly' ? 'Monthly' : 'Not Disclosed',
-          salaryTaxBasis: opp.salary.taxBasis === 'gross' ? 'Gross' : opp.salary.taxBasis === 'net' ? 'Net' : 'Not Specified',
+          category: opp.category,
+          publishedDate: opp.publishedDate || opp.discoveredAt.slice(0, 10),
+          salary: opp.salary.disclosed ? opp.salary.salaryDisplay : 'Salary not disclosed',
+          salaryPeriod: !opp.salary.disclosed
+            ? 'Not Disclosed'
+            : opp.salary.period === 'annual'
+            ? 'Annual'
+            : 'Monthly',
+          salaryTaxBasis: opp.salary.disclosed
+            ? opp.salary.taxBasis === 'gross'
+              ? 'Gross'
+              : opp.salary.taxBasis === 'net'
+              ? 'Net'
+              : 'Not Specified'
+            : 'Not Specified',
           normalizedMonthlyUsd: opp.salary.normalizedMonthlyUsd,
           requiredBankingExperience:
             opp.eligibility.requiredBankingYears !== null
@@ -1963,12 +2086,20 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
               ? `${opp.eligibility.requiredManagerialYears}+ years managerial`
               : 'Managerial / branch leadership verified',
           actualResponsibilities: opp.actualResponsibilities,
-          visaSponsorshipStatus: opp.visa.statusLabel,
+          visaSponsorshipStatus: opp.visa.transparencyStatus || opp.visa.statusLabel,
+          visaEvidence: opp.visa.evidenceQuote || opp.visa.sponsorshipStatement,
           visaFeesCovered: opp.visa.visaFeesCovered,
           relocationSupport: opp.visa.relocationDetails,
-          applicationDeadline: opp.deadlineRaw,
-          fullDaysRemaining: opp.fullDaysRemaining,
+          ethiopianEligibility: opp.eligibility.nationalityEligibility,
+          applicationDeadline: liveDeadline.deadlineDateExact || opp.deadlineRaw,
+          deadlineStatusLabel: liveDeadline.deadlineStatusLabel,
+          deadlineTime: liveDeadline.deadlineTime,
+          deadlineTimezone: liveDeadline.deadlineTimezone,
+          fullDaysRemaining: liveDeadline.fullDaysRemaining,
+          officialSourceWebsite: opp.primarySourceName,
           officialApplicationLink: opp.officialApplicationUrl,
+          applicationLinkStatus: opp.applicationLinkVerification?.status || 'VERIFIED',
+          lastVerifiedAt: opp.lastVerifiedAt,
           verificationStatus: opp.verificationBadge,
           whyMatchesReferenceProfile: evalRes.matchReasons,
           relevanceScore: evalRes.relevanceScore,
@@ -1983,13 +2114,144 @@ export function registerOpportunityIntelligenceRoutes(deps: RegisterOpportunityI
           bankingYears: 9,
           managerialYears: 3,
           sector: 'Branch Banking',
-          minimumMonthlySalaryUsd: minSalary,
+          minimumMonthlySalaryUsd: null,
         },
         totalMatched: results.length,
         jobs: results,
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Unable to load Branch Banking intelligence.' });
+    }
+  });
+
+  // 1B. On-Open Live Opportunity Deadline & Direct Application Link Verification (Sections 4 & 5)
+  deps.app.post('/api/opportunity-intelligence/opportunities/:id/verify-live', async (req: Request, res: Response) => {
+    try {
+      const oppId = String(req.params.id || '').trim().slice(0, 128);
+      if (!oppId) {
+        res.status(400).json({ success: false, error: 'Opportunity id is required.' });
+        return;
+      }
+
+      const db = engine.loadDb();
+      const target = engine.getAllOpportunities(db).find((o) => o.id === oppId);
+      const explicitUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      const targetUrl = target?.officialApplicationUrl || explicitUrl;
+
+      if (!targetUrl) {
+        res.status(404).json({ success: false, error: 'Opportunity not found.' });
+        return;
+      }
+
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+
+      // SSRF-safe public URL validation before live network check
+      const urlCheck = await validatePublicCrawlUrl(targetUrl);
+      if (!urlCheck.ok) {
+        res.json({
+          success: true,
+          opportunityId: oppId,
+          verified: false,
+          linkStatus: 'NOT VERIFIED',
+          deadlineStatusLabel: target?.deadlineStatusLabel || 'DEADLINE NOT PUBLISHED',
+          fullDaysRemaining: target?.fullDaysRemaining ?? null,
+          lastVerifiedAt: nowIso,
+          note: `Link failed public URL validation: ${urlCheck.reason}`,
+        });
+        return;
+      }
+
+      let httpStatus = 0;
+      let isClosedPage = false;
+      let errorNote: string | null = null;
+
+      try {
+        const resp = await fetch(targetUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'HopelandJobsBot/2.0 (+https://www.hopelandjobs.tech; Live Link Verifier)',
+            Accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(6500),
+        });
+        httpStatus = resp.status;
+        if (resp.ok) {
+          const snippet = (await resp.text()).slice(0, 40000).toLowerCase();
+          isClosedPage =
+            /\b(this\s+(?:position|job|vacancy|role|application)\s+(?:has\s+been\s+filled|is\s+closed|is\s+no\s+longer\s+(?:available|open|accepting))|applications?\s+(?:are\s+)?(?:now\s+)?closed|no\s+longer\s+accepting\s+applications|vacancy\s+(?:expired|closed|withdrawn)|posting\s+has\s+expired)\b/i.test(
+              snippet
+            );
+        } else if (resp.status === 404 || resp.status === 410) {
+          errorNote = `Official application link returned HTTP ${resp.status} (page removed or expired).`;
+        } else if (resp.status === 403 || resp.status === 429) {
+          errorNote = `Portal returned HTTP ${resp.status} (automated check restricted; open link directly in browser).`;
+        } else {
+          errorNote = `Official portal returned HTTP ${resp.status}.`;
+        }
+      } catch (err: any) {
+        errorNote = err?.name === 'TimeoutError'
+          ? 'Official portal check timed out.'
+          : 'Temporary network error while verifying official portal.';
+      }
+
+      const rawDeadline =
+        (typeof req.body?.applicationDeadline === 'string' ? req.body.applicationDeadline : null) ||
+        target?.deadlineDateExact ||
+        target?.deadlineRaw ||
+        null;
+      const deadlineEval = evaluateStrictThreeDayDeadline(rawDeadline, nowMs, isClosedPage);
+      const linkStatus: 'VERIFIED' | 'NOT VERIFIED' =
+        httpStatus >= 200 && httpStatus < 400 && !isClosedPage ? 'VERIFIED' : 'NOT VERIFIED';
+
+      if (target) {
+        target.lastVerifiedAt = nowIso;
+        target.deadlineLastVerifiedAt = nowIso;
+        target.fullDaysRemaining = deadlineEval.fullDaysRemaining;
+        target.deadlineStatusLabel = deadlineEval.deadlineStatusLabel;
+        if (target.applicationLinkVerification) {
+          target.applicationLinkVerification = {
+            ...target.applicationLinkVerification,
+            status: httpStatus === 403 || httpStatus === 429 ? target.applicationLinkVerification.status : linkStatus,
+            httpStatus: httpStatus || null,
+            checkedAt: nowIso,
+            note: errorNote || target.applicationLinkVerification.note,
+          };
+        }
+        if (isClosedPage || deadlineEval.deadlineStatusLabel === 'DEADLINE PASSED' || httpStatus === 404 || httpStatus === 410) {
+          target.status = deadlineEval.deadlineStatusLabel === 'DEADLINE PASSED' ? 'expired' : 'unpublished';
+          target.unpublishedAt = nowIso;
+          target.unpublishedReason = isClosedPage
+            ? 'Official application page reports applications are closed.'
+            : httpStatus === 404 || httpStatus === 410
+            ? `Direct application link returned HTTP ${httpStatus}.`
+            : deadlineEval.explanation;
+          target.verificationBadge = deadlineEval.deadlineStatusLabel;
+        }
+        engine.saveDb(db);
+      }
+
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        success: true,
+        opportunityId: oppId,
+        verified: linkStatus === 'VERIFIED' && deadlineEval.passed,
+        httpStatus: httpStatus || null,
+        linkStatus: httpStatus === 403 || httpStatus === 429 ? 'VERIFIED' : linkStatus,
+        isClosedPage,
+        deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+        deadlineDateExact: deadlineEval.deadlineDateExact,
+        deadlineTime: deadlineEval.deadlineTime,
+        deadlineTimezone: deadlineEval.deadlineTimezone,
+        fullDaysRemaining: deadlineEval.fullDaysRemaining,
+        lastVerifiedAt: nowIso,
+        note: isClosedPage
+          ? 'APPLICATIONS CLOSED — Official page indicates this vacancy is no longer accepting applications.'
+          : errorNote || `Live check verified (HTTP ${httpStatus}) — ${deadlineEval.deadlineStatusLabel}.`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Live verification failed.' });
     }
   });
 

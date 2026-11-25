@@ -1,5 +1,135 @@
 [
   {
+    "id": "aud_1795625687473_531b6",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:54:47.473Z"
+  },
+  {
+    "id": "aud_1795625627465_rpdtg",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:53:47.465Z"
+  },
+  {
+    "id": "aud_1795625567451_yuskj",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:52:47.451Z"
+  },
+  {
+    "id": "aud_1795625507449_z6fx9",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:51:47.449Z"
+  },
+  {
+    "id": "aud_1795625447450_u1aoi",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:50:47.450Z"
+  },
+  {
+    "id": "aud_1795625087428_gv4sv",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:44:47.428Z"
+  },
+  {
+    "id": "aud_1795625027432_3gxat",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:43:47.432Z"
+  },
+  {
+    "id": "aud_1795624967427_domdd",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:42:47.427Z"
+  },
+  {
+    "id": "aud_1795624850219_69d4b",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:40:50.219Z"
+  },
+  {
+    "id": "aud_1795624440131_yoick",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:34:00.131Z"
+  },
+  {
+    "id": "aud_1795624127371_tf932",
+    "action": "staff_profile_updated",
+    "actorEmail": "nexusitsoultion@gmail.com",
+    "actorUid": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "targetType": "staff_profile",
+    "targetId": "XPuREoTPhvTyYsvB14L3JpptCV53",
+    "summary": "Updated permanent profile for Nexus it soultion",
+    "severity": "info",
+    "timestamp": "2026-11-25T16:28:47.371Z"
+  },
+  {
+    "id": "aud_1795624067844_mll9c",
+    "action": "autonomous_discovery_lock_recovered",
+    "actorEmail": "system_worker",
+    "targetType": "autonomous_discovery",
+    "summary": "Recovered stale execution lock (auto1m_1795623245757_829e89) after server restart/timeout.",
+    "severity": "warning",
+    "timestamp": "2026-11-25T16:27:47.844Z"
+  },
+  {
     "id": "aud_1795622112748_2ft5x",
     "action": "staff_profile_updated",
     "actorEmail": "nexusitsoultion@gmail.com",

@@ -95,7 +95,7 @@ export const DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE: BranchManagerProfileInput = 
   languages: ['English'],
   hasMastersDegree: false,
   hasEnglishTest: false,
-  minimumMonthlyGrossUsd: 3000,
+  minimumMonthlyGrossUsd: 0,
 };
 
 export interface VerifiedBranchManagerJob {
@@ -134,10 +134,30 @@ export interface VerifiedBranchManagerJob {
   rankingScore: number;
   salaryPeriod?: 'Monthly' | 'Annual' | 'Not Disclosed';
   salaryTaxBasis?: 'Gross' | 'Net' | 'Not Specified';
+  salaryDisclosed?: boolean;
   requiredBankingExperience?: string;
   requiredManagerialExperience?: string;
   verificationStatus?: string;
   seniorityLevel?: string;
+  visaTransparencyStatus?:
+    | 'VISA SPONSORSHIP CONFIRMED'
+    | 'VISA SPONSORSHIP NOT OFFERED'
+    | 'VISA SPONSORSHIP NOT SPECIFIED'
+    | 'VISA SPONSORSHIP REQUIRES CONFIRMATION'
+    | 'Visa sponsorship not applicable — domestic opportunity';
+  deadlineStatusLabel?:
+    | 'OPEN — ACCEPTING APPLICATIONS'
+    | 'CLOSING SOON'
+    | 'DEADLINE PASSED'
+    | 'APPLICATIONS CLOSED'
+    | 'DEADLINE NOT PUBLISHED'
+    | 'NOT YET OPEN';
+  deadlineTime?: string | null;
+  deadlineTimezone?: string | null;
+  daysRemaining?: number | null;
+  lastVerifiedAt?: string;
+  applicationLinkStatus?: 'VERIFIED' | 'NOT VERIFIED';
+  workMode?: 'remote' | 'hybrid' | 'onsite' | 'not_specified';
 }
 
 export interface StrictGateAuditSummary {

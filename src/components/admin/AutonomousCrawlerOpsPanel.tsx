@@ -289,7 +289,7 @@ export const AutonomousCrawlerOpsPanel: React.FC<Props> = ({ adminEmail }) => {
           <div className="text-2xl font-extrabold text-emerald-700 tabular-nums mt-0.5">
             {combinedCounts.opportunitiesVerified.toLocaleString()}
           </div>
-          <div className="text-[11px] text-slate-500">$3k+ matches: {combinedCounts.visa3kVerifiedCount}</div>
+          <div className="text-[11px] text-slate-500">Branch Banking verified: {combinedCounts.visa3kVerifiedCount}</div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="text-[11px] font-medium text-slate-500">Opportunities Rejected</div>

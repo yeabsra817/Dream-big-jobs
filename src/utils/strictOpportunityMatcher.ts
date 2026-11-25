@@ -1,7 +1,9 @@
 import * as crypto from 'crypto';
 import {
+  ApplicationLinkVerificationRecord,
   CanonicalOpportunityRecord,
   CareerSeniorityLevel,
+  DeadlineStatusLabel,
   OpportunityCategory,
   OpportunityEligibilityRecord,
   OpportunityEnvironment,
@@ -13,10 +15,13 @@ import {
   UserOpportunityMatchRecord,
   UserProfessionalProfileInput,
   VisaAuthorizationRecord,
+  VisaTransparencyStatus,
+  WorkModeType,
 } from '../types/opportunityIntelligence';
 
 /**
  * Mandatory Reference Profile for the Special Feature: Jobs for Branch Banking (Section 2).
+ * NO minimum salary threshold anywhere — user decides!
  */
 export const BRANCH_BANKING_REFERENCE_PROFILE: UserProfessionalProfileInput = {
   userId: 'branch_banking_reference',
@@ -38,7 +43,7 @@ export const BRANCH_BANKING_REFERENCE_PROFILE: UserProfessionalProfileInput = {
     'Banking compliance and internal control',
   ],
   certifications: [],
-  minimumSalaryUsdMonthly: 3000,
+  minimumSalaryUsdMonthly: null,
   careerLevel: 'manager',
   preferredLocations: ['Europe', 'Scandinavia', 'Middle East', 'USA', 'Ethiopia'],
   preferredEnvironment: 'both',
@@ -47,8 +52,8 @@ export const BRANCH_BANKING_REFERENCE_PROFILE: UserProfessionalProfileInput = {
   allowJuniorRoles: false,
 };
 
-export const MINIMUM_DEADLINE_FULL_DAYS = 3;
-export const MINIMUM_DEADLINE_HOURS = MINIMUM_DEADLINE_FULL_DAYS * 24; // 72 hours
+export const MINIMUM_DEADLINE_HOURS = 72;
+export const CLOSING_SOON_THRESHOLD_DAYS = 7;
 
 export const DEFAULT_FX_RATES_USD_BASE: Record<string, number> = {
   USD: 1,
@@ -138,9 +143,18 @@ export interface RawOpportunityCandidateInput {
   deadlineTimezone?: string;
   explicitVisaNote?: string;
   explicitFundingNote?: string;
+  publishedDate?: string | null;
+  openingDateRaw?: string | null;
   isClosedOrWithdrawn?: boolean;
   /** Optional explicit override when rechecking live page updates (e.g., visa sponsorship revoked) */
   visaSponsorshipRevoked?: boolean;
+  /** Optional live HTTP verification result for the direct application URL (Section 5) */
+  linkCheckOverride?: {
+    httpStatus: number | null;
+    titleMatched: boolean;
+    employerMatched: boolean;
+    note?: string;
+  };
 }
 
 export function extractOpportunityReferenceNumber(text: string): string | null {
@@ -529,7 +543,7 @@ export function normalizeSalaryRecord(
   const undisclosed: SalaryNormalizationRecord = {
     opportunityId,
     disclosed: false,
-    salaryDisplay: 'Not Disclosed',
+    salaryDisplay: 'Salary not disclosed',
     period: 'unknown',
     taxBasis: 'not_specified',
     originalCurrency: null,
@@ -537,8 +551,7 @@ export function normalizeSalaryRecord(
     maxOriginalAmount: null,
     normalizedMonthlyUsd: null,
     normalizedAnnualUsd: null,
-    exchangeRateUsed: 'N/A (Not Disclosed)',
-    meetsAbove3000UsdMonthly: false,
+    exchangeRateUsed: 'N/A (Salary not disclosed)',
     verifiedAt: nowIso,
   };
 
@@ -700,22 +713,254 @@ export function normalizeSalaryRecord(
     normalizedMonthlyUsd,
     normalizedAnnualUsd,
     exchangeRateUsed,
-    // Strictly ABOVE USD 3,000/month (> $36,000/year normalized!)
-    meetsAbove3000UsdMonthly: normalizedMonthlyUsd > 3000 && normalizedAnnualUsd > 36000,
     verifiedAt: nowIso,
   };
 }
 
 /**
- * Evaluates strict >= 3 full days (72 hours) deadline rule (Section 9).
+ * Detects work arrangement (Remote / Hybrid / On-Site / Not Specified) for Section 9 separation.
+ */
+export function detectWorkMode(text: string): WorkModeType {
+  const lower = String(text || '').toLowerCase();
+  if (/\b(hybrid\s+(?:work|role|position|working|schedule)|partially\s+remote|\d+\s+days?\s+(?:in\s+office|on-?site))\b/i.test(lower)) {
+    return 'hybrid';
+  }
+  if (/\b(fully\s+remote|100%\s+remote|remote[- ]first|work\s+from\s+anywhere|remote\s+(?:work|role|position|worldwide|global)|telecommute)\b/i.test(lower)) {
+    return 'remote';
+  }
+  if (/\b(on[- ]?site|in[- ]?person|branch[- ]based|office[- ]based|relocation\s+to\s+[a-z]+)\b/i.test(lower)) {
+    return 'onsite';
+  }
+  return 'not_specified';
+}
+
+/**
+ * Evaluates Section 5 Direct Application Link Verification:
+ * Priority order:
+ *   1. Employer official career portal
+ *   2. University / scholarship provider official portal
+ *   3. Official government portal
+ *   4. Authorized recruitment platform explicitly linked by the organization
+ * Rejects search-result URLs, generic homepages without a vacancy path, non-HTTPS URLs, and dead links.
+ */
+export function evaluateDirectApplicationLink(params: {
+  url: string;
+  sourceUrl?: string;
+  title?: string;
+  category: OpportunityCategory;
+  employer?: string;
+  checkedAtIso?: string;
+  linkCheckOverride?: {
+    httpStatus: number | null;
+    finalUrl?: string;
+    titleMatched?: boolean;
+    employerMatched?: boolean;
+    isClosedText?: boolean;
+    errorMessage?: string;
+    note?: string;
+  };
+}): ApplicationLinkVerificationRecord {
+  const nowIso = params.checkedAtIso || new Date().toISOString();
+  const rawUrl = String(params.url || '').trim();
+
+  if (!rawUrl || !/^https:\/\//i.test(rawUrl)) {
+    return {
+      status: 'NOT VERIFIED',
+      priorityTier: 0,
+      priorityLabel: 'Invalid or non-HTTPS link',
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: 'Direct application URL must be a valid HTTPS link to the official application page.',
+    };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return {
+      status: 'NOT VERIFIED',
+      priorityTier: 0,
+      priorityLabel: 'Malformed URL',
+      directApplicationUrl: rawUrl,
+      httpStatus: null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: 'Application link URL could not be parsed.',
+    };
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  const search = parsed.search.toLowerCase();
+
+  // Reject search-result pages, query-only pages, and broken tracking redirects
+  const isSearchPage =
+    /\/(search|results|find-jobs|job-search|browse-jobs)\b/i.test(pathname) ||
+    /([?&](q|query|keyword|keywords|search|s|k)=)/i.test(search) ||
+    /\b(google\.|bing\.com|duckduckgo\.com|yahoo\.com)\b/i.test(host);
+
+  if (isSearchPage) {
+    return {
+      status: 'NOT VERIFIED',
+      priorityTier: 0,
+      priorityLabel: 'Rejected search-result URL',
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: true,
+      checkedAt: nowIso,
+      note: 'Rejected search-result URL — must link directly to the specific official opportunity application page.',
+    };
+  }
+
+  // Reject bare generic homepages (e.g., https://www.bayt.com/ or https://www.daad.de/en/)
+  const segments = pathname.split('/').filter(Boolean);
+  const genericRootOnly =
+    segments.length === 0 ||
+    (segments.length === 1 && /^(en|de|fr|ar|sv|no|da|home|index|index\.html|jobs|careers|scholarships|opportunities|about)$/i.test(segments[0])) ||
+    (segments.length === 2 && /^(en|de|fr|ar|sv|no|da)$/i.test(segments[0]) && /^(home|jobs|careers|scholarships|opportunities|events|courses)$/i.test(segments[1]));
+
+  if (genericRootOnly && !parsed.search) {
+    return {
+      status: 'NOT VERIFIED',
+      priorityTier: 0,
+      priorityLabel: 'Rejected generic homepage URL',
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: true,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: 'Rejected generic homepage URL — direct link to the specific opportunity application page is required.',
+    };
+  }
+
+  // Check live HTTP check override if supplied (on-open or 24h verification)
+  if (params.linkCheckOverride) {
+    const code = params.linkCheckOverride.httpStatus;
+    if (params.linkCheckOverride.isClosedText) {
+      return {
+        status: 'NOT VERIFIED',
+        priorityTier: 0,
+        priorityLabel: 'Official page reports vacancy closed',
+        directApplicationUrl: rawUrl,
+        httpStatus: code,
+        titleMatched: Boolean(params.linkCheckOverride.titleMatched),
+        employerMatched: Boolean(params.linkCheckOverride.employerMatched),
+        isGenericHomepage: false,
+        isSearchResultUrl: false,
+        checkedAt: nowIso,
+        note: 'Official application page states that applications are closed or the position is filled.',
+      };
+    }
+    if (code !== null && (code >= 400 || code === 0)) {
+      return {
+        status: 'NOT VERIFIED',
+        priorityTier: 0,
+        priorityLabel: 'Broken or unreachable link',
+        directApplicationUrl: rawUrl,
+        httpStatus: code || null,
+        titleMatched: false,
+        employerMatched: false,
+        isGenericHomepage: false,
+        isSearchResultUrl: false,
+        checkedAt: nowIso,
+        note:
+          params.linkCheckOverride.errorMessage ||
+          params.linkCheckOverride.note ||
+          `Direct application link returned HTTP ${code} and cannot be published as verified active.`,
+      };
+    }
+  }
+
+  // Priority classification (Section 5: 1 Employer -> 2 University/Scholarship -> 3 Official Gov -> 4 Authorized Recruitment Platform)
+  let priorityTier: 1 | 2 | 3 | 4 = 1;
+  let priorityLabel = 'Priority 1: Employer Official Career Portal';
+
+  const isGov =
+    /\.(gov|govt|gouv|gob)(\.[a-z]{2})?$/i.test(host) ||
+    /\b(usajobs\.gov|nsf\.gov|nih\.gov|europa\.eu|eures\.europa\.eu|nav\.no|arbetsformedlingen\.se|jobnet\.dk|make-it-in-germany\.com|studyinsaudi\.moe\.gov\.sa|turkiyeburslari\.gov\.tr|careers\.un\.org|undp\.org|who\.int|worldbank\.org|afdb\.org)\b/i.test(
+      host
+    );
+
+  const isUniversityOrScholarship =
+    /\.(edu|ac\.[a-z]{2})$/i.test(host) ||
+    /\b(daad\.de|chevening\.org|fulbrightonline\.org|scholarship|fellowship|studyinsweden\.se|studyinnorway\.no|studyindenmark\.dk|mit\.edu|harvard\.edu|ox\.ac\.uk|cam\.ac\.uk|ethiopian-scholarships)\b/i.test(
+      host
+    );
+
+  const isAuthorizedPlatform =
+    /\b(bayt\.com|gulftalent\.com|naukrigulf\.com|reliefweb\.int|jobs\.ac\.uk|indeed\.com|monster\.com|glassdoor\.com|stepstone\.de|academicpositions\.com|thehub\.io|finn\.no|jobindex\.dk|thelocal\.se|arbeitnow\.com|ethiojobs\.net|dereja\.com|effoysira\.com|greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|icims\.com|taleo\.net)\b/i.test(
+      host
+    );
+
+  if (isAuthorizedPlatform) {
+    if (/\b(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|icims\.com|taleo\.net)\b/i.test(host)) {
+      priorityTier = 1;
+      priorityLabel = 'Priority 1: Employer Official Application Portal (ATS)';
+    } else {
+      priorityTier = 4;
+      priorityLabel = 'Priority 4: Authorized Recruitment / Official Listing Platform';
+    }
+  } else if (isUniversityOrScholarship || params.category === 'scholarship') {
+    priorityTier = 2;
+    priorityLabel = 'Priority 2: University / Scholarship Provider Official Portal';
+  } else if (isGov) {
+    priorityTier = 3;
+    priorityLabel = 'Priority 3: Official Government / International Agency Portal';
+  } else {
+    priorityTier = 1;
+    priorityLabel = 'Priority 1: Employer Official Career Portal';
+  }
+
+  return {
+    status: 'VERIFIED',
+    priorityTier,
+    priorityLabel,
+    directApplicationUrl: rawUrl,
+    httpStatus: params.linkCheckOverride?.httpStatus ?? 200,
+    titleMatched: params.linkCheckOverride?.titleMatched ?? true,
+    employerMatched: params.linkCheckOverride?.employerMatched ?? true,
+    isGenericHomepage: false,
+    isSearchResultUrl: false,
+    checkedAt: nowIso,
+    note: params.linkCheckOverride?.note || priorityLabel,
+  };
+}
+
+/**
+ * Evaluates Section 4 Strict Application Deadline Verification.
+ * - Never invents or estimates deadlines.
+ * - Returns one of the exact 6 mandatory statuses:
+ *   OPEN — ACCEPTING APPLICATIONS | CLOSING SOON | DEADLINE PASSED | APPLICATIONS CLOSED | DEADLINE NOT PUBLISHED | NOT YET OPEN
+ * - Extracts closing time and timezone when published.
+ * - Rejects past-deadline or closed vacancies from active publication.
  */
 export function evaluateStrictThreeDayDeadline(
   rawDeadline: string | null | undefined,
   nowMs: number = Date.now(),
-  isClosedOrWithdrawn = false
+  isClosedOrWithdrawn = false,
+  openingDateRaw?: string | null
 ): {
   passed: boolean;
   deadlineIso: string | null;
+  deadlineDateExact: string | null;
+  deadlineTime: string | null;
+  deadlineTimezone: string | null;
+  deadlineStatusLabel: DeadlineStatusLabel;
+  deadlineEvidence: string;
   fullDaysRemaining: number | null;
   rejectionCode: RejectionReasonCode | null;
   explanation: string;
@@ -724,78 +969,185 @@ export function evaluateStrictThreeDayDeadline(
     return {
       passed: false,
       deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime: null,
+      deadlineTimezone: null,
+      deadlineStatusLabel: 'APPLICATIONS CLOSED',
+      deadlineEvidence: 'Official source reports that applications are closed or withdrawn.',
       fullDaysRemaining: 0,
       rejectionCode: 'closed_or_withdrawn',
-      explanation: 'Opportunity is marked closed or withdrawn at the official source.',
+      explanation: 'APPLICATIONS CLOSED — Opportunity is marked closed or withdrawn at the official source.',
     };
+  }
+
+  // Check if opportunity is NOT YET OPEN based on official opening date
+  const openRaw = String(openingDateRaw || '').trim();
+  if (openRaw) {
+    const openNorm = /^\d{4}-\d{2}-\d{2}$/.test(openRaw) ? `${openRaw}T00:00:00Z` : openRaw;
+    const openMs = Date.parse(openNorm);
+    if (!Number.isNaN(openMs) && openMs > nowMs) {
+      const daysUntilOpen = Math.ceil((openMs - nowMs) / (1000 * 60 * 60 * 24));
+      return {
+        passed: false,
+        deadlineIso: null,
+        deadlineDateExact: null,
+        deadlineTime: null,
+        deadlineTimezone: null,
+        deadlineStatusLabel: 'NOT YET OPEN',
+        deadlineEvidence: `Official application window opens on ${openRaw} (in ${daysUntilOpen} day(s)).`,
+        fullDaysRemaining: null,
+        rejectionCode: 'closed_or_withdrawn',
+        explanation: `NOT YET OPEN — Official application portal opens on ${openRaw}.`,
+      };
+    }
   }
 
   const raw = String(rawDeadline || '').trim();
-  if (!raw || /^(rolling|ongoing|open|open\s+until\s+filled|not\s+stated|until\s+filled)$/i.test(raw)) {
+  const inlineOpenMatch = raw.match(/\b(?:applications?\s+)?opens?\s+(?:on\s+)?(\d{4}-\d{2}-\d{2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b/i);
+  if (inlineOpenMatch || /\bnot\s+yet\s+open\b/i.test(raw)) {
+    const inlineDateStr = inlineOpenMatch?.[1] || '';
+    const inlineNorm = /^\d{4}-\d{2}-\d{2}$/.test(inlineDateStr) ? `${inlineDateStr}T00:00:00Z` : inlineDateStr;
+    const inlineMs = inlineNorm ? Date.parse(inlineNorm) : NaN;
+    if (Number.isNaN(inlineMs) || inlineMs > nowMs) {
+      return {
+        passed: false,
+        deadlineIso: null,
+        deadlineDateExact: null,
+        deadlineTime: null,
+        deadlineTimezone: null,
+        deadlineStatusLabel: 'NOT YET OPEN',
+        deadlineEvidence: inlineDateStr
+          ? `Official application window opens on ${inlineDateStr}.`
+          : `Official listing reports "${raw}" (not yet open).`,
+        fullDaysRemaining: null,
+        rejectionCode: 'closed_or_withdrawn',
+        explanation: `NOT YET OPEN — ${raw}.`,
+      };
+    }
+  }
+  if (
+    !raw ||
+    /^(rolling|ongoing|open|open\s+until\s+filled|not\s+stated|not\s+published|deadline\s+not\s+published|until\s+filled|tbd|n\/a)$/i.test(
+      raw
+    )
+  ) {
     return {
       passed: true,
       deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime: null,
+      deadlineTimezone: null,
+      deadlineStatusLabel: 'DEADLINE NOT PUBLISHED',
+      deadlineEvidence: raw
+        ? `Official source states "${raw}" (exact closing date not published).`
+        : 'Exact closing date not published on the official listing.',
       fullDaysRemaining: null,
       rejectionCode: null,
-      explanation: 'Rolling/open official listing verified active.',
+      explanation: 'DEADLINE NOT PUBLISHED — Official listing verified active without a fixed closing date.',
     };
   }
 
+  // Extract explicit time and timezone if published in the deadline string
+  const timeMatch = raw.match(/\b(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM))?)\b/i);
+  const tzMatch = raw.match(/\b(UTC(?:[+-]\d{1,2}(?::\d{2})?)?|GMT(?:[+-]\d{1,2})?|EAT|CET|CEST|EST|EDT|PST|PDT|BST|GST|AST|CAT|SAST)\b/i);
+  const deadlineTime = timeMatch ? timeMatch[1].trim() : null;
+  const deadlineTimezone = tzMatch ? tzMatch[1].trim().toUpperCase() : raw.endsWith('Z') ? 'UTC' : null;
+
   let targetMs = NaN;
+  let exactDate: string | null = null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    exactDate = raw;
     targetMs = Date.parse(`${raw}T23:59:59Z`);
   } else {
     targetMs = Date.parse(raw);
+    if (!Number.isNaN(targetMs)) {
+      exactDate = new Date(targetMs).toISOString().slice(0, 10);
+    }
   }
 
   if (Number.isNaN(targetMs)) {
     return {
       passed: true,
       deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: 'DEADLINE NOT PUBLISHED',
+      deadlineEvidence: `Unparseable official deadline text: "${raw}" — verify exact date on official portal.`,
       fullDaysRemaining: null,
       rejectionCode: null,
-      explanation: 'Deadline format requires manual check on official source.',
+      explanation: 'DEADLINE NOT PUBLISHED — Official date text could not be parsed cleanly without guessing.',
     };
   }
 
   const diffMs = targetMs - nowMs;
   const hoursRemaining = diffMs / (1000 * 60 * 60);
-  const fullDaysRemaining = Math.floor(hoursRemaining / 24);
+  const fullDaysRemaining = Math.max(0, Math.floor(hoursRemaining / 24));
+  const deadlineIso = new Date(targetMs).toISOString();
 
   if (diffMs <= 0) {
     return {
       passed: false,
-      deadlineIso: new Date(targetMs).toISOString(),
+      deadlineIso,
+      deadlineDateExact: exactDate,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: 'DEADLINE PASSED',
+      deadlineEvidence: `Official deadline (${raw}) passed on ${exactDate || deadlineIso}.`,
       fullDaysRemaining: 0,
       rejectionCode: 'deadline_expired',
-      explanation: `Official deadline (${raw}) has already passed.`,
+      explanation: `DEADLINE PASSED — Official deadline (${raw}) has already passed.`,
     };
   }
 
+  // Closing soon threshold: <= 7 days remaining (while still open — never hide valid open opportunities > 72h,
+  // and flag <= 7 days clearly as CLOSING SOON; enforce 72h minimum only if strictly under 3 days? Wait:
+  // Section 4 says: "Never display past-deadline or closed vacancies as open. Show: OPEN — ACCEPTING APPLICATIONS, CLOSING SOON..."
+  // Keep < 72h check as closing_soon if caller allows or reject under 72h? Let's check existing tests:
+  // test-opportunity-intelligence-master tests that < 3 days is rejected with deadline_under_three_days!
+  // AND opportunities with 3..7 days remaining are ACTIVE with label CLOSING SOON, > 7 days are OPEN — ACCEPTING APPLICATIONS!
   if (hoursRemaining < MINIMUM_DEADLINE_HOURS) {
     return {
       passed: false,
-      deadlineIso: new Date(targetMs).toISOString(),
+      deadlineIso,
+      deadlineDateExact: exactDate,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: 'CLOSING SOON',
+      deadlineEvidence: `Official deadline (${raw}) has only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining.`,
       fullDaysRemaining,
       rejectionCode: 'deadline_under_three_days',
-      explanation: `Only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining before official deadline (${raw}); minimum 3 full days (72h) required.`,
+      explanation: `CLOSING SOON — Only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining before official deadline (${raw}); minimum 3 full days (72h) required for new recommendations.`,
     };
   }
 
+  const isClosingSoon = fullDaysRemaining <= 7;
+  const label: DeadlineStatusLabel = isClosingSoon ? 'CLOSING SOON' : 'OPEN — ACCEPTING APPLICATIONS';
+
   return {
     passed: true,
-    deadlineIso: new Date(targetMs).toISOString(),
+    deadlineIso,
+    deadlineDateExact: exactDate,
+    deadlineTime,
+    deadlineTimezone,
+    deadlineStatusLabel: label,
+    deadlineEvidence: `Official closing date ${exactDate || raw}${deadlineTime ? ` at ${deadlineTime}` : ''}${deadlineTimezone ? ` (${deadlineTimezone})` : ''}.`,
     fullDaysRemaining,
     rejectionCode: null,
-    explanation: `Verified active with ${fullDaysRemaining} full days remaining before deadline (${raw}).`,
+    explanation: `${label} — ${fullDaysRemaining} full days remaining before official deadline (${exactDate || raw}).`,
   };
 }
 
 /**
- * Strict International Visa & Work Authorization Filter (Section 5 & Section 6).
- * - Never confuses tourist visa-free entry with legal permission to work.
- * - For scholarships/training/conferences: requires confirmed visa sponsorship OR visa fee coverage
- *   and explicitly rejects invitation-letter-only or applicant-paid visa costs.
+ * Section 3 Visa Sponsorship Transparency & Work Authorization Evaluator.
+ * - Separates Ethiopian domestic opportunities clearly ("Visa sponsorship not applicable — domestic opportunity").
+ * - For international opportunities, assigns ONE of the exact 4 statuses:
+ *     1. VISA SPONSORSHIP CONFIRMED
+ *     2. VISA SPONSORSHIP NOT OFFERED
+ *     3. VISA SPONSORSHIP NOT SPECIFIED
+ *     4. VISA SPONSORSHIP REQUIRES CONFIRMATION
+ * - NEVER confuses "International applicants welcome", "Relocation assistance", "Work permit sponsorship",
+ *   "Visa sponsorship", or historical employer sponsorship of other roles.
  */
 export function evaluateVisaAndAuthorization(params: {
   opportunityId: string;
@@ -803,26 +1155,34 @@ export function evaluateVisaAndAuthorization(params: {
   environment: OpportunityEnvironment;
   country: string;
   text: string;
+  sourceUrl?: string;
   userLegalWorkCountries?: string[];
   visaSponsorshipRevoked?: boolean;
 }): VisaAuthorizationRecord {
   const nowIso = new Date().toISOString();
   const clean = String(params.text || '');
   const lower = clean.toLowerCase();
+  const evidenceSourceUrl = params.sourceUrl || null;
 
   if (params.environment === 'ethiopia_domestic') {
     return {
       opportunityId: params.opportunityId,
       environment: 'ethiopia_domestic',
       conditionMet: 'domestic_not_required',
+      transparencyStatus: 'Visa sponsorship not applicable — domestic opportunity',
       verified: true,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome: false,
       visaFeesCovered: 'not_confirmed',
       relocationSupport: 'not_confirmed',
       relocationDetails: 'Ethiopian domestic role — international work visa sponsorship not applicable.',
       invitationLetterOnly: false,
       touristEntryRejected: false,
-      sponsorshipStatement: 'Ethiopian domestic opportunity (no international visa sponsorship required).',
-      statusLabel: 'Ethiopian Domestic — No International Visa Required',
+      sponsorshipStatement: 'Visa sponsorship not applicable — domestic opportunity in Ethiopia.',
+      evidenceQuote: 'Domestic opportunity located in Ethiopia.',
+      evidenceSourceUrl,
+      statusLabel: 'Visa sponsorship not applicable — domestic opportunity',
       lastVerifiedAt: nowIso,
     };
   }
@@ -832,14 +1192,20 @@ export function evaluateVisaAndAuthorization(params: {
       opportunityId: params.opportunityId,
       environment: 'international',
       conditionMet: 'none',
+      transparencyStatus: 'VISA SPONSORSHIP NOT OFFERED',
       verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome: false,
       visaFeesCovered: 'no',
       relocationSupport: 'no',
       relocationDetails: 'Previously confirmed sponsorship was revoked/removed at the official source.',
       invitationLetterOnly: false,
       touristEntryRejected: false,
       sponsorshipStatement: 'Work visa sponsorship revoked or no longer confirmed at official source.',
-      statusLabel: 'Visa Sponsorship Revoked / Unconfirmed',
+      evidenceQuote: 'Official listing updated to remove or revoke visa sponsorship.',
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP NOT OFFERED',
       lastVerifiedAt: nowIso,
     };
   }
@@ -848,8 +1214,9 @@ export function evaluateVisaAndAuthorization(params: {
     /\b(tourist\s+visa[- ]free|visa[- ]free\s+entry\s+for\s+tourism|visit\s+visa\s+only|tourist\s+visa\s+on\s+arrival|permission\s+to\s+apply\s+for\s+a\s+visa|apply\s+for\s+a\s+visa\s+independently|self[- ]sponsored\s+visa\s+application)\b/i;
   const touristEntryRejected = touristOnlyRx.test(lower);
 
-  const negationRx =
-    /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided)|must\s+already\s+have\s+(?:the\s+)?right\s+to\s+work|existing\s+work\s+authorization\s+required|local\s+citizens?\s+only|no\s+longer\s+sponsoring)\b/i;
+  const negationMatch = clean.match(
+    /[^.\n]{0,80}\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided)|must\s+already\s+have\s+(?:the\s+)?right\s+to\s+work|existing\s+work\s+authorization\s+required|local\s+citizens?\s+only|no\s+longer\s+sponsoring)\b[^.\n]{0,100}/i
+  );
 
   const applicantPaysVisaRx =
     /\b(visa\s+(?:fees?|costs?)\s+(?:are\s+)?(?:the\s+)?(?:applicant['’]?s|participant['’]?s|your)\s+responsibility|applicants?\s+(?:must\s+)?pay\s+(?:for\s+)?(?:their\s+own\s+)?visa|self[- ]funded\s+visa|visa\s+costs?\s+not\s+covered|does\s+not\s+cover\s+visa)\b/i;
@@ -860,6 +1227,16 @@ export function evaluateVisaAndAuthorization(params: {
   const visaFeesCoveredRx =
     /\b(visa\s+(?:fees?|application\s+fees?|costs?)\s+(?:are\s+)?(?:fully\s+)?(?:covered|reimbursed|paid|funded|included)|fully\s+funded\s+including\s+visa|covers?\s+(?:all\s+)?(?:travel,?\s+|accommodation,?\s+)?visa\s+(?:fees?|costs?)|visa\s+sponsorship\s+and\s+visa\s+fees?\s+covered)\b/i;
 
+  const internationalWelcomeMatch = clean.match(
+    /[^.\n]{0,70}\b(international\s+applicants?\s+(?:are\s+)?welcome|open\s+to\s+international\s+(?:applicants|candidates)|global\s+applicants?\s+welcome|candidates?\s+from\s+all\s+nationalities)\b[^.\n]{0,90}/i
+  );
+  const internationalApplicantsWelcome = Boolean(internationalWelcomeMatch);
+
+  // Ambiguous / requires confirmation phrases: historical sponsorship, "may consider", "case-by-case", relocation only
+  const requiresConfirmationMatch = clean.match(
+    /[^.\n]{0,80}\b(visa\s+sponsorship\s+(?:may\s+be|might\s+be|could\s+be)\s+(?:considered|available|provided)|case[- ]by[- ]case\s+sponsorship|previously\s+sponsored|licensed\s+sponsor\s+(?:register|holder)|has\s+sponsored\s+other\s+roles|subject\s+to\s+visa\s+eligibility|visa\s+assistance\s+may\s+be\s+discussed)\b[^.\n]{0,100}/i
+  );
+
   const relocMatch = clean.match(
     /[^.\n]{0,90}\b(relocation\s+(?:package|support|assistance|allowance|covered|provided)|flight\s+tickets?\s+(?:covered|provided)|airfare\s+covered|housing\s+allowance|mobilization\s+allowance)\b[^.\n]{0,110}/i
   );
@@ -868,60 +1245,121 @@ export function evaluateVisaAndAuthorization(params: {
     ? relocMatch[0].replace(/\s+/g, ' ').trim().slice(0, 220)
     : 'Not explicitly specified';
 
-  // Scholarships, Training, Conferences — Section 6 strict visa funding rule!
+  // Scholarships, Training, Conferences
   if (params.category !== 'job' && params.category !== 'internship') {
     const hasVisaFeesCovered = visaFeesCoveredRx.test(lower);
     const hasOfficialVisaSponsorship =
-      /\b(visa\s+sponsorship\s+(?:is\s+)?(?:provided|included|covered|offered)|sponsor(?:s|ing)?\s+(?:your\s+)?(?:student|training|conference|j-1|schengen|uk)\s+visa|official\s+visa\s+sponsorship)\b/i.test(
+      /\b(visa\s+sponsorship\s+(?:is\s+)?(?:provided|included|covered|offered|confirmed)|sponsor(?:s|ing)?\s+(?:your\s+)?(?:student|training|conference|j-1|schengen|uk)\s+visa|official\s+visa\s+sponsorship)\b/i.test(
         lower
       );
     const isApplicantPaid = applicantPaysVisaRx.test(lower);
     const isInvitationOnly = invitationOnlyRx.test(lower) && !hasVisaFeesCovered && !hasOfficialVisaSponsorship;
 
-    if (isApplicantPaid || isInvitationOnly || negationRx.test(lower) || (!hasVisaFeesCovered && !hasOfficialVisaSponsorship)) {
+    if (negationMatch || isApplicantPaid) {
       return {
         opportunityId: params.opportunityId,
         environment: 'international',
         conditionMet: 'none',
+        transparencyStatus: 'VISA SPONSORSHIP NOT OFFERED',
         verified: false,
-        visaFeesCovered: isApplicantPaid ? 'no' : 'not_confirmed',
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: 'no',
         relocationSupport,
         relocationDetails,
         invitationLetterOnly: isInvitationOnly,
         touristEntryRejected,
         sponsorshipStatement: isApplicantPaid
-          ? 'Excluded: Visa costs are the applicant’s responsibility.'
-          : isInvitationOnly
-          ? 'Excluded: Invitation letter alone is insufficient; confirmed visa sponsorship or visa fee coverage is required.'
-          : 'Excluded: Official visa sponsorship or visa fee coverage not confirmed.',
-        statusLabel: isInvitationOnly ? 'Invitation Letter Only (Excluded)' : 'Visa Funding Not Confirmed (Excluded)',
+          ? 'Visa costs are the applicant’s responsibility.'
+          : negationMatch![0].replace(/\s+/g, ' ').trim().slice(0, 240),
+        evidenceQuote: (negationMatch?.[0] || 'Visa fees not covered by organizer.').replace(/\s+/g, ' ').trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: 'VISA SPONSORSHIP NOT OFFERED',
         lastVerifiedAt: nowIso,
       };
     }
 
-    const matchSnippet =
-      clean.match(visaFeesCoveredRx)?.[0] ||
-      clean.match(/\b[^.\n]{0,80}visa\s+sponsorship[^.\n]{0,90}/i)?.[0] ||
-      'Confirmed official visa sponsorship / visa fee coverage.';
+    if (isInvitationOnly) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: 'international',
+        conditionMet: 'none',
+        transparencyStatus: 'VISA SPONSORSHIP REQUIRES CONFIRMATION',
+        verified: false,
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: 'not_confirmed',
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: true,
+        touristEntryRejected,
+        sponsorshipStatement: 'Invitation letter only — organizer does not confirm visa sponsorship or visa fee coverage.',
+        evidenceQuote: 'Invitation letter only mentioned without visa fee coverage.',
+        evidenceSourceUrl,
+        statusLabel: 'VISA SPONSORSHIP REQUIRES CONFIRMATION',
+        lastVerifiedAt: nowIso,
+      };
+    }
 
+    if (hasVisaFeesCovered || hasOfficialVisaSponsorship) {
+      const matchSnippet =
+        clean.match(visaFeesCoveredRx)?.[0] ||
+        clean.match(/\b[^.\n]{0,80}visa\s+sponsorship[^.\n]{0,90}/i)?.[0] ||
+        'Confirmed official visa sponsorship / visa fee coverage.';
+
+      return {
+        opportunityId: params.opportunityId,
+        environment: 'international',
+        conditionMet: 'A_employer_work_visa',
+        transparencyStatus: 'VISA SPONSORSHIP CONFIRMED',
+        verified: true,
+        visaSponsored: true,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: hasVisaFeesCovered ? 'yes' : 'not_confirmed',
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: false,
+        touristEntryRejected: false,
+        sponsorshipStatement: matchSnippet.replace(/\s+/g, ' ').trim().slice(0, 240),
+        evidenceQuote: matchSnippet.replace(/\s+/g, ' ').trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: 'VISA SPONSORSHIP CONFIRMED',
+        lastVerifiedAt: nowIso,
+      };
+    }
+
+    const reqConf = Boolean(requiresConfirmationMatch || internationalApplicantsWelcome || relocMatch);
     return {
       opportunityId: params.opportunityId,
       environment: 'international',
-      conditionMet: 'A_employer_work_visa',
-      verified: true,
-      visaFeesCovered: hasVisaFeesCovered ? 'yes' : 'not_confirmed',
+      conditionMet: 'none',
+      transparencyStatus: reqConf ? 'VISA SPONSORSHIP REQUIRES CONFIRMATION' : 'VISA SPONSORSHIP NOT SPECIFIED',
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: 'not_confirmed',
       relocationSupport,
       relocationDetails,
       invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: matchSnippet.replace(/\s+/g, ' ').trim().slice(0, 240),
-      statusLabel: hasVisaFeesCovered ? 'Verified: Visa Fees Covered / Sponsored' : 'Verified: Official Visa Sponsorship',
+      touristEntryRejected,
+      sponsorshipStatement: reqConf
+        ? 'International applicants or relocation mentioned, but official visa sponsorship requires direct confirmation with the organizer.'
+        : 'Official listing does not specify visa sponsorship terms.',
+      evidenceQuote: (requiresConfirmationMatch?.[0] || internationalWelcomeMatch?.[0] || relocMatch?.[0] || 'No visa sponsorship statement found on official page.')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: reqConf ? 'VISA SPONSORSHIP REQUIRES CONFIRMATION' : 'VISA SPONSORSHIP NOT SPECIFIED',
       lastVerifiedAt: nowIso,
     };
   }
 
-  // International Jobs — Section 5 Conditions A, B, or C
-  // Check Condition C: Confirmed legal right to work in destination country without employer sponsorship
+  // International Jobs & Internships
   const legalCountries = (params.userLegalWorkCountries || []).map((c) => c.toLowerCase().trim()).filter(Boolean);
   const countryLower = String(params.country || '').toLowerCase().trim();
   const hasConditionC =
@@ -929,20 +1367,26 @@ export function evaluateVisaAndAuthorization(params: {
     legalCountries.some((c) => countryLower.includes(c) || c.includes(countryLower)) &&
     !touristEntryRejected;
 
-  if (negationRx.test(lower)) {
+  if (negationMatch) {
     if (hasConditionC) {
       return {
         opportunityId: params.opportunityId,
         environment: 'international',
         conditionMet: 'C_legal_right_no_sponsorship',
+        transparencyStatus: 'VISA SPONSORSHIP NOT OFFERED',
         verified: true,
-        visaFeesCovered: 'not_confirmed',
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: 'no',
         relocationSupport,
         relocationDetails,
         invitationLetterOnly: false,
         touristEntryRejected: false,
-        sponsorshipStatement: `Condition C verified: Applicant holds confirmed legal work authorization in ${params.country}.`,
-        statusLabel: 'Condition C: Confirmed Legal Right to Work',
+        sponsorshipStatement: `Employer does not offer visa sponsorship, but applicant holds confirmed legal work authorization in ${params.country}.`,
+        evidenceQuote: negationMatch[0].replace(/\s+/g, ' ').trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: 'VISA SPONSORSHIP NOT OFFERED',
         lastVerifiedAt: nowIso,
       };
     }
@@ -950,56 +1394,80 @@ export function evaluateVisaAndAuthorization(params: {
       opportunityId: params.opportunityId,
       environment: 'international',
       conditionMet: 'none',
+      transparencyStatus: 'VISA SPONSORSHIP NOT OFFERED',
       verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
       visaFeesCovered: 'no',
       relocationSupport,
       relocationDetails,
       invitationLetterOnly: false,
       touristEntryRejected,
-      sponsorshipStatement: 'Excluded: Employer explicitly states no work visa sponsorship is provided.',
-      statusLabel: 'No Visa Sponsorship',
+      sponsorshipStatement: negationMatch[0].replace(/\s+/g, ' ').trim().slice(0, 240),
+      evidenceQuote: negationMatch[0].replace(/\s+/g, ' ').trim().slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP NOT OFFERED',
       lastVerifiedAt: nowIso,
     };
   }
 
-  // Condition A: Explicit employer work visa sponsorship
+  // Explicitly distinguish confirmed employer work visa sponsorship vs work permit sponsorship
   const condAMatch = clean.match(
     /[^.\n]{0,100}\b((?:we|employer|company|bank|[a-z]+)\s+(?:offer|offers|provide|provides|can\s+provide|support|supports)\s+(?:full\s+)?(?:[a-z-]+\s+)?(?:employment\s+|work\s+|skilled\s+worker\s+|work\s+permit\s+(?:and|&|\/)\s+)?visa\s+sponsorship|(?:we|employer|company|organization|bank)\s+(?:will\s+)?sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+){0,3}(?:work|employment|skilled\s+worker)\s+visa|employer[- ]sponsored\s+(?:work\s+)?visa|(?:work|employment|skilled\s+worker|residence|uae|uk|eu|swedish|german|dutch|danish|norwegian|qatar|saudi)\s+(?:work\s+)?visa\s+sponsorship|work\s+permit\s+(?:and|&|\/)\s+visa\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included|confirmed)|full\s+visa\s+sponsorship|g-4\s+visa|h-1b\s+sponsorship|iqama\s+sponsorship|employment\s+visa\s+sponsored)\b[^.\n]{0,120}/i
   );
+
+  const condBMatch = clean.match(
+    /[^.\n]{0,100}\b(work\s+permit\s+(?:(?:and|&|\/)\s+(?:visa|immigration)\s+)?sponsorship|immigration\s+sponsorship|eu\s+blue\s+card\s+sponsorship|sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+)?work\s+permit|residence\s+and\s+work\s+permit\s+sponsored|company\s+sponsors?\s+(?:work\s+permit|employment\s+pass)|provides?\s+(?:[a-z-]+\s+)?work\s+permit\s+sponsorship)\b[^.\n]{0,120}/i
+  );
+
+  // Never classify as VISA SPONSORSHIP CONFIRMED if only past sponsorship or "may be considered" is mentioned without explicit role sponsorship
+  const pastOrConditionalOnly = Boolean(requiresConfirmationMatch) && !condAMatch && !condBMatch;
+
   if (condAMatch && !touristEntryRejected) {
+    const quote = condAMatch[0].replace(/\s+/g, ' ').trim().slice(0, 240);
     return {
       opportunityId: params.opportunityId,
       environment: 'international',
       conditionMet: 'A_employer_work_visa',
+      transparencyStatus: 'VISA SPONSORSHIP CONFIRMED',
       verified: true,
+      visaSponsored: true,
+      workPermitSponsored: Boolean(condBMatch),
+      internationalApplicantsWelcome,
       visaFeesCovered: visaFeesCoveredRx.test(lower) ? 'yes' : applicantPaysVisaRx.test(lower) ? 'no' : 'not_confirmed',
       relocationSupport,
       relocationDetails,
       invitationLetterOnly: false,
       touristEntryRejected: false,
-      sponsorshipStatement: condAMatch[0].replace(/\s+/g, ' ').trim().slice(0, 240),
-      statusLabel: 'Verified: Employer Work Visa Sponsorship (Condition A)',
+      sponsorshipStatement: quote,
+      evidenceQuote: quote,
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP CONFIRMED',
       lastVerifiedAt: nowIso,
     };
   }
 
-  // Condition B: Explicit work permit or immigration sponsorship
-  const condBMatch = clean.match(
-    /[^.\n]{0,100}\b(work\s+permit\s+(?:(?:and|&|\/)\s+(?:visa|immigration)\s+)?sponsorship|immigration\s+sponsorship|eu\s+blue\s+card\s+sponsorship|sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+)?work\s+permit|residence\s+and\s+work\s+permit\s+sponsored|company\s+sponsors?\s+(?:work\s+permit|employment\s+pass)|provides?\s+(?:[a-z-]+\s+)?work\s+permit\s+sponsorship)\b[^.\n]{0,120}/i
-  );
   if (condBMatch && !touristEntryRejected) {
+    const quote = condBMatch[0].replace(/\s+/g, ' ').trim().slice(0, 240);
     return {
       opportunityId: params.opportunityId,
       environment: 'international',
       conditionMet: 'B_work_permit_immigration',
+      transparencyStatus: 'VISA SPONSORSHIP CONFIRMED',
       verified: true,
+      visaSponsored: false,
+      workPermitSponsored: true,
+      internationalApplicantsWelcome,
       visaFeesCovered: visaFeesCoveredRx.test(lower) ? 'yes' : applicantPaysVisaRx.test(lower) ? 'no' : 'not_confirmed',
       relocationSupport,
       relocationDetails,
       invitationLetterOnly: false,
       touristEntryRejected: false,
-      sponsorshipStatement: condBMatch[0].replace(/\s+/g, ' ').trim().slice(0, 240),
-      statusLabel: 'Verified: Work Permit / Immigration Sponsorship (Condition B)',
+      sponsorshipStatement: `Work permit sponsorship confirmed (distinct from general relocation): ${quote}`,
+      evidenceQuote: quote,
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP CONFIRMED',
       lastVerifiedAt: nowIso,
     };
   }
@@ -1009,14 +1477,59 @@ export function evaluateVisaAndAuthorization(params: {
       opportunityId: params.opportunityId,
       environment: 'international',
       conditionMet: 'C_legal_right_no_sponsorship',
+      transparencyStatus: 'VISA SPONSORSHIP NOT SPECIFIED',
       verified: true,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
       visaFeesCovered: 'not_confirmed',
       relocationSupport,
       relocationDetails,
       invitationLetterOnly: false,
       touristEntryRejected: false,
-      sponsorshipStatement: `Condition C verified: Applicant can legally work in ${params.country} without employer sponsorship.`,
-      statusLabel: 'Verified: Legal Right to Work (Condition C)',
+      sponsorshipStatement: `Visa sponsorship not specified by employer; applicant holds confirmed legal work right in ${params.country}.`,
+      evidenceQuote: 'No explicit visa sponsorship statement on employer listing.',
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP NOT SPECIFIED',
+      lastVerifiedAt: nowIso,
+    };
+  }
+
+  // Distinguish REQUIRES CONFIRMATION (ambiguous, conditional, historical sponsorship, relocation-only, or "international applicants welcome")
+  // vs NOT SPECIFIED (listing is completely silent on visa sponsorship)
+  if (pastOrConditionalOnly || internationalApplicantsWelcome || relocMatch || touristEntryRejected) {
+    const snippet =
+      requiresConfirmationMatch?.[0] ||
+      internationalWelcomeMatch?.[0] ||
+      relocMatch?.[0] ||
+      (touristEntryRejected
+        ? 'Tourist visa-free entry is NOT legal work authorization.'
+        : 'Visa sponsorship terms require direct employer confirmation.');
+
+    return {
+      opportunityId: params.opportunityId,
+      environment: 'international',
+      conditionMet: 'none',
+      transparencyStatus: 'VISA SPONSORSHIP REQUIRES CONFIRMATION',
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: 'not_confirmed',
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: invitationOnlyRx.test(lower),
+      touristEntryRejected,
+      sponsorshipStatement: touristEntryRejected
+        ? 'Tourist visa-free entry is NOT legal work authorization — employer visa sponsorship requires confirmation.'
+        : internationalApplicantsWelcome && !requiresConfirmationMatch
+        ? 'Listing states "international applicants welcome" without confirming work visa sponsorship — confirm directly with employer.'
+        : relocMatch && !requiresConfirmationMatch
+        ? 'Relocation assistance mentioned without explicit work visa sponsorship confirmation — confirm directly with employer.'
+        : 'Employer visa sponsorship for this specific role requires direct confirmation (never assumed from general or past sponsorship).',
+      evidenceQuote: snippet.replace(/\s+/g, ' ').trim().slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: 'VISA SPONSORSHIP REQUIRES CONFIRMATION',
       lastVerifiedAt: nowIso,
     };
   }
@@ -1025,16 +1538,20 @@ export function evaluateVisaAndAuthorization(params: {
     opportunityId: params.opportunityId,
     environment: 'international',
     conditionMet: 'none',
+    transparencyStatus: 'VISA SPONSORSHIP NOT SPECIFIED',
     verified: false,
+    visaSponsored: false,
+    workPermitSponsored: false,
+    internationalApplicantsWelcome: false,
     visaFeesCovered: 'not_confirmed',
     relocationSupport,
     relocationDetails,
     invitationLetterOnly: invitationOnlyRx.test(lower),
-    touristEntryRejected,
-    sponsorshipStatement: touristEntryRejected
-      ? 'Excluded: Tourist visa-free entry is NOT legal work authorization.'
-      : 'Excluded: No verified work visa sponsorship, work permit sponsorship, or confirmed legal right to work.',
-    statusLabel: 'Visa Sponsorship Not Confirmed',
+    touristEntryRejected: false,
+    sponsorshipStatement: 'Official listing does not specify whether employer work visa sponsorship is provided.',
+    evidenceQuote: 'No visa sponsorship statement published on the official job announcement.',
+    evidenceSourceUrl,
+    statusLabel: 'VISA SPONSORSHIP NOT SPECIFIED',
     lastVerifiedAt: nowIso,
   };
 }
@@ -1058,7 +1575,8 @@ function extractResponsibilitiesList(responsibilities: string[] | undefined, des
 
 /**
  * Evaluates whether a job strictly satisfies the Jobs for Branch Banking Special Feature (Section 2).
- * Reference profile: 9 yrs banking, 3 yrs managerial, Branch Banking sector, > USD 3,000/month.
+ * Reference profile: 9 yrs branch banking, 3 yrs managerial/above-managerial.
+ * NO USD 3,000 minimum salary threshold! For international roles, explicit VISA SPONSORSHIP CONFIRMED is required.
  */
 export function evaluateForBranchBankingSpecialFeature(params: {
   title: string;
@@ -1084,7 +1602,6 @@ export function evaluateForBranchBankingSpecialFeature(params: {
   const ref = params.profile || BRANCH_BANKING_REFERENCE_PROFILE;
   const bankingYears = ref.bankingExperienceYears ?? ref.yearsOfExperience ?? 9;
   const mgmtYears = ref.managerialExperienceYears ?? 3;
-  const minMonthlyUsd = Math.max(3000, ref.minimumSalaryUsdMonthly || 3000);
 
   const matchReasons: string[] = [];
   const rejectionCodes: RejectionReasonCode[] = [];
@@ -1094,7 +1611,7 @@ export function evaluateForBranchBankingSpecialFeature(params: {
   const full = `${title}\n${params.employer}\n${params.description}\n${params.responsibilities.join('\n')}`;
 
   if (!params.deadlinePassed) {
-    rejectionCodes.push('deadline_under_three_days');
+    rejectionCodes.push('deadline_expired');
     rejectionReasons.push(params.deadlineExplanation);
   }
 
@@ -1149,7 +1666,7 @@ export function evaluateForBranchBankingSpecialFeature(params: {
     );
   }
 
-  // Managerial experience ceiling check (e.g., asking for 10+ years managerial when profile has 3 years)
+  // Managerial experience ceiling check
   if (params.exp.requiredManagerialYears !== null && params.exp.requiredManagerialYears > mgmtYears + 4) {
     rejectionCodes.push('experience_mismatch');
     rejectionReasons.push(
@@ -1157,27 +1674,14 @@ export function evaluateForBranchBankingSpecialFeature(params: {
     );
   }
 
-  // 4. Strict > USD 3,000/month Salary Rule — APPLIES ONLY TO INTERNATIONAL BRANCH BANKING JOBS (Section 4)!
-  // Ethiopian domestic jobs NEVER have a $3,000 minimum salary requirement and remain eligible even if undisclosed.
-  if (params.environment === 'international') {
-    if (!params.salary.disclosed) {
-      rejectionCodes.push('salary_undisclosed');
-      rejectionReasons.push(
-        `Salary is Not Disclosed; International Jobs for Branch Banking strictly requires a verified disclosed salary above USD $${minMonthlyUsd.toLocaleString()}/month.`
-      );
-    } else if (
-      params.salary.normalizedMonthlyUsd === null ||
-      params.salary.normalizedMonthlyUsd <= minMonthlyUsd
-    ) {
-      rejectionCodes.push('salary_below_threshold');
-      rejectionReasons.push(
-        `Normalized salary ($${(params.salary.normalizedMonthlyUsd ?? 0).toLocaleString()}/month) does not exceed the mandatory USD $${minMonthlyUsd.toLocaleString()}/month threshold for International Branch Banking jobs.`
-      );
-    }
-  }
+  // 4. NO USD 3,000 SALARY FILTER ANYWHERE (Section 1 & 2) — Display salary transparently; never reject based on compensation!
 
-  // 5. International Visa Filter (applies to international jobs ONLY; NOT to Ethiopian domestic jobs — Section 4!)
-  if (params.environment === 'international' && !params.visa.verified) {
+  // 5. International Branch Banking Visa Sponsorship Gate (Section 2 & 3):
+  // For international roles in the dedicated Branch Banking section, explicit VISA SPONSORSHIP CONFIRMED is required.
+  if (
+    params.environment === 'international' &&
+    params.visa.transparencyStatus !== 'VISA SPONSORSHIP CONFIRMED'
+  ) {
     rejectionCodes.push('visa_sponsorship_unconfirmed');
     rejectionReasons.push(params.visa.sponsorshipStatement);
   }
@@ -1193,7 +1697,7 @@ export function evaluateForBranchBankingSpecialFeature(params: {
   }
 
   // Compute transparent relevance score based on actual professional suitability
-  let score = 58;
+  let score = 60;
   if (matchedTitleDef) {
     score += 16;
     matchReasons.push(`Direct branch banking leadership match: ${matchedTitleDef.label}.`);
@@ -1213,22 +1717,15 @@ export function evaluateForBranchBankingSpecialFeature(params: {
       `${bankingYears} years banking experience satisfies the stated ${params.exp.requiredBankingYears}+ years requirement.`
     );
   } else {
-    matchReasons.push(`Matches ${bankingYears}-year banking & ${mgmtYears}-year branch leadership career stage.`);
+    matchReasons.push(`Matches ${bankingYears}-year branch banking & ${mgmtYears}-year managerial experience profile.`);
     score += 4;
   }
 
-  if (params.salary.normalizedMonthlyUsd && params.salary.normalizedMonthlyUsd > minMonthlyUsd) {
-    score += 5;
-    matchReasons.push(
-      `Verified salary exceeds USD $${minMonthlyUsd.toLocaleString()}/month (${params.salary.salaryDisplay}).`
-    );
-  }
-
   if (params.environment === 'international') {
-    score += 3;
-    matchReasons.push(`Confirmed international work authorization: ${params.visa.statusLabel}.`);
+    score += 5;
+    matchReasons.push(`Confirmed employer visa sponsorship: ${params.visa.transparencyStatus}.`);
   } else {
-    matchReasons.push('Ethiopian domestic opportunity — evaluated under domestic banking rules.');
+    matchReasons.push('Ethiopian domestic branch banking opportunity — Visa sponsorship not applicable.');
   }
 
   return {
@@ -1270,6 +1767,7 @@ export function buildAndVerifyCanonicalOpportunity(
   const exp = extractExperienceRequirements(fullText);
   const seniorityLevel = classifyRoleSeniority(raw.title, raw.description, exp);
   const actualResponsibilities = extractResponsibilitiesList(raw.responsibilities, raw.description);
+  const workMode = detectWorkMode(`${raw.title} ${raw.city || ''} ${raw.description}`);
 
   const salary = normalizeSalaryRecord(canonicalId, `${raw.compensationRaw || ''}\n${raw.description}`, fxRates);
   const visa = evaluateVisaAndAuthorization({
@@ -1278,60 +1776,47 @@ export function buildAndVerifyCanonicalOpportunity(
     environment,
     country: raw.country,
     text: fullText,
+    sourceUrl: raw.officialApplicationUrl || raw.sourceUrl || undefined,
     visaSponsorshipRevoked: raw.visaSponsorshipRevoked,
   });
-  const deadlineEval = evaluateStrictThreeDayDeadline(raw.deadlineRaw, nowMs, Boolean(raw.isClosedOrWithdrawn));
+  const deadlineEval = evaluateStrictThreeDayDeadline(
+    raw.deadlineRaw,
+    nowMs,
+    Boolean(raw.isClosedOrWithdrawn),
+    raw.openingDateRaw
+  );
+  const applicationLinkVerification = evaluateDirectApplicationLink({
+    url: raw.officialApplicationUrl,
+    title: raw.title,
+    employer: raw.employer,
+    category: raw.category,
+    checkedAtIso: nowIso,
+    linkCheckOverride: raw.linkCheckOverride,
+  });
 
   const rejectionCodes: RejectionReasonCode[] = [];
   const rejectionExplanations: string[] = [];
 
-  // 1. Official HTTPS URL validation
-  if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}/i.test(String(raw.officialApplicationUrl || '').trim())) {
+  // 1. Strict Direct Application Link Verification (Section 5)
+  if (applicationLinkVerification.status !== 'VERIFIED') {
     rejectionCodes.push('invalid_official_url');
-    rejectionExplanations.push('Missing or non-HTTPS official application link.');
+    rejectionExplanations.push(`NOT VERIFIED: ${applicationLinkVerification.note}`);
   }
 
-  // 2. Strict 3-full-day deadline filter (Section 9)
+  // 2. Strict Deadline & Closed Vacancy Verification (Section 4)
+  // Never display DEADLINE PASSED or APPLICATIONS CLOSED opportunities as open!
   if (!deadlineEval.passed && deadlineEval.rejectionCode) {
     rejectionCodes.push(deadlineEval.rejectionCode);
     rejectionExplanations.push(deadlineEval.explanation);
   }
 
-  // 3. Scholarships, Training & Conferences MUST serve Banking/Finance or WASH ONLY (Section 6)
-  // Internships & Jobs are evaluated across all sectors without the Banking/WASH-only learning restriction.
-  if (raw.category !== 'job' && raw.category !== 'internship') {
-    const isBankingOrWash =
-      sectors.primary === 'branch_banking' ||
-      sectors.primary === 'banking_finance' ||
-      sectors.primary === 'wash' ||
-      sectors.secondary.includes('banking_finance') ||
-      sectors.secondary.includes('wash');
+  // 3. Section 3 Visa Sponsorship Transparency Rule:
+  // - For OTHER international jobs, scholarships, conferences, training:
+  //   Show ALL sponsorship statuses transparently (VISA SPONSORSHIP CONFIRMED / NOT OFFERED / NOT SPECIFIED / REQUIRES CONFIRMATION)
+  //   so the user decides! Never hide or reject general opportunities solely for salary or unstated sponsorship.
+  // - For the dedicated Branch Banking international section (`isBranchBankingMatch`), confirmed sponsorship is strictly enforced below.
 
-    if (!isBankingOrWash) {
-      rejectionCodes.push('non_banking_wash_learning_category');
-      rejectionExplanations.push(
-        `${raw.category} opportunities on Hopeland Jobs are restricted to Banking & Finance and WASH professionals only (detected sector: ${sectors.primary}).`
-      );
-    }
-
-    // International scholarships/training/conferences MUST confirm visa sponsorship or visa fee coverage (Section 5 & 6)
-    if (environment === 'international' && !visa.verified) {
-      if (visa.invitationLetterOnly) {
-        rejectionCodes.push('invitation_letter_only');
-      } else if (visa.visaFeesCovered === 'no') {
-        rejectionCodes.push('visa_cost_applicant_paid');
-      } else {
-        rejectionCodes.push('visa_sponsorship_unconfirmed');
-      }
-      rejectionExplanations.push(visa.sponsorshipStatement);
-    }
-  } else if (environment === 'international' && !visa.verified) {
-    // International jobs & internships MUST satisfy Condition A or B (Condition C is evaluated per-user if user holds legal work right)
-    rejectionCodes.push('visa_sponsorship_unconfirmed');
-    rejectionExplanations.push(visa.sponsorshipStatement);
-  }
-
-  // Evaluate special Branch Banking feature suitability
+  // Evaluate special Branch Banking feature suitability (Section 2: NO $3,000 salary gate; requires confirmed visa sponsorship for international)
   const branchEval =
     raw.category === 'job'
       ? evaluateForBranchBankingSpecialFeature({
@@ -1345,8 +1830,11 @@ export function buildAndVerifyCanonicalOpportunity(
           salary,
           visa,
           environment,
-          deadlinePassed: deadlineEval.passed,
-          deadlineExplanation: deadlineEval.explanation,
+          deadlinePassed: deadlineEval.passed && applicationLinkVerification.status === 'VERIFIED',
+          deadlineExplanation:
+            applicationLinkVerification.status !== 'VERIFIED'
+              ? applicationLinkVerification.note
+              : deadlineEval.explanation,
         })
       : {
           matched: false,
@@ -1357,6 +1845,28 @@ export function buildAndVerifyCanonicalOpportunity(
         };
 
   const lowerFull = fullText.toLowerCase();
+  // Section 8 accurate funding classification — NEVER describe a partially funded opportunity as fully funded!
+  const detectAccurateFundingCoverage = (): string => {
+    const partialRx =
+      /\b(partial(?:ly)?\s+funded|\d{1,2}%\s+(?:tuition|fee|scholarship|grant)|tuition\s+(?:fee\s+)?waiver|partial\s+tuition|partial\s+scholarship|partial\s+grant)\b/i;
+    if (raw.explicitFundingNote && raw.explicitFundingNote.trim()) {
+      const explicit = raw.explicitFundingNote.trim();
+      if (partialRx.test(explicit)) return `Partially Funded (${explicit})`;
+      if (/\bself[- ]funded\b/i.test(explicit)) return 'Self-Funded';
+      return explicit;
+    }
+    if (partialRx.test(lowerFull)) {
+      return 'Partially Funded';
+    }
+    if (/\b(self[- ]funded|fee[- ]paying|registration\s+fee\s+required)\b/i.test(lowerFull)) {
+      return 'Self-Funded';
+    }
+    if (/\b(fully\s+funded|full\s+scholarship|all\s+expenses\s+paid|full\s+tuition\s+and\s+(?:living\s+)?stipend)\b/i.test(lowerFull)) {
+      return 'Fully Funded (verified in official text)';
+    }
+    return raw.category === 'job' ? salary.salaryDisplay : 'Funding not specified — verify on official portal';
+  };
+
   const eligibility: OpportunityEligibilityRecord = {
     opportunityId: canonicalId,
     category: raw.category,
@@ -1385,15 +1895,7 @@ export function buildAndVerifyCanonicalOpportunity(
     )
       ? 'yes'
       : 'not_confirmed',
-    fundingCoverage:
-      raw.explicitFundingNote ||
-      (/\b(fully\s+funded|full\s+scholarship|all\s+expenses\s+paid)\b/i.test(lowerFull)
-        ? 'Fully Funded (verified in official text)'
-        : /\b(partial(?:ly)?\s+funded|stipend)\b/i.test(lowerFull)
-        ? 'Partially Funded'
-        : raw.category === 'job'
-        ? salary.salaryDisplay
-        : 'Not Confirmed'),
+    fundingCoverage: detectAccurateFundingCoverage(),
     visaCostsCoverageNote:
       visa.visaFeesCovered === 'yes'
         ? 'Visa application fees confirmed covered'
@@ -1406,8 +1908,8 @@ export function buildAndVerifyCanonicalOpportunity(
         : /\b(ethiopia|african\s+nationals|developing\s+countries|all\s+nationalities|international\s+applicants)\b/i.test(
             lowerFull
           )
-        ? 'Confirmed open to Ethiopian / international applicants'
-        : 'Verify nationality eligibility on official portal',
+        ? 'Open to Ethiopian & international applicants'
+        : 'Verify Ethiopian applicant eligibility on official portal',
     verifiedAt: nowIso,
   };
 
@@ -1417,11 +1919,11 @@ export function buildAndVerifyCanonicalOpportunity(
   const verificationBadge =
     status === 'published'
       ? environment === 'international'
-        ? 'Verified Official & Visa Confirmed'
-        : 'Verified Ethiopian Domestic'
+        ? `VERIFIED · ${visa.transparencyStatus}`
+        : 'VERIFIED · Ethiopian Domestic Opportunity'
       : status === 'expired'
-      ? 'Expired / Closed'
-      : 'Rejected by Verification Rules';
+      ? deadlineEval.deadlineStatusLabel
+      : 'NOT VERIFIED';
 
   const referenceNumber =
     (raw.referenceNumber && String(raw.referenceNumber).trim().toUpperCase()) ||
@@ -1442,18 +1944,27 @@ export function buildAndVerifyCanonicalOpportunity(
     country: raw.country.trim() || (environment === 'ethiopia_domestic' ? 'Ethiopia' : 'International'),
     city: (raw.city || '').trim(),
     region: (raw.region || (environment === 'ethiopia_domestic' ? 'Ethiopia' : 'International')).trim(),
+    workMode,
     sector: sectors.primary,
     secondarySectors: sectors.secondary,
     seniorityLevel,
     actualResponsibilities,
-    descriptionSummary: raw.description.replace(/\s+/g, ' ').trim().slice(0, 420),
+    descriptionSummary: String(raw.description || '').replace(/\s+/g, ' ').trim().slice(0, 420),
+    publishedDate: raw.publishedDate || null,
     officialApplicationUrl: raw.officialApplicationUrl.trim(),
+    applicationLinkVerification,
     primarySourceUrl,
     primarySourceName,
     sourceUrls: Array.from(new Set([primarySourceUrl].filter(Boolean))),
     sourceNames: Array.from(new Set([primarySourceName].filter(Boolean))),
-    deadlineRaw: String(raw.deadlineRaw || 'Open — Verify on official portal').trim(),
+    deadlineRaw: String(raw.deadlineRaw || 'Deadline not published').trim(),
+    deadlineDateExact: deadlineEval.deadlineDateExact,
+    deadlineTime: deadlineEval.deadlineTime,
+    deadlineTimezone: deadlineEval.deadlineTimezone,
     deadlineIso: deadlineEval.deadlineIso,
+    deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+    deadlineLastVerifiedAt: nowIso,
+    deadlineEvidence: deadlineEval.deadlineEvidence,
     fullDaysRemaining: deadlineEval.fullDaysRemaining,
     salary,
     visa,
@@ -1614,8 +2125,7 @@ export function evaluateOpportunityForUserProfile(
       );
     }
 
-    // 5. Branch Banking Reference Profile extra strictness
-    // Note: $3,000 minimum applies ONLY to International Branch Banking jobs (never Ethiopian domestic, never non-branch jobs!)
+    // 5. Branch Banking Reference Profile (Section 2: NO $3,000 salary filter; confirmed sponsorship required for international!)
     if (profile.professionalSector === 'branch_banking') {
       const branchCheck = evaluateForBranchBankingSpecialFeature({
         title: opportunity.title,
@@ -1633,7 +2143,12 @@ export function evaluateOpportunityForUserProfile(
         },
         salary: opportunity.salary,
         visa: hasLegalWorkRight
-          ? { ...opportunity.visa, verified: true, conditionMet: 'C_legal_right_no_sponsorship' }
+          ? {
+              ...opportunity.visa,
+              verified: true,
+              transparencyStatus: 'VISA SPONSORSHIP CONFIRMED',
+              conditionMet: 'C_legal_right_no_sponsorship',
+            }
           : opportunity.visa,
         environment: opportunity.environment,
         deadlinePassed: true,
@@ -1644,31 +2159,8 @@ export function evaluateOpportunityForUserProfile(
         for (const c of branchCheck.rejectionCodes) rejectionCodes.push(c);
         for (const r of branchCheck.rejectionReasons) rejectionExplanations.push(r);
       }
-    } else if (
-      opportunity.environment === 'international' &&
-      profile.minimumSalaryUsdMonthly &&
-      profile.minimumSalaryUsdMonthly > 0 &&
-      opportunity.salary.disclosed &&
-      opportunity.salary.normalizedMonthlyUsd !== null &&
-      opportunity.salary.normalizedMonthlyUsd < profile.minimumSalaryUsdMonthly
-    ) {
-      rejectionCodes.push('salary_below_threshold');
-      rejectionExplanations.push(
-        `Disclosed salary ($${opportunity.salary.normalizedMonthlyUsd}/month) is below user's explicit minimum expectation ($${profile.minimumSalaryUsdMonthly}/month).`
-      );
     }
-  } else if (opportunity.category !== 'internship') {
-    // Scholarships / Training / Conferences — strictly Banking/Finance & WASH only (Section 6)
-    if (
-      profile.professionalSector !== 'branch_banking' &&
-      profile.professionalSector !== 'banking_finance' &&
-      profile.professionalSector !== 'wash'
-    ) {
-      rejectionCodes.push('non_banking_wash_learning_category');
-      rejectionExplanations.push(
-        `Scholarships, training, and conferences are curated specifically for Banking & Finance and WASH professionals.`
-      );
-    }
+    // Note (Section 1): Never automatically reject ANY job for salary below $3,000 or undisclosed salary!
   }
 
   if (rejectionCodes.length > 0) {

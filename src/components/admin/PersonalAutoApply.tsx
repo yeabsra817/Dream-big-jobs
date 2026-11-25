@@ -206,7 +206,7 @@ Bachelor of Arts in Accounting and Finance — Mekelle University (Graduated 201
   },
 ];
 
-// Top-level builder for International Visa Sponsorship Applications (Europe & Middle East > $3,000 USD)
+// Top-level builder for International Visa Sponsorship Applications (Europe & Middle East)
 export const buildInternationalJobRecord = (
   job: InternationalVisaJob,
   profileData: PersonalProfile = DEFAULT_PROFILE,
@@ -302,7 +302,7 @@ yeabsra45@gmail.com | +251 91 123 4567`;
     matchAnalysis: {
       score: job.matchScore,
       category: job.matchCategory,
-      rationale: `High compatibility (${job.matchScore}%) for ${job.title}. Candidate's 9 years banking experience, 3 years Branch Manager role at Tsedey Bank, and Mekelle University Accounting & Finance degree fully meet and exceed all core criteria. Employer provides verified visa sponsorship and salary (${job.salaryDisplay}) well above $3,000 USD requirement.`,
+      rationale: `High compatibility (${job.matchScore}%) for ${job.title}. Candidate's 9 years banking experience, 3 years Branch Manager role at Tsedey Bank, and Mekelle University Accounting & Finance degree fully meet and exceed all core criteria. Employer provides verified visa sponsorship (${job.salaryDisplay || 'Salary not disclosed'}).`,
       strengths: [
         '9 years of banking, financial control, and general ledger reconciliation',
         '3 years Branch Manager leadership overseeing operational expenditure',
@@ -378,11 +378,11 @@ export const PersonalAutoApply: React.FC<Props> = ({
     return INTERNATIONAL_VISA_JOBS.map((j) => buildInternationalJobRecord(j, DEFAULT_PROFILE, DEFAULT_DOCUMENTS));
   });
 
-  // Stream Toggle: International Visa Sponsorship (> $3,000 USD) vs Ethiopian Local/NGOs
+  // Stream Toggle: International Visa Sponsorship vs Ethiopian Local/NGOs
   const [jobStream, setJobStream] = useState<'international_visa' | 'ethiopian'>('international_visa');
   const [intlRegionFilter, setIntlRegionFilter] = useState<'all' | 'Europe' | 'Middle East'>('all');
   const [intlCountryFilter, setIntlCountryFilter] = useState<string>('all');
-  const [intlMinSalaryFilter, setIntlMinSalaryFilter] = useState<number>(3000);
+  const [intlMinSalaryFilter, setIntlMinSalaryFilter] = useState<number>(0);
 
   // Instant PDF & Document Preview Modal State (prompt opening before and after send)
   const [activePdfPreview, setActivePdfPreview] = useState<{
@@ -1008,7 +1008,7 @@ export const PersonalAutoApply: React.FC<Props> = ({
         newlyPrepared.forEach((a) => saveAutoApplyApplication(a).catch(() => {}));
         setActionFeedback({
           type: 'success',
-          message: `Auto-prepared ${newlyPrepared.length} Europe & Middle East visa sponsorship applications (> $3,000 USD)! All 105 are ready to send.`,
+          message: `Auto-prepared ${newlyPrepared.length} Europe & Middle East visa sponsorship applications! All 105 are ready to send.`,
         });
       } else {
         setActionFeedback({
@@ -1224,7 +1224,7 @@ export const PersonalAutoApply: React.FC<Props> = ({
     });
   }, [candidateVacancies, profile.targetPositions, profile.targetOrganizations]);
 
-  // International Jobs Filtered List (Europe & Middle East > $3,000 USD)
+  // International Jobs Filtered List (Europe & Middle East — no mandatory salary threshold)
   const filteredInternationalJobs = useMemo(() => {
     return INTERNATIONAL_VISA_JOBS.filter((job) => {
       // Region filter
@@ -1485,12 +1485,12 @@ export const PersonalAutoApply: React.FC<Props> = ({
               </div>
               <h2 className="text-base sm:text-xl font-black text-white">
                 {jobStream === 'international_visa'
-                  ? '🇪🇺 & 🇦🇪 Europe & Middle East Visa Sponsorship Jobs (> $3,000 USD)'
+                  ? '🇪🇺 & 🇦🇪 Europe & Middle East Visa Sponsorship Jobs'
                   : '🇪🇹 Ethiopian Local Vacancies (MSF, NGOs, Embassies & Banks in Addis Ababa)'}
               </h2>
               <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
                 {jobStream === 'international_visa'
-                  ? 'Exclusively curated for Yeabsra Tefera from Top 10 International Portals (Relocate.me, Bayt, GulfTalent, EFinancialCareers, Devex). 100+ active jobs published in the last 3 days with verified employer visa sponsorship and salaries exceeding $3,000 USD.'
+                  ? 'Exclusively curated for Yeabsra Tefera from Top 10 International Portals (Relocate.me, Bayt, GulfTalent, EFinancialCareers, Devex) with verified employer visa sponsorship and no mandatory salary threshold.'
                   : 'Verified vacancies within Ethiopia matching banking, finance, internal control, and NGO management criteria.'}
               </p>
             </div>
@@ -1537,7 +1537,7 @@ export const PersonalAutoApply: React.FC<Props> = ({
                   Instant Visa Pipeline Auto-Preparation (105 Vacancies)
                 </span>
                 <p className="text-[11px] text-slate-600">
-                  Pre-generate tailored ATS CVs, formal cover letters, and email dispatches for all verified European & Middle Eastern vacancies (&gt; $3,000 USD).
+                  Pre-generate tailored ATS CVs, formal cover letters, and email dispatches for all verified European &amp; Middle Eastern visa-sponsored vacancies.
                 </p>
               </div>
               <button
@@ -1608,10 +1608,10 @@ export const PersonalAutoApply: React.FC<Props> = ({
                   onChange={(e) => setIntlMinSalaryFilter(Number(e.target.value))}
                   className="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-white text-slate-800 outline-none"
                 >
-                  <option value={3000}>Min Salary: $3,000+ USD</option>
-                  <option value={5000}>Min Salary: $5,000+ USD</option>
-                  <option value={7000}>Min Salary: $7,000+ USD</option>
-                  <option value={8500}>Min Salary: $8,500+ USD</option>
+                  <option value={0}>All Salaries (No Minimum)</option>
+                  <option value={5000}>Optional Filter: $5,000+ USD</option>
+                  <option value={7000}>Optional Filter: $7,000+ USD</option>
+                  <option value={8500}>Optional Filter: $8,500+ USD</option>
                 </select>
               </div>
             ) : (
@@ -1651,7 +1651,7 @@ export const PersonalAutoApply: React.FC<Props> = ({
                 </span>
                 <span className="text-emerald-700 font-extrabold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  All Salaries &gt; $3,000 USD • Active within 3 Days
+                  All Disclosed &amp; Undisclosed Salaries • Verified Visa Sponsorship
                 </span>
               </div>
 

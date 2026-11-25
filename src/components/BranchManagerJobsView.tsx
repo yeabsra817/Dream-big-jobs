@@ -41,6 +41,10 @@ import {
   triggerBranchManagerLiveDiscovery,
 } from '../lib/branchManagerJobsService';
 import { fetchAutonomousDiscoveryStatus } from '../lib/autonomousDiscoveryService';
+import {
+  verifyOpportunityLive,
+  type LiveOpportunityVerificationResult,
+} from '../lib/opportunityIntelligenceService';
 
 interface Props {
   onBack: () => void;
@@ -61,12 +65,13 @@ export const BranchManagerJobsView: React.FC<Props> = ({
   const [isOwnerAccountProfile, setIsOwnerAccountProfile] = useState(false);
   const [response, setResponse] = useState<BranchManagerJobsSearchResponse | null>(null);
   const [selectedJob, setSelectedJob] = useState<VerifiedBranchManagerJob | null>(null);
+  const [liveVerifyResult, setLiveVerifyResult] = useState<LiveOpportunityVerificationResult | null>(null);
+  const [isVerifyingLive, setIsVerifyingLive] = useState(false);
 
-  // Filters
+  // Filters (No USD 3,000 salary restriction anywhere on the platform)
   const [searchQuery, setSearchQuery] = useState('');
   const [regionFilter, setRegionFilter] = useState<BranchManagerRegionScope | 'ALL'>('ALL');
   const [positionFilter, setPositionFilter] = useState<string>('ALL');
-  const [minSalaryUsd, setMinSalaryUsd] = useState<number>(3000);
 
   // UI states
   const [isLoading, setIsLoading] = useState(true);
@@ -119,7 +124,6 @@ export const BranchManagerJobsView: React.FC<Props> = ({
           profile: ownerFlag ? undefined : activeProfile,
           regionFilter: 'ALL',
           positionFilter: 'ALL',
-          minSalaryUsd: Math.max(3000, activeProfile.minimumMonthlyGrossUsd || 3000),
         });
         if (!cancelled) {
           setResponse(res);
@@ -131,7 +135,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
       } catch (err: any) {
         if (!cancelled) {
           setErrorMessage(
-            err?.message || 'Unable to load verified $3,000+ visa-sponsored roles.'
+            err?.message || 'Unable to load verified visa-sponsored Branch Banking roles.'
           );
         }
       } finally {
@@ -144,7 +148,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
     };
   }, [isSignedIn, userProfile?.uid, syncBuffers]);
 
-  // Silent auto-refresh whenever the 1-minute autonomous discovery worker updates verified $3,000+ results
+  // Silent auto-refresh whenever the autonomous discovery worker updates verified results
   useEffect(() => {
     let active = true;
     let lastSeenSuccessAt: string | null = null;
@@ -157,7 +161,6 @@ export const BranchManagerJobsView: React.FC<Props> = ({
             profile: isOwnerAccountProfile ? undefined : profile,
             regionFilter: 'ALL',
             positionFilter: 'ALL',
-            minSalaryUsd: Math.max(3000, profile.minimumMonthlyGrossUsd || 3000),
           });
           if (active) setResponse(fresh);
         } catch {
@@ -174,6 +177,31 @@ export const BranchManagerJobsView: React.FC<Props> = ({
     };
   }, [isOwnerAccountProfile, profile]);
 
+  // Section 4 & 5: Recheck deadline & direct application link live whenever a user opens an opportunity
+  useEffect(() => {
+    if (!selectedJob) {
+      setLiveVerifyResult(null);
+      setIsVerifyingLive(false);
+      return;
+    }
+    let active = true;
+    setIsVerifyingLive(true);
+    setLiveVerifyResult(null);
+    verifyOpportunityLive(selectedJob.id, {
+      url: selectedJob.officialApplicationUrl,
+      applicationDeadline: selectedJob.applicationDeadline,
+    })
+      .then((res) => {
+        if (active && res) setLiveVerifyResult(res);
+      })
+      .finally(() => {
+        if (active) setIsVerifyingLive(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedJob]);
+
   const handleRunLiveScan = async () => {
     setIsScanningLive(true);
     setErrorMessage(null);
@@ -182,7 +210,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
       const res = await triggerBranchManagerLiveDiscovery(profile);
       setResponse(res);
       setStatusMessage(
-        `Scanned ${res.audit.totalCandidatesScanned.toLocaleString()} live openings across ${res.audit.sourcesChecked.length} official portals (${res.audit.passedAllSixGates} passed all 6 strict $3,000+ & visa-sponsorship verification gates).`
+        `Scanned ${res.audit.totalCandidatesScanned.toLocaleString()} live openings across ${res.audit.sourcesChecked.length} official portals (${res.audit.passedAllSixGates} verified with confirmed employer visa sponsorship — no minimum salary restriction).`
       );
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to scan live official banking portals.');
@@ -194,7 +222,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
   const handleSaveProfile = async () => {
     const nextProfile: BranchManagerProfileInput = {
       ...profile,
-      minimumMonthlyGrossUsd: Math.max(3000, Number(profile.minimumMonthlyGrossUsd || 3000)),
+      minimumMonthlyGrossUsd: 0,
       coreSkills: skillsText
         .split(',')
         .map((s) => s.trim())
@@ -222,7 +250,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
       syncBuffers(persisted);
       setIsProfileEditorOpen(false);
       setStatusMessage(
-        'Your private professional profile was saved and all verified $3,000+ openings were re-scored.'
+        'Your private professional profile was saved and all verified visa-sponsored Branch Banking openings were re-scored.'
       );
 
       setIsLoading(true);
@@ -230,7 +258,6 @@ export const BranchManagerJobsView: React.FC<Props> = ({
         profile: persisted,
         regionFilter: 'ALL',
         positionFilter: 'ALL',
-        minSalaryUsd: Math.max(3000, persisted.minimumMonthlyGrossUsd || 3000),
       });
       setResponse(res);
     } catch (err: any) {
@@ -253,12 +280,11 @@ export const BranchManagerJobsView: React.FC<Props> = ({
     syncBuffers(clean);
   };
 
-  // Client-side instant filtering over strictly 6-gate verified results
+  // Client-side instant filtering over strictly verified visa-sponsored results (no salary cutoff)
   const visibleJobs = useMemo(() => {
     const all = response?.jobs || [];
     return all.filter((job) => {
       if (regionFilter !== 'ALL' && job.regionScope !== regionFilter) return false;
-      if (job.grossMonthlySalaryUsd < minSalaryUsd) return false;
       if (positionFilter !== 'ALL') {
         const pf = positionFilter.toLowerCase();
         if (
@@ -275,7 +301,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
       }
       return true;
     });
-  }, [response, regionFilter, minSalaryUsd, positionFilter, searchQuery]);
+  }, [response, regionFilter, positionFilter, searchQuery]);
 
   const countsByRegion = useMemo(() => {
     const counts: Record<string, number> = { ALL: (response?.jobs || []).length };
@@ -299,7 +325,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Jobs for Branch Manager</span>
+              <span>Back to Jobs for Branch Banking</span>
             </button>
             <a
               href={selectedJob.officialApplicationUrl}
@@ -307,24 +333,55 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#16A34A] hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
             >
-              <span>Apply on Official Employer Portal</span>
+              <span>APPLY NOW</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
         </div>
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+          {/* Live On-Open Verification Banner (Sections 4 & 5) */}
+          <div
+            className={`rounded-xl border px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2 ${
+              liveVerifyResult?.isClosedPage || liveVerifyResult?.deadlineStatusLabel === 'DEADLINE PASSED'
+                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {isVerifyingLive ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-700 shrink-0" />
+              ) : (
+                <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+              )}
+              <span className="font-semibold">
+                {isVerifyingLive
+                  ? 'Rechecking official deadline and direct application link live...'
+                  : liveVerifyResult
+                  ? liveVerifyResult.note
+                  : `Verification Status: ${selectedJob.applicationLinkStatus || 'VERIFIED'} · ${selectedJob.deadlineStatusLabel || 'OPEN — ACCEPTING APPLICATIONS'}`}
+              </span>
+            </div>
+            <span className="text-[11px] opacity-80">
+              Last Verified:{' '}
+              {new Date(liveVerifyResult?.lastVerifiedAt || selectedJob.lastVerifiedAt || Date.now()).toLocaleString()}
+            </span>
+          </div>
+
           {/* Header Summary Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  <span className="font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                    Verified Visa-Sponsored · &gt;$3,000/mo
+                  <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                    {selectedJob.visaTransparencyStatus || 'VISA SPONSORSHIP CONFIRMED'}
                   </span>
-                  <span className="text-slate-500 font-medium">{selectedJob.regionScope}</span>
+                  <span className="font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                    {liveVerifyResult?.deadlineStatusLabel || selectedJob.deadlineStatusLabel || 'OPEN — ACCEPTING APPLICATIONS'}
+                  </span>
+                  <span className="text-slate-500 font-medium">Job — Branch Banking</span>
                   <span className="text-slate-400">·</span>
-                  <span className="text-slate-600">{selectedJob.matchedTargetPosition}</span>
+                  <span className="text-slate-600">{selectedJob.regionScope}</span>
                 </div>
                 <h1 className="text-2xl font-bold text-[#0B132B]">{selectedJob.jobTitle}</h1>
                 <div className="text-sm font-semibold text-slate-700 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -336,15 +393,25 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
                     {selectedJob.city}, {selectedJob.country}
                   </span>
+                  {selectedJob.workMode && selectedJob.workMode !== 'not_specified' && (
+                    <>
+                      <span className="text-slate-300">|</span>
+                      <span className="uppercase text-[11px] font-bold text-sky-800">
+                        {selectedJob.workMode}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 min-w-[230px] text-left md:text-right">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800">
-                  Guaranteed Gross Monthly (USD)
+                  Official Disclosed Salary
                 </div>
-                <div className="text-2xl font-bold text-emerald-900 tabular-nums">
-                  ${selectedJob.grossMonthlySalaryUsd.toLocaleString()} / mo
+                <div className="text-xl font-bold text-emerald-900 tabular-nums">
+                  {selectedJob.salaryDisclosed !== false && selectedJob.grossMonthlySalaryUsd > 0
+                    ? `$${selectedJob.grossMonthlySalaryUsd.toLocaleString()} / mo USD`
+                    : 'Salary not disclosed'}
                 </div>
                 <div className="text-xs text-emerald-800 mt-0.5">
                   Profile Match: <strong className="tabular-nums">{selectedJob.profileMatchPercentage}%</strong>
@@ -352,16 +419,32 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Salary Conversion Transparency */}
+            {/* Salary & Deadline Transparency */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <div className="font-bold text-slate-800">Original Disclosed Base Salary</div>
-                <div className="text-slate-700 font-medium">{selectedJob.originalSalaryDisplay}</div>
+                <div className="font-bold text-slate-800">Salary / Compensation Details</div>
+                <div className="text-slate-700 font-medium">
+                  {selectedJob.salaryDisclosed !== false && selectedJob.grossMonthlySalaryUsd > 0
+                    ? `${selectedJob.originalSalaryDisplay} (${selectedJob.usdEquivalentDisplay})`
+                    : 'Salary not disclosed on official employer listing'}
+                </div>
+                {selectedJob.salaryDisclosed !== false && selectedJob.grossMonthlySalaryUsd > 0 && (
+                  <div className="text-[11px] text-slate-500">{selectedJob.exchangeRateUsed}</div>
+                )}
               </div>
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                <div className="font-bold text-slate-800">USD Equivalent &amp; Exchange Rate</div>
-                <div className="text-slate-700 font-medium">{selectedJob.usdEquivalentDisplay}</div>
-                <div className="text-[11px] text-slate-500">{selectedJob.exchangeRateUsed}</div>
+                <div className="font-bold text-slate-800">Verified Application Deadline</div>
+                <div className="text-slate-700 font-medium">
+                  {selectedJob.applicationDeadline}
+                  {selectedJob.deadlineTime ? ` · ${selectedJob.deadlineTime}` : ''}
+                  {selectedJob.deadlineTimezone ? ` (${selectedJob.deadlineTimezone})` : ''}
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  {(liveVerifyResult?.fullDaysRemaining ?? selectedJob.daysRemaining) !== null &&
+                  (liveVerifyResult?.fullDaysRemaining ?? selectedJob.daysRemaining) !== undefined
+                    ? `${liveVerifyResult?.fullDaysRemaining ?? selectedJob.daysRemaining} full day(s) remaining`
+                    : 'Exact closing date not published by employer'}
+                </div>
               </div>
             </div>
           </div>
@@ -459,7 +542,8 @@ export const BranchManagerJobsView: React.FC<Props> = ({
 
             <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-slate-500">
-                Verified Official Source: <strong className="text-slate-800">{selectedJob.sourcePortal}</strong>
+                Official Source Website: <strong className="text-slate-800">{selectedJob.sourcePortal}</strong> · Direct Link Status:{' '}
+                <strong className="text-emerald-700">{liveVerifyResult?.linkStatus || selectedJob.applicationLinkStatus || 'VERIFIED'}</strong>
               </div>
               <a
                 href={selectedJob.officialApplicationUrl}
@@ -467,7 +551,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#16A34A] hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
               >
-                <span>Open Official Employer Application Link</span>
+                <span>APPLY NOW (Official Employer Portal)</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
@@ -498,20 +582,22 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#0B132B]">
-                    Jobs for Branch Manager
+                    Jobs for Branch Banking
                   </h1>
                   <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                    Visa-Sponsored · &gt;$3,000/mo Gross Base
+                    VISA SPONSORSHIP CONFIRMED · No Minimum Salary Restriction
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl">
-                  Strictly verified senior banking &amp; finance openings above USD 3,000/month
-                  gross base salary with explicit employer visa sponsorship across{' '}
+                  Strictly verified international branch banking &amp; banking management openings
+                  matched to your 9-year banking and 3-year managerial experience with confirmed
+                  employer visa sponsorship across{' '}
                   <strong className="text-slate-800">
                     Africa (International Banks &amp; Companies Only), Middle East, Europe &amp;
                     Scandinavian
-                  </strong>{' '}
-                  only.
+                  </strong>
+                  . All salaries are displayed transparently (&ldquo;Salary not disclosed&rdquo; when
+                  unpublished).
                 </p>
               </div>
             </div>
@@ -600,8 +686,9 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                 Manager)
               </div>
               <div className="text-xs text-slate-500">
-                Strict Floor: Gross Base Salary &gt; $3,000/month ($36,000/yr USD) · Explicit Visa
-                Sponsorship Required · Ethiopian Offshore Applicants Eligible
+                Verification Rules: Confirmed Employer Visa Sponsorship Required · No Minimum
+                Salary Restriction · Ethiopian Offshore Applicants Eligible · Direct Official Links
+                Only
               </div>
             </div>
 
@@ -612,7 +699,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
             >
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>
-                {showAuditBreakdown ? 'Hide 6-Gate Audit' : 'View 6-Gate Verification Audit'}
+                {showAuditBreakdown ? 'Hide Verification Audit' : 'View Verification Audit'}
               </span>
             </button>
           </div>
@@ -628,16 +715,10 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               </div>
               <div>
                 <div className="text-[11px] text-emerald-700 font-medium">
-                  Passed All 6 Strict Gates
+                  Verified Visa-Sponsored Matches
                 </div>
                 <div className="text-xl font-bold text-emerald-700 tabular-nums">
                   {response.audit.passedAllSixGates}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] text-slate-500">Excluded (Undisclosed Salary)</div>
-                <div className="text-xl font-bold text-slate-700 tabular-nums">
-                  {response.audit.excludedUndisclosedSalary}
                 </div>
               </div>
               <div>
@@ -648,28 +729,32 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                   {response.audit.excludedUnconfirmedVisaSponsorship}
                 </div>
               </div>
+              <div>
+                <div className="text-[11px] text-slate-500">Excluded (Expired / Invalid Link)</div>
+                <div className="text-xl font-bold text-slate-700 tabular-nums">
+                  {response.audit.excludedExpiredOrDuplicate}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Expandable Full 6-Gate Audit */}
+          {/* Expandable Verification Audit */}
           {showAuditBreakdown && response && (
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
               <div className="font-bold text-slate-900">
-                Zero-Fabrication 6-Gate Exclusion Breakdown
+                Zero-Fabrication Verification Breakdown (Zero Minimum Salary Filter)
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700 tabular-nums">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-slate-700 tabular-nums">
                 <div>Outside 4 Allowed Regions: {response.audit.excludedOutsideAllowedRegions}</div>
                 <div>
                   Local African (Non-Intl): {response.audit.excludedLocalAfricanNonInternational}
                 </div>
-                <div>Unrelated Roles Blocked: {response.audit.excludedNonMatchingRole}</div>
-                <div>Below $3,000/mo Base: {response.audit.excludedBelow3000Usd}</div>
-                <div>Undisclosed Salary Blocked: {response.audit.excludedUndisclosedSalary}</div>
+                <div>Unrelated / Junior Roles Blocked: {response.audit.excludedNonMatchingRole}</div>
                 <div>
                   Unconfirmed Sponsorship: {response.audit.excludedUnconfirmedVisaSponsorship}
                 </div>
                 <div>Offshore/Ethiopian Ineligible: {response.audit.excludedEthiopianIneligible}</div>
-                <div>Expired / Duplicates: {response.audit.excludedExpiredOrDuplicate}</div>
+                <div>Expired / Duplicates / Bad Links: {response.audit.excludedExpiredOrDuplicate}</div>
               </div>
               <div className="text-[11px] text-slate-500 pt-1">
                 FX Source: {response.audit.fxSourceNote} · Official Portals Checked (
@@ -795,21 +880,11 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Minimum Gross Monthly USD (&ge;$3,000)
+                  Salary Display Preference
                 </label>
-                <input
-                  type="number"
-                  min={3000}
-                  max={50000}
-                  value={profile.minimumMonthlyGrossUsd}
-                  onChange={(e) =>
-                    setProfile({
-                      ...profile,
-                      minimumMonthlyGrossUsd: Math.max(3000, Number(e.target.value) || 3000),
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 outline-none focus:border-emerald-600"
-                />
+                <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-600">
+                  All salaries shown (no minimum threshold)
+                </div>
               </div>
             </div>
 
@@ -912,9 +987,9 @@ export const BranchManagerJobsView: React.FC<Props> = ({
             })}
           </div>
 
-          {/* Search & Filters */}
+          {/* Search & Filters (No minimum salary restriction) */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div className="md:col-span-5 relative">
+            <div className="md:col-span-7 relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -925,7 +1000,7 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               />
             </div>
 
-            <div className="md:col-span-4">
+            <div className="md:col-span-5">
               <select
                 value={positionFilter}
                 onChange={(e) => setPositionFilter(e.target.value)}
@@ -939,19 +1014,6 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                 ))}
               </select>
             </div>
-
-            <div className="md:col-span-3">
-              <select
-                value={minSalaryUsd}
-                onChange={(e) => setMinSalaryUsd(Number(e.target.value))}
-                className="w-full px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 bg-white outline-none"
-              >
-                <option value={3000}>Gross Base &gt; $3,000 / mo ($36k/yr)</option>
-                <option value={5000}>Gross Base &ge; $5,000 / mo ($60k/yr)</option>
-                <option value={7500}>Gross Base &ge; $7,500 / mo ($90k/yr)</option>
-                <option value={10000}>Gross Base &ge; $10,000 / mo ($120k/yr)</option>
-              </select>
-            </div>
           </div>
         </div>
 
@@ -960,27 +1022,26 @@ export const BranchManagerJobsView: React.FC<Props> = ({
           <div className="bg-white rounded-2xl border border-slate-200 py-16 text-center space-y-3">
             <Loader2 className="w-7 h-7 animate-spin text-emerald-600 mx-auto" />
             <p className="text-sm font-semibold text-slate-700">
-              Scanning live official portals &amp; verifying $3,000+ gross salary and visa
-              sponsorship gates...
+              Scanning live official portals &amp; verifying confirmed employer visa sponsorship,
+              exact deadlines, and direct application links...
             </p>
           </div>
         ) : visibleJobs.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
             <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
             <h2 className="text-base font-bold text-[#0B132B]">
-              No Live Openings Currently Pass All 6 Strict Verification Gates Under This Filter
+              No Live Openings Currently Match Confirmed Visa Sponsorship Under This Filter
             </h2>
             <p className="text-xs text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              Per strict zero-fabrication rules, postings with undisclosed base salaries, salaries
-              at or below USD 3,000/month, unconfirmed visa sponsorship, local-only hiring, or
-              locations outside Africa (International Banks &amp; Companies), Middle East, Europe,
-              and Scandinavia are strictly excluded.{' '}
+              Per strict verification rules, international Branch Banking roles must explicitly
+              confirm employer visa sponsorship, remain open with a verified direct application
+              link, and match your banking management profile (no minimum salary threshold is
+              applied).{' '}
               {response && (
                 <span>
                   ({response.audit.totalCandidatesScanned.toLocaleString()} live postings were
-                  audited; {response.audit.excludedUndisclosedSalary} had undisclosed salaries and{' '}
-                  {response.audit.excludedUnconfirmedVisaSponsorship} lacked explicit sponsorship
-                  text.)
+                  audited; {response.audit.excludedUnconfirmedVisaSponsorship} lacked confirmed
+                  employer visa sponsorship.)
                 </span>
               )}
             </p>
@@ -1009,9 +1070,9 @@ export const BranchManagerJobsView: React.FC<Props> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 px-1">
               <span>
                 Showing <strong className="text-slate-900">{visibleJobs.length}</strong> verified
-                visa-sponsored openings above{' '}
-                <strong className="text-slate-900">${minSalaryUsd.toLocaleString()}/month</strong>{' '}
-                ranked by sponsorship strength, salary, Ethiopian eligibility &amp; profile match.
+                international Branch Banking openings with{' '}
+                <strong className="text-emerald-800">VISA SPONSORSHIP CONFIRMED</strong> (all
+                salaries included — no minimum salary restriction).
               </span>
               {response?.lastDiscoveryAt && (
                 <span className="text-[11px] text-slate-400">
@@ -1020,146 +1081,166 @@ export const BranchManagerJobsView: React.FC<Props> = ({
               )}
             </div>
 
-            {visibleJobs.map((job) => (
-              <div
-                key={job.id}
-                className="bg-white rounded-2xl border border-slate-200 border-l-4 border-l-emerald-600 p-5 hover:border-slate-300 transition-colors space-y-3.5"
-              >
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap text-[11px]">
-                      <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                        {job.verificationStatus || 'Verified Active & Visa Confirmed'}
-                      </span>
-                      <span className="font-semibold text-slate-700">{job.regionScope}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="text-slate-600">{job.matchedTargetPosition}</span>
-                      {job.seniorityLevel && (
-                        <>
-                          <span className="text-slate-300">·</span>
-                          <span className="text-slate-600 capitalize">
-                            {job.seniorityLevel.replace(/_/g, ' ')}
-                          </span>
-                        </>
+            {visibleJobs.map((job) => {
+              const hasDisclosedSalary =
+                job.salaryDisclosed !== false && job.grossMonthlySalaryUsd > 0;
+              return (
+                <div
+                  key={job.id}
+                  className="bg-white rounded-2xl border border-slate-200 border-l-4 border-l-emerald-600 p-5 hover:border-slate-300 transition-colors space-y-3.5"
+                >
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                        <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                          {job.visaTransparencyStatus || 'VISA SPONSORSHIP CONFIRMED'}
+                        </span>
+                        <span className="font-bold text-slate-800 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                          {job.deadlineStatusLabel || 'OPEN — ACCEPTING APPLICATIONS'}
+                        </span>
+                        <span className="font-semibold text-slate-700">Job — Branch Banking</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-slate-600">{job.regionScope}</span>
+                        {job.workMode && job.workMode !== 'not_specified' && (
+                          <>
+                            <span className="text-slate-300">·</span>
+                            <span className="uppercase font-bold text-sky-800">{job.workMode}</span>
+                          </>
+                        )}
+                      </div>
+                      <h3 className="text-lg font-bold text-[#0B132B] leading-snug">
+                        {job.jobTitle}
+                      </h3>
+                      <div className="text-xs font-semibold text-slate-700 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span>{job.employerName}</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="font-normal text-slate-600">
+                          {job.city}, {job.country}
+                        </span>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-emerald-700 font-bold tabular-nums">
+                          Experience Match: {job.profileMatchPercentage}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="md:text-right shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
+                      <div className="text-base font-bold text-emerald-800 tabular-nums">
+                        {hasDisclosedSalary
+                          ? `$${job.grossMonthlySalaryUsd.toLocaleString()} / mo USD`
+                          : 'Salary not disclosed'}
+                      </div>
+                      <div className="text-[11px] text-slate-700 font-medium">
+                        {hasDisclosedSalary
+                          ? `${job.originalSalaryDisplay} (${job.salaryTaxBasis || 'Gross'})`
+                          : 'Official salary not published by employer'}
+                      </div>
+                      {hasDisclosedSalary && (
+                        <div className="text-[10px] text-slate-400">{job.exchangeRateUsed}</div>
                       )}
                     </div>
-                    <h3 className="text-lg font-bold text-[#0B132B] leading-snug">
-                      {job.jobTitle}
-                    </h3>
-                    <div className="text-xs font-semibold text-slate-700 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span>{job.employerName}</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="font-normal text-slate-600">
-                        {job.city}, {job.country}
+                  </div>
+
+                  {/* Section 13 Structured Info Grid: Experience, Deadline & Verification */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Experience Match (9 yrs Banking / 3 yrs Mgmt)
+                      </div>
+                      <div className="text-slate-800 font-semibold mt-0.5">
+                        {job.requiredBankingExperience || 'Matches banking profile'} ·{' '}
+                        {job.requiredManagerialExperience || 'Managerial level'}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Application Deadline &amp; Days Remaining
+                      </div>
+                      <div className="text-slate-800 font-semibold mt-0.5">
+                        {job.applicationDeadline}
+                        {job.deadlineTime ? ` (${job.deadlineTime}${job.deadlineTimezone ? ` ${job.deadlineTimezone}` : ''})` : ''}
+                        {job.daysRemaining !== null && job.daysRemaining !== undefined
+                          ? ` · ${job.daysRemaining} day(s) left`
+                          : ''}
+                      </div>
+                    </div>
+                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                        Visa Sponsorship &amp; Verification Status
+                      </div>
+                      <div className="text-emerald-950 font-semibold mt-0.5">
+                        {job.visaTransparencyStatus || 'VISA SPONSORSHIP CONFIRMED'} · Link{' '}
+                        {job.applicationLinkStatus || 'VERIFIED'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actual Responsibilities & Visa Evidence */}
+                  <div className="text-xs text-slate-700 bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                    <div>
+                      <strong className="text-slate-900">Actual Responsibilities:</strong>{' '}
+                      <span>
+                        {job.jobResponsibilities && job.jobResponsibilities.length > 0
+                          ? job.jobResponsibilities.slice(0, 3).join('; ')
+                          : job.requiredExperience}
                       </span>
-                      <span className="text-slate-300">·</span>
-                      <span className="text-emerald-700 font-bold tabular-nums">
-                        Relevance Score: {job.profileMatchPercentage}%
+                    </div>
+                    <div className="text-emerald-900">
+                      <strong>Visa Sponsorship Evidence:</strong> &ldquo;{job.visaSponsorshipEvidence}&rdquo;
+                    </div>
+                  </div>
+
+                  {/* Why It Matches Reference Profile + Gaps Snapshot */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="font-bold text-slate-800">Why It Matches Your Profile:</span>{' '}
+                      <span className="text-slate-600">{job.whyYouQualify.slice(0, 2).join(' ')}</span>
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800">Gaps / To Confirm:</span>{' '}
+                      <span className="text-slate-600">
+                        {job.gapsOrUnmetRequirements.length > 0
+                          ? job.gapsOrUnmetRequirements[0]
+                          : 'No mandatory credential gaps flagged.'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="md:text-right shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
-                    <div className="text-lg font-bold text-emerald-800 tabular-nums">
-                      ${job.grossMonthlySalaryUsd.toLocaleString()} / mo USD
+                  {/* Section 13 Metadata Footer & Direct APPLY NOW Button */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                      <span>Ethiopian Applicants: Eligible</span>
+                      <span>Source: {job.sourcePortal}</span>
+                      <span>Published: {job.datePosted}</span>
+                      <span>
+                        Last Verified:{' '}
+                        {new Date(job.lastVerifiedAt || response?.generatedAt || Date.now()).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="text-[11px] text-slate-700 font-medium">
-                      {job.originalSalaryDisplay} · {job.salaryPeriod || 'Annual / Monthly Normalized'} (
-                      {job.salaryTaxBasis || 'Gross'})
-                    </div>
-                    <div className="text-[10px] text-slate-400">{job.exchangeRateUsed}</div>
-                  </div>
-                </div>
 
-                {/* Required Banking & Managerial Experience + Visa Status */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Required Banking Experience
-                    </div>
-                    <div className="text-slate-800 font-semibold mt-0.5">
-                      {job.requiredBankingExperience || 'Matches 9-year banking profile'}
-                    </div>
-                  </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                      Required Managerial Experience
-                    </div>
-                    <div className="text-slate-800 font-semibold mt-0.5">
-                      {job.requiredManagerialExperience || 'Matches 3-year management profile'}
-                    </div>
-                  </div>
-                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
-                      Visa Sponsorship / Work Auth
-                    </div>
-                    <div className="text-emerald-950 font-semibold mt-0.5">
-                      Confirmed Employer Work Visa Sponsorship
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedJob(job)}
+                        className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold transition-colors cursor-pointer"
+                      >
+                        <span>View Full Details</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <a
+                        href={job.officialApplicationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-4 py-1.5 rounded-lg bg-[#16A34A] hover:bg-emerald-700 text-white font-bold transition-colors"
+                      >
+                        <span>APPLY NOW</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     </div>
                   </div>
                 </div>
-
-                {/* Actual Responsibilities & Visa Evidence */}
-                <div className="text-xs text-slate-700 bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-1.5">
-                  <div>
-                    <strong className="text-slate-900">Actual Responsibilities:</strong>{' '}
-                    <span>
-                      {job.jobResponsibilities && job.jobResponsibilities.length > 0
-                        ? job.jobResponsibilities.slice(0, 3).join('; ')
-                        : job.requiredExperience}
-                    </span>
-                  </div>
-                  <div className="text-emerald-900">
-                    <strong>Visa Sponsorship Evidence:</strong> &ldquo;{job.visaSponsorshipEvidence}&rdquo;
-                  </div>
-                </div>
-
-                {/* Why It Matches Reference Profile + Gaps Snapshot */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="font-bold text-slate-800">Why It Matches Reference Profile:</span>{' '}
-                    <span className="text-slate-600">{job.whyYouQualify.slice(0, 2).join(' ')}</span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-800">Gaps / To Confirm:</span>{' '}
-                    <span className="text-slate-600">
-                      {job.gapsOrUnmetRequirements.length > 0
-                        ? job.gapsOrUnmetRequirements[0]
-                        : 'No mandatory credential gaps flagged.'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Metadata & Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-                    <span>Ethiopian Applicants: Confirmed Eligible</span>
-                    <span>Posted: {job.datePosted}</span>
-                    <span>Deadline: {job.applicationDeadline}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedJob(job)}
-                      className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold transition-colors cursor-pointer"
-                    >
-                      <span>View Full 19-Point Details</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                    <a
-                      href={job.officialApplicationUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-[#16A34A] hover:bg-emerald-700 text-white font-semibold transition-colors"
-                    >
-                      <span>Apply Official</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

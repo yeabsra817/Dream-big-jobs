@@ -4556,7 +4556,7 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
             : ['English'],
           englishOnly: rawProfile.englishOnly !== undefined ? Boolean(rawProfile.englishOnly) : true,
           minimumMonthlySalaryUsd: Math.max(0, Math.min(50000, Number(rawProfile.minimumMonthlySalaryUsd) || 0)),
-          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || 'USD 3,000+ / month').slice(0, 80),
+          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || 'All disclosed & undisclosed salaries (no minimum threshold)').slice(0, 80),
           willingRelocateAloneFirst: Boolean(rawProfile.willingRelocateAloneFirst ?? true),
           familyReunificationImportant: Boolean(rawProfile.familyReunificationImportant ?? true),
           needsEmployerSponsorship: Boolean(rawProfile.needsEmployerSponsorship ?? true),

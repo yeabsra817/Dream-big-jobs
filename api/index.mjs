@@ -7679,8 +7679,8 @@ var PRIMARY_BENCHMARK_PROFILE = {
   currentPosition: "Branch Manager",
   languages: ["English"],
   englishOnly: true,
-  minimumMonthlySalaryUsd: 3e3,
-  preferredSalaryRangeUsd: "USD 3,500\u20136,000+ / month",
+  minimumMonthlySalaryUsd: 0,
+  preferredSalaryRangeUsd: "All disclosed & undisclosed salaries (user decides)",
   willingRelocateAloneFirst: true,
   familyReunificationImportant: true,
   needsEmployerSponsorship: true,
@@ -7851,7 +7851,7 @@ var FX_TO_USD = {
   ZAR: 0.055,
   MUR: 0.022
 };
-function parseAndNormalizeSalaryUsd(opp, targetMinMonthlyUsd = 3e3) {
+function parseAndNormalizeSalaryUsd(opp, targetMinMonthlyUsd = 0) {
   const combined = `${opp.funding?.stipendOrSalary || ""} ${opp.funding?.fundingSummary || ""} ${opp.summary || ""}`;
   const benefitsSummary = [];
   const housingAllowance = /\b(housing\s+allowance|accommodation\s+(?:provided|allowance|covered)|free\s+housing)\b/i.test(
@@ -7971,7 +7971,7 @@ function inferApplicantEducationRank(degreeText) {
 }
 function evaluateWeightedCareerMatch(opp, profile) {
   const visaChecklist = classifySevenTierVisaSponsorship(opp);
-  const salaryInfo = parseAndNormalizeSalaryUsd(opp, profile.minimumMonthlySalaryUsd || 3e3);
+  const salaryInfo = parseAndNormalizeSalaryUsd(opp, profile.minimumMonthlySalaryUsd || 0);
   const careerSpecialty = classifyCareerSpecialtyCategory(opp.title, opp.summary, opp.organization);
   const regionGroup = detectInternationalRegion(opp.country, opp.location);
   const matchReasons = [];
@@ -8101,27 +8101,22 @@ function evaluateWeightedCareerMatch(opp, profile) {
     visaEligibilityScore = profile.needsEmployerSponsorship ? 6 : 12;
     gapOrMismatchReasons.push("Sponsorship not confirmed \u2014 verify employer work permit support before applying.");
   }
-  let salaryScore = 6;
-  const minTarget = profile.minimumMonthlySalaryUsd || 3e3;
+  let salaryScore = 8;
+  const minTarget = profile.minimumMonthlySalaryUsd && profile.minimumMonthlySalaryUsd > 0 ? profile.minimumMonthlySalaryUsd : 0;
   if (salaryInfo.hasAdvertisedSalary && salaryInfo.estimatedMonthlyUsd !== null) {
-    if (salaryInfo.estimatedMonthlyUsd >= minTarget) {
+    if (minTarget === 0 || salaryInfo.estimatedMonthlyUsd >= minTarget) {
       salaryScore = 10;
       matchReasons.push(
-        `Estimated salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) meets your USD ${minTarget.toLocaleString()}/mo target.`
-      );
-    } else if (salaryInfo.isExceptionalPathwayBelowTarget) {
-      salaryScore = 6;
-      gapOrMismatchReasons.push(
-        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below USD ${minTarget.toLocaleString()}/mo target, flagged under exceptional relocation/pathway opportunities.`
+        `Official disclosed salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) clearly displayed for your review.`
       );
     } else {
-      salaryScore = 2;
-      gapOrMismatchReasons.push(
-        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below your USD ${minTarget.toLocaleString()}/mo minimum expectation.`
+      salaryScore = 7;
+      matchReasons.push(
+        `Official disclosed salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) displayed transparently \u2014 no automatic salary rejection.`
       );
     }
   } else {
-    salaryScore = 6;
+    salaryScore = 8;
   }
   let languageScore = 8;
   if (profile.englishOnly && visaChecklist.localLanguageMandatory === "yes") {
@@ -8270,8 +8265,8 @@ function extractGroundedProfileFromCvText(cvText, overrides = {}) {
     currentPosition: currentPosition || "Not specified in CV",
     languages,
     englishOnly: overrides.englishOnly ?? !nonEnglishEuropean,
-    minimumMonthlySalaryUsd: overrides.minimumMonthlySalaryUsd ?? 3e3,
-    preferredSalaryRangeUsd: overrides.preferredSalaryRangeUsd || "USD 3,000+ / month",
+    minimumMonthlySalaryUsd: overrides.minimumMonthlySalaryUsd ?? 0,
+    preferredSalaryRangeUsd: overrides.preferredSalaryRangeUsd || "All salaries (no minimum filter)",
     willingRelocateAloneFirst: overrides.willingRelocateAloneFirst ?? true,
     familyReunificationImportant: overrides.familyReunificationImportant ?? true,
     needsEmployerSponsorship: overrides.needsEmployerSponsorship ?? true,
@@ -11990,7 +11985,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
           languages: Array.isArray(rawProfile.languages) && rawProfile.languages.length > 0 ? rawProfile.languages.map((l) => String(l).slice(0, 40)).slice(0, 10) : ["English"],
           englishOnly: rawProfile.englishOnly !== void 0 ? Boolean(rawProfile.englishOnly) : true,
           minimumMonthlySalaryUsd: Math.max(0, Math.min(5e4, Number(rawProfile.minimumMonthlySalaryUsd) || 0)),
-          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || "USD 3,000+ / month").slice(0, 80),
+          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || "All disclosed & undisclosed salaries (no minimum threshold)").slice(0, 80),
           willingRelocateAloneFirst: Boolean(rawProfile.willingRelocateAloneFirst ?? true),
           familyReunificationImportant: Boolean(rawProfile.familyReunificationImportant ?? true),
           needsEmployerSponsorship: Boolean(rawProfile.needsEmployerSponsorship ?? true),
@@ -16586,7 +16581,7 @@ function registerGlobalMigrationHubRoutes(deps) {
 
 // serverBranchManagerJobs.ts
 import * as path5 from "path";
-import * as crypto4 from "crypto";
+import * as crypto5 from "crypto";
 
 // src/types/branchManagerJobs.ts
 var ALLOWED_BRANCH_MANAGER_REGIONS = [
@@ -16654,8 +16649,1607 @@ var DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE = {
   languages: ["English"],
   hasMastersDegree: false,
   hasEnglishTest: false,
-  minimumMonthlyGrossUsd: 3e3
+  minimumMonthlyGrossUsd: 0
 };
+
+// src/utils/strictOpportunityMatcher.ts
+import * as crypto4 from "crypto";
+
+// src/types/opportunityIntelligence.ts
+var SENIORITY_RANK = {
+  entry_level: 1,
+  junior_professional: 2,
+  experienced_professional: 3,
+  senior_professional: 4,
+  supervisor: 5,
+  assistant_manager: 6,
+  manager: 7,
+  senior_manager: 8,
+  director: 9,
+  executive: 10
+};
+var SENIORITY_LABELS = {
+  entry_level: "Entry Level",
+  junior_professional: "Junior Professional",
+  experienced_professional: "Experienced Professional",
+  senior_professional: "Senior Professional",
+  supervisor: "Supervisor",
+  assistant_manager: "Assistant Manager",
+  manager: "Manager",
+  senior_manager: "Senior Manager",
+  director: "Director",
+  executive: "Executive"
+};
+
+// src/utils/strictOpportunityMatcher.ts
+var BRANCH_BANKING_REFERENCE_PROFILE = {
+  userId: "branch_banking_reference",
+  professionalSector: "branch_banking",
+  currentOccupation: "Branch Manager",
+  educationLevel: "bachelors",
+  fieldOfStudy: "Accounting and Finance",
+  yearsOfExperience: 9,
+  bankingExperienceYears: 9,
+  managerialExperienceYears: 3,
+  skills: [
+    "Branch operations",
+    "Banking management",
+    "Branch administration",
+    "Customer relationship management",
+    "Credit operations",
+    "Deposit mobilization",
+    "Staff supervision",
+    "Banking compliance and internal control"
+  ],
+  certifications: [],
+  minimumSalaryUsdMonthly: null,
+  careerLevel: "manager",
+  preferredLocations: ["Europe", "Scandinavia", "Middle East", "USA", "Ethiopia"],
+  preferredEnvironment: "both",
+  nationality: "Ethiopian",
+  countriesWithLegalWorkRight: ["Ethiopia"],
+  allowJuniorRoles: false
+};
+var MINIMUM_DEADLINE_HOURS = 72;
+var DEFAULT_FX_RATES_USD_BASE = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.785,
+  CHF: 0.88,
+  SEK: 10.65,
+  NOK: 10.9,
+  DKK: 6.88,
+  AED: 3.6725,
+  SAR: 3.75,
+  QAR: 3.64,
+  KWD: 0.307,
+  OMR: 0.385,
+  BHD: 0.376,
+  CAD: 1.38,
+  AUD: 1.53,
+  ETB: 126
+};
+var PRIORITY_BRANCH_BANKING_TITLES = [
+  { label: "Senior Branch Manager", rx: /\bsenior\s+(?:retail\s+|commercial\s+|bank\s+)?branch\s+manager\b/i },
+  { label: "Area Branch Manager", rx: /\barea\s+(?:bank\s+|retail\s+)?branch\s+manager\b|\barea\s+banking\s+manager\b/i },
+  { label: "Regional Branch Manager", rx: /\bregional\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Branch Operations Manager", rx: /\bbranch\s+operations\s+manager\b/i },
+  { label: "Banking Operations Manager", rx: /\b(?:banking|bank)\s+operations\s+manager\b/i },
+  {
+    label: "Banking Operations and Administration Manager",
+    rx: /\b(?:banking|branch)\s+operations\s+(?:and|&)\s+admin(?:istration)?\s+manager\b/i
+  },
+  { label: "Branch Manager", rx: /\b(?:retail\s+|commercial\s+|bank\s+|banking\s+)?branch\s+manager\b/i },
+  { label: "Deputy Branch Manager", rx: /\bdeputy\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Assistant Branch Manager", rx: /\bassistant\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Banking Service Manager", rx: /\b(?:banking|branch)\s+service(?:s)?\s+manager\b/i },
+  { label: "Retail Banking Manager", rx: /\bretail\s+banking\s+manager\b/i },
+  { label: "Branch Network Manager", rx: /\bbranch\s+network\s+manager\b/i },
+  {
+    label: "Banking Relationship Manager (Managerial)",
+    rx: /\b(?:senior\s+|commercial\s+|corporate\s+|retail\s+|sme\s+|banking\s+|bank\s+)?relationship\s+manager\b/i
+  },
+  {
+    label: "Banking Business Development Manager",
+    rx: /\b(?:banking|bank|retail\s+banking|commercial\s+banking|branch)\s+business\s+development\s+manager\b/i
+  },
+  {
+    label: "Banking Management Equivalent",
+    rx: /\b(?:sme\s+banking|commercial\s+banking|credit\s+operations|microfinance\s+operations|customer\s+operations|deposit\s+mobilization|financial\s+operations)\s+manager\b/i
+  }
+];
+var EXECUTIVE_OVER_SENIOR_TITLE_RX = /\b(vice\s+president|svp\b|evp\b|avp\b.*executive|\bvp\b|chief\s+[a-z\s]+officer|\bceo\b|\bcfo\b|\bcoo\b|\bcro\b|managing\s+director|executive\s+director|group\s+head\s+of|global\s+head\s+of|country\s+ceo|country\s+head)\b/i;
+var JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX = /\b(customer\s+service\s+representative|csr\b|bank\s+teller|\bteller\b|\bcashier\b|junior\s+banking\s+assistant|banking\s+assistant|entry[- ]level|graduate\s+trainee|management\s+trainee|\bintern\b|\binternship\b|front\s+desk|receptionist|call\s+center\s+agent|contact\s+center\s+agent|data\s+entry\s+clerk|office\s+assistant|clerical\s+officer|junior\s+clerk|administrative\s+assistant)\b/i;
+var NON_BANKING_MANAGER_DISQUALIFIER_RX = /\b(software|devops|frontend|backend|full[- ]stack|data\s+scien|machine\s+learning|cloud\s+architect|product\s+designer|ux\s+designer|marketing\s+manager|social\s+media\s+manager|brand\s+manager|hotel\s+manager|restaurant\s+manager|store\s+manager|warehouse\s+manager|supply\s+chain\s+manager|construction\s+manager|project\s+manager.*civil|nursing\s+manager|clinic\s+manager|school\s+principal|hr\s+manager|human\s+resources\s+manager|talent\s+acquisition\s+manager|office\s+manager|facilities\s+manager|wash\s+(?:manager|coordinator|officer|engineer)|water\s+and\s+sanitation)\b/i;
+var BRANCH_BANKING_RESPONSIBILITY_SIGNALS = [
+  { label: "Branch operations & daily controls", rx: /\b(branch\s+operations|daily\s+branch|vault\s+control|cash\s+management|teller\s+supervision|branch\s+compliance|core\s+banking)\b/i },
+  { label: "Banking management & P&L / KPI leadership", rx: /\b(branch\s+performance|branch\s+p&l|branch\s+target|branch\s+budget|deposit\s+mobilization|branch\s+growth|portfolio\s+management)\b/i },
+  { label: "Staff supervision & team management", rx: /\b(supervis(?:e|ing)\s+(?:branch\s+)?staff|lead(?:ing)?\s+a\s+team|manage\s+(?:direct\s+reports|branch\s+team|relationship\s+officers|tellers)|people\s+management|performance\s+appraisal)\b/i },
+  { label: "Credit, lending & risk oversight", rx: /\b(credit\s+appraisal|loan\s+portfolio|credit\s+risk|kyc|aml|internal\s+control|regulatory\s+compliance|audit\s+readiness)\b/i },
+  { label: "Managerial customer relationship & business development", rx: /\b(high[- ]value\s+client|commercial\s+clients|sme\s+clients|customer\s+relationship\s+management|client\s+acquisition|business\s+development|retail\s+banking)\b/i }
+];
+function extractOpportunityReferenceNumber(text) {
+  const m = String(text || "").match(
+    /\b(?:job\s*(?:id|ref|code|number|#)|req(?:uisition)?\s*(?:id|#|no\.?)|vacancy\s*(?:id|no\.?|ref)|reference\s*(?:no\.?|number|code|#)|ref\s*[:#])\s*[:#-]?\s*([A-Z0-9][A-Z0-9/_-]{2,28})\b/i
+  );
+  if (!m?.[1]) return null;
+  const cleaned = m[1].trim().toUpperCase();
+  if (/^(HTTP|HTTPS|WWW|THE|AND|FOR|YES|NOT)$/.test(cleaned)) return null;
+  return cleaned;
+}
+function normalizeCanonicalText(input) {
+  return String(input || "").toLowerCase().replace(/https?:\/\//g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\b(the|and|for|with|limited|ltd|plc|inc|corp|llc|gmbh|s\.c\.|bank\s+s\.c\.)\b/g, " ").replace(/\s+/g, " ").trim();
+}
+function normalizeOfficialUrl(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || "").trim());
+    u.hash = "";
+    const stripParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "source", "gh_src"];
+    for (const p of stripParams) u.searchParams.delete(p);
+    return u.toString().replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return String(rawUrl || "").trim().toLowerCase();
+  }
+}
+function buildCanonicalOpportunityIdentity(input) {
+  const normUrl = normalizeOfficialUrl(input.officialApplicationUrl);
+  const urlFingerprint = crypto4.createHash("sha256").update(normUrl).digest("hex").slice(0, 24);
+  const normEmployer = normalizeCanonicalText(input.employer);
+  const normTitle = normalizeCanonicalText(input.title);
+  const normCountry = normalizeCanonicalText(input.country || "global");
+  const crossSourceBasis = `${input.category}|${normEmployer}|${normTitle}|${normCountry}`;
+  const canonicalKey = crypto4.createHash("sha256").update(crossSourceBasis).digest("hex").slice(0, 24);
+  return {
+    canonicalKey,
+    urlFingerprint,
+    canonicalId: `opp_${canonicalKey}`
+  };
+}
+function detectEnvironment(country, city = "", description = "") {
+  const combined = `${country} ${city}`.toLowerCase();
+  if (/\b(ethiopia|addis\s+ababa|adama|hawassa|bahir\s+dar|mekelle|dire\s+dawa|gondar|jimma|dessie|bishoftu|shashemene|arbaminch|jigjiga|semera|assosa|gambela|harar)\b/i.test(
+    combined
+  )) {
+    return "ethiopia_domestic";
+  }
+  if (!country.trim() && /\b(addis\s+ababa|ethiopian\s+birr|\betb\b)\b/i.test(description)) {
+    return "ethiopia_domestic";
+  }
+  return "international";
+}
+function detectProfessionalSectors(title, employer, description) {
+  const titleAndOrg = `${title} ${employer}`.toLowerCase();
+  const full = `${title} ${employer} ${description}`.toLowerCase();
+  const scores = {
+    branch_banking: 0,
+    banking_finance: 0,
+    wash: 0,
+    engineering: 0,
+    healthcare: 0,
+    education: 0,
+    it_software: 0,
+    legal_compliance: 0,
+    general_management: 0,
+    other: 0
+  };
+  if (/\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply|sanitation|hygiene\s+promotion|water\s+engineering|wastewater|environmental\s+health|water\s+resources|humanitarian\s+wash|climate[- ]resilient\s+wash|borehole|fecal\s+sludge|latrine|hydrogeolog)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.wash += 9;
+  } else if (/\b(wash\s+program|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply\s+and\s+sanitation|wastewater\s+treatment|hygiene\s+promotion|humanitarian\s+wash|climate[- ]resilient\s+wash)\b/i.test(
+    full
+  )) {
+    scores.wash += 6;
+  }
+  if (PRIORITY_BRANCH_BANKING_TITLES.some((p) => p.rx.test(title))) {
+    scores.branch_banking += 10;
+    scores.banking_finance += 6;
+  }
+  if (/\b(branch\s+banking|branch\s+operations|retail\s+banking|branch\s+network|branch\s+management|deposit\s+mobilization|teller\s+supervision|branch\s+administration)\b/i.test(
+    full
+  )) {
+    scores.branch_banking += 5;
+  }
+  const isFakeBankPhrase = /\b(blood\s+bank|food\s+bank|river\s+bank|water\s+bank|data\s+bank|seed\s+bank)\b/i.test(full);
+  if (!isFakeBankPhrase && /\b(bank|banking|central\s+bank|commercial\s+bank|microfinance|financial\s+inclusion|digital\s+banking|fintech|financial\s+technology|accounting|finance|financial\s+management|risk\s+management|credit\s+risk|economics|financial\s+regulation|treasury|aml|kyc|audit|lending)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.banking_finance += 8;
+  } else if (!isFakeBankPhrase && /\b(commercial\s+banking|central\s+banking|microfinance|financial\s+inclusion|financial\s+regulation|banking\s+operations|risk\s+management|credit\s+portfolio)\b/i.test(
+    full
+  )) {
+    scores.banking_finance += 5;
+  }
+  if (/\b(civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|structural\s+engineer|chemical\s+engineer|industrial\s+engineer|construction\s+engineer|site\s+engineer)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.engineering += 8;
+  }
+  if (/\b(physician|medical\s+doctor|registered\s+nurse|pharmacist|midwife|clinical\s+officer|epidemiolog|hospital\s+director|public\s+health\s+specialist|surgeon|dentist)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.healthcare += 8;
+  }
+  if (/\b(professor|lecturer|teacher|school\s+principal|academic\s+dean|curriculum\s+specialist|education\s+specialist|pedagog)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.education += 8;
+  }
+  if (/\b(software\s+engineer|developer|devops|data\s+scientist|machine\s+learning|cybersecurity|cloud\s+engineer|systems?\s+administrator|frontend|backend|full[- ]stack)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.it_software += 8;
+  }
+  if (/\b(attorney|lawyer|legal\s+counsel|solicitor|barrister)\b/i.test(titleAndOrg)) {
+    scores.legal_compliance += 7;
+  }
+  const ordered = Object.entries(scores).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]);
+  if (ordered.length === 0) {
+    return { primary: "other", secondary: [] };
+  }
+  if (scores.wash >= 8 && !/\b(branch|credit|loan|teller|deposit|finance\s+manager|accounting|banking\s+operations)\b/i.test(title)) {
+    const rest = ordered.map(([k]) => k).filter((k) => k !== "wash");
+    return { primary: "wash", secondary: rest.slice(0, 2) };
+  }
+  return {
+    primary: ordered[0][0],
+    secondary: ordered.slice(1, 3).map(([k]) => k)
+  };
+}
+function extractExperienceRequirements(text) {
+  const clean = String(text || "");
+  let requiredTotalYears = null;
+  let requiredBankingYears = null;
+  let requiredManagerialYears = null;
+  const mgmtMatches = [
+    ...clean.matchAll(
+      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|direct\s+|proven\s+|senior\s+)?(?:executive\s+|branch\s+)?(?:managerial|management|leadership|supervisory|people\s+management|branch\s+manager)/gi
+    ),
+    ...clean.matchAll(
+      /(?:managerial|management|leadership|supervisory)\s+experience[^.\n]{0,40}?(\d{1,2})\s*\+?\s*years?/gi
+    )
+  ];
+  for (const m of mgmtMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 35) {
+      requiredManagerialYears = requiredManagerialYears === null ? val : Math.max(requiredManagerialYears, val);
+    }
+  }
+  const bankMatches = [
+    ...clean.matchAll(
+      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|relevant\s+|proven\s+|senior\s+|executive\s+)?(?:retail\s+|commercial\s+|branch\s+)?(?:banking|financial\s+services|bank\s+operations|microfinance|credit)/gi
+    )
+  ];
+  for (const m of bankMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
+      requiredBankingYears = requiredBankingYears === null ? val : Math.max(requiredBankingYears, val);
+    }
+  }
+  const genMatches = [
+    ...clean.matchAll(
+      /(?:at\s+least|minimum\s+(?:of\s+)?|requires?\s+|with\s+)?(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:relevant|progressive|proven|professional|executive|work|related|experience|in\s+)/gi
+    )
+  ];
+  for (const m of genMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
+      requiredTotalYears = requiredTotalYears === null ? val : Math.max(requiredTotalYears, val);
+    }
+  }
+  if (requiredTotalYears === null && requiredBankingYears !== null) {
+    requiredTotalYears = requiredBankingYears;
+  }
+  const bankingExperienceSummary = requiredBankingYears !== null ? `${requiredBankingYears}+ years of banking experience` : requiredTotalYears !== null ? `${requiredTotalYears}+ years of relevant experience` : "Not explicitly stated \u2014 verify on official portal";
+  const managerialExperienceSummary = requiredManagerialYears !== null ? `${requiredManagerialYears}+ years of managerial / leadership experience` : /\b(executive|vice\s+president|svp|evp|managing\s+director)\b/i.test(clean) ? "Senior executive leadership track (10+ years)" : /\b(branch\s+manager|operations\s+manager|area\s+manager|regional\s+manager|supervis|manage\s+a\s+team|people\s+management)\b/i.test(
+    clean
+  ) ? "Managerial / team supervision experience required" : "Not explicitly stated";
+  return {
+    requiredTotalYears,
+    requiredBankingYears,
+    requiredManagerialYears,
+    bankingExperienceSummary,
+    managerialExperienceSummary
+  };
+}
+function classifyRoleSeniority(title, description, exp) {
+  const t = String(title || "").trim();
+  const full = `${t}
+${description}`;
+  const maxYears = Math.max(exp.requiredTotalYears ?? 0, exp.requiredBankingYears ?? 0);
+  const mgmtYears = exp.requiredManagerialYears ?? 0;
+  if (EXECUTIVE_OVER_SENIOR_TITLE_RX.test(t) || maxYears >= 14 && /\b(executive|board\s+of\s+directors|c-suite|enterprise[- ]wide|group\s+strategy|vice\s+president)\b/i.test(full)) {
+    return "executive";
+  }
+  if (/\b(director|head\s+of\s+(?:retail|commercial|banking|operations|finance|wash|programs?))\b/i.test(t) && !/\b(assistant\s+director|deputy\s+branch)\b/i.test(t)) {
+    return maxYears >= 14 ? "executive" : "director";
+  }
+  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(t)) {
+    if (/\b(intern|trainee|entry[- ]level|fresh\s+graduate|cashier|teller|clerk|receptionist)\b/i.test(t)) {
+      return "entry_level";
+    }
+    return "junior_professional";
+  }
+  if (/\b(senior\s+(?:branch|banking|operations|finance|credit|risk|compliance|relationship|wash)\s+manager|regional\s+branch\s+manager|area\s+branch\s+manager|branch\s+network\s+manager)\b/i.test(
+    t
+  )) {
+    return maxYears >= 13 || mgmtYears >= 8 ? "director" : "senior_manager";
+  }
+  if (/\b(deputy\s+branch\s+manager|assistant\s+(?:branch|banking|operations|finance)\s+manager)\b/i.test(t)) {
+    return "assistant_manager";
+  }
+  if (/\bmanager\b/i.test(t)) {
+    if (mgmtYears >= 7 || maxYears >= 13) return "director";
+    if (mgmtYears >= 5 || maxYears >= 10) return "senior_manager";
+    if (maxYears > 0 && maxYears <= 2 && !/\b(supervis|manage\s+(?:staff|team)|direct\s+reports|branch\s+p&l)\b/i.test(full)) {
+      return "experienced_professional";
+    }
+    return "manager";
+  }
+  if (/\b(supervisor|team\s+lead(?:er)?|unit\s+head|section\s+head|coordinator)\b/i.test(t)) {
+    return "supervisor";
+  }
+  if (/\b(senior|lead|principal|specialist|advisor|consultant)\b/i.test(t) || maxYears >= 6) {
+    return "senior_professional";
+  }
+  if (maxYears >= 3 || /\b(officer|analyst|engineer|accountant|auditor)\b/i.test(t)) {
+    return "experienced_professional";
+  }
+  if (maxYears >= 1) return "junior_professional";
+  return "entry_level";
+}
+function normalizeSalaryRecord(opportunityId, text, fxRatesUsdBase = DEFAULT_FX_RATES_USD_BASE) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const clean = String(text || "").replace(/\u00a0/g, " ");
+  const undisclosed = {
+    opportunityId,
+    disclosed: false,
+    salaryDisplay: "Salary not disclosed",
+    period: "unknown",
+    taxBasis: "not_specified",
+    originalCurrency: null,
+    minOriginalAmount: null,
+    maxOriginalAmount: null,
+    normalizedMonthlyUsd: null,
+    normalizedAnnualUsd: null,
+    exchangeRateUsed: "N/A (Salary not disclosed)",
+    verifiedAt: nowIso
+  };
+  const mapCurrency = (raw) => {
+    const u = raw.trim().toUpperCase();
+    if (u === "$" || u === "US$" || u === "USD") return "USD";
+    if (u === "\u20AC" || u === "EUR") return "EUR";
+    if (u === "\xA3" || u === "GBP") return "GBP";
+    if (u === "CHF") return "CHF";
+    if (u === "SEK") return "SEK";
+    if (u === "NOK") return "NOK";
+    if (u === "DKK") return "DKK";
+    if (u === "AED" || u === "DHS") return "AED";
+    if (u === "SAR") return "SAR";
+    if (u === "QAR") return "QAR";
+    if (u === "KWD") return "KWD";
+    if (u === "OMR") return "OMR";
+    if (u === "BHD") return "BHD";
+    if (u === "CAD" || u === "C$") return "CAD";
+    if (u === "AUD" || u === "A$") return "AUD";
+    if (u === "ETB" || u === "BIRR") return "ETB";
+    return u;
+  };
+  const parseAmount = (raw) => {
+    const s = raw.trim().toLowerCase();
+    const isK = s.endsWith("k");
+    const numeric = Number(s.replace(/k$/, "").replace(/,/g, ""));
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return isK ? numeric * 1e3 : numeric;
+  };
+  const prefixRx = /(US\$|\$|€|£|\bUSD\b|\bEUR\b|\bGBP\b|\bCHF\b|\bSEK\b|\bNOK\b|\bDKK\b|\bAED\b|\bSAR\b|\bQAR\b|\bKWD\b|\bOMR\b|\bBHD\b|\bCAD\b|\bAUD\b|\bETB\b)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(?:US\$|\$|€|£|USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
+  const suffixRx = /(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
+  const found = [];
+  const evaluateMatch = (idx, fullMatch, currRaw, minRaw, maxRaw, periodRaw) => {
+    const start = Math.max(0, idx - 90);
+    const end = Math.min(clean.length, idx + fullMatch.length + 90);
+    const ctx = clean.slice(start, end);
+    const ctxLower = ctx.toLowerCase();
+    if (/\b(funding|series\s+[a-d]|valuation|revenue|raised|aum|assets\s+under|market\s+cap|transactions?\s+volume|loan\s+size|tuition\s+fee|registration\s+fee)\b/i.test(
+      ctxLower
+    ) && !/\b(salary|base\s+pay|gross\s+pay|remuneration|compensation|stipend)\b/i.test(ctxLower)) {
+      return;
+    }
+    const hasSalaryCue = /\b(salary|compensation|base\s+pay|gross\s+pay|net\s+pay|remuneration|pay\s+range|package|per\s+year|per\s+annum|annually|per\s+month|monthly|\/year|\/yr|\/month|\/mo|p\.a\.|p\.m\.)\b/i.test(
+      ctxLower
+    );
+    if (!hasSalaryCue) return;
+    const currency = mapCurrency(currRaw);
+    const rate2 = fxRatesUsdBase[currency] || DEFAULT_FX_RATES_USD_BASE[currency];
+    if (!rate2) return;
+    const v1 = parseAmount(minRaw);
+    if (!v1) return;
+    const v2 = maxRaw ? parseAmount(maxRaw) || v1 : v1;
+    const low = Math.min(v1, v2);
+    const high = Math.max(v1, v2);
+    let period;
+    const joinedPeriod = `${periodRaw || ""} ${fullMatch}`.toLowerCase();
+    if (/(month|\/mo\b|p\.m\.|monthly)/i.test(joinedPeriod) || /\b(per\s+month|monthly|\/\s*mo|\/\s*month)\b/i.test(ctxLower)) {
+      period = "monthly";
+    } else if (/(year|\/yr\b|annual|annum|p\.a\.)/i.test(joinedPeriod) || /\b(per\s+year|annually|annual|\/\s*yr|\/\s*year|p\.a\.|per\s+annum)\b/i.test(ctxLower)) {
+      period = "annual";
+    } else {
+      const approxUsd = low / rate2;
+      period = approxUsd >= 18e3 ? "annual" : "monthly";
+    }
+    const annualUsd = period === "annual" ? low / rate2 : low / rate2 * 12;
+    if (annualUsd < 1200 || annualUsd > 8e5) return;
+    const taxBasis = /\b(net\s+salary|net\s+pay|tax[- ]free|after[- ]tax|take[- ]home)\b/i.test(
+      ctxLower
+    ) ? "net" : /\b(gross\s+salary|gross\s+pay|gross\s+base|before\s+tax|pre[- ]tax|base\s+salary)\b/i.test(ctxLower) ? "gross" : "not_specified";
+    const priority = /\b(base\s+salary|gross\s+salary|monthly\s+salary|annual\s+salary|salary\s+range)\b/i.test(ctxLower) ? 3 : 2;
+    found.push({ currency, low, high, period, taxBasis, priority });
+  };
+  let m;
+  while ((m = prefixRx.exec(clean)) !== null) {
+    evaluateMatch(m.index, m[0], m[1], m[2], m[3], m[4]);
+  }
+  while ((m = suffixRx.exec(clean)) !== null) {
+    evaluateMatch(m.index, m[0], m[3], m[1], m[2], m[4]);
+  }
+  if (found.length === 0) return undisclosed;
+  found.sort((a, b) => b.priority - a.priority || b.low - a.low);
+  const best = found[0];
+  const rate = fxRatesUsdBase[best.currency] || DEFAULT_FX_RATES_USD_BASE[best.currency] || 1;
+  const normalizedAnnualUsd = Math.round(
+    best.period === "annual" ? best.low / rate : best.low / rate * 12
+  );
+  const normalizedMonthlyUsd = Math.round(normalizedAnnualUsd / 12);
+  const periodStr = best.period === "annual" ? "Annual" : "Monthly";
+  const taxStr = best.taxBasis === "gross" ? "Gross" : best.taxBasis === "net" ? "Net" : "Tax basis not specified";
+  const rangeStr = best.high > best.low ? `${best.currency} ${best.low.toLocaleString()}\u2013${best.high.toLocaleString()}` : `${best.currency} ${best.low.toLocaleString()}`;
+  const salaryDisplay = `${rangeStr} (${periodStr}, ${taxStr}) \u2248 USD $${normalizedMonthlyUsd.toLocaleString()}/month ($${normalizedAnnualUsd.toLocaleString()}/year)`;
+  const exchangeRateUsed = best.currency === "USD" ? "1 USD = 1.0000 USD" : `1 ${best.currency} = $${(1 / rate).toFixed(4)} USD`;
+  return {
+    opportunityId,
+    disclosed: true,
+    salaryDisplay,
+    period: best.period,
+    taxBasis: best.taxBasis,
+    originalCurrency: best.currency,
+    minOriginalAmount: best.low,
+    maxOriginalAmount: best.high,
+    normalizedMonthlyUsd,
+    normalizedAnnualUsd,
+    exchangeRateUsed,
+    verifiedAt: nowIso
+  };
+}
+function detectWorkMode(text) {
+  const lower = String(text || "").toLowerCase();
+  if (/\b(hybrid\s+(?:work|role|position|working|schedule)|partially\s+remote|\d+\s+days?\s+(?:in\s+office|on-?site))\b/i.test(lower)) {
+    return "hybrid";
+  }
+  if (/\b(fully\s+remote|100%\s+remote|remote[- ]first|work\s+from\s+anywhere|remote\s+(?:work|role|position|worldwide|global)|telecommute)\b/i.test(lower)) {
+    return "remote";
+  }
+  if (/\b(on[- ]?site|in[- ]?person|branch[- ]based|office[- ]based|relocation\s+to\s+[a-z]+)\b/i.test(lower)) {
+    return "onsite";
+  }
+  return "not_specified";
+}
+function evaluateDirectApplicationLink(params) {
+  const nowIso = params.checkedAtIso || (/* @__PURE__ */ new Date()).toISOString();
+  const rawUrl = String(params.url || "").trim();
+  if (!rawUrl || !/^https:\/\//i.test(rawUrl)) {
+    return {
+      status: "NOT VERIFIED",
+      priorityTier: 0,
+      priorityLabel: "Invalid or non-HTTPS link",
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: "Direct application URL must be a valid HTTPS link to the official application page."
+    };
+  }
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return {
+      status: "NOT VERIFIED",
+      priorityTier: 0,
+      priorityLabel: "Malformed URL",
+      directApplicationUrl: rawUrl,
+      httpStatus: null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: "Application link URL could not be parsed."
+    };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  const search = parsed.search.toLowerCase();
+  const isSearchPage = /\/(search|results|find-jobs|job-search|browse-jobs)\b/i.test(pathname) || /([?&](q|query|keyword|keywords|search|s|k)=)/i.test(search) || /\b(google\.|bing\.com|duckduckgo\.com|yahoo\.com)\b/i.test(host);
+  if (isSearchPage) {
+    return {
+      status: "NOT VERIFIED",
+      priorityTier: 0,
+      priorityLabel: "Rejected search-result URL",
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: false,
+      isSearchResultUrl: true,
+      checkedAt: nowIso,
+      note: "Rejected search-result URL \u2014 must link directly to the specific official opportunity application page."
+    };
+  }
+  const segments = pathname.split("/").filter(Boolean);
+  const genericRootOnly = segments.length === 0 || segments.length === 1 && /^(en|de|fr|ar|sv|no|da|home|index|index\.html|jobs|careers|scholarships|opportunities|about)$/i.test(segments[0]) || segments.length === 2 && /^(en|de|fr|ar|sv|no|da)$/i.test(segments[0]) && /^(home|jobs|careers|scholarships|opportunities|events|courses)$/i.test(segments[1]);
+  if (genericRootOnly && !parsed.search) {
+    return {
+      status: "NOT VERIFIED",
+      priorityTier: 0,
+      priorityLabel: "Rejected generic homepage URL",
+      directApplicationUrl: rawUrl,
+      httpStatus: params.linkCheckOverride?.httpStatus ?? null,
+      titleMatched: false,
+      employerMatched: false,
+      isGenericHomepage: true,
+      isSearchResultUrl: false,
+      checkedAt: nowIso,
+      note: "Rejected generic homepage URL \u2014 direct link to the specific opportunity application page is required."
+    };
+  }
+  if (params.linkCheckOverride) {
+    const code = params.linkCheckOverride.httpStatus;
+    if (params.linkCheckOverride.isClosedText) {
+      return {
+        status: "NOT VERIFIED",
+        priorityTier: 0,
+        priorityLabel: "Official page reports vacancy closed",
+        directApplicationUrl: rawUrl,
+        httpStatus: code,
+        titleMatched: Boolean(params.linkCheckOverride.titleMatched),
+        employerMatched: Boolean(params.linkCheckOverride.employerMatched),
+        isGenericHomepage: false,
+        isSearchResultUrl: false,
+        checkedAt: nowIso,
+        note: "Official application page states that applications are closed or the position is filled."
+      };
+    }
+    if (code !== null && (code >= 400 || code === 0)) {
+      return {
+        status: "NOT VERIFIED",
+        priorityTier: 0,
+        priorityLabel: "Broken or unreachable link",
+        directApplicationUrl: rawUrl,
+        httpStatus: code || null,
+        titleMatched: false,
+        employerMatched: false,
+        isGenericHomepage: false,
+        isSearchResultUrl: false,
+        checkedAt: nowIso,
+        note: params.linkCheckOverride.errorMessage || params.linkCheckOverride.note || `Direct application link returned HTTP ${code} and cannot be published as verified active.`
+      };
+    }
+  }
+  let priorityTier = 1;
+  let priorityLabel = "Priority 1: Employer Official Career Portal";
+  const isGov = /\.(gov|govt|gouv|gob)(\.[a-z]{2})?$/i.test(host) || /\b(usajobs\.gov|nsf\.gov|nih\.gov|europa\.eu|eures\.europa\.eu|nav\.no|arbetsformedlingen\.se|jobnet\.dk|make-it-in-germany\.com|studyinsaudi\.moe\.gov\.sa|turkiyeburslari\.gov\.tr|careers\.un\.org|undp\.org|who\.int|worldbank\.org|afdb\.org)\b/i.test(
+    host
+  );
+  const isUniversityOrScholarship = /\.(edu|ac\.[a-z]{2})$/i.test(host) || /\b(daad\.de|chevening\.org|fulbrightonline\.org|scholarship|fellowship|studyinsweden\.se|studyinnorway\.no|studyindenmark\.dk|mit\.edu|harvard\.edu|ox\.ac\.uk|cam\.ac\.uk|ethiopian-scholarships)\b/i.test(
+    host
+  );
+  const isAuthorizedPlatform = /\b(bayt\.com|gulftalent\.com|naukrigulf\.com|reliefweb\.int|jobs\.ac\.uk|indeed\.com|monster\.com|glassdoor\.com|stepstone\.de|academicpositions\.com|thehub\.io|finn\.no|jobindex\.dk|thelocal\.se|arbeitnow\.com|ethiojobs\.net|dereja\.com|effoysira\.com|greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|icims\.com|taleo\.net)\b/i.test(
+    host
+  );
+  if (isAuthorizedPlatform) {
+    if (/\b(greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|icims\.com|taleo\.net)\b/i.test(host)) {
+      priorityTier = 1;
+      priorityLabel = "Priority 1: Employer Official Application Portal (ATS)";
+    } else {
+      priorityTier = 4;
+      priorityLabel = "Priority 4: Authorized Recruitment / Official Listing Platform";
+    }
+  } else if (isUniversityOrScholarship || params.category === "scholarship") {
+    priorityTier = 2;
+    priorityLabel = "Priority 2: University / Scholarship Provider Official Portal";
+  } else if (isGov) {
+    priorityTier = 3;
+    priorityLabel = "Priority 3: Official Government / International Agency Portal";
+  } else {
+    priorityTier = 1;
+    priorityLabel = "Priority 1: Employer Official Career Portal";
+  }
+  return {
+    status: "VERIFIED",
+    priorityTier,
+    priorityLabel,
+    directApplicationUrl: rawUrl,
+    httpStatus: params.linkCheckOverride?.httpStatus ?? 200,
+    titleMatched: params.linkCheckOverride?.titleMatched ?? true,
+    employerMatched: params.linkCheckOverride?.employerMatched ?? true,
+    isGenericHomepage: false,
+    isSearchResultUrl: false,
+    checkedAt: nowIso,
+    note: params.linkCheckOverride?.note || priorityLabel
+  };
+}
+function evaluateStrictThreeDayDeadline(rawDeadline, nowMs = Date.now(), isClosedOrWithdrawn = false, openingDateRaw) {
+  if (isClosedOrWithdrawn) {
+    return {
+      passed: false,
+      deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime: null,
+      deadlineTimezone: null,
+      deadlineStatusLabel: "APPLICATIONS CLOSED",
+      deadlineEvidence: "Official source reports that applications are closed or withdrawn.",
+      fullDaysRemaining: 0,
+      rejectionCode: "closed_or_withdrawn",
+      explanation: "APPLICATIONS CLOSED \u2014 Opportunity is marked closed or withdrawn at the official source."
+    };
+  }
+  const openRaw = String(openingDateRaw || "").trim();
+  if (openRaw) {
+    const openNorm = /^\d{4}-\d{2}-\d{2}$/.test(openRaw) ? `${openRaw}T00:00:00Z` : openRaw;
+    const openMs = Date.parse(openNorm);
+    if (!Number.isNaN(openMs) && openMs > nowMs) {
+      const daysUntilOpen = Math.ceil((openMs - nowMs) / (1e3 * 60 * 60 * 24));
+      return {
+        passed: false,
+        deadlineIso: null,
+        deadlineDateExact: null,
+        deadlineTime: null,
+        deadlineTimezone: null,
+        deadlineStatusLabel: "NOT YET OPEN",
+        deadlineEvidence: `Official application window opens on ${openRaw} (in ${daysUntilOpen} day(s)).`,
+        fullDaysRemaining: null,
+        rejectionCode: "closed_or_withdrawn",
+        explanation: `NOT YET OPEN \u2014 Official application portal opens on ${openRaw}.`
+      };
+    }
+  }
+  const raw = String(rawDeadline || "").trim();
+  const inlineOpenMatch = raw.match(/\b(?:applications?\s+)?opens?\s+(?:on\s+)?(\d{4}-\d{2}-\d{2}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b/i);
+  if (inlineOpenMatch || /\bnot\s+yet\s+open\b/i.test(raw)) {
+    const inlineDateStr = inlineOpenMatch?.[1] || "";
+    const inlineNorm = /^\d{4}-\d{2}-\d{2}$/.test(inlineDateStr) ? `${inlineDateStr}T00:00:00Z` : inlineDateStr;
+    const inlineMs = inlineNorm ? Date.parse(inlineNorm) : NaN;
+    if (Number.isNaN(inlineMs) || inlineMs > nowMs) {
+      return {
+        passed: false,
+        deadlineIso: null,
+        deadlineDateExact: null,
+        deadlineTime: null,
+        deadlineTimezone: null,
+        deadlineStatusLabel: "NOT YET OPEN",
+        deadlineEvidence: inlineDateStr ? `Official application window opens on ${inlineDateStr}.` : `Official listing reports "${raw}" (not yet open).`,
+        fullDaysRemaining: null,
+        rejectionCode: "closed_or_withdrawn",
+        explanation: `NOT YET OPEN \u2014 ${raw}.`
+      };
+    }
+  }
+  if (!raw || /^(rolling|ongoing|open|open\s+until\s+filled|not\s+stated|not\s+published|deadline\s+not\s+published|until\s+filled|tbd|n\/a)$/i.test(
+    raw
+  )) {
+    return {
+      passed: true,
+      deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime: null,
+      deadlineTimezone: null,
+      deadlineStatusLabel: "DEADLINE NOT PUBLISHED",
+      deadlineEvidence: raw ? `Official source states "${raw}" (exact closing date not published).` : "Exact closing date not published on the official listing.",
+      fullDaysRemaining: null,
+      rejectionCode: null,
+      explanation: "DEADLINE NOT PUBLISHED \u2014 Official listing verified active without a fixed closing date."
+    };
+  }
+  const timeMatch = raw.match(/\b(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM))?)\b/i);
+  const tzMatch = raw.match(/\b(UTC(?:[+-]\d{1,2}(?::\d{2})?)?|GMT(?:[+-]\d{1,2})?|EAT|CET|CEST|EST|EDT|PST|PDT|BST|GST|AST|CAT|SAST)\b/i);
+  const deadlineTime = timeMatch ? timeMatch[1].trim() : null;
+  const deadlineTimezone = tzMatch ? tzMatch[1].trim().toUpperCase() : raw.endsWith("Z") ? "UTC" : null;
+  let targetMs = NaN;
+  let exactDate = null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    exactDate = raw;
+    targetMs = Date.parse(`${raw}T23:59:59Z`);
+  } else {
+    targetMs = Date.parse(raw);
+    if (!Number.isNaN(targetMs)) {
+      exactDate = new Date(targetMs).toISOString().slice(0, 10);
+    }
+  }
+  if (Number.isNaN(targetMs)) {
+    return {
+      passed: true,
+      deadlineIso: null,
+      deadlineDateExact: null,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: "DEADLINE NOT PUBLISHED",
+      deadlineEvidence: `Unparseable official deadline text: "${raw}" \u2014 verify exact date on official portal.`,
+      fullDaysRemaining: null,
+      rejectionCode: null,
+      explanation: "DEADLINE NOT PUBLISHED \u2014 Official date text could not be parsed cleanly without guessing."
+    };
+  }
+  const diffMs = targetMs - nowMs;
+  const hoursRemaining = diffMs / (1e3 * 60 * 60);
+  const fullDaysRemaining = Math.max(0, Math.floor(hoursRemaining / 24));
+  const deadlineIso = new Date(targetMs).toISOString();
+  if (diffMs <= 0) {
+    return {
+      passed: false,
+      deadlineIso,
+      deadlineDateExact: exactDate,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: "DEADLINE PASSED",
+      deadlineEvidence: `Official deadline (${raw}) passed on ${exactDate || deadlineIso}.`,
+      fullDaysRemaining: 0,
+      rejectionCode: "deadline_expired",
+      explanation: `DEADLINE PASSED \u2014 Official deadline (${raw}) has already passed.`
+    };
+  }
+  if (hoursRemaining < MINIMUM_DEADLINE_HOURS) {
+    return {
+      passed: false,
+      deadlineIso,
+      deadlineDateExact: exactDate,
+      deadlineTime,
+      deadlineTimezone,
+      deadlineStatusLabel: "CLOSING SOON",
+      deadlineEvidence: `Official deadline (${raw}) has only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining.`,
+      fullDaysRemaining,
+      rejectionCode: "deadline_under_three_days",
+      explanation: `CLOSING SOON \u2014 Only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining before official deadline (${raw}); minimum 3 full days (72h) required for new recommendations.`
+    };
+  }
+  const isClosingSoon = fullDaysRemaining <= 7;
+  const label = isClosingSoon ? "CLOSING SOON" : "OPEN \u2014 ACCEPTING APPLICATIONS";
+  return {
+    passed: true,
+    deadlineIso,
+    deadlineDateExact: exactDate,
+    deadlineTime,
+    deadlineTimezone,
+    deadlineStatusLabel: label,
+    deadlineEvidence: `Official closing date ${exactDate || raw}${deadlineTime ? ` at ${deadlineTime}` : ""}${deadlineTimezone ? ` (${deadlineTimezone})` : ""}.`,
+    fullDaysRemaining,
+    rejectionCode: null,
+    explanation: `${label} \u2014 ${fullDaysRemaining} full days remaining before official deadline (${exactDate || raw}).`
+  };
+}
+function evaluateVisaAndAuthorization(params) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const clean = String(params.text || "");
+  const lower = clean.toLowerCase();
+  const evidenceSourceUrl = params.sourceUrl || null;
+  if (params.environment === "ethiopia_domestic") {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "ethiopia_domestic",
+      conditionMet: "domestic_not_required",
+      transparencyStatus: "Visa sponsorship not applicable \u2014 domestic opportunity",
+      verified: true,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome: false,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport: "not_confirmed",
+      relocationDetails: "Ethiopian domestic role \u2014 international work visa sponsorship not applicable.",
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: "Visa sponsorship not applicable \u2014 domestic opportunity in Ethiopia.",
+      evidenceQuote: "Domestic opportunity located in Ethiopia.",
+      evidenceSourceUrl,
+      statusLabel: "Visa sponsorship not applicable \u2014 domestic opportunity",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (params.visaSponsorshipRevoked) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      transparencyStatus: "VISA SPONSORSHIP NOT OFFERED",
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome: false,
+      visaFeesCovered: "no",
+      relocationSupport: "no",
+      relocationDetails: "Previously confirmed sponsorship was revoked/removed at the official source.",
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: "Work visa sponsorship revoked or no longer confirmed at official source.",
+      evidenceQuote: "Official listing updated to remove or revoke visa sponsorship.",
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP NOT OFFERED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const touristOnlyRx = /\b(tourist\s+visa[- ]free|visa[- ]free\s+entry\s+for\s+tourism|visit\s+visa\s+only|tourist\s+visa\s+on\s+arrival|permission\s+to\s+apply\s+for\s+a\s+visa|apply\s+for\s+a\s+visa\s+independently|self[- ]sponsored\s+visa\s+application)\b/i;
+  const touristEntryRejected = touristOnlyRx.test(lower);
+  const negationMatch = clean.match(
+    /[^.\n]{0,80}\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided)|must\s+already\s+have\s+(?:the\s+)?right\s+to\s+work|existing\s+work\s+authorization\s+required|local\s+citizens?\s+only|no\s+longer\s+sponsoring)\b[^.\n]{0,100}/i
+  );
+  const applicantPaysVisaRx = /\b(visa\s+(?:fees?|costs?)\s+(?:are\s+)?(?:the\s+)?(?:applicant['’]?s|participant['’]?s|your)\s+responsibility|applicants?\s+(?:must\s+)?pay\s+(?:for\s+)?(?:their\s+own\s+)?visa|self[- ]funded\s+visa|visa\s+costs?\s+not\s+covered|does\s+not\s+cover\s+visa)\b/i;
+  const invitationOnlyRx = /\b(invitation\s+letter\s+only|only\s+(?:an?\s+)?invitation\s+letter|provide\s+an?\s+invitation\s+letter\s+for\s+visa|visa\s+support\s+letter\s+only)\b/i;
+  const visaFeesCoveredRx = /\b(visa\s+(?:fees?|application\s+fees?|costs?)\s+(?:are\s+)?(?:fully\s+)?(?:covered|reimbursed|paid|funded|included)|fully\s+funded\s+including\s+visa|covers?\s+(?:all\s+)?(?:travel,?\s+|accommodation,?\s+)?visa\s+(?:fees?|costs?)|visa\s+sponsorship\s+and\s+visa\s+fees?\s+covered)\b/i;
+  const internationalWelcomeMatch = clean.match(
+    /[^.\n]{0,70}\b(international\s+applicants?\s+(?:are\s+)?welcome|open\s+to\s+international\s+(?:applicants|candidates)|global\s+applicants?\s+welcome|candidates?\s+from\s+all\s+nationalities)\b[^.\n]{0,90}/i
+  );
+  const internationalApplicantsWelcome = Boolean(internationalWelcomeMatch);
+  const requiresConfirmationMatch = clean.match(
+    /[^.\n]{0,80}\b(visa\s+sponsorship\s+(?:may\s+be|might\s+be|could\s+be)\s+(?:considered|available|provided)|case[- ]by[- ]case\s+sponsorship|previously\s+sponsored|licensed\s+sponsor\s+(?:register|holder)|has\s+sponsored\s+other\s+roles|subject\s+to\s+visa\s+eligibility|visa\s+assistance\s+may\s+be\s+discussed)\b[^.\n]{0,100}/i
+  );
+  const relocMatch = clean.match(
+    /[^.\n]{0,90}\b(relocation\s+(?:package|support|assistance|allowance|covered|provided)|flight\s+tickets?\s+(?:covered|provided)|airfare\s+covered|housing\s+allowance|mobilization\s+allowance)\b[^.\n]{0,110}/i
+  );
+  const relocationSupport = relocMatch ? "yes" : "not_confirmed";
+  const relocationDetails = relocMatch ? relocMatch[0].replace(/\s+/g, " ").trim().slice(0, 220) : "Not explicitly specified";
+  if (params.category !== "job" && params.category !== "internship") {
+    const hasVisaFeesCovered = visaFeesCoveredRx.test(lower);
+    const hasOfficialVisaSponsorship = /\b(visa\s+sponsorship\s+(?:is\s+)?(?:provided|included|covered|offered|confirmed)|sponsor(?:s|ing)?\s+(?:your\s+)?(?:student|training|conference|j-1|schengen|uk)\s+visa|official\s+visa\s+sponsorship)\b/i.test(
+      lower
+    );
+    const isApplicantPaid = applicantPaysVisaRx.test(lower);
+    const isInvitationOnly = invitationOnlyRx.test(lower) && !hasVisaFeesCovered && !hasOfficialVisaSponsorship;
+    if (negationMatch || isApplicantPaid) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "none",
+        transparencyStatus: "VISA SPONSORSHIP NOT OFFERED",
+        verified: false,
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: "no",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: isInvitationOnly,
+        touristEntryRejected,
+        sponsorshipStatement: isApplicantPaid ? "Visa costs are the applicant\u2019s responsibility." : negationMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
+        evidenceQuote: (negationMatch?.[0] || "Visa fees not covered by organizer.").replace(/\s+/g, " ").trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: "VISA SPONSORSHIP NOT OFFERED",
+        lastVerifiedAt: nowIso
+      };
+    }
+    if (isInvitationOnly) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "none",
+        transparencyStatus: "VISA SPONSORSHIP REQUIRES CONFIRMATION",
+        verified: false,
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: "not_confirmed",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: true,
+        touristEntryRejected,
+        sponsorshipStatement: "Invitation letter only \u2014 organizer does not confirm visa sponsorship or visa fee coverage.",
+        evidenceQuote: "Invitation letter only mentioned without visa fee coverage.",
+        evidenceSourceUrl,
+        statusLabel: "VISA SPONSORSHIP REQUIRES CONFIRMATION",
+        lastVerifiedAt: nowIso
+      };
+    }
+    if (hasVisaFeesCovered || hasOfficialVisaSponsorship) {
+      const matchSnippet = clean.match(visaFeesCoveredRx)?.[0] || clean.match(/\b[^.\n]{0,80}visa\s+sponsorship[^.\n]{0,90}/i)?.[0] || "Confirmed official visa sponsorship / visa fee coverage.";
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "A_employer_work_visa",
+        transparencyStatus: "VISA SPONSORSHIP CONFIRMED",
+        verified: true,
+        visaSponsored: true,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: hasVisaFeesCovered ? "yes" : "not_confirmed",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: false,
+        touristEntryRejected: false,
+        sponsorshipStatement: matchSnippet.replace(/\s+/g, " ").trim().slice(0, 240),
+        evidenceQuote: matchSnippet.replace(/\s+/g, " ").trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: "VISA SPONSORSHIP CONFIRMED",
+        lastVerifiedAt: nowIso
+      };
+    }
+    const reqConf = Boolean(requiresConfirmationMatch || internationalApplicantsWelcome || relocMatch);
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      transparencyStatus: reqConf ? "VISA SPONSORSHIP REQUIRES CONFIRMATION" : "VISA SPONSORSHIP NOT SPECIFIED",
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected,
+      sponsorshipStatement: reqConf ? "International applicants or relocation mentioned, but official visa sponsorship requires direct confirmation with the organizer." : "Official listing does not specify visa sponsorship terms.",
+      evidenceQuote: (requiresConfirmationMatch?.[0] || internationalWelcomeMatch?.[0] || relocMatch?.[0] || "No visa sponsorship statement found on official page.").replace(/\s+/g, " ").trim().slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: reqConf ? "VISA SPONSORSHIP REQUIRES CONFIRMATION" : "VISA SPONSORSHIP NOT SPECIFIED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const legalCountries = (params.userLegalWorkCountries || []).map((c) => c.toLowerCase().trim()).filter(Boolean);
+  const countryLower = String(params.country || "").toLowerCase().trim();
+  const hasConditionC = Boolean(countryLower) && legalCountries.some((c) => countryLower.includes(c) || c.includes(countryLower)) && !touristEntryRejected;
+  if (negationMatch) {
+    if (hasConditionC) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "C_legal_right_no_sponsorship",
+        transparencyStatus: "VISA SPONSORSHIP NOT OFFERED",
+        verified: true,
+        visaSponsored: false,
+        workPermitSponsored: false,
+        internationalApplicantsWelcome,
+        visaFeesCovered: "no",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: false,
+        touristEntryRejected: false,
+        sponsorshipStatement: `Employer does not offer visa sponsorship, but applicant holds confirmed legal work authorization in ${params.country}.`,
+        evidenceQuote: negationMatch[0].replace(/\s+/g, " ").trim().slice(0, 220),
+        evidenceSourceUrl,
+        statusLabel: "VISA SPONSORSHIP NOT OFFERED",
+        lastVerifiedAt: nowIso
+      };
+    }
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      transparencyStatus: "VISA SPONSORSHIP NOT OFFERED",
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: "no",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected,
+      sponsorshipStatement: negationMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
+      evidenceQuote: negationMatch[0].replace(/\s+/g, " ").trim().slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP NOT OFFERED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const condAMatch = clean.match(
+    /[^.\n]{0,100}\b((?:we|employer|company|bank|[a-z]+)\s+(?:offer|offers|provide|provides|can\s+provide|support|supports)\s+(?:full\s+)?(?:[a-z-]+\s+)?(?:employment\s+|work\s+|skilled\s+worker\s+|work\s+permit\s+(?:and|&|\/)\s+)?visa\s+sponsorship|(?:we|employer|company|organization|bank)\s+(?:will\s+)?sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+){0,3}(?:work|employment|skilled\s+worker)\s+visa|employer[- ]sponsored\s+(?:work\s+)?visa|(?:work|employment|skilled\s+worker|residence|uae|uk|eu|swedish|german|dutch|danish|norwegian|qatar|saudi)\s+(?:work\s+)?visa\s+sponsorship|work\s+permit\s+(?:and|&|\/)\s+visa\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included|confirmed)|full\s+visa\s+sponsorship|g-4\s+visa|h-1b\s+sponsorship|iqama\s+sponsorship|employment\s+visa\s+sponsored)\b[^.\n]{0,120}/i
+  );
+  const condBMatch = clean.match(
+    /[^.\n]{0,100}\b(work\s+permit\s+(?:(?:and|&|\/)\s+(?:visa|immigration)\s+)?sponsorship|immigration\s+sponsorship|eu\s+blue\s+card\s+sponsorship|sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+)?work\s+permit|residence\s+and\s+work\s+permit\s+sponsored|company\s+sponsors?\s+(?:work\s+permit|employment\s+pass)|provides?\s+(?:[a-z-]+\s+)?work\s+permit\s+sponsorship)\b[^.\n]{0,120}/i
+  );
+  const pastOrConditionalOnly = Boolean(requiresConfirmationMatch) && !condAMatch && !condBMatch;
+  if (condAMatch && !touristEntryRejected) {
+    const quote = condAMatch[0].replace(/\s+/g, " ").trim().slice(0, 240);
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "A_employer_work_visa",
+      transparencyStatus: "VISA SPONSORSHIP CONFIRMED",
+      verified: true,
+      visaSponsored: true,
+      workPermitSponsored: Boolean(condBMatch),
+      internationalApplicantsWelcome,
+      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: quote,
+      evidenceQuote: quote,
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP CONFIRMED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (condBMatch && !touristEntryRejected) {
+    const quote = condBMatch[0].replace(/\s+/g, " ").trim().slice(0, 240);
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "B_work_permit_immigration",
+      transparencyStatus: "VISA SPONSORSHIP CONFIRMED",
+      verified: true,
+      visaSponsored: false,
+      workPermitSponsored: true,
+      internationalApplicantsWelcome,
+      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: `Work permit sponsorship confirmed (distinct from general relocation): ${quote}`,
+      evidenceQuote: quote,
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP CONFIRMED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (hasConditionC) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "C_legal_right_no_sponsorship",
+      transparencyStatus: "VISA SPONSORSHIP NOT SPECIFIED",
+      verified: true,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: `Visa sponsorship not specified by employer; applicant holds confirmed legal work right in ${params.country}.`,
+      evidenceQuote: "No explicit visa sponsorship statement on employer listing.",
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP NOT SPECIFIED",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (pastOrConditionalOnly || internationalApplicantsWelcome || relocMatch || touristEntryRejected) {
+    const snippet = requiresConfirmationMatch?.[0] || internationalWelcomeMatch?.[0] || relocMatch?.[0] || (touristEntryRejected ? "Tourist visa-free entry is NOT legal work authorization." : "Visa sponsorship terms require direct employer confirmation.");
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      transparencyStatus: "VISA SPONSORSHIP REQUIRES CONFIRMATION",
+      verified: false,
+      visaSponsored: false,
+      workPermitSponsored: false,
+      internationalApplicantsWelcome,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: invitationOnlyRx.test(lower),
+      touristEntryRejected,
+      sponsorshipStatement: touristEntryRejected ? "Tourist visa-free entry is NOT legal work authorization \u2014 employer visa sponsorship requires confirmation." : internationalApplicantsWelcome && !requiresConfirmationMatch ? 'Listing states "international applicants welcome" without confirming work visa sponsorship \u2014 confirm directly with employer.' : relocMatch && !requiresConfirmationMatch ? "Relocation assistance mentioned without explicit work visa sponsorship confirmation \u2014 confirm directly with employer." : "Employer visa sponsorship for this specific role requires direct confirmation (never assumed from general or past sponsorship).",
+      evidenceQuote: snippet.replace(/\s+/g, " ").trim().slice(0, 220),
+      evidenceSourceUrl,
+      statusLabel: "VISA SPONSORSHIP REQUIRES CONFIRMATION",
+      lastVerifiedAt: nowIso
+    };
+  }
+  return {
+    opportunityId: params.opportunityId,
+    environment: "international",
+    conditionMet: "none",
+    transparencyStatus: "VISA SPONSORSHIP NOT SPECIFIED",
+    verified: false,
+    visaSponsored: false,
+    workPermitSponsored: false,
+    internationalApplicantsWelcome: false,
+    visaFeesCovered: "not_confirmed",
+    relocationSupport,
+    relocationDetails,
+    invitationLetterOnly: invitationOnlyRx.test(lower),
+    touristEntryRejected: false,
+    sponsorshipStatement: "Official listing does not specify whether employer work visa sponsorship is provided.",
+    evidenceQuote: "No visa sponsorship statement published on the official job announcement.",
+    evidenceSourceUrl,
+    statusLabel: "VISA SPONSORSHIP NOT SPECIFIED",
+    lastVerifiedAt: nowIso
+  };
+}
+function extractResponsibilitiesList(responsibilities, description) {
+  if (Array.isArray(responsibilities) && responsibilities.filter((r) => r.trim().length >= 12).length > 0) {
+    return responsibilities.map((r) => r.trim()).filter(Boolean).slice(0, 6);
+  }
+  const sentences = String(description || "").split(/[\n•▪▸]+|(?<=\.)\s+/).map((s) => s.replace(/^[\s\-–*0-9.)]+/, "").trim()).filter((s) => s.length >= 24 && s.length <= 220);
+  const actionLines = sentences.filter(
+    (s) => /^(lead|manage|oversee|supervise|drive|ensure|develop|prepare|monitor|coordinate|review|build|deliver|maintain|support|own|design|execute|implement|control|analyze|report|establish|direct|grow)/i.test(
+      s
+    )
+  );
+  if (actionLines.length >= 2) return actionLines.slice(0, 5);
+  return sentences.slice(0, 4);
+}
+function evaluateForBranchBankingSpecialFeature(params) {
+  const ref = params.profile || BRANCH_BANKING_REFERENCE_PROFILE;
+  const bankingYears = ref.bankingExperienceYears ?? ref.yearsOfExperience ?? 9;
+  const mgmtYears = ref.managerialExperienceYears ?? 3;
+  const matchReasons = [];
+  const rejectionCodes = [];
+  const rejectionReasons = [];
+  const title = String(params.title || "").trim();
+  const full = `${title}
+${params.employer}
+${params.description}
+${params.responsibilities.join("\n")}`;
+  if (!params.deadlinePassed) {
+    rejectionCodes.push("deadline_expired");
+    rejectionReasons.push(params.deadlineExplanation);
+  }
+  if (NON_BANKING_MANAGER_DISQUALIFIER_RX.test(title) || params.sector === "wash") {
+    rejectionCodes.push("industry_mismatch");
+    rejectionReasons.push(
+      `Position "${title}" is outside branch banking / banking management (detected sector: ${params.sector}).`
+    );
+  }
+  if (params.seniorityLevel === "executive" || EXECUTIVE_OVER_SENIOR_TITLE_RX.test(title) || params.exp.requiredTotalYears !== null && params.exp.requiredTotalYears >= bankingYears + 4 || params.exp.requiredBankingYears !== null && params.exp.requiredBankingYears >= bankingYears + 4) {
+    rejectionCodes.push("seniority_mismatch_too_senior");
+    rejectionReasons.push(
+      `Unsuitable seniority match: "${title}" is an Executive/VP-level role (${params.exp.requiredTotalYears ? `${params.exp.requiredTotalYears}+ years required` : SENIORITY_LABELS[params.seniorityLevel]}) that substantially exceeds the ${bankingYears}-year banking / ${mgmtYears}-year branch management reference profile.`
+    );
+  }
+  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(title) || params.seniorityLevel === "entry_level" || params.seniorityLevel === "junior_professional") {
+    rejectionCodes.push("seniority_mismatch_too_junior");
+    rejectionReasons.push(
+      `Unsuitable professional and seniority match: "${title}" is a non-managerial / entry-to-junior role (${SENIORITY_LABELS[params.seniorityLevel]}), unsuitable for a Branch Manager with ${bankingYears} years banking and ${mgmtYears} years managerial experience.`
+    );
+  }
+  const matchedTitleDef = PRIORITY_BRANCH_BANKING_TITLES.find((p) => p.rx.test(title));
+  const matchedRespSignals = BRANCH_BANKING_RESPONSIBILITY_SIGNALS.filter((s) => s.rx.test(full)).map((s) => s.label);
+  const isBankingSector = params.sector === "branch_banking" || params.sector === "banking_finance";
+  if (!isBankingSector) {
+    if (!rejectionCodes.includes("industry_mismatch")) {
+      rejectionCodes.push("industry_mismatch");
+      rejectionReasons.push(`Role sector (${params.sector}) does not align with Branch Banking / Banking Management.`);
+    }
+  } else if (!matchedTitleDef && matchedRespSignals.length < 2) {
+    rejectionCodes.push("experience_mismatch");
+    rejectionReasons.push(
+      `Actual responsibilities do not sufficiently demonstrate branch banking operations, administration, or banking leadership authority.`
+    );
+  }
+  if (params.exp.requiredManagerialYears !== null && params.exp.requiredManagerialYears > mgmtYears + 4) {
+    rejectionCodes.push("experience_mismatch");
+    rejectionReasons.push(
+      `Requires ${params.exp.requiredManagerialYears}+ years of managerial experience, exceeding the reference profile (${mgmtYears} years managerial experience).`
+    );
+  }
+  if (params.environment === "international" && params.visa.transparencyStatus !== "VISA SPONSORSHIP CONFIRMED") {
+    rejectionCodes.push("visa_sponsorship_unconfirmed");
+    rejectionReasons.push(params.visa.sponsorshipStatement);
+  }
+  if (rejectionCodes.length > 0) {
+    return {
+      matched: false,
+      relevanceScore: 0,
+      matchReasons: [],
+      rejectionCodes: Array.from(new Set(rejectionCodes)),
+      rejectionReasons: Array.from(new Set(rejectionReasons))
+    };
+  }
+  let score = 60;
+  if (matchedTitleDef) {
+    score += 16;
+    matchReasons.push(`Direct branch banking leadership match: ${matchedTitleDef.label}.`);
+  } else {
+    score += 10;
+    matchReasons.push("Equivalent banking management responsibilities verified from job description.");
+  }
+  if (matchedRespSignals.length > 0) {
+    score += Math.min(12, matchedRespSignals.length * 3);
+    matchReasons.push(`Core managerial responsibilities aligned: ${matchedRespSignals.slice(0, 3).join("; ")}.`);
+  }
+  if (params.exp.requiredBankingYears !== null && bankingYears >= params.exp.requiredBankingYears) {
+    score += 6;
+    matchReasons.push(
+      `${bankingYears} years banking experience satisfies the stated ${params.exp.requiredBankingYears}+ years requirement.`
+    );
+  } else {
+    matchReasons.push(`Matches ${bankingYears}-year branch banking & ${mgmtYears}-year managerial experience profile.`);
+    score += 4;
+  }
+  if (params.environment === "international") {
+    score += 5;
+    matchReasons.push(`Confirmed employer visa sponsorship: ${params.visa.transparencyStatus}.`);
+  } else {
+    matchReasons.push("Ethiopian domestic branch banking opportunity \u2014 Visa sponsorship not applicable.");
+  }
+  return {
+    matched: true,
+    relevanceScore: Math.min(99, Math.max(60, score)),
+    matchReasons,
+    rejectionCodes: [],
+    rejectionReasons: []
+  };
+}
+function buildAndVerifyCanonicalOpportunity(raw, options) {
+  const nowMs = options?.nowMs ?? Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const fxRates = options?.fxRatesUsdBase || DEFAULT_FX_RATES_USD_BASE;
+  const { canonicalKey, urlFingerprint, canonicalId } = buildCanonicalOpportunityIdentity({
+    category: raw.category,
+    title: raw.title,
+    employer: raw.employer,
+    country: raw.country,
+    officialApplicationUrl: raw.officialApplicationUrl
+  });
+  const environment = detectEnvironment(raw.country, raw.city || "", raw.description);
+  const fullText = `${raw.title}
+${raw.employer}
+${raw.compensationRaw || ""}
+${raw.explicitVisaNote || ""}
+${raw.explicitFundingNote || ""}
+${raw.description}`;
+  const sectors = detectProfessionalSectors(raw.title, raw.employer, raw.description);
+  const exp = extractExperienceRequirements(fullText);
+  const seniorityLevel = classifyRoleSeniority(raw.title, raw.description, exp);
+  const actualResponsibilities = extractResponsibilitiesList(raw.responsibilities, raw.description);
+  const workMode = detectWorkMode(`${raw.title} ${raw.city || ""} ${raw.description}`);
+  const salary = normalizeSalaryRecord(canonicalId, `${raw.compensationRaw || ""}
+${raw.description}`, fxRates);
+  const visa = evaluateVisaAndAuthorization({
+    opportunityId: canonicalId,
+    category: raw.category,
+    environment,
+    country: raw.country,
+    text: fullText,
+    sourceUrl: raw.officialApplicationUrl || raw.sourceUrl || void 0,
+    visaSponsorshipRevoked: raw.visaSponsorshipRevoked
+  });
+  const deadlineEval = evaluateStrictThreeDayDeadline(
+    raw.deadlineRaw,
+    nowMs,
+    Boolean(raw.isClosedOrWithdrawn),
+    raw.openingDateRaw
+  );
+  const applicationLinkVerification = evaluateDirectApplicationLink({
+    url: raw.officialApplicationUrl,
+    title: raw.title,
+    employer: raw.employer,
+    category: raw.category,
+    checkedAtIso: nowIso,
+    linkCheckOverride: raw.linkCheckOverride
+  });
+  const rejectionCodes = [];
+  const rejectionExplanations = [];
+  if (applicationLinkVerification.status !== "VERIFIED") {
+    rejectionCodes.push("invalid_official_url");
+    rejectionExplanations.push(`NOT VERIFIED: ${applicationLinkVerification.note}`);
+  }
+  if (!deadlineEval.passed && deadlineEval.rejectionCode) {
+    rejectionCodes.push(deadlineEval.rejectionCode);
+    rejectionExplanations.push(deadlineEval.explanation);
+  }
+  const branchEval = raw.category === "job" ? evaluateForBranchBankingSpecialFeature({
+    title: raw.title,
+    employer: raw.employer,
+    description: raw.description,
+    responsibilities: actualResponsibilities,
+    sector: sectors.primary,
+    seniorityLevel,
+    exp,
+    salary,
+    visa,
+    environment,
+    deadlinePassed: deadlineEval.passed && applicationLinkVerification.status === "VERIFIED",
+    deadlineExplanation: applicationLinkVerification.status !== "VERIFIED" ? applicationLinkVerification.note : deadlineEval.explanation
+  }) : {
+    matched: false,
+    relevanceScore: 0,
+    matchReasons: [],
+    rejectionCodes: [],
+    rejectionReasons: []
+  };
+  const lowerFull = fullText.toLowerCase();
+  const detectAccurateFundingCoverage = () => {
+    const partialRx = /\b(partial(?:ly)?\s+funded|\d{1,2}%\s+(?:tuition|fee|scholarship|grant)|tuition\s+(?:fee\s+)?waiver|partial\s+tuition|partial\s+scholarship|partial\s+grant)\b/i;
+    if (raw.explicitFundingNote && raw.explicitFundingNote.trim()) {
+      const explicit = raw.explicitFundingNote.trim();
+      if (partialRx.test(explicit)) return `Partially Funded (${explicit})`;
+      if (/\bself[- ]funded\b/i.test(explicit)) return "Self-Funded";
+      return explicit;
+    }
+    if (partialRx.test(lowerFull)) {
+      return "Partially Funded";
+    }
+    if (/\b(self[- ]funded|fee[- ]paying|registration\s+fee\s+required)\b/i.test(lowerFull)) {
+      return "Self-Funded";
+    }
+    if (/\b(fully\s+funded|full\s+scholarship|all\s+expenses\s+paid|full\s+tuition\s+and\s+(?:living\s+)?stipend)\b/i.test(lowerFull)) {
+      return "Fully Funded (verified in official text)";
+    }
+    return raw.category === "job" ? salary.salaryDisplay : "Funding not specified \u2014 verify on official portal";
+  };
+  const eligibility = {
+    opportunityId: canonicalId,
+    category: raw.category,
+    sector: sectors.primary,
+    secondarySectors: sectors.secondary,
+    seniorityLevel,
+    requiredBankingYears: exp.requiredBankingYears,
+    requiredManagerialYears: exp.requiredManagerialYears,
+    requiredTotalYears: exp.requiredTotalYears,
+    educationRequirement: fullText.match(/[^.\n]{0,40}\b(phd|doctorate|master['’]?s|mba|bachelor['’]?s|university\s+degree|diploma)\b[^.\n]{0,70}/i)?.[0]?.replace(/\s+/g, " ").trim() || "Verify education requirements on official portal",
+    individualApplicationAllowed: /\b(nominated\s+only|institutional\s+nomination\s+required|no\s+direct\s+individual\s+applications)\b/i.test(
+      lowerFull
+    ) ? "no" : /\b(apply\s+online|individual\s+applications?\s+(?:welcome|accepted)|apply\s+directly)\b/i.test(lowerFull) ? "yes" : "not_confirmed",
+    universityRecommendationRequired: /\b(university\s+(?:recommendation|nomination|endorsement))\b/i.test(lowerFull) ? "yes" : "not_confirmed",
+    companyRecommendationRequired: /\b((?:employer|company|organization)\s+(?:recommendation|nomination|endorsement))\b/i.test(
+      lowerFull
+    ) ? "yes" : "not_confirmed",
+    fundingCoverage: detectAccurateFundingCoverage(),
+    visaCostsCoverageNote: visa.visaFeesCovered === "yes" ? "Visa application fees confirmed covered" : visa.visaFeesCovered === "no" ? "Visa costs are applicant responsibility" : visa.sponsorshipStatement,
+    nationalityEligibility: environment === "ethiopia_domestic" ? "Ethiopian domestic applicants" : /\b(ethiopia|african\s+nationals|developing\s+countries|all\s+nationalities|international\s+applicants)\b/i.test(
+      lowerFull
+    ) ? "Open to Ethiopian & international applicants" : "Verify Ethiopian applicant eligibility on official portal",
+    verifiedAt: nowIso
+  };
+  const isExpired = rejectionCodes.includes("deadline_expired") || rejectionCodes.includes("closed_or_withdrawn");
+  const status = rejectionCodes.length === 0 ? "published" : isExpired ? "expired" : "rejected";
+  const verificationBadge = status === "published" ? environment === "international" ? `VERIFIED \xB7 ${visa.transparencyStatus}` : "VERIFIED \xB7 Ethiopian Domestic Opportunity" : status === "expired" ? deadlineEval.deadlineStatusLabel : "NOT VERIFIED";
+  const referenceNumber = raw.referenceNumber && String(raw.referenceNumber).trim().toUpperCase() || extractOpportunityReferenceNumber(`${raw.title}
+${raw.description}
+${raw.officialApplicationUrl}`);
+  const primarySourceUrl = String(raw.sourceUrl || raw.officialApplicationUrl).trim();
+  const primarySourceName = String(raw.sourceName || raw.employer).trim();
+  return {
+    id: canonicalId,
+    canonicalKey,
+    urlFingerprint,
+    referenceNumber,
+    updateVersion: 1,
+    category: raw.category,
+    environment,
+    title: raw.title.trim(),
+    employer: raw.employer.trim(),
+    country: raw.country.trim() || (environment === "ethiopia_domestic" ? "Ethiopia" : "International"),
+    city: (raw.city || "").trim(),
+    region: (raw.region || (environment === "ethiopia_domestic" ? "Ethiopia" : "International")).trim(),
+    workMode,
+    sector: sectors.primary,
+    secondarySectors: sectors.secondary,
+    seniorityLevel,
+    actualResponsibilities,
+    descriptionSummary: String(raw.description || "").replace(/\s+/g, " ").trim().slice(0, 420),
+    publishedDate: raw.publishedDate || null,
+    officialApplicationUrl: raw.officialApplicationUrl.trim(),
+    applicationLinkVerification,
+    primarySourceUrl,
+    primarySourceName,
+    sourceUrls: Array.from(new Set([primarySourceUrl].filter(Boolean))),
+    sourceNames: Array.from(new Set([primarySourceName].filter(Boolean))),
+    deadlineRaw: String(raw.deadlineRaw || "Deadline not published").trim(),
+    deadlineDateExact: deadlineEval.deadlineDateExact,
+    deadlineTime: deadlineEval.deadlineTime,
+    deadlineTimezone: deadlineEval.deadlineTimezone,
+    deadlineIso: deadlineEval.deadlineIso,
+    deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+    deadlineLastVerifiedAt: nowIso,
+    deadlineEvidence: deadlineEval.deadlineEvidence,
+    fullDaysRemaining: deadlineEval.fullDaysRemaining,
+    salary,
+    visa,
+    eligibility,
+    status,
+    verificationBadge,
+    rejectionCodes: Array.from(new Set(rejectionCodes)),
+    rejectionExplanations: Array.from(new Set(rejectionExplanations)),
+    isBranchBankingMatch: branchEval.matched,
+    branchBankingRelevanceScore: branchEval.relevanceScore,
+    branchBankingMatchReasons: branchEval.matchReasons,
+    branchBankingRejectionReasons: branchEval.rejectionReasons,
+    discoveredAt: nowIso,
+    lastVerifiedAt: nowIso,
+    updatedAt: nowIso,
+    unpublishedAt: null,
+    unpublishedReason: null
+  };
+}
+function areSectorsCompatible(userSector, oppPrimary, oppSecondary) {
+  if (userSector === oppPrimary) return true;
+  if (userSector === "branch_banking") {
+    return oppPrimary === "banking_finance" || oppPrimary === "branch_banking";
+  }
+  if (userSector === "banking_finance") {
+    return oppPrimary === "branch_banking" || oppPrimary === "banking_finance";
+  }
+  if (userSector === "wash") {
+    return oppPrimary === "wash" || oppSecondary.includes("wash");
+  }
+  if (userSector === "engineering") {
+    return oppPrimary === "engineering" || oppPrimary === "wash" && oppSecondary.includes("engineering");
+  }
+  if (userSector === "healthcare") {
+    return oppPrimary === "healthcare";
+  }
+  if (userSector === "education") {
+    return oppPrimary === "education";
+  }
+  if (userSector === "it_software") {
+    return oppPrimary === "it_software";
+  }
+  if (userSector === "legal_compliance") {
+    return oppPrimary === "legal_compliance";
+  }
+  return oppSecondary.includes(userSector);
+}
+function evaluateOpportunityForUserProfile(opportunity, profile) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const matchReasons = [];
+  const rejectionCodes = [];
+  const rejectionExplanations = [];
+  const hasLegalWorkRight = opportunity.environment === "international" && opportunity.category === "job" && (profile.countriesWithLegalWorkRight || []).some(
+    (c) => c.toLowerCase().trim() === opportunity.country.toLowerCase().trim()
+  );
+  if (opportunity.status !== "published") {
+    const onlyFailedVisa = opportunity.rejectionCodes.length === 1 && opportunity.rejectionCodes[0] === "visa_sponsorship_unconfirmed";
+    if (!(onlyFailedVisa && hasLegalWorkRight)) {
+      return {
+        id: `match_${profile.userId}_${opportunity.id}`,
+        userId: profile.userId,
+        opportunityId: opportunity.id,
+        environment: opportunity.environment,
+        category: opportunity.category,
+        eligible: false,
+        relevanceScore: 0,
+        matchReasons: [],
+        rejectionCodes: [...opportunity.rejectionCodes],
+        rejectionExplanations: [...opportunity.rejectionExplanations],
+        evaluatedAt: nowIso
+      };
+    }
+  }
+  if (profile.preferredEnvironment !== "both" && profile.preferredEnvironment !== opportunity.environment) {
+    rejectionCodes.push("industry_mismatch");
+    rejectionExplanations.push(
+      `Opportunity environment (${opportunity.environment}) does not match user preference (${profile.preferredEnvironment}).`
+    );
+  }
+  if (!areSectorsCompatible(profile.professionalSector, opportunity.sector, opportunity.secondarySectors)) {
+    rejectionCodes.push("industry_mismatch");
+    rejectionExplanations.push(
+      `Industry mismatch: Opportunity sector (${opportunity.sector}) does not match user sector (${profile.professionalSector}).`
+    );
+  }
+  if (opportunity.category === "job") {
+    const userRank = SENIORITY_RANK[profile.careerLevel] || 4;
+    const oppRank = SENIORITY_RANK[opportunity.seniorityLevel] || 4;
+    if (oppRank > userRank + 1 || opportunity.seniorityLevel === "executive" && profile.careerLevel !== "executive" && profile.careerLevel !== "director") {
+      rejectionCodes.push("seniority_mismatch_too_senior");
+      rejectionExplanations.push(
+        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) substantially exceeds user career level (${SENIORITY_LABELS[profile.careerLevel]}).`
+      );
+    }
+    const isUserSeniorOrManager = userRank >= SENIORITY_RANK.senior_professional;
+    const isOppJuniorOrEntry = oppRank <= SENIORITY_RANK.junior_professional;
+    if (isUserSeniorOrManager && isOppJuniorOrEntry && !profile.allowJuniorRoles) {
+      rejectionCodes.push("seniority_mismatch_too_junior");
+      rejectionExplanations.push(
+        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) is below user's ${SENIORITY_LABELS[profile.careerLevel]} level.`
+      );
+    } else if (userRank >= SENIORITY_RANK.manager && oppRank < SENIORITY_RANK.supervisor && !profile.allowJuniorRoles) {
+      rejectionCodes.push("seniority_mismatch_too_junior");
+      rejectionExplanations.push(
+        `Seniority mismatch: Managerial user (${SENIORITY_LABELS[profile.careerLevel]}) should not receive non-supervisory/individual-contributor junior roles (${SENIORITY_LABELS[opportunity.seniorityLevel]}).`
+      );
+    }
+    const reqYears = opportunity.eligibility.requiredTotalYears ?? opportunity.eligibility.requiredBankingYears;
+    if (reqYears !== null && reqYears > profile.yearsOfExperience + 3) {
+      rejectionCodes.push("experience_mismatch");
+      rejectionExplanations.push(
+        `Experience mismatch: Role requires ${reqYears}+ years while user profile has ${profile.yearsOfExperience} years.`
+      );
+    }
+    const reqMgmt = opportunity.eligibility.requiredManagerialYears;
+    if (reqMgmt !== null && reqMgmt > profile.managerialExperienceYears + 3) {
+      rejectionCodes.push("experience_mismatch");
+      rejectionExplanations.push(
+        `Managerial experience mismatch: Role requires ${reqMgmt}+ managerial years while user profile has ${profile.managerialExperienceYears} years.`
+      );
+    }
+    if (profile.professionalSector === "branch_banking") {
+      const branchCheck = evaluateForBranchBankingSpecialFeature({
+        title: opportunity.title,
+        employer: opportunity.employer,
+        description: opportunity.descriptionSummary,
+        responsibilities: opportunity.actualResponsibilities,
+        sector: opportunity.sector,
+        seniorityLevel: opportunity.seniorityLevel,
+        exp: {
+          requiredTotalYears: opportunity.eligibility.requiredTotalYears,
+          requiredBankingYears: opportunity.eligibility.requiredBankingYears,
+          requiredManagerialYears: opportunity.eligibility.requiredManagerialYears,
+          bankingExperienceSummary: "",
+          managerialExperienceSummary: ""
+        },
+        salary: opportunity.salary,
+        visa: hasLegalWorkRight ? {
+          ...opportunity.visa,
+          verified: true,
+          transparencyStatus: "VISA SPONSORSHIP CONFIRMED",
+          conditionMet: "C_legal_right_no_sponsorship"
+        } : opportunity.visa,
+        environment: opportunity.environment,
+        deadlinePassed: true,
+        deadlineExplanation: "",
+        profile
+      });
+      if (!branchCheck.matched) {
+        for (const c of branchCheck.rejectionCodes) rejectionCodes.push(c);
+        for (const r of branchCheck.rejectionReasons) rejectionExplanations.push(r);
+      }
+    }
+  }
+  if (rejectionCodes.length > 0) {
+    return {
+      id: `match_${profile.userId}_${opportunity.id}`,
+      userId: profile.userId,
+      opportunityId: opportunity.id,
+      environment: opportunity.environment,
+      category: opportunity.category,
+      eligible: false,
+      relevanceScore: 0,
+      matchReasons: [],
+      rejectionCodes: Array.from(new Set(rejectionCodes)),
+      rejectionExplanations: Array.from(new Set(rejectionExplanations)),
+      evaluatedAt: nowIso
+    };
+  }
+  let score = 62;
+  matchReasons.push(`Direct sector match (${opportunity.sector}) aligned with ${profile.currentOccupation || profile.professionalSector}.`);
+  score += 12;
+  if (opportunity.category === "job") {
+    matchReasons.push(`Seniority fit: ${SENIORITY_LABELS[opportunity.seniorityLevel]} matches your ${SENIORITY_LABELS[profile.careerLevel]} career level.`);
+    score += 10;
+  } else {
+    matchReasons.push(`Verified ${opportunity.category} opportunity with confirmed visa/funding transparency.`);
+    score += 10;
+  }
+  const oppLower = `${opportunity.title} ${opportunity.descriptionSummary} ${opportunity.actualResponsibilities.join(" ")}`.toLowerCase();
+  const matchedSkills = (profile.skills || []).filter((sk) => {
+    const tokens = sk.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+    return tokens.some((t) => oppLower.includes(t));
+  });
+  if (matchedSkills.length > 0) {
+    matchReasons.push(`Matched skills: ${matchedSkills.slice(0, 4).join(", ")}.`);
+    score += Math.min(10, matchedSkills.length * 3);
+  }
+  if (opportunity.environment === "international") {
+    matchReasons.push(
+      hasLegalWorkRight ? `Condition C: Confirmed legal right to work in ${opportunity.country}.` : opportunity.visa.statusLabel
+    );
+    score += 4;
+  } else {
+    matchReasons.push("Ethiopian domestic opportunity matched under local career rules.");
+    score += 4;
+  }
+  return {
+    id: `match_${profile.userId}_${opportunity.id}`,
+    userId: profile.userId,
+    opportunityId: opportunity.id,
+    environment: opportunity.environment,
+    category: opportunity.category,
+    eligible: true,
+    relevanceScore: Math.min(99, score),
+    matchReasons,
+    rejectionCodes: [],
+    rejectionExplanations: [],
+    evaluatedAt: nowIso
+  };
+}
 
 // serverBranchManagerJobs.ts
 var OWNER_PRIVATE_SAVED_PROFILE = {
@@ -16691,7 +18285,7 @@ var OWNER_PRIVATE_SAVED_PROFILE = {
   languages: ["English", "Amharic"],
   hasMastersDegree: false,
   hasEnglishTest: false,
-  minimumMonthlyGrossUsd: 3e3
+  minimumMonthlyGrossUsd: 0
 };
 var FALLBACK_FX_USD_BASE = {
   USD: 1,
@@ -16942,8 +18536,8 @@ function parseGuaranteedBaseSalaryUsd(rawText, fxRatesUsdBase = FALLBACK_FX_USD_
     maxOriginal: 0,
     baseMonthlyUsd: 0,
     baseAnnualUsd: 0,
-    originalSalaryDisplay: "Undisclosed",
-    usdEquivalentDisplay: "Undisclosed",
+    originalSalaryDisplay: "Salary not disclosed",
+    usdEquivalentDisplay: "Salary not disclosed",
     exchangeRateUsed: ""
   };
   if (!rawText || !rawText.trim()) return empty;
@@ -17056,13 +18650,14 @@ function extractExplicitVisaSponsorshipEvidence(text) {
       localOnlyBlocked: true
     };
   }
+  const conditionalOrPastOnlyRx = /\b(previously\s+sponsored|has\s+sponsored\s+other\s+roles|licensed\s+sponsor\s+(?:register|holder)|visa\s+sponsorship\s+(?:may\s+be|might\s+be|could\s+be)\s+(?:considered|available)|case[- ]by[- ]case\s+sponsorship)\b/i;
   const explicitPatterns = [
     {
-      rx: /[^.\n]{0,120}\b(we\s+(?:offer|provide|can\s+provide|support)\s+(?:full\s+)?(?:visa|work\s+permit)\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included)|skilled\s+worker\s+visa\s+sponsorship|employer[- ]sponsored\s+(?:work\s+)?visa|sponsor(?:ing)?\s+(?:your\s+)?(?:work\s+)?visa|work\s+permit\s+sponsorship|eu\s+blue\s+card\s+sponsorship|relocation\s+and\s+visa\s+sponsorship|visa\s+and\s+relocation\s+(?:support|package|sponsorship)|full\s+visa\s+sponsorship)\b[^.\n]{0,140}/i,
+      rx: /[^.\n]{0,120}\b(we\s+(?:offer|provide|can\s+provide|support)\s+(?:full\s+)?(?:international\s+|work\s+|employment\s+)?(?:visa|work\s+permit)\s+sponsorship|visa\s+sponsorship\s+(?:and\s+relocation\s+(?:package|support|assistance)\s+)?(?:is\s+|are\s+)?(?:available|provided|offered|included|confirmed)|skilled\s+worker\s+visa\s+sponsorship|employer[- ]sponsored\s+(?:work\s+)?visa|sponsor(?:s|ing)?\s+(?:your\s+)?(?:work\s+)?visa|work\s+permit\s+sponsorship|eu\s+blue\s+card\s+sponsorship|relocation\s+and\s+visa\s+sponsorship|visa\s+and\s+relocation\s+(?:support|package|sponsorship)|full\s+(?:international\s+|work\s+|employment\s+)?visa\s+sponsorship)\b[^.\n]{0,140}/i,
       score: 100
     },
     {
-      rx: /[^.\n]{0,100}\b(visa\s+sponsorship|sponsorship\s+for\s+international\s+applicants|international\s+recruitment\s+with\s+(?:visa|work\s+permit)|g-4\s+visa|iqama\s+sponsorship|employment\s+visa\s+sponsored\s+by\s+(?:the\s+)?employer)\b[^.\n]{0,120}/i,
+      rx: /[^.\n]{0,100}\b(sponsorship\s+for\s+international\s+applicants|international\s+recruitment\s+with\s+(?:visa|work\s+permit)\s+sponsorship|g-4\s+visa|iqama\s+sponsorship|employment\s+visa\s+sponsored\s+by\s+(?:the\s+)?employer)\b[^.\n]{0,120}/i,
       score: 90
     }
   ];
@@ -17071,7 +18666,7 @@ function extractExplicitVisaSponsorshipEvidence(text) {
   let strengthScore = 0;
   for (const pat of explicitPatterns) {
     const match = clean.match(pat.rx);
-    if (match) {
+    if (match && !conditionalOrPastOnlyRx.test(match[0])) {
       confirmed = true;
       evidence = match[0].replace(/\s+/g, " ").trim().slice(0, 260);
       strengthScore = pat.score;
@@ -17254,8 +18849,8 @@ function sanitizeBranchProfile(input, fallback = DEFAULT_PUBLIC_BRANCH_MANAGER_P
     languages: cleanArr(input.languages, fallback.languages),
     hasMastersDegree: Boolean(input.hasMastersDegree),
     hasEnglishTest: Boolean(input.hasEnglishTest),
-    // Strictly enforce >= $3,000 USD minimum floor for this section!
-    minimumMonthlyGrossUsd: Math.max(3e3, Math.min(5e4, Number(input.minimumMonthlyGrossUsd ?? 3e3) || 3e3))
+    // No mandatory minimum salary restriction anywhere on the platform (Section 1)
+    minimumMonthlyGrossUsd: Math.max(0, Math.min(5e4, Number(input.minimumMonthlyGrossUsd ?? 0) || 0))
   };
 }
 function evaluateBranchManagerJobs(params) {
@@ -17263,7 +18858,7 @@ function evaluateBranchManagerJobs(params) {
   const baseDefault = params.isOwnerAccountProfile ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE;
   const profile = sanitizeBranchProfile(params.profileInput, baseDefault);
   const fxRates = params.fxRatesUsdBase || FALLBACK_FX_USD_BASE;
-  const minThresholdUsd = Math.max(3e3, Number(params.minSalaryUsd || profile.minimumMonthlyGrossUsd || 3e3));
+  const minThresholdUsd = Math.max(0, Number(params.minSalaryUsd ?? 0) || 0);
   const audit = {
     totalCandidatesScanned: (params.rawCandidates || []).length,
     passedAllSixGates: 0,
@@ -17283,17 +18878,20 @@ function evaluateBranchManagerJobs(params) {
   const verifiedJobs = [];
   for (const raw of params.rawCandidates || []) {
     const url = String(raw.applicationUrl || "").trim();
-    if (!url.startsWith("https://")) {
+    const linkCheck = evaluateDirectApplicationLink({
+      url,
+      category: "job",
+      employer: raw.employerName
+    });
+    if (linkCheck.status !== "VERIFIED") {
       audit.excludedExpiredOrDuplicate += 1;
       continue;
     }
-    if (raw.applicationDeadline && raw.applicationDeadline !== "Open \u2014 Verify on employer portal") {
-      const dlNorm = /^\d{4}-\d{2}-\d{2}$/.test(raw.applicationDeadline.trim()) ? `${raw.applicationDeadline.trim()}T23:59:59Z` : raw.applicationDeadline;
-      const parsedDl = Date.parse(dlNorm);
-      if (!Number.isNaN(parsedDl) && parsedDl - Date.now() < 72 * 60 * 60 * 1e3) {
-        audit.excludedExpiredOrDuplicate += 1;
-        continue;
-      }
+    const rawDeadlineClean = raw.applicationDeadline && raw.applicationDeadline !== "Open \u2014 Verify on employer portal" ? raw.applicationDeadline : null;
+    const deadlineEval = evaluateStrictThreeDayDeadline(rawDeadlineClean, Date.now(), false);
+    if (!deadlineEval.passed) {
+      audit.excludedExpiredOrDuplicate += 1;
+      continue;
     }
     const dedupKey = `${raw.title.toLowerCase().trim()}|${raw.employerName.toLowerCase().trim()}|${raw.locationRaw.toLowerCase().trim()}`;
     if (seenDedup.has(dedupKey)) {
@@ -17335,14 +18933,6 @@ ${plainDesc}`;
 ${plainDesc}`,
       fxRates
     );
-    if (!salaryEval.disclosed) {
-      audit.excludedUndisclosedSalary += 1;
-      continue;
-    }
-    if (salaryEval.baseMonthlyUsd <= 3e3 || salaryEval.baseAnnualUsd <= 36e3) {
-      audit.excludedBelow3000Usd += 1;
-      continue;
-    }
     const visaEval = extractExplicitVisaSponsorshipEvidence(fullText);
     if (visaEval.localOnlyBlocked || raw.ethiopianEligibleHint === "excluded") {
       audit.excludedEthiopianIneligible += 1;
@@ -17429,11 +19019,11 @@ ${plainDesc}`,
       matchScore -= 6;
     }
     const profileMatchPercentage = Math.max(35, Math.min(98, Math.round(matchScore)));
-    const salaryNorm = Math.min(100, 50 + (salaryEval.baseMonthlyUsd - 3e3) / 100);
+    const salaryNorm = salaryEval.disclosed ? Math.max(40, Math.min(100, 45 + salaryEval.baseMonthlyUsd / 150)) : 55;
     const ethScore = raw.ethiopianEligibleHint === "confirmed" ? 100 : 90;
     const relocScore = (visaEval.hasRelocation ? 60 : 0) + (visaEval.hasFamilySupport ? 40 : 0);
     const rankingScore = Number(
-      (visaEval.strengthScore * 0.3 + salaryNorm * 0.24 + ethScore * 0.16 + profileMatchPercentage * 0.16 + employerMeta.reputationScore * 0.08 + relocScore * 0.06).toFixed(2)
+      (visaEval.strengthScore * 0.34 + profileMatchPercentage * 0.24 + ethScore * 0.18 + salaryNorm * 0.1 + employerMeta.reputationScore * 0.08 + relocScore * 0.06).toFixed(2)
     );
     audit.passedAllSixGates += 1;
     const mgmtExpMatch = plainDesc.match(
@@ -17441,6 +19031,7 @@ ${plainDesc}`,
     );
     const requiredManagerialExperience = mgmtExpMatch ? `${mgmtExpMatch[1]}+ years managerial / supervisory experience` : "Managerial & staff supervision experience required";
     const taxBasis = /\b(net\s+salary|tax[- ]free|after[- ]tax)\b/i.test(fullText) ? "Net" : /\b(gross|base\s+salary)\b/i.test(fullText) ? "Gross" : "Not Specified";
+    const workMode = detectWorkMode(fullText);
     verifiedJobs.push({
       id: raw.id,
       jobTitle: raw.title,
@@ -17449,12 +19040,14 @@ ${plainDesc}`,
       country: regionEval.country,
       city: regionEval.city,
       regionScope: regionEval.regionScope,
-      grossMonthlySalaryUsd: salaryEval.baseMonthlyUsd,
-      grossAnnualSalaryUsd: salaryEval.baseAnnualUsd,
-      originalSalaryDisplay: salaryEval.originalSalaryDisplay,
-      usdEquivalentDisplay: salaryEval.usdEquivalentDisplay,
-      exchangeRateUsed: salaryEval.exchangeRateUsed,
+      grossMonthlySalaryUsd: salaryEval.disclosed ? salaryEval.baseMonthlyUsd : 0,
+      grossAnnualSalaryUsd: salaryEval.disclosed ? salaryEval.baseAnnualUsd : 0,
+      salaryDisclosed: salaryEval.disclosed,
+      originalSalaryDisplay: salaryEval.disclosed ? salaryEval.originalSalaryDisplay : "Salary not disclosed",
+      usdEquivalentDisplay: salaryEval.disclosed ? salaryEval.usdEquivalentDisplay : "Salary not disclosed",
+      exchangeRateUsed: salaryEval.disclosed ? salaryEval.exchangeRateUsed : "Not applicable (salary not disclosed)",
       visaSponsorshipEvidence: visaEval.evidence,
+      visaTransparencyStatus: "VISA SPONSORSHIP CONFIRMED",
       sponsorshipStrengthScore: visaEval.strengthScore,
       ethiopianEligibilityConfirmation: ethiopianConfirmation,
       requiredEducation: eduText,
@@ -17465,21 +19058,28 @@ ${plainDesc}`,
       familyRelocationPossibilities: visaEval.familyText,
       hasConfirmedRelocation: visaEval.hasRelocation,
       hasConfirmedFamilySupport: visaEval.hasFamilySupport,
-      applicationDeadline: raw.applicationDeadline || "Open \u2014 Verify closing date on official employer portal",
+      applicationDeadline: deadlineEval.deadlineDateExact || raw.applicationDeadline || "DEADLINE NOT PUBLISHED",
+      deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+      deadlineTime: deadlineEval.deadlineTime,
+      deadlineTimezone: deadlineEval.deadlineTimezone,
+      daysRemaining: deadlineEval.fullDaysRemaining,
       datePosted: raw.datePosted || nowIso.slice(0, 10),
+      lastVerifiedAt: nowIso,
       officialApplicationUrl: url,
+      applicationLinkStatus: linkCheck.status,
       sourcePortal: raw.sourcePortal,
+      workMode,
       profileMatchPercentage,
       whyYouQualify,
       gapsOrUnmetRequirements,
       matchedTargetPosition: roleMatch.matchedPosition,
       employerReputationScore: employerMeta.reputationScore,
       rankingScore,
-      salaryPeriod: salaryEval.period === "annual" ? "Annual" : salaryEval.period === "monthly" ? "Monthly" : "Not Disclosed",
-      salaryTaxBasis: taxBasis,
+      salaryPeriod: !salaryEval.disclosed ? "Not Disclosed" : salaryEval.period === "annual" ? "Annual" : "Monthly",
+      salaryTaxBasis: salaryEval.disclosed ? taxBasis : "Not Specified",
       requiredBankingExperience: expEval.summary,
       requiredManagerialExperience,
-      verificationStatus: "Verified Official \xB7 >$3,000/mo \xB7 Visa Confirmed",
+      verificationStatus: "Verified Official \xB7 Visa Sponsorship Confirmed",
       seniorityLevel: /\bsenior|regional|area|network\b/i.test(raw.title) ? "Senior Manager" : /\bdeputy|assistant\b/i.test(raw.title) ? "Assistant / Deputy Manager" : "Manager"
     });
   }
@@ -17487,7 +19087,9 @@ ${plainDesc}`,
     if (params.regionFilter && params.regionFilter !== "ALL" && job.regionScope !== params.regionFilter) {
       return false;
     }
-    if (job.grossMonthlySalaryUsd < minThresholdUsd) return false;
+    if (minThresholdUsd > 0 && job.salaryDisclosed && job.grossMonthlySalaryUsd < minThresholdUsd) {
+      return false;
+    }
     if (params.positionFilter && params.positionFilter !== "ALL") {
       const pf = params.positionFilter.toLowerCase();
       if (!job.matchedTargetPosition.toLowerCase().includes(pf) && !job.jobTitle.toLowerCase().includes(pf)) {
@@ -17612,7 +19214,7 @@ async function discoverLiveBranchManagerCandidates(existingGlobalOpps) {
       const url = String(j.absolute_url || "").trim();
       if (!url.startsWith("https://")) continue;
       candidates.push({
-        id: `bm_gh_${board.slug}_${j.id || crypto4.randomBytes(4).toString("hex")}`,
+        id: `bm_gh_${board.slug}_${j.id || crypto5.randomBytes(4).toString("hex")}`,
         title: String(j.title || "").trim(),
         employerName: board.employerName,
         employerTypeHint: board.employerType,
@@ -17645,7 +19247,7 @@ async function discoverLiveBranchManagerCandidates(existingGlobalOpps) {
       if (!url.startsWith("https://")) continue;
       const compSummary = j.compensation?.compensationTierSummary || j.compensation?.summaryComponents?.map((c) => c.label).join(" ") || "";
       candidates.push({
-        id: `bm_ash_${board.slug}_${j.id || crypto4.randomBytes(4).toString("hex")}`,
+        id: `bm_ash_${board.slug}_${j.id || crypto5.randomBytes(4).toString("hex")}`,
         title: String(j.title || "").trim(),
         employerName: board.employerName,
         employerTypeHint: board.employerType,
@@ -17674,7 +19276,7 @@ async function discoverLiveBranchManagerCandidates(existingGlobalOpps) {
           const desc = String(j.description || "");
           const tags = Array.isArray(j.tags) ? j.tags.join(" ") : "";
           candidates.push({
-            id: `bm_arb_${j.slug || crypto4.randomBytes(4).toString("hex")}`,
+            id: `bm_arb_${j.slug || crypto5.randomBytes(4).toString("hex")}`,
             title: String(j.title || "").trim(),
             employerName: String(j.company_name || "European Employer").trim(),
             locationRaw: `${String(j.location || "")} Germany Europe`.trim(),
@@ -17794,7 +19396,7 @@ function registerBranchManagerJobsRoutes(deps) {
     } catch (err) {
       res.status(500).json({
         success: false,
-        error: err?.message || "Failed to evaluate verified $3,000+ visa-sponsored roles."
+        error: err?.message || "Failed to evaluate verified visa-sponsored Branch Banking roles."
       });
     }
   });
@@ -17928,12 +19530,12 @@ function registerBranchManagerJobsRoutes(deps) {
 // serverAutonomousDiscoveryWorker.ts
 import * as fs3 from "fs";
 import * as path7 from "path";
-import * as crypto6 from "crypto";
+import * as crypto7 from "crypto";
 
 // serverAutonomousWebCrawler.ts
 import * as fs2 from "fs";
 import * as path6 from "path";
-import * as crypto5 from "crypto";
+import * as crypto6 from "crypto";
 import * as dns2 from "dns";
 import * as net2 from "net";
 var MAX_QUEUE_SIZE = 1200;
@@ -18345,7 +19947,7 @@ function fingerprintOpportunity(url, title, employer) {
     title.trim().toLowerCase().replace(/\s+/g, " "),
     employer.trim().toLowerCase().replace(/\s+/g, " ")
   ].join("|");
-  return crypto5.createHash("sha256").update(norm).digest("hex").slice(0, 24);
+  return crypto6.createHash("sha256").update(norm).digest("hex").slice(0, 24);
 }
 var AutonomousWebCrawler = class {
   constructor(options) {
@@ -18424,7 +20026,7 @@ var AutonomousWebCrawler = class {
       if (!existingUrls.has(seed.url)) {
         existingUrls.add(seed.url);
         db.queue.push({
-          id: `task_${crypto5.createHash("sha256").update(seed.url).digest("hex").slice(0, 14)}`,
+          id: `task_${crypto6.createHash("sha256").update(seed.url).digest("hex").slice(0, 14)}`,
           url: seed.url,
           domain: seed.domain,
           taskType: seed.taskType,
@@ -18551,7 +20153,7 @@ var AutonomousWebCrawler = class {
       return { enqueued: false, isNewDomain, domain };
     }
     db.queue.push({
-      id: `task_${crypto5.createHash("sha256").update(cleanUrl).digest("hex").slice(0, 14)}`,
+      id: `task_${crypto6.createHash("sha256").update(cleanUrl).digest("hex").slice(0, 14)}`,
       url: cleanUrl,
       domain,
       taskType: params.taskType,
@@ -18791,7 +20393,9 @@ ${candidate.summaryText}`;
       if (db.domains[candidate.sourceDomain]) {
         db.domains[candidate.sourceDomain].opportunitiesFoundCount++;
       }
-      if (salaryInfo.salaryMonthlyUsd && salaryInfo.salaryMonthlyUsd >= 3e3) {
+      if (/\b(bank|banking|branch\s+manager|retail\s+banking|credit\s+manager|relationship\s+manager|finance\s+manager|financial\s+controller|compliance\s+manager|risk\s+manager|microfinance|treasury)\b/i.test(
+        `${cleanTitle} ${cleanEmployer} ${combined}`
+      )) {
         counters.publishedBranchCandidates.push({
           id: `bm_web_${fp}`,
           title: cleanTitle,
@@ -19196,7 +20800,7 @@ ${candidate.summaryText}`;
         result.tasksSucceeded++;
         result.pagesProcessed++;
         db.totalPagesCrawled++;
-        const contentHash = crypto5.createHash("sha256").update(res.text.slice(0, 8e4)).digest("hex").slice(0, 20);
+        const contentHash = crypto6.createHash("sha256").update(res.text.slice(0, 8e4)).digest("hex").slice(0, 20);
         const prevPage = db.crawledPages[task.url];
         const contentChanged = !prevPage || prevPage.contentHash !== contentHash;
         let stats = { linksFound: 0, newDomainsFound: 0 };
@@ -19370,18 +20974,18 @@ function makeFingerprint(stream, url, title, employer) {
     String(title || "").trim().toLowerCase().replace(/\s+/g, " "),
     String(employer || "").trim().toLowerCase().replace(/\s+/g, " ")
   ].join("|");
-  return crypto6.createHash("sha256").update(normalized).digest("hex").slice(0, 24);
+  return crypto7.createHash("sha256").update(normalized).digest("hex").slice(0, 24);
 }
 function makeIncidentSignature(component, errorMsg) {
   const norm = `${component.toLowerCase()}|${errorMsg.toLowerCase().replace(/[0-9]+ms/g, "<ms>").replace(/[0-9]+s/g, "<s>").replace(/\s+/g, " ").slice(0, 140)}`;
-  return crypto6.createHash("sha256").update(norm).digest("hex").slice(0, 16);
+  return crypto7.createHash("sha256").update(norm).digest("hex").slice(0, 16);
 }
 function constantTimeSecretEqual(provided, expected) {
   if (!provided || !expected) return false;
   const a = Buffer.from(provided, "utf8");
   const b = Buffer.from(expected, "utf8");
   if (a.length !== b.length) return false;
-  return crypto6.timingSafeEqual(a, b);
+  return crypto7.timingSafeEqual(a, b);
 }
 async function fetchJsonWithRetryAndRateLimit(url, timeoutMs = 8e3, maxRetries = 2) {
   let lastError = "Unknown network error";
@@ -19625,7 +21229,7 @@ function registerAutonomousDiscoveryWorker(deps) {
       return { incident: existing, shouldNotifyOwner: false };
     }
     const next = {
-      id: `inc_${Date.now()}_${crypto6.randomBytes(3).toString("hex")}`,
+      id: `inc_${Date.now()}_${crypto7.randomBytes(3).toString("hex")}`,
       signature,
       component: params.component,
       errorType: params.errorType,
@@ -19780,7 +21384,7 @@ function registerAutonomousDiscoveryWorker(deps) {
         const jobUrl = String(j.absolute_url || "").trim();
         if (!jobUrl.startsWith("https://")) continue;
         incoming.push({
-          id: `bm_gh_${src.slug}_${j.id || crypto6.randomBytes(4).toString("hex")}`,
+          id: `bm_gh_${src.slug}_${j.id || crypto7.randomBytes(4).toString("hex")}`,
           title: String(j.title || "").trim(),
           employerName: src.employerName,
           employerTypeHint: src.employerType,
@@ -19826,7 +21430,7 @@ function registerAutonomousDiscoveryWorker(deps) {
         if (!jobUrl.startsWith("https://")) continue;
         const compSummary = j.compensation?.compensationTierSummary || j.compensation?.summaryComponents?.map((c) => c.label).join(" ") || "";
         incoming.push({
-          id: `bm_ash_${src.slug}_${j.id || crypto6.randomBytes(4).toString("hex")}`,
+          id: `bm_ash_${src.slug}_${j.id || crypto7.randomBytes(4).toString("hex")}`,
           title: String(j.title || "").trim(),
           employerName: src.employerName,
           employerTypeHint: src.employerType,
@@ -19877,7 +21481,7 @@ function registerAutonomousDiscoveryWorker(deps) {
         const desc = String(j.description || "");
         const tags = Array.isArray(j.tags) ? j.tags.join(" ") : "";
         incoming.push({
-          id: `bm_arb_${j.slug || crypto6.randomBytes(4).toString("hex")}`,
+          id: `bm_arb_${j.slug || crypto7.randomBytes(4).toString("hex")}`,
           title: String(j.title || "").trim(),
           employerName: String(j.company_name || "European Employer").trim(),
           locationRaw: `${String(j.location || "")} Germany Europe`.trim(),
@@ -19984,7 +21588,7 @@ Tags: ${tags}`,
   async function runOneMinuteCycle(trigger, options) {
     const startedMs = Date.now();
     const startedAt = new Date(startedMs).toISOString();
-    const cycleId = `auto1m_${startedMs}_${crypto6.randomBytes(3).toString("hex")}`;
+    const cycleId = `auto1m_${startedMs}_${crypto7.randomBytes(3).toString("hex")}`;
     const preState = loadState();
     const activePersistedLock = preState.activeLock && Date.parse(preState.activeLock.expiresAt) > startedMs;
     if (isCycleInFlight || activePersistedLock) {
@@ -20434,7 +22038,7 @@ Tags: ${tags}`,
       }
       for (const alert of incidentsToNotify) {
         pushAdminNotification({
-          type: `ops_${crypto6.createHash("sha256").update(alert.title).digest("hex").slice(0, 12)}`,
+          type: `ops_${crypto7.createHash("sha256").update(alert.title).digest("hex").slice(0, 12)}`,
           title: alert.title,
           message: alert.message,
           severity: alert.severity
@@ -20754,1231 +22358,6 @@ Time (EAT): ${formatEthiopiaDateTime(Date.now())}`
 // serverOpportunityIntelligence.ts
 import * as path8 from "path";
 import * as crypto8 from "crypto";
-
-// src/utils/strictOpportunityMatcher.ts
-import * as crypto7 from "crypto";
-
-// src/types/opportunityIntelligence.ts
-var SENIORITY_RANK = {
-  entry_level: 1,
-  junior_professional: 2,
-  experienced_professional: 3,
-  senior_professional: 4,
-  supervisor: 5,
-  assistant_manager: 6,
-  manager: 7,
-  senior_manager: 8,
-  director: 9,
-  executive: 10
-};
-var SENIORITY_LABELS = {
-  entry_level: "Entry Level",
-  junior_professional: "Junior Professional",
-  experienced_professional: "Experienced Professional",
-  senior_professional: "Senior Professional",
-  supervisor: "Supervisor",
-  assistant_manager: "Assistant Manager",
-  manager: "Manager",
-  senior_manager: "Senior Manager",
-  director: "Director",
-  executive: "Executive"
-};
-
-// src/utils/strictOpportunityMatcher.ts
-var BRANCH_BANKING_REFERENCE_PROFILE = {
-  userId: "branch_banking_reference",
-  professionalSector: "branch_banking",
-  currentOccupation: "Branch Manager",
-  educationLevel: "bachelors",
-  fieldOfStudy: "Accounting and Finance",
-  yearsOfExperience: 9,
-  bankingExperienceYears: 9,
-  managerialExperienceYears: 3,
-  skills: [
-    "Branch operations",
-    "Banking management",
-    "Branch administration",
-    "Customer relationship management",
-    "Credit operations",
-    "Deposit mobilization",
-    "Staff supervision",
-    "Banking compliance and internal control"
-  ],
-  certifications: [],
-  minimumSalaryUsdMonthly: 3e3,
-  careerLevel: "manager",
-  preferredLocations: ["Europe", "Scandinavia", "Middle East", "USA", "Ethiopia"],
-  preferredEnvironment: "both",
-  nationality: "Ethiopian",
-  countriesWithLegalWorkRight: ["Ethiopia"],
-  allowJuniorRoles: false
-};
-var MINIMUM_DEADLINE_FULL_DAYS = 3;
-var MINIMUM_DEADLINE_HOURS = MINIMUM_DEADLINE_FULL_DAYS * 24;
-var DEFAULT_FX_RATES_USD_BASE = {
-  USD: 1,
-  EUR: 0.92,
-  GBP: 0.785,
-  CHF: 0.88,
-  SEK: 10.65,
-  NOK: 10.9,
-  DKK: 6.88,
-  AED: 3.6725,
-  SAR: 3.75,
-  QAR: 3.64,
-  KWD: 0.307,
-  OMR: 0.385,
-  BHD: 0.376,
-  CAD: 1.38,
-  AUD: 1.53,
-  ETB: 126
-};
-var PRIORITY_BRANCH_BANKING_TITLES = [
-  { label: "Senior Branch Manager", rx: /\bsenior\s+(?:retail\s+|commercial\s+|bank\s+)?branch\s+manager\b/i },
-  { label: "Area Branch Manager", rx: /\barea\s+(?:bank\s+|retail\s+)?branch\s+manager\b|\barea\s+banking\s+manager\b/i },
-  { label: "Regional Branch Manager", rx: /\bregional\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
-  { label: "Branch Operations Manager", rx: /\bbranch\s+operations\s+manager\b/i },
-  { label: "Banking Operations Manager", rx: /\b(?:banking|bank)\s+operations\s+manager\b/i },
-  {
-    label: "Banking Operations and Administration Manager",
-    rx: /\b(?:banking|branch)\s+operations\s+(?:and|&)\s+admin(?:istration)?\s+manager\b/i
-  },
-  { label: "Branch Manager", rx: /\b(?:retail\s+|commercial\s+|bank\s+|banking\s+)?branch\s+manager\b/i },
-  { label: "Deputy Branch Manager", rx: /\bdeputy\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
-  { label: "Assistant Branch Manager", rx: /\bassistant\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
-  { label: "Banking Service Manager", rx: /\b(?:banking|branch)\s+service(?:s)?\s+manager\b/i },
-  { label: "Retail Banking Manager", rx: /\bretail\s+banking\s+manager\b/i },
-  { label: "Branch Network Manager", rx: /\bbranch\s+network\s+manager\b/i },
-  {
-    label: "Banking Relationship Manager (Managerial)",
-    rx: /\b(?:senior\s+|commercial\s+|corporate\s+|retail\s+|sme\s+|banking\s+|bank\s+)?relationship\s+manager\b/i
-  },
-  {
-    label: "Banking Business Development Manager",
-    rx: /\b(?:banking|bank|retail\s+banking|commercial\s+banking|branch)\s+business\s+development\s+manager\b/i
-  },
-  {
-    label: "Banking Management Equivalent",
-    rx: /\b(?:sme\s+banking|commercial\s+banking|credit\s+operations|microfinance\s+operations|customer\s+operations|deposit\s+mobilization|financial\s+operations)\s+manager\b/i
-  }
-];
-var EXECUTIVE_OVER_SENIOR_TITLE_RX = /\b(vice\s+president|svp\b|evp\b|avp\b.*executive|\bvp\b|chief\s+[a-z\s]+officer|\bceo\b|\bcfo\b|\bcoo\b|\bcro\b|managing\s+director|executive\s+director|group\s+head\s+of|global\s+head\s+of|country\s+ceo|country\s+head)\b/i;
-var JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX = /\b(customer\s+service\s+representative|csr\b|bank\s+teller|\bteller\b|\bcashier\b|junior\s+banking\s+assistant|banking\s+assistant|entry[- ]level|graduate\s+trainee|management\s+trainee|\bintern\b|\binternship\b|front\s+desk|receptionist|call\s+center\s+agent|contact\s+center\s+agent|data\s+entry\s+clerk|office\s+assistant|clerical\s+officer|junior\s+clerk|administrative\s+assistant)\b/i;
-var NON_BANKING_MANAGER_DISQUALIFIER_RX = /\b(software|devops|frontend|backend|full[- ]stack|data\s+scien|machine\s+learning|cloud\s+architect|product\s+designer|ux\s+designer|marketing\s+manager|social\s+media\s+manager|brand\s+manager|hotel\s+manager|restaurant\s+manager|store\s+manager|warehouse\s+manager|supply\s+chain\s+manager|construction\s+manager|project\s+manager.*civil|nursing\s+manager|clinic\s+manager|school\s+principal|hr\s+manager|human\s+resources\s+manager|talent\s+acquisition\s+manager|office\s+manager|facilities\s+manager|wash\s+(?:manager|coordinator|officer|engineer)|water\s+and\s+sanitation)\b/i;
-var BRANCH_BANKING_RESPONSIBILITY_SIGNALS = [
-  { label: "Branch operations & daily controls", rx: /\b(branch\s+operations|daily\s+branch|vault\s+control|cash\s+management|teller\s+supervision|branch\s+compliance|core\s+banking)\b/i },
-  { label: "Banking management & P&L / KPI leadership", rx: /\b(branch\s+performance|branch\s+p&l|branch\s+target|branch\s+budget|deposit\s+mobilization|branch\s+growth|portfolio\s+management)\b/i },
-  { label: "Staff supervision & team management", rx: /\b(supervis(?:e|ing)\s+(?:branch\s+)?staff|lead(?:ing)?\s+a\s+team|manage\s+(?:direct\s+reports|branch\s+team|relationship\s+officers|tellers)|people\s+management|performance\s+appraisal)\b/i },
-  { label: "Credit, lending & risk oversight", rx: /\b(credit\s+appraisal|loan\s+portfolio|credit\s+risk|kyc|aml|internal\s+control|regulatory\s+compliance|audit\s+readiness)\b/i },
-  { label: "Managerial customer relationship & business development", rx: /\b(high[- ]value\s+client|commercial\s+clients|sme\s+clients|customer\s+relationship\s+management|client\s+acquisition|business\s+development|retail\s+banking)\b/i }
-];
-function extractOpportunityReferenceNumber(text) {
-  const m = String(text || "").match(
-    /\b(?:job\s*(?:id|ref|code|number|#)|req(?:uisition)?\s*(?:id|#|no\.?)|vacancy\s*(?:id|no\.?|ref)|reference\s*(?:no\.?|number|code|#)|ref\s*[:#])\s*[:#-]?\s*([A-Z0-9][A-Z0-9/_-]{2,28})\b/i
-  );
-  if (!m?.[1]) return null;
-  const cleaned = m[1].trim().toUpperCase();
-  if (/^(HTTP|HTTPS|WWW|THE|AND|FOR|YES|NOT)$/.test(cleaned)) return null;
-  return cleaned;
-}
-function normalizeCanonicalText(input) {
-  return String(input || "").toLowerCase().replace(/https?:\/\//g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\b(the|and|for|with|limited|ltd|plc|inc|corp|llc|gmbh|s\.c\.|bank\s+s\.c\.)\b/g, " ").replace(/\s+/g, " ").trim();
-}
-function normalizeOfficialUrl(rawUrl) {
-  try {
-    const u = new URL(String(rawUrl || "").trim());
-    u.hash = "";
-    const stripParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "source", "gh_src"];
-    for (const p of stripParams) u.searchParams.delete(p);
-    return u.toString().replace(/\/+$/, "").toLowerCase();
-  } catch {
-    return String(rawUrl || "").trim().toLowerCase();
-  }
-}
-function buildCanonicalOpportunityIdentity(input) {
-  const normUrl = normalizeOfficialUrl(input.officialApplicationUrl);
-  const urlFingerprint = crypto7.createHash("sha256").update(normUrl).digest("hex").slice(0, 24);
-  const normEmployer = normalizeCanonicalText(input.employer);
-  const normTitle = normalizeCanonicalText(input.title);
-  const normCountry = normalizeCanonicalText(input.country || "global");
-  const crossSourceBasis = `${input.category}|${normEmployer}|${normTitle}|${normCountry}`;
-  const canonicalKey = crypto7.createHash("sha256").update(crossSourceBasis).digest("hex").slice(0, 24);
-  return {
-    canonicalKey,
-    urlFingerprint,
-    canonicalId: `opp_${canonicalKey}`
-  };
-}
-function detectEnvironment(country, city = "", description = "") {
-  const combined = `${country} ${city}`.toLowerCase();
-  if (/\b(ethiopia|addis\s+ababa|adama|hawassa|bahir\s+dar|mekelle|dire\s+dawa|gondar|jimma|dessie|bishoftu|shashemene|arbaminch|jigjiga|semera|assosa|gambela|harar)\b/i.test(
-    combined
-  )) {
-    return "ethiopia_domestic";
-  }
-  if (!country.trim() && /\b(addis\s+ababa|ethiopian\s+birr|\betb\b)\b/i.test(description)) {
-    return "ethiopia_domestic";
-  }
-  return "international";
-}
-function detectProfessionalSectors(title, employer, description) {
-  const titleAndOrg = `${title} ${employer}`.toLowerCase();
-  const full = `${title} ${employer} ${description}`.toLowerCase();
-  const scores = {
-    branch_banking: 0,
-    banking_finance: 0,
-    wash: 0,
-    engineering: 0,
-    healthcare: 0,
-    education: 0,
-    it_software: 0,
-    legal_compliance: 0,
-    general_management: 0,
-    other: 0
-  };
-  if (/\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply|sanitation|hygiene\s+promotion|water\s+engineering|wastewater|environmental\s+health|water\s+resources|humanitarian\s+wash|climate[- ]resilient\s+wash|borehole|fecal\s+sludge|latrine|hydrogeolog)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.wash += 9;
-  } else if (/\b(wash\s+program|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply\s+and\s+sanitation|wastewater\s+treatment|hygiene\s+promotion|humanitarian\s+wash|climate[- ]resilient\s+wash)\b/i.test(
-    full
-  )) {
-    scores.wash += 6;
-  }
-  if (PRIORITY_BRANCH_BANKING_TITLES.some((p) => p.rx.test(title))) {
-    scores.branch_banking += 10;
-    scores.banking_finance += 6;
-  }
-  if (/\b(branch\s+banking|branch\s+operations|retail\s+banking|branch\s+network|branch\s+management|deposit\s+mobilization|teller\s+supervision|branch\s+administration)\b/i.test(
-    full
-  )) {
-    scores.branch_banking += 5;
-  }
-  const isFakeBankPhrase = /\b(blood\s+bank|food\s+bank|river\s+bank|water\s+bank|data\s+bank|seed\s+bank)\b/i.test(full);
-  if (!isFakeBankPhrase && /\b(bank|banking|central\s+bank|commercial\s+bank|microfinance|financial\s+inclusion|digital\s+banking|fintech|financial\s+technology|accounting|finance|financial\s+management|risk\s+management|credit\s+risk|economics|financial\s+regulation|treasury|aml|kyc|audit|lending)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.banking_finance += 8;
-  } else if (!isFakeBankPhrase && /\b(commercial\s+banking|central\s+banking|microfinance|financial\s+inclusion|financial\s+regulation|banking\s+operations|risk\s+management|credit\s+portfolio)\b/i.test(
-    full
-  )) {
-    scores.banking_finance += 5;
-  }
-  if (/\b(civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|structural\s+engineer|chemical\s+engineer|industrial\s+engineer|construction\s+engineer|site\s+engineer)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.engineering += 8;
-  }
-  if (/\b(physician|medical\s+doctor|registered\s+nurse|pharmacist|midwife|clinical\s+officer|epidemiolog|hospital\s+director|public\s+health\s+specialist|surgeon|dentist)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.healthcare += 8;
-  }
-  if (/\b(professor|lecturer|teacher|school\s+principal|academic\s+dean|curriculum\s+specialist|education\s+specialist|pedagog)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.education += 8;
-  }
-  if (/\b(software\s+engineer|developer|devops|data\s+scientist|machine\s+learning|cybersecurity|cloud\s+engineer|systems?\s+administrator|frontend|backend|full[- ]stack)\b/i.test(
-    titleAndOrg
-  )) {
-    scores.it_software += 8;
-  }
-  if (/\b(attorney|lawyer|legal\s+counsel|solicitor|barrister)\b/i.test(titleAndOrg)) {
-    scores.legal_compliance += 7;
-  }
-  const ordered = Object.entries(scores).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]);
-  if (ordered.length === 0) {
-    return { primary: "other", secondary: [] };
-  }
-  if (scores.wash >= 8 && !/\b(branch|credit|loan|teller|deposit|finance\s+manager|accounting|banking\s+operations)\b/i.test(title)) {
-    const rest = ordered.map(([k]) => k).filter((k) => k !== "wash");
-    return { primary: "wash", secondary: rest.slice(0, 2) };
-  }
-  return {
-    primary: ordered[0][0],
-    secondary: ordered.slice(1, 3).map(([k]) => k)
-  };
-}
-function extractExperienceRequirements(text) {
-  const clean = String(text || "");
-  let requiredTotalYears = null;
-  let requiredBankingYears = null;
-  let requiredManagerialYears = null;
-  const mgmtMatches = [
-    ...clean.matchAll(
-      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|direct\s+|proven\s+|senior\s+)?(?:executive\s+|branch\s+)?(?:managerial|management|leadership|supervisory|people\s+management|branch\s+manager)/gi
-    ),
-    ...clean.matchAll(
-      /(?:managerial|management|leadership|supervisory)\s+experience[^.\n]{0,40}?(\d{1,2})\s*\+?\s*years?/gi
-    )
-  ];
-  for (const m of mgmtMatches) {
-    const val = parseInt(m[1], 10);
-    if (!Number.isNaN(val) && val >= 0 && val <= 35) {
-      requiredManagerialYears = requiredManagerialYears === null ? val : Math.max(requiredManagerialYears, val);
-    }
-  }
-  const bankMatches = [
-    ...clean.matchAll(
-      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|relevant\s+|proven\s+|senior\s+|executive\s+)?(?:retail\s+|commercial\s+|branch\s+)?(?:banking|financial\s+services|bank\s+operations|microfinance|credit)/gi
-    )
-  ];
-  for (const m of bankMatches) {
-    const val = parseInt(m[1], 10);
-    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
-      requiredBankingYears = requiredBankingYears === null ? val : Math.max(requiredBankingYears, val);
-    }
-  }
-  const genMatches = [
-    ...clean.matchAll(
-      /(?:at\s+least|minimum\s+(?:of\s+)?|requires?\s+|with\s+)?(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:relevant|progressive|proven|professional|executive|work|related|experience|in\s+)/gi
-    )
-  ];
-  for (const m of genMatches) {
-    const val = parseInt(m[1], 10);
-    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
-      requiredTotalYears = requiredTotalYears === null ? val : Math.max(requiredTotalYears, val);
-    }
-  }
-  if (requiredTotalYears === null && requiredBankingYears !== null) {
-    requiredTotalYears = requiredBankingYears;
-  }
-  const bankingExperienceSummary = requiredBankingYears !== null ? `${requiredBankingYears}+ years of banking experience` : requiredTotalYears !== null ? `${requiredTotalYears}+ years of relevant experience` : "Not explicitly stated \u2014 verify on official portal";
-  const managerialExperienceSummary = requiredManagerialYears !== null ? `${requiredManagerialYears}+ years of managerial / leadership experience` : /\b(executive|vice\s+president|svp|evp|managing\s+director)\b/i.test(clean) ? "Senior executive leadership track (10+ years)" : /\b(branch\s+manager|operations\s+manager|area\s+manager|regional\s+manager|supervis|manage\s+a\s+team|people\s+management)\b/i.test(
-    clean
-  ) ? "Managerial / team supervision experience required" : "Not explicitly stated";
-  return {
-    requiredTotalYears,
-    requiredBankingYears,
-    requiredManagerialYears,
-    bankingExperienceSummary,
-    managerialExperienceSummary
-  };
-}
-function classifyRoleSeniority(title, description, exp) {
-  const t = String(title || "").trim();
-  const full = `${t}
-${description}`;
-  const maxYears = Math.max(exp.requiredTotalYears ?? 0, exp.requiredBankingYears ?? 0);
-  const mgmtYears = exp.requiredManagerialYears ?? 0;
-  if (EXECUTIVE_OVER_SENIOR_TITLE_RX.test(t) || maxYears >= 14 && /\b(executive|board\s+of\s+directors|c-suite|enterprise[- ]wide|group\s+strategy|vice\s+president)\b/i.test(full)) {
-    return "executive";
-  }
-  if (/\b(director|head\s+of\s+(?:retail|commercial|banking|operations|finance|wash|programs?))\b/i.test(t) && !/\b(assistant\s+director|deputy\s+branch)\b/i.test(t)) {
-    return maxYears >= 14 ? "executive" : "director";
-  }
-  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(t)) {
-    if (/\b(intern|trainee|entry[- ]level|fresh\s+graduate|cashier|teller|clerk|receptionist)\b/i.test(t)) {
-      return "entry_level";
-    }
-    return "junior_professional";
-  }
-  if (/\b(senior\s+(?:branch|banking|operations|finance|credit|risk|compliance|relationship|wash)\s+manager|regional\s+branch\s+manager|area\s+branch\s+manager|branch\s+network\s+manager)\b/i.test(
-    t
-  )) {
-    return maxYears >= 13 || mgmtYears >= 8 ? "director" : "senior_manager";
-  }
-  if (/\b(deputy\s+branch\s+manager|assistant\s+(?:branch|banking|operations|finance)\s+manager)\b/i.test(t)) {
-    return "assistant_manager";
-  }
-  if (/\bmanager\b/i.test(t)) {
-    if (mgmtYears >= 7 || maxYears >= 13) return "director";
-    if (mgmtYears >= 5 || maxYears >= 10) return "senior_manager";
-    if (maxYears > 0 && maxYears <= 2 && !/\b(supervis|manage\s+(?:staff|team)|direct\s+reports|branch\s+p&l)\b/i.test(full)) {
-      return "experienced_professional";
-    }
-    return "manager";
-  }
-  if (/\b(supervisor|team\s+lead(?:er)?|unit\s+head|section\s+head|coordinator)\b/i.test(t)) {
-    return "supervisor";
-  }
-  if (/\b(senior|lead|principal|specialist|advisor|consultant)\b/i.test(t) || maxYears >= 6) {
-    return "senior_professional";
-  }
-  if (maxYears >= 3 || /\b(officer|analyst|engineer|accountant|auditor)\b/i.test(t)) {
-    return "experienced_professional";
-  }
-  if (maxYears >= 1) return "junior_professional";
-  return "entry_level";
-}
-function normalizeSalaryRecord(opportunityId, text, fxRatesUsdBase = DEFAULT_FX_RATES_USD_BASE) {
-  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-  const clean = String(text || "").replace(/\u00a0/g, " ");
-  const undisclosed = {
-    opportunityId,
-    disclosed: false,
-    salaryDisplay: "Not Disclosed",
-    period: "unknown",
-    taxBasis: "not_specified",
-    originalCurrency: null,
-    minOriginalAmount: null,
-    maxOriginalAmount: null,
-    normalizedMonthlyUsd: null,
-    normalizedAnnualUsd: null,
-    exchangeRateUsed: "N/A (Not Disclosed)",
-    meetsAbove3000UsdMonthly: false,
-    verifiedAt: nowIso
-  };
-  const mapCurrency = (raw) => {
-    const u = raw.trim().toUpperCase();
-    if (u === "$" || u === "US$" || u === "USD") return "USD";
-    if (u === "\u20AC" || u === "EUR") return "EUR";
-    if (u === "\xA3" || u === "GBP") return "GBP";
-    if (u === "CHF") return "CHF";
-    if (u === "SEK") return "SEK";
-    if (u === "NOK") return "NOK";
-    if (u === "DKK") return "DKK";
-    if (u === "AED" || u === "DHS") return "AED";
-    if (u === "SAR") return "SAR";
-    if (u === "QAR") return "QAR";
-    if (u === "KWD") return "KWD";
-    if (u === "OMR") return "OMR";
-    if (u === "BHD") return "BHD";
-    if (u === "CAD" || u === "C$") return "CAD";
-    if (u === "AUD" || u === "A$") return "AUD";
-    if (u === "ETB" || u === "BIRR") return "ETB";
-    return u;
-  };
-  const parseAmount = (raw) => {
-    const s = raw.trim().toLowerCase();
-    const isK = s.endsWith("k");
-    const numeric = Number(s.replace(/k$/, "").replace(/,/g, ""));
-    if (!Number.isFinite(numeric) || numeric <= 0) return null;
-    return isK ? numeric * 1e3 : numeric;
-  };
-  const prefixRx = /(US\$|\$|€|£|\bUSD\b|\bEUR\b|\bGBP\b|\bCHF\b|\bSEK\b|\bNOK\b|\bDKK\b|\bAED\b|\bSAR\b|\bQAR\b|\bKWD\b|\bOMR\b|\bBHD\b|\bCAD\b|\bAUD\b|\bETB\b)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(?:US\$|\$|€|£|USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
-  const suffixRx = /(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
-  const found = [];
-  const evaluateMatch = (idx, fullMatch, currRaw, minRaw, maxRaw, periodRaw) => {
-    const start = Math.max(0, idx - 90);
-    const end = Math.min(clean.length, idx + fullMatch.length + 90);
-    const ctx = clean.slice(start, end);
-    const ctxLower = ctx.toLowerCase();
-    if (/\b(funding|series\s+[a-d]|valuation|revenue|raised|aum|assets\s+under|market\s+cap|transactions?\s+volume|loan\s+size|tuition\s+fee|registration\s+fee)\b/i.test(
-      ctxLower
-    ) && !/\b(salary|base\s+pay|gross\s+pay|remuneration|compensation|stipend)\b/i.test(ctxLower)) {
-      return;
-    }
-    const hasSalaryCue = /\b(salary|compensation|base\s+pay|gross\s+pay|net\s+pay|remuneration|pay\s+range|package|per\s+year|per\s+annum|annually|per\s+month|monthly|\/year|\/yr|\/month|\/mo|p\.a\.|p\.m\.)\b/i.test(
-      ctxLower
-    );
-    if (!hasSalaryCue) return;
-    const currency = mapCurrency(currRaw);
-    const rate2 = fxRatesUsdBase[currency] || DEFAULT_FX_RATES_USD_BASE[currency];
-    if (!rate2) return;
-    const v1 = parseAmount(minRaw);
-    if (!v1) return;
-    const v2 = maxRaw ? parseAmount(maxRaw) || v1 : v1;
-    const low = Math.min(v1, v2);
-    const high = Math.max(v1, v2);
-    let period;
-    const joinedPeriod = `${periodRaw || ""} ${fullMatch}`.toLowerCase();
-    if (/(month|\/mo\b|p\.m\.|monthly)/i.test(joinedPeriod) || /\b(per\s+month|monthly|\/\s*mo|\/\s*month)\b/i.test(ctxLower)) {
-      period = "monthly";
-    } else if (/(year|\/yr\b|annual|annum|p\.a\.)/i.test(joinedPeriod) || /\b(per\s+year|annually|annual|\/\s*yr|\/\s*year|p\.a\.|per\s+annum)\b/i.test(ctxLower)) {
-      period = "annual";
-    } else {
-      const approxUsd = low / rate2;
-      period = approxUsd >= 18e3 ? "annual" : "monthly";
-    }
-    const annualUsd = period === "annual" ? low / rate2 : low / rate2 * 12;
-    if (annualUsd < 1200 || annualUsd > 8e5) return;
-    const taxBasis = /\b(net\s+salary|net\s+pay|tax[- ]free|after[- ]tax|take[- ]home)\b/i.test(
-      ctxLower
-    ) ? "net" : /\b(gross\s+salary|gross\s+pay|gross\s+base|before\s+tax|pre[- ]tax|base\s+salary)\b/i.test(ctxLower) ? "gross" : "not_specified";
-    const priority = /\b(base\s+salary|gross\s+salary|monthly\s+salary|annual\s+salary|salary\s+range)\b/i.test(ctxLower) ? 3 : 2;
-    found.push({ currency, low, high, period, taxBasis, priority });
-  };
-  let m;
-  while ((m = prefixRx.exec(clean)) !== null) {
-    evaluateMatch(m.index, m[0], m[1], m[2], m[3], m[4]);
-  }
-  while ((m = suffixRx.exec(clean)) !== null) {
-    evaluateMatch(m.index, m[0], m[3], m[1], m[2], m[4]);
-  }
-  if (found.length === 0) return undisclosed;
-  found.sort((a, b) => b.priority - a.priority || b.low - a.low);
-  const best = found[0];
-  const rate = fxRatesUsdBase[best.currency] || DEFAULT_FX_RATES_USD_BASE[best.currency] || 1;
-  const normalizedAnnualUsd = Math.round(
-    best.period === "annual" ? best.low / rate : best.low / rate * 12
-  );
-  const normalizedMonthlyUsd = Math.round(normalizedAnnualUsd / 12);
-  const periodStr = best.period === "annual" ? "Annual" : "Monthly";
-  const taxStr = best.taxBasis === "gross" ? "Gross" : best.taxBasis === "net" ? "Net" : "Tax basis not specified";
-  const rangeStr = best.high > best.low ? `${best.currency} ${best.low.toLocaleString()}\u2013${best.high.toLocaleString()}` : `${best.currency} ${best.low.toLocaleString()}`;
-  const salaryDisplay = `${rangeStr} (${periodStr}, ${taxStr}) \u2248 USD $${normalizedMonthlyUsd.toLocaleString()}/month ($${normalizedAnnualUsd.toLocaleString()}/year)`;
-  const exchangeRateUsed = best.currency === "USD" ? "1 USD = 1.0000 USD" : `1 ${best.currency} = $${(1 / rate).toFixed(4)} USD`;
-  return {
-    opportunityId,
-    disclosed: true,
-    salaryDisplay,
-    period: best.period,
-    taxBasis: best.taxBasis,
-    originalCurrency: best.currency,
-    minOriginalAmount: best.low,
-    maxOriginalAmount: best.high,
-    normalizedMonthlyUsd,
-    normalizedAnnualUsd,
-    exchangeRateUsed,
-    // Strictly ABOVE USD 3,000/month (> $36,000/year normalized!)
-    meetsAbove3000UsdMonthly: normalizedMonthlyUsd > 3e3 && normalizedAnnualUsd > 36e3,
-    verifiedAt: nowIso
-  };
-}
-function evaluateStrictThreeDayDeadline(rawDeadline, nowMs = Date.now(), isClosedOrWithdrawn = false) {
-  if (isClosedOrWithdrawn) {
-    return {
-      passed: false,
-      deadlineIso: null,
-      fullDaysRemaining: 0,
-      rejectionCode: "closed_or_withdrawn",
-      explanation: "Opportunity is marked closed or withdrawn at the official source."
-    };
-  }
-  const raw = String(rawDeadline || "").trim();
-  if (!raw || /^(rolling|ongoing|open|open\s+until\s+filled|not\s+stated|until\s+filled)$/i.test(raw)) {
-    return {
-      passed: true,
-      deadlineIso: null,
-      fullDaysRemaining: null,
-      rejectionCode: null,
-      explanation: "Rolling/open official listing verified active."
-    };
-  }
-  let targetMs = NaN;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    targetMs = Date.parse(`${raw}T23:59:59Z`);
-  } else {
-    targetMs = Date.parse(raw);
-  }
-  if (Number.isNaN(targetMs)) {
-    return {
-      passed: true,
-      deadlineIso: null,
-      fullDaysRemaining: null,
-      rejectionCode: null,
-      explanation: "Deadline format requires manual check on official source."
-    };
-  }
-  const diffMs = targetMs - nowMs;
-  const hoursRemaining = diffMs / (1e3 * 60 * 60);
-  const fullDaysRemaining = Math.floor(hoursRemaining / 24);
-  if (diffMs <= 0) {
-    return {
-      passed: false,
-      deadlineIso: new Date(targetMs).toISOString(),
-      fullDaysRemaining: 0,
-      rejectionCode: "deadline_expired",
-      explanation: `Official deadline (${raw}) has already passed.`
-    };
-  }
-  if (hoursRemaining < MINIMUM_DEADLINE_HOURS) {
-    return {
-      passed: false,
-      deadlineIso: new Date(targetMs).toISOString(),
-      fullDaysRemaining,
-      rejectionCode: "deadline_under_three_days",
-      explanation: `Only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining before official deadline (${raw}); minimum 3 full days (72h) required.`
-    };
-  }
-  return {
-    passed: true,
-    deadlineIso: new Date(targetMs).toISOString(),
-    fullDaysRemaining,
-    rejectionCode: null,
-    explanation: `Verified active with ${fullDaysRemaining} full days remaining before deadline (${raw}).`
-  };
-}
-function evaluateVisaAndAuthorization(params) {
-  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-  const clean = String(params.text || "");
-  const lower = clean.toLowerCase();
-  if (params.environment === "ethiopia_domestic") {
-    return {
-      opportunityId: params.opportunityId,
-      environment: "ethiopia_domestic",
-      conditionMet: "domestic_not_required",
-      verified: true,
-      visaFeesCovered: "not_confirmed",
-      relocationSupport: "not_confirmed",
-      relocationDetails: "Ethiopian domestic role \u2014 international work visa sponsorship not applicable.",
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: "Ethiopian domestic opportunity (no international visa sponsorship required).",
-      statusLabel: "Ethiopian Domestic \u2014 No International Visa Required",
-      lastVerifiedAt: nowIso
-    };
-  }
-  if (params.visaSponsorshipRevoked) {
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "none",
-      verified: false,
-      visaFeesCovered: "no",
-      relocationSupport: "no",
-      relocationDetails: "Previously confirmed sponsorship was revoked/removed at the official source.",
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: "Work visa sponsorship revoked or no longer confirmed at official source.",
-      statusLabel: "Visa Sponsorship Revoked / Unconfirmed",
-      lastVerifiedAt: nowIso
-    };
-  }
-  const touristOnlyRx = /\b(tourist\s+visa[- ]free|visa[- ]free\s+entry\s+for\s+tourism|visit\s+visa\s+only|tourist\s+visa\s+on\s+arrival|permission\s+to\s+apply\s+for\s+a\s+visa|apply\s+for\s+a\s+visa\s+independently|self[- ]sponsored\s+visa\s+application)\b/i;
-  const touristEntryRejected = touristOnlyRx.test(lower);
-  const negationRx = /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided)|must\s+already\s+have\s+(?:the\s+)?right\s+to\s+work|existing\s+work\s+authorization\s+required|local\s+citizens?\s+only|no\s+longer\s+sponsoring)\b/i;
-  const applicantPaysVisaRx = /\b(visa\s+(?:fees?|costs?)\s+(?:are\s+)?(?:the\s+)?(?:applicant['’]?s|participant['’]?s|your)\s+responsibility|applicants?\s+(?:must\s+)?pay\s+(?:for\s+)?(?:their\s+own\s+)?visa|self[- ]funded\s+visa|visa\s+costs?\s+not\s+covered|does\s+not\s+cover\s+visa)\b/i;
-  const invitationOnlyRx = /\b(invitation\s+letter\s+only|only\s+(?:an?\s+)?invitation\s+letter|provide\s+an?\s+invitation\s+letter\s+for\s+visa|visa\s+support\s+letter\s+only)\b/i;
-  const visaFeesCoveredRx = /\b(visa\s+(?:fees?|application\s+fees?|costs?)\s+(?:are\s+)?(?:fully\s+)?(?:covered|reimbursed|paid|funded|included)|fully\s+funded\s+including\s+visa|covers?\s+(?:all\s+)?(?:travel,?\s+|accommodation,?\s+)?visa\s+(?:fees?|costs?)|visa\s+sponsorship\s+and\s+visa\s+fees?\s+covered)\b/i;
-  const relocMatch = clean.match(
-    /[^.\n]{0,90}\b(relocation\s+(?:package|support|assistance|allowance|covered|provided)|flight\s+tickets?\s+(?:covered|provided)|airfare\s+covered|housing\s+allowance|mobilization\s+allowance)\b[^.\n]{0,110}/i
-  );
-  const relocationSupport = relocMatch ? "yes" : "not_confirmed";
-  const relocationDetails = relocMatch ? relocMatch[0].replace(/\s+/g, " ").trim().slice(0, 220) : "Not explicitly specified";
-  if (params.category !== "job" && params.category !== "internship") {
-    const hasVisaFeesCovered = visaFeesCoveredRx.test(lower);
-    const hasOfficialVisaSponsorship = /\b(visa\s+sponsorship\s+(?:is\s+)?(?:provided|included|covered|offered)|sponsor(?:s|ing)?\s+(?:your\s+)?(?:student|training|conference|j-1|schengen|uk)\s+visa|official\s+visa\s+sponsorship)\b/i.test(
-      lower
-    );
-    const isApplicantPaid = applicantPaysVisaRx.test(lower);
-    const isInvitationOnly = invitationOnlyRx.test(lower) && !hasVisaFeesCovered && !hasOfficialVisaSponsorship;
-    if (isApplicantPaid || isInvitationOnly || negationRx.test(lower) || !hasVisaFeesCovered && !hasOfficialVisaSponsorship) {
-      return {
-        opportunityId: params.opportunityId,
-        environment: "international",
-        conditionMet: "none",
-        verified: false,
-        visaFeesCovered: isApplicantPaid ? "no" : "not_confirmed",
-        relocationSupport,
-        relocationDetails,
-        invitationLetterOnly: isInvitationOnly,
-        touristEntryRejected,
-        sponsorshipStatement: isApplicantPaid ? "Excluded: Visa costs are the applicant\u2019s responsibility." : isInvitationOnly ? "Excluded: Invitation letter alone is insufficient; confirmed visa sponsorship or visa fee coverage is required." : "Excluded: Official visa sponsorship or visa fee coverage not confirmed.",
-        statusLabel: isInvitationOnly ? "Invitation Letter Only (Excluded)" : "Visa Funding Not Confirmed (Excluded)",
-        lastVerifiedAt: nowIso
-      };
-    }
-    const matchSnippet = clean.match(visaFeesCoveredRx)?.[0] || clean.match(/\b[^.\n]{0,80}visa\s+sponsorship[^.\n]{0,90}/i)?.[0] || "Confirmed official visa sponsorship / visa fee coverage.";
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "A_employer_work_visa",
-      verified: true,
-      visaFeesCovered: hasVisaFeesCovered ? "yes" : "not_confirmed",
-      relocationSupport,
-      relocationDetails,
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: matchSnippet.replace(/\s+/g, " ").trim().slice(0, 240),
-      statusLabel: hasVisaFeesCovered ? "Verified: Visa Fees Covered / Sponsored" : "Verified: Official Visa Sponsorship",
-      lastVerifiedAt: nowIso
-    };
-  }
-  const legalCountries = (params.userLegalWorkCountries || []).map((c) => c.toLowerCase().trim()).filter(Boolean);
-  const countryLower = String(params.country || "").toLowerCase().trim();
-  const hasConditionC = Boolean(countryLower) && legalCountries.some((c) => countryLower.includes(c) || c.includes(countryLower)) && !touristEntryRejected;
-  if (negationRx.test(lower)) {
-    if (hasConditionC) {
-      return {
-        opportunityId: params.opportunityId,
-        environment: "international",
-        conditionMet: "C_legal_right_no_sponsorship",
-        verified: true,
-        visaFeesCovered: "not_confirmed",
-        relocationSupport,
-        relocationDetails,
-        invitationLetterOnly: false,
-        touristEntryRejected: false,
-        sponsorshipStatement: `Condition C verified: Applicant holds confirmed legal work authorization in ${params.country}.`,
-        statusLabel: "Condition C: Confirmed Legal Right to Work",
-        lastVerifiedAt: nowIso
-      };
-    }
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "none",
-      verified: false,
-      visaFeesCovered: "no",
-      relocationSupport,
-      relocationDetails,
-      invitationLetterOnly: false,
-      touristEntryRejected,
-      sponsorshipStatement: "Excluded: Employer explicitly states no work visa sponsorship is provided.",
-      statusLabel: "No Visa Sponsorship",
-      lastVerifiedAt: nowIso
-    };
-  }
-  const condAMatch = clean.match(
-    /[^.\n]{0,100}\b((?:we|employer|company|bank|[a-z]+)\s+(?:offer|offers|provide|provides|can\s+provide|support|supports)\s+(?:full\s+)?(?:[a-z-]+\s+)?(?:employment\s+|work\s+|skilled\s+worker\s+|work\s+permit\s+(?:and|&|\/)\s+)?visa\s+sponsorship|(?:we|employer|company|organization|bank)\s+(?:will\s+)?sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+){0,3}(?:work|employment|skilled\s+worker)\s+visa|employer[- ]sponsored\s+(?:work\s+)?visa|(?:work|employment|skilled\s+worker|residence|uae|uk|eu|swedish|german|dutch|danish|norwegian|qatar|saudi)\s+(?:work\s+)?visa\s+sponsorship|work\s+permit\s+(?:and|&|\/)\s+visa\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included|confirmed)|full\s+visa\s+sponsorship|g-4\s+visa|h-1b\s+sponsorship|iqama\s+sponsorship|employment\s+visa\s+sponsored)\b[^.\n]{0,120}/i
-  );
-  if (condAMatch && !touristEntryRejected) {
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "A_employer_work_visa",
-      verified: true,
-      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
-      relocationSupport,
-      relocationDetails,
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: condAMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
-      statusLabel: "Verified: Employer Work Visa Sponsorship (Condition A)",
-      lastVerifiedAt: nowIso
-    };
-  }
-  const condBMatch = clean.match(
-    /[^.\n]{0,100}\b(work\s+permit\s+(?:(?:and|&|\/)\s+(?:visa|immigration)\s+)?sponsorship|immigration\s+sponsorship|eu\s+blue\s+card\s+sponsorship|sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+)?work\s+permit|residence\s+and\s+work\s+permit\s+sponsored|company\s+sponsors?\s+(?:work\s+permit|employment\s+pass)|provides?\s+(?:[a-z-]+\s+)?work\s+permit\s+sponsorship)\b[^.\n]{0,120}/i
-  );
-  if (condBMatch && !touristEntryRejected) {
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "B_work_permit_immigration",
-      verified: true,
-      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
-      relocationSupport,
-      relocationDetails,
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: condBMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
-      statusLabel: "Verified: Work Permit / Immigration Sponsorship (Condition B)",
-      lastVerifiedAt: nowIso
-    };
-  }
-  if (hasConditionC) {
-    return {
-      opportunityId: params.opportunityId,
-      environment: "international",
-      conditionMet: "C_legal_right_no_sponsorship",
-      verified: true,
-      visaFeesCovered: "not_confirmed",
-      relocationSupport,
-      relocationDetails,
-      invitationLetterOnly: false,
-      touristEntryRejected: false,
-      sponsorshipStatement: `Condition C verified: Applicant can legally work in ${params.country} without employer sponsorship.`,
-      statusLabel: "Verified: Legal Right to Work (Condition C)",
-      lastVerifiedAt: nowIso
-    };
-  }
-  return {
-    opportunityId: params.opportunityId,
-    environment: "international",
-    conditionMet: "none",
-    verified: false,
-    visaFeesCovered: "not_confirmed",
-    relocationSupport,
-    relocationDetails,
-    invitationLetterOnly: invitationOnlyRx.test(lower),
-    touristEntryRejected,
-    sponsorshipStatement: touristEntryRejected ? "Excluded: Tourist visa-free entry is NOT legal work authorization." : "Excluded: No verified work visa sponsorship, work permit sponsorship, or confirmed legal right to work.",
-    statusLabel: "Visa Sponsorship Not Confirmed",
-    lastVerifiedAt: nowIso
-  };
-}
-function extractResponsibilitiesList(responsibilities, description) {
-  if (Array.isArray(responsibilities) && responsibilities.filter((r) => r.trim().length >= 12).length > 0) {
-    return responsibilities.map((r) => r.trim()).filter(Boolean).slice(0, 6);
-  }
-  const sentences = String(description || "").split(/[\n•▪▸]+|(?<=\.)\s+/).map((s) => s.replace(/^[\s\-–*0-9.)]+/, "").trim()).filter((s) => s.length >= 24 && s.length <= 220);
-  const actionLines = sentences.filter(
-    (s) => /^(lead|manage|oversee|supervise|drive|ensure|develop|prepare|monitor|coordinate|review|build|deliver|maintain|support|own|design|execute|implement|control|analyze|report|establish|direct|grow)/i.test(
-      s
-    )
-  );
-  if (actionLines.length >= 2) return actionLines.slice(0, 5);
-  return sentences.slice(0, 4);
-}
-function evaluateForBranchBankingSpecialFeature(params) {
-  const ref = params.profile || BRANCH_BANKING_REFERENCE_PROFILE;
-  const bankingYears = ref.bankingExperienceYears ?? ref.yearsOfExperience ?? 9;
-  const mgmtYears = ref.managerialExperienceYears ?? 3;
-  const minMonthlyUsd = Math.max(3e3, ref.minimumSalaryUsdMonthly || 3e3);
-  const matchReasons = [];
-  const rejectionCodes = [];
-  const rejectionReasons = [];
-  const title = String(params.title || "").trim();
-  const full = `${title}
-${params.employer}
-${params.description}
-${params.responsibilities.join("\n")}`;
-  if (!params.deadlinePassed) {
-    rejectionCodes.push("deadline_under_three_days");
-    rejectionReasons.push(params.deadlineExplanation);
-  }
-  if (NON_BANKING_MANAGER_DISQUALIFIER_RX.test(title) || params.sector === "wash") {
-    rejectionCodes.push("industry_mismatch");
-    rejectionReasons.push(
-      `Position "${title}" is outside branch banking / banking management (detected sector: ${params.sector}).`
-    );
-  }
-  if (params.seniorityLevel === "executive" || EXECUTIVE_OVER_SENIOR_TITLE_RX.test(title) || params.exp.requiredTotalYears !== null && params.exp.requiredTotalYears >= bankingYears + 4 || params.exp.requiredBankingYears !== null && params.exp.requiredBankingYears >= bankingYears + 4) {
-    rejectionCodes.push("seniority_mismatch_too_senior");
-    rejectionReasons.push(
-      `Unsuitable seniority match: "${title}" is an Executive/VP-level role (${params.exp.requiredTotalYears ? `${params.exp.requiredTotalYears}+ years required` : SENIORITY_LABELS[params.seniorityLevel]}) that substantially exceeds the ${bankingYears}-year banking / ${mgmtYears}-year branch management reference profile.`
-    );
-  }
-  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(title) || params.seniorityLevel === "entry_level" || params.seniorityLevel === "junior_professional") {
-    rejectionCodes.push("seniority_mismatch_too_junior");
-    rejectionReasons.push(
-      `Unsuitable professional and seniority match: "${title}" is a non-managerial / entry-to-junior role (${SENIORITY_LABELS[params.seniorityLevel]}), unsuitable for a Branch Manager with ${bankingYears} years banking and ${mgmtYears} years managerial experience.`
-    );
-  }
-  const matchedTitleDef = PRIORITY_BRANCH_BANKING_TITLES.find((p) => p.rx.test(title));
-  const matchedRespSignals = BRANCH_BANKING_RESPONSIBILITY_SIGNALS.filter((s) => s.rx.test(full)).map((s) => s.label);
-  const isBankingSector = params.sector === "branch_banking" || params.sector === "banking_finance";
-  if (!isBankingSector) {
-    if (!rejectionCodes.includes("industry_mismatch")) {
-      rejectionCodes.push("industry_mismatch");
-      rejectionReasons.push(`Role sector (${params.sector}) does not align with Branch Banking / Banking Management.`);
-    }
-  } else if (!matchedTitleDef && matchedRespSignals.length < 2) {
-    rejectionCodes.push("experience_mismatch");
-    rejectionReasons.push(
-      `Actual responsibilities do not sufficiently demonstrate branch banking operations, administration, or banking leadership authority.`
-    );
-  }
-  if (params.exp.requiredManagerialYears !== null && params.exp.requiredManagerialYears > mgmtYears + 4) {
-    rejectionCodes.push("experience_mismatch");
-    rejectionReasons.push(
-      `Requires ${params.exp.requiredManagerialYears}+ years of managerial experience, exceeding the reference profile (${mgmtYears} years managerial experience).`
-    );
-  }
-  if (params.environment === "international") {
-    if (!params.salary.disclosed) {
-      rejectionCodes.push("salary_undisclosed");
-      rejectionReasons.push(
-        `Salary is Not Disclosed; International Jobs for Branch Banking strictly requires a verified disclosed salary above USD $${minMonthlyUsd.toLocaleString()}/month.`
-      );
-    } else if (params.salary.normalizedMonthlyUsd === null || params.salary.normalizedMonthlyUsd <= minMonthlyUsd) {
-      rejectionCodes.push("salary_below_threshold");
-      rejectionReasons.push(
-        `Normalized salary ($${(params.salary.normalizedMonthlyUsd ?? 0).toLocaleString()}/month) does not exceed the mandatory USD $${minMonthlyUsd.toLocaleString()}/month threshold for International Branch Banking jobs.`
-      );
-    }
-  }
-  if (params.environment === "international" && !params.visa.verified) {
-    rejectionCodes.push("visa_sponsorship_unconfirmed");
-    rejectionReasons.push(params.visa.sponsorshipStatement);
-  }
-  if (rejectionCodes.length > 0) {
-    return {
-      matched: false,
-      relevanceScore: 0,
-      matchReasons: [],
-      rejectionCodes: Array.from(new Set(rejectionCodes)),
-      rejectionReasons: Array.from(new Set(rejectionReasons))
-    };
-  }
-  let score = 58;
-  if (matchedTitleDef) {
-    score += 16;
-    matchReasons.push(`Direct branch banking leadership match: ${matchedTitleDef.label}.`);
-  } else {
-    score += 10;
-    matchReasons.push("Equivalent banking management responsibilities verified from job description.");
-  }
-  if (matchedRespSignals.length > 0) {
-    score += Math.min(12, matchedRespSignals.length * 3);
-    matchReasons.push(`Core managerial responsibilities aligned: ${matchedRespSignals.slice(0, 3).join("; ")}.`);
-  }
-  if (params.exp.requiredBankingYears !== null && bankingYears >= params.exp.requiredBankingYears) {
-    score += 6;
-    matchReasons.push(
-      `${bankingYears} years banking experience satisfies the stated ${params.exp.requiredBankingYears}+ years requirement.`
-    );
-  } else {
-    matchReasons.push(`Matches ${bankingYears}-year banking & ${mgmtYears}-year branch leadership career stage.`);
-    score += 4;
-  }
-  if (params.salary.normalizedMonthlyUsd && params.salary.normalizedMonthlyUsd > minMonthlyUsd) {
-    score += 5;
-    matchReasons.push(
-      `Verified salary exceeds USD $${minMonthlyUsd.toLocaleString()}/month (${params.salary.salaryDisplay}).`
-    );
-  }
-  if (params.environment === "international") {
-    score += 3;
-    matchReasons.push(`Confirmed international work authorization: ${params.visa.statusLabel}.`);
-  } else {
-    matchReasons.push("Ethiopian domestic opportunity \u2014 evaluated under domestic banking rules.");
-  }
-  return {
-    matched: true,
-    relevanceScore: Math.min(99, Math.max(60, score)),
-    matchReasons,
-    rejectionCodes: [],
-    rejectionReasons: []
-  };
-}
-function buildAndVerifyCanonicalOpportunity(raw, options) {
-  const nowMs = options?.nowMs ?? Date.now();
-  const nowIso = new Date(nowMs).toISOString();
-  const fxRates = options?.fxRatesUsdBase || DEFAULT_FX_RATES_USD_BASE;
-  const { canonicalKey, urlFingerprint, canonicalId } = buildCanonicalOpportunityIdentity({
-    category: raw.category,
-    title: raw.title,
-    employer: raw.employer,
-    country: raw.country,
-    officialApplicationUrl: raw.officialApplicationUrl
-  });
-  const environment = detectEnvironment(raw.country, raw.city || "", raw.description);
-  const fullText = `${raw.title}
-${raw.employer}
-${raw.compensationRaw || ""}
-${raw.explicitVisaNote || ""}
-${raw.explicitFundingNote || ""}
-${raw.description}`;
-  const sectors = detectProfessionalSectors(raw.title, raw.employer, raw.description);
-  const exp = extractExperienceRequirements(fullText);
-  const seniorityLevel = classifyRoleSeniority(raw.title, raw.description, exp);
-  const actualResponsibilities = extractResponsibilitiesList(raw.responsibilities, raw.description);
-  const salary = normalizeSalaryRecord(canonicalId, `${raw.compensationRaw || ""}
-${raw.description}`, fxRates);
-  const visa = evaluateVisaAndAuthorization({
-    opportunityId: canonicalId,
-    category: raw.category,
-    environment,
-    country: raw.country,
-    text: fullText,
-    visaSponsorshipRevoked: raw.visaSponsorshipRevoked
-  });
-  const deadlineEval = evaluateStrictThreeDayDeadline(raw.deadlineRaw, nowMs, Boolean(raw.isClosedOrWithdrawn));
-  const rejectionCodes = [];
-  const rejectionExplanations = [];
-  if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}/i.test(String(raw.officialApplicationUrl || "").trim())) {
-    rejectionCodes.push("invalid_official_url");
-    rejectionExplanations.push("Missing or non-HTTPS official application link.");
-  }
-  if (!deadlineEval.passed && deadlineEval.rejectionCode) {
-    rejectionCodes.push(deadlineEval.rejectionCode);
-    rejectionExplanations.push(deadlineEval.explanation);
-  }
-  if (raw.category !== "job" && raw.category !== "internship") {
-    const isBankingOrWash = sectors.primary === "branch_banking" || sectors.primary === "banking_finance" || sectors.primary === "wash" || sectors.secondary.includes("banking_finance") || sectors.secondary.includes("wash");
-    if (!isBankingOrWash) {
-      rejectionCodes.push("non_banking_wash_learning_category");
-      rejectionExplanations.push(
-        `${raw.category} opportunities on Hopeland Jobs are restricted to Banking & Finance and WASH professionals only (detected sector: ${sectors.primary}).`
-      );
-    }
-    if (environment === "international" && !visa.verified) {
-      if (visa.invitationLetterOnly) {
-        rejectionCodes.push("invitation_letter_only");
-      } else if (visa.visaFeesCovered === "no") {
-        rejectionCodes.push("visa_cost_applicant_paid");
-      } else {
-        rejectionCodes.push("visa_sponsorship_unconfirmed");
-      }
-      rejectionExplanations.push(visa.sponsorshipStatement);
-    }
-  } else if (environment === "international" && !visa.verified) {
-    rejectionCodes.push("visa_sponsorship_unconfirmed");
-    rejectionExplanations.push(visa.sponsorshipStatement);
-  }
-  const branchEval = raw.category === "job" ? evaluateForBranchBankingSpecialFeature({
-    title: raw.title,
-    employer: raw.employer,
-    description: raw.description,
-    responsibilities: actualResponsibilities,
-    sector: sectors.primary,
-    seniorityLevel,
-    exp,
-    salary,
-    visa,
-    environment,
-    deadlinePassed: deadlineEval.passed,
-    deadlineExplanation: deadlineEval.explanation
-  }) : {
-    matched: false,
-    relevanceScore: 0,
-    matchReasons: [],
-    rejectionCodes: [],
-    rejectionReasons: []
-  };
-  const lowerFull = fullText.toLowerCase();
-  const eligibility = {
-    opportunityId: canonicalId,
-    category: raw.category,
-    sector: sectors.primary,
-    secondarySectors: sectors.secondary,
-    seniorityLevel,
-    requiredBankingYears: exp.requiredBankingYears,
-    requiredManagerialYears: exp.requiredManagerialYears,
-    requiredTotalYears: exp.requiredTotalYears,
-    educationRequirement: fullText.match(/[^.\n]{0,40}\b(phd|doctorate|master['’]?s|mba|bachelor['’]?s|university\s+degree|diploma)\b[^.\n]{0,70}/i)?.[0]?.replace(/\s+/g, " ").trim() || "Verify education requirements on official portal",
-    individualApplicationAllowed: /\b(nominated\s+only|institutional\s+nomination\s+required|no\s+direct\s+individual\s+applications)\b/i.test(
-      lowerFull
-    ) ? "no" : /\b(apply\s+online|individual\s+applications?\s+(?:welcome|accepted)|apply\s+directly)\b/i.test(lowerFull) ? "yes" : "not_confirmed",
-    universityRecommendationRequired: /\b(university\s+(?:recommendation|nomination|endorsement))\b/i.test(lowerFull) ? "yes" : "not_confirmed",
-    companyRecommendationRequired: /\b((?:employer|company|organization)\s+(?:recommendation|nomination|endorsement))\b/i.test(
-      lowerFull
-    ) ? "yes" : "not_confirmed",
-    fundingCoverage: raw.explicitFundingNote || (/\b(fully\s+funded|full\s+scholarship|all\s+expenses\s+paid)\b/i.test(lowerFull) ? "Fully Funded (verified in official text)" : /\b(partial(?:ly)?\s+funded|stipend)\b/i.test(lowerFull) ? "Partially Funded" : raw.category === "job" ? salary.salaryDisplay : "Not Confirmed"),
-    visaCostsCoverageNote: visa.visaFeesCovered === "yes" ? "Visa application fees confirmed covered" : visa.visaFeesCovered === "no" ? "Visa costs are applicant responsibility" : visa.sponsorshipStatement,
-    nationalityEligibility: environment === "ethiopia_domestic" ? "Ethiopian domestic applicants" : /\b(ethiopia|african\s+nationals|developing\s+countries|all\s+nationalities|international\s+applicants)\b/i.test(
-      lowerFull
-    ) ? "Confirmed open to Ethiopian / international applicants" : "Verify nationality eligibility on official portal",
-    verifiedAt: nowIso
-  };
-  const isExpired = rejectionCodes.includes("deadline_expired") || rejectionCodes.includes("closed_or_withdrawn");
-  const status = rejectionCodes.length === 0 ? "published" : isExpired ? "expired" : "rejected";
-  const verificationBadge = status === "published" ? environment === "international" ? "Verified Official & Visa Confirmed" : "Verified Ethiopian Domestic" : status === "expired" ? "Expired / Closed" : "Rejected by Verification Rules";
-  const referenceNumber = raw.referenceNumber && String(raw.referenceNumber).trim().toUpperCase() || extractOpportunityReferenceNumber(`${raw.title}
-${raw.description}
-${raw.officialApplicationUrl}`);
-  const primarySourceUrl = String(raw.sourceUrl || raw.officialApplicationUrl).trim();
-  const primarySourceName = String(raw.sourceName || raw.employer).trim();
-  return {
-    id: canonicalId,
-    canonicalKey,
-    urlFingerprint,
-    referenceNumber,
-    updateVersion: 1,
-    category: raw.category,
-    environment,
-    title: raw.title.trim(),
-    employer: raw.employer.trim(),
-    country: raw.country.trim() || (environment === "ethiopia_domestic" ? "Ethiopia" : "International"),
-    city: (raw.city || "").trim(),
-    region: (raw.region || (environment === "ethiopia_domestic" ? "Ethiopia" : "International")).trim(),
-    sector: sectors.primary,
-    secondarySectors: sectors.secondary,
-    seniorityLevel,
-    actualResponsibilities,
-    descriptionSummary: raw.description.replace(/\s+/g, " ").trim().slice(0, 420),
-    officialApplicationUrl: raw.officialApplicationUrl.trim(),
-    primarySourceUrl,
-    primarySourceName,
-    sourceUrls: Array.from(new Set([primarySourceUrl].filter(Boolean))),
-    sourceNames: Array.from(new Set([primarySourceName].filter(Boolean))),
-    deadlineRaw: String(raw.deadlineRaw || "Open \u2014 Verify on official portal").trim(),
-    deadlineIso: deadlineEval.deadlineIso,
-    fullDaysRemaining: deadlineEval.fullDaysRemaining,
-    salary,
-    visa,
-    eligibility,
-    status,
-    verificationBadge,
-    rejectionCodes: Array.from(new Set(rejectionCodes)),
-    rejectionExplanations: Array.from(new Set(rejectionExplanations)),
-    isBranchBankingMatch: branchEval.matched,
-    branchBankingRelevanceScore: branchEval.relevanceScore,
-    branchBankingMatchReasons: branchEval.matchReasons,
-    branchBankingRejectionReasons: branchEval.rejectionReasons,
-    discoveredAt: nowIso,
-    lastVerifiedAt: nowIso,
-    updatedAt: nowIso,
-    unpublishedAt: null,
-    unpublishedReason: null
-  };
-}
-function areSectorsCompatible(userSector, oppPrimary, oppSecondary) {
-  if (userSector === oppPrimary) return true;
-  if (userSector === "branch_banking") {
-    return oppPrimary === "banking_finance" || oppPrimary === "branch_banking";
-  }
-  if (userSector === "banking_finance") {
-    return oppPrimary === "branch_banking" || oppPrimary === "banking_finance";
-  }
-  if (userSector === "wash") {
-    return oppPrimary === "wash" || oppSecondary.includes("wash");
-  }
-  if (userSector === "engineering") {
-    return oppPrimary === "engineering" || oppPrimary === "wash" && oppSecondary.includes("engineering");
-  }
-  if (userSector === "healthcare") {
-    return oppPrimary === "healthcare";
-  }
-  if (userSector === "education") {
-    return oppPrimary === "education";
-  }
-  if (userSector === "it_software") {
-    return oppPrimary === "it_software";
-  }
-  if (userSector === "legal_compliance") {
-    return oppPrimary === "legal_compliance";
-  }
-  return oppSecondary.includes(userSector);
-}
-function evaluateOpportunityForUserProfile(opportunity, profile) {
-  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-  const matchReasons = [];
-  const rejectionCodes = [];
-  const rejectionExplanations = [];
-  const hasLegalWorkRight = opportunity.environment === "international" && opportunity.category === "job" && (profile.countriesWithLegalWorkRight || []).some(
-    (c) => c.toLowerCase().trim() === opportunity.country.toLowerCase().trim()
-  );
-  if (opportunity.status !== "published") {
-    const onlyFailedVisa = opportunity.rejectionCodes.length === 1 && opportunity.rejectionCodes[0] === "visa_sponsorship_unconfirmed";
-    if (!(onlyFailedVisa && hasLegalWorkRight)) {
-      return {
-        id: `match_${profile.userId}_${opportunity.id}`,
-        userId: profile.userId,
-        opportunityId: opportunity.id,
-        environment: opportunity.environment,
-        category: opportunity.category,
-        eligible: false,
-        relevanceScore: 0,
-        matchReasons: [],
-        rejectionCodes: [...opportunity.rejectionCodes],
-        rejectionExplanations: [...opportunity.rejectionExplanations],
-        evaluatedAt: nowIso
-      };
-    }
-  }
-  if (profile.preferredEnvironment !== "both" && profile.preferredEnvironment !== opportunity.environment) {
-    rejectionCodes.push("industry_mismatch");
-    rejectionExplanations.push(
-      `Opportunity environment (${opportunity.environment}) does not match user preference (${profile.preferredEnvironment}).`
-    );
-  }
-  if (!areSectorsCompatible(profile.professionalSector, opportunity.sector, opportunity.secondarySectors)) {
-    rejectionCodes.push("industry_mismatch");
-    rejectionExplanations.push(
-      `Industry mismatch: Opportunity sector (${opportunity.sector}) does not match user sector (${profile.professionalSector}).`
-    );
-  }
-  if (opportunity.category === "job") {
-    const userRank = SENIORITY_RANK[profile.careerLevel] || 4;
-    const oppRank = SENIORITY_RANK[opportunity.seniorityLevel] || 4;
-    if (oppRank > userRank + 1 || opportunity.seniorityLevel === "executive" && profile.careerLevel !== "executive" && profile.careerLevel !== "director") {
-      rejectionCodes.push("seniority_mismatch_too_senior");
-      rejectionExplanations.push(
-        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) substantially exceeds user career level (${SENIORITY_LABELS[profile.careerLevel]}).`
-      );
-    }
-    const isUserSeniorOrManager = userRank >= SENIORITY_RANK.senior_professional;
-    const isOppJuniorOrEntry = oppRank <= SENIORITY_RANK.junior_professional;
-    if (isUserSeniorOrManager && isOppJuniorOrEntry && !profile.allowJuniorRoles) {
-      rejectionCodes.push("seniority_mismatch_too_junior");
-      rejectionExplanations.push(
-        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) is below user's ${SENIORITY_LABELS[profile.careerLevel]} level.`
-      );
-    } else if (userRank >= SENIORITY_RANK.manager && oppRank < SENIORITY_RANK.supervisor && !profile.allowJuniorRoles) {
-      rejectionCodes.push("seniority_mismatch_too_junior");
-      rejectionExplanations.push(
-        `Seniority mismatch: Managerial user (${SENIORITY_LABELS[profile.careerLevel]}) should not receive non-supervisory/individual-contributor junior roles (${SENIORITY_LABELS[opportunity.seniorityLevel]}).`
-      );
-    }
-    const reqYears = opportunity.eligibility.requiredTotalYears ?? opportunity.eligibility.requiredBankingYears;
-    if (reqYears !== null && reqYears > profile.yearsOfExperience + 3) {
-      rejectionCodes.push("experience_mismatch");
-      rejectionExplanations.push(
-        `Experience mismatch: Role requires ${reqYears}+ years while user profile has ${profile.yearsOfExperience} years.`
-      );
-    }
-    const reqMgmt = opportunity.eligibility.requiredManagerialYears;
-    if (reqMgmt !== null && reqMgmt > profile.managerialExperienceYears + 3) {
-      rejectionCodes.push("experience_mismatch");
-      rejectionExplanations.push(
-        `Managerial experience mismatch: Role requires ${reqMgmt}+ managerial years while user profile has ${profile.managerialExperienceYears} years.`
-      );
-    }
-    if (profile.professionalSector === "branch_banking") {
-      const branchCheck = evaluateForBranchBankingSpecialFeature({
-        title: opportunity.title,
-        employer: opportunity.employer,
-        description: opportunity.descriptionSummary,
-        responsibilities: opportunity.actualResponsibilities,
-        sector: opportunity.sector,
-        seniorityLevel: opportunity.seniorityLevel,
-        exp: {
-          requiredTotalYears: opportunity.eligibility.requiredTotalYears,
-          requiredBankingYears: opportunity.eligibility.requiredBankingYears,
-          requiredManagerialYears: opportunity.eligibility.requiredManagerialYears,
-          bankingExperienceSummary: "",
-          managerialExperienceSummary: ""
-        },
-        salary: opportunity.salary,
-        visa: hasLegalWorkRight ? { ...opportunity.visa, verified: true, conditionMet: "C_legal_right_no_sponsorship" } : opportunity.visa,
-        environment: opportunity.environment,
-        deadlinePassed: true,
-        deadlineExplanation: "",
-        profile
-      });
-      if (!branchCheck.matched) {
-        for (const c of branchCheck.rejectionCodes) rejectionCodes.push(c);
-        for (const r of branchCheck.rejectionReasons) rejectionExplanations.push(r);
-      }
-    } else if (opportunity.environment === "international" && profile.minimumSalaryUsdMonthly && profile.minimumSalaryUsdMonthly > 0 && opportunity.salary.disclosed && opportunity.salary.normalizedMonthlyUsd !== null && opportunity.salary.normalizedMonthlyUsd < profile.minimumSalaryUsdMonthly) {
-      rejectionCodes.push("salary_below_threshold");
-      rejectionExplanations.push(
-        `Disclosed salary ($${opportunity.salary.normalizedMonthlyUsd}/month) is below user's explicit minimum expectation ($${profile.minimumSalaryUsdMonthly}/month).`
-      );
-    }
-  } else if (opportunity.category !== "internship") {
-    if (profile.professionalSector !== "branch_banking" && profile.professionalSector !== "banking_finance" && profile.professionalSector !== "wash") {
-      rejectionCodes.push("non_banking_wash_learning_category");
-      rejectionExplanations.push(
-        `Scholarships, training, and conferences are curated specifically for Banking & Finance and WASH professionals.`
-      );
-    }
-  }
-  if (rejectionCodes.length > 0) {
-    return {
-      id: `match_${profile.userId}_${opportunity.id}`,
-      userId: profile.userId,
-      opportunityId: opportunity.id,
-      environment: opportunity.environment,
-      category: opportunity.category,
-      eligible: false,
-      relevanceScore: 0,
-      matchReasons: [],
-      rejectionCodes: Array.from(new Set(rejectionCodes)),
-      rejectionExplanations: Array.from(new Set(rejectionExplanations)),
-      evaluatedAt: nowIso
-    };
-  }
-  let score = 62;
-  matchReasons.push(`Direct sector match (${opportunity.sector}) aligned with ${profile.currentOccupation || profile.professionalSector}.`);
-  score += 12;
-  if (opportunity.category === "job") {
-    matchReasons.push(`Seniority fit: ${SENIORITY_LABELS[opportunity.seniorityLevel]} matches your ${SENIORITY_LABELS[profile.careerLevel]} career level.`);
-    score += 10;
-  } else {
-    matchReasons.push(`Verified ${opportunity.category} opportunity with confirmed visa/funding transparency.`);
-    score += 10;
-  }
-  const oppLower = `${opportunity.title} ${opportunity.descriptionSummary} ${opportunity.actualResponsibilities.join(" ")}`.toLowerCase();
-  const matchedSkills = (profile.skills || []).filter((sk) => {
-    const tokens = sk.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
-    return tokens.some((t) => oppLower.includes(t));
-  });
-  if (matchedSkills.length > 0) {
-    matchReasons.push(`Matched skills: ${matchedSkills.slice(0, 4).join(", ")}.`);
-    score += Math.min(10, matchedSkills.length * 3);
-  }
-  if (opportunity.environment === "international") {
-    matchReasons.push(
-      hasLegalWorkRight ? `Condition C: Confirmed legal right to work in ${opportunity.country}.` : opportunity.visa.statusLabel
-    );
-    score += 4;
-  } else {
-    matchReasons.push("Ethiopian domestic opportunity matched under local career rules.");
-    score += 4;
-  }
-  return {
-    id: `match_${profile.userId}_${opportunity.id}`,
-    userId: profile.userId,
-    opportunityId: opportunity.id,
-    environment: opportunity.environment,
-    category: opportunity.category,
-    eligible: true,
-    relevanceScore: Math.min(99, score),
-    matchReasons,
-    rejectionCodes: [],
-    rejectionExplanations: [],
-    evaluatedAt: nowIso
-  };
-}
-
-// serverOpportunityIntelligence.ts
 var ADDIS_ABABA_TIMEZONE = "Africa/Addis_Ababa";
 var TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1e3;
 function formatAddisAbabaTimestamp(iso) {
@@ -22127,7 +22506,7 @@ function inferUserProfileFromLegacy(uid, raw) {
     managerialExperienceYears: mgmtYears,
     skills: Array.isArray(raw?.skills) ? raw.skills.map((s) => typeof s === "string" ? s : s?.name || "").filter(Boolean) : [],
     certifications: Array.isArray(raw?.certifications) ? raw.certifications.map((c) => typeof c === "string" ? c : c?.name || "").filter(Boolean) : [],
-    minimumSalaryUsdMonthly: professionalSector === "branch_banking" ? 3e3 : Number(raw?.minimumSalaryUsdMonthly || 0) || null,
+    minimumSalaryUsdMonthly: null,
     careerLevel,
     preferredLocations: Array.isArray(raw?.preferredLocations) ? raw.preferredLocations : [],
     preferredEnvironment: "both",
@@ -22285,8 +22664,9 @@ var OpportunityIntelligenceEngine = class {
           primarySourceName
         };
       };
-      if (existing.status === "published" && verified.status !== "published") {
-        const unpublishReason = verified.rejectionExplanations.join(" | ") || "Failed recheck verification rules.";
+      const branchVisaLost = existing.isBranchBankingMatch && existing.environment === "international" && (Boolean(raw.visaSponsorshipRevoked) || verified.visa.transparencyStatus !== "VISA SPONSORSHIP CONFIRMED");
+      if (existing.status === "published" && (verified.status !== "published" || Boolean(raw.visaSponsorshipRevoked) || branchVisaLost)) {
+        const unpublishReason = verified.rejectionExplanations.join(" | ") || (raw.visaSponsorshipRevoked || branchVisaLost ? "Confirmed work visa sponsorship was revoked or removed during recheck." : "Failed recheck verification rules.");
         const updated = {
           ...existing,
           ...verified,
@@ -22324,12 +22704,23 @@ var OpportunityIntelligenceEngine = class {
         });
         return { record: updated, outcome: "auto_unpublished" };
       }
-      const deadlineChanged = Boolean(verified.deadlineIso && existing.deadlineIso && verified.deadlineIso !== existing.deadlineIso);
-      const salaryMateriallyChanged = !existing.salary.disclosed && verified.salary.disclosed || existing.salary.normalizedMonthlyUsd !== null && verified.salary.normalizedMonthlyUsd !== null && Math.abs(existing.salary.normalizedMonthlyUsd - verified.salary.normalizedMonthlyUsd) >= 250;
+      const deadlineChanged = Boolean(verified.deadlineIso && existing.deadlineIso && verified.deadlineIso !== existing.deadlineIso) || Boolean(!existing.deadlineIso && verified.deadlineIso);
+      const visaConfirmedUpgraded = existing.visa.transparencyStatus !== "VISA SPONSORSHIP CONFIRMED" && verified.visa.transparencyStatus === "VISA SPONSORSHIP CONFIRMED";
+      const officiallyReopened = (existing.status === "unpublished" || existing.status === "expired") && verified.status === "published";
+      const existingLinkPriority = existing.applicationLinkVerification?.priorityTier || 4;
+      const verifiedLinkPriority = verified.applicationLinkVerification?.priorityTier || 4;
+      const applicationUrlCorrected = Boolean(
+        verified.urlFingerprint && existing.urlFingerprint && verified.urlFingerprint !== existing.urlFingerprint && verified.applicationLinkVerification?.status === "VERIFIED" && (existing.applicationLinkVerification?.status !== "VERIFIED" || verifiedLinkPriority < existingLinkPriority)
+      );
       const hoursSinceLastVerify = (nowMs - Date.parse(existing.lastVerifiedAt || existing.updatedAt || nowIso)) / (1e3 * 60 * 60);
       const isRepeatDailyRefresh = hoursSinceLastVerify >= 20;
-      if (deadlineChanged || salaryMateriallyChanged) {
+      if (deadlineChanged || visaConfirmedUpgraded || officiallyReopened || applicationUrlCorrected) {
         const nextVersion = existing.updateVersion + 1;
+        const changeNotes = [];
+        if (deadlineChanged) changeNotes.push(`application deadline updated to ${verified.deadlineRaw}`);
+        if (visaConfirmedUpgraded) changeNotes.push("employer visa sponsorship now confirmed");
+        if (officiallyReopened) changeNotes.push("application officially reopened");
+        if (applicationUrlCorrected) changeNotes.push("direct official application link corrected");
         const updated = {
           ...existing,
           ...verified,
@@ -22341,6 +22732,7 @@ var OpportunityIntelligenceEngine = class {
           sourceUrls: mergedSourceUrls,
           sourceNames: mergedSourceNames,
           lastVerifiedAt: nowIso,
+          deadlineLastVerifiedAt: nowIso,
           updatedAt: nowIso
         };
         collection[existingIdx] = updated;
@@ -22359,7 +22751,7 @@ var OpportunityIntelligenceEngine = class {
           newStatus: updated.status,
           passed: updated.status === "published",
           rejectionCodes: updated.rejectionCodes,
-          explanation: `Material update detected (v${nextVersion}): ${deadlineChanged ? `deadline updated to ${updated.deadlineRaw}` : ""}${deadlineChanged && salaryMateriallyChanged ? "; " : ""}${salaryMateriallyChanged ? `salary updated to ${updated.salary.salaryDisplay}` : ""}.`,
+          explanation: `Meaningful update detected (v${nextVersion}): ${changeNotes.join("; ")}.`,
           sourceUrl: updated.officialApplicationUrl
         });
         return { record: updated, outcome: "material_updated" };
@@ -22371,6 +22763,8 @@ var OpportunityIntelligenceEngine = class {
       existing.sourceNames = mergedSourceNames;
       existing.referenceNumber = existing.referenceNumber || verified.referenceNumber;
       existing.fullDaysRemaining = verified.fullDaysRemaining;
+      existing.deadlineStatusLabel = verified.deadlineStatusLabel;
+      existing.deadlineLastVerifiedAt = nowIso;
       existing.lastVerifiedAt = nowIso;
       if (isRepeatDailyRefresh) {
         existing.updatedAt = nowIso;
@@ -22442,31 +22836,37 @@ var OpportunityIntelligenceEngine = class {
           nowMs,
           Boolean(livePatch?.isClosedOrWithdrawn)
         );
-        const visaStillConfirmed = opp.environment === "ethiopia_domestic" ? true : Boolean(opp.visa.verified && !livePatch?.visaSponsorshipRevoked);
+        const visaRevoked = Boolean(livePatch?.visaSponsorshipRevoked);
+        const branchVisaLost = opp.isBranchBankingMatch && opp.environment === "international" && (visaRevoked || opp.visa.transparencyStatus !== "VISA SPONSORSHIP CONFIRMED");
         opp.lastVerifiedAt = nowIso;
+        opp.deadlineLastVerifiedAt = nowIso;
         opp.fullDaysRemaining = deadlineEval.fullDaysRemaining;
-        if (!deadlineEval.passed || !visaStillConfirmed) {
+        opp.deadlineStatusLabel = deadlineEval.deadlineStatusLabel;
+        opp.deadlineEvidence = deadlineEval.deadlineEvidence;
+        if (!deadlineEval.passed || visaRevoked || branchVisaLost) {
           const reasons = [];
           const codes = [...opp.rejectionCodes];
           if (!deadlineEval.passed && deadlineEval.rejectionCode) {
             codes.push(deadlineEval.rejectionCode);
             reasons.push(deadlineEval.explanation);
           }
-          if (!visaStillConfirmed) {
+          if (visaRevoked || branchVisaLost) {
             codes.push("visa_sponsorship_unconfirmed");
+            opp.isBranchBankingMatch = false;
             opp.visa = {
               ...opp.visa,
               verified: false,
               conditionMet: "none",
-              statusLabel: "Visa Sponsorship Revoked / Unconfirmed",
-              sponsorshipStatement: "Confirmed visa sponsorship was removed during scheduled recheck.",
+              transparencyStatus: "VISA SPONSORSHIP NOT OFFERED",
+              statusLabel: "VISA SPONSORSHIP NOT OFFERED",
+              sponsorshipStatement: "Confirmed visa sponsorship was revoked or removed during scheduled recheck.",
               lastVerifiedAt: nowIso
             };
             db.opportunity_visa_status[opp.id] = opp.visa;
             reasons.push("Confirmed work visa sponsorship is no longer valid at the official source.");
           }
-          opp.status = "unpublished";
-          opp.verificationBadge = "Unpublished After Recheck";
+          opp.status = deadlineEval.deadlineStatusLabel === "DEADLINE PASSED" ? "expired" : "unpublished";
+          opp.verificationBadge = deadlineEval.deadlineStatusLabel === "DEADLINE PASSED" ? "DEADLINE PASSED \u2014 Removed from Active" : deadlineEval.deadlineStatusLabel === "APPLICATIONS CLOSED" ? "APPLICATIONS CLOSED \u2014 Removed from Active" : "Unpublished After Recheck";
           opp.rejectionCodes = Array.from(new Set(codes));
           opp.rejectionExplanations = Array.from(/* @__PURE__ */ new Set([...opp.rejectionExplanations, ...reasons]));
           opp.unpublishedAt = nowIso;
@@ -22961,6 +23361,42 @@ var OpportunityIntelligenceEngine = class {
           else rejectedCount++;
         }
       }
+      const broaderWebDb = this.loadJsonFileSafe(
+        path8.join(this.runtimeBaseDir, "data", "autonomous_web_crawler_db.json"),
+        {}
+      );
+      const broaderItems = Object.values(broaderWebDb?.opportunities || {}).filter(
+        (item) => item && item.status === "PUBLISHED" && item.officialApplicationUrl
+      );
+      for (const b of broaderItems.slice(0, 100)) {
+        const catRaw = String(b.category || "job").toLowerCase();
+        const cat = catRaw.includes("scholar") ? "scholarship" : catRaw.includes("conf") ? "conference" : catRaw.includes("train") ? "training" : catRaw.includes("intern") ? "internship" : "job";
+        const res = this.ingestAndVerifyCandidate(
+          db,
+          {
+            category: cat,
+            title: String(b.title || ""),
+            employer: String(b.employer || "Official Organization"),
+            country: String(b.country || "International"),
+            city: String(b.location || ""),
+            description: String(b.summary || b.title || ""),
+            compensationRaw: String(b.salaryDisplay || ""),
+            explicitVisaNote: String(b.visaEvidence || ""),
+            officialApplicationUrl: String(b.officialApplicationUrl),
+            sourceUrl: String(b.sourcePageUrl || b.officialApplicationUrl),
+            sourceName: `Broader Internet Official Portal (${b.sourceDomain || "Verified Source"})`,
+            deadlineRaw: b.deadlineRaw || null,
+            publishedDate: typeof b.discoveredAt === "string" ? b.discoveredAt.slice(0, 10) : null
+          },
+          { fxRatesUsdBase: fxRates, nowMs: startedMs }
+        );
+        verifiedCount++;
+        if (res.outcome === "created") {
+          newDiscovered++;
+          if (res.record.status === "published") publishedCount++;
+          else rejectedCount++;
+        }
+      }
       const maxLive = Math.max(0, Math.min(40, options?.maxLiveNetworkSources ?? 40));
       const enabledSources = db.opportunity_sources.filter((s) => s.enabled).slice(0, maxLive);
       const BATCH_SIZE = 5;
@@ -23378,17 +23814,23 @@ function registerOpportunityIntelligenceRoutes(deps) {
     try {
       const db = engine.loadDb();
       const envParam = String(req.query.environment || "all").toLowerCase();
-      const minSalary = Math.max(3e3, Number(req.query.minSalaryUsd || 3e3) || 3e3);
       const q = String(req.query.q || "").trim().toLowerCase();
+      const nowMs = Date.now();
       const allPublishedJobs = engine.getAllOpportunities(db).filter((o) => o.status === "published" && o.category === "job");
       const results = [];
       const customProfile = {
         ...BRANCH_BANKING_REFERENCE_PROFILE,
-        minimumSalaryUsdMonthly: minSalary
+        minimumSalaryUsdMonthly: null
       };
       for (const opp of allPublishedJobs) {
         if (envParam === "international" && opp.environment !== "international") continue;
         if (envParam === "ethiopia_domestic" && opp.environment !== "ethiopia_domestic") continue;
+        const liveDeadline = evaluateStrictThreeDayDeadline(
+          opp.deadlineDateExact || opp.deadlineRaw,
+          nowMs,
+          false
+        );
+        if (!liveDeadline.passed) continue;
         const evalRes = evaluateForBranchBankingSpecialFeature({
           title: opp.title,
           employer: opp.employer,
@@ -23420,20 +23862,31 @@ function registerOpportunityIntelligenceRoutes(deps) {
           employer: opp.employer,
           country: opp.country,
           city: opp.city,
+          workMode: opp.workMode || "not_specified",
           environment: opp.environment,
-          salary: opp.salary.disclosed ? opp.salary.salaryDisplay : "Not Disclosed",
-          salaryPeriod: opp.salary.period === "annual" ? "Annual" : opp.salary.period === "monthly" ? "Monthly" : "Not Disclosed",
-          salaryTaxBasis: opp.salary.taxBasis === "gross" ? "Gross" : opp.salary.taxBasis === "net" ? "Net" : "Not Specified",
+          category: opp.category,
+          publishedDate: opp.publishedDate || opp.discoveredAt.slice(0, 10),
+          salary: opp.salary.disclosed ? opp.salary.salaryDisplay : "Salary not disclosed",
+          salaryPeriod: !opp.salary.disclosed ? "Not Disclosed" : opp.salary.period === "annual" ? "Annual" : "Monthly",
+          salaryTaxBasis: opp.salary.disclosed ? opp.salary.taxBasis === "gross" ? "Gross" : opp.salary.taxBasis === "net" ? "Net" : "Not Specified" : "Not Specified",
           normalizedMonthlyUsd: opp.salary.normalizedMonthlyUsd,
           requiredBankingExperience: opp.eligibility.requiredBankingYears !== null ? `${opp.eligibility.requiredBankingYears}+ years banking` : opp.eligibility.requiredTotalYears !== null ? `${opp.eligibility.requiredTotalYears}+ years relevant` : "Verify on official portal",
           requiredManagerialExperience: opp.eligibility.requiredManagerialYears !== null ? `${opp.eligibility.requiredManagerialYears}+ years managerial` : "Managerial / branch leadership verified",
           actualResponsibilities: opp.actualResponsibilities,
-          visaSponsorshipStatus: opp.visa.statusLabel,
+          visaSponsorshipStatus: opp.visa.transparencyStatus || opp.visa.statusLabel,
+          visaEvidence: opp.visa.evidenceQuote || opp.visa.sponsorshipStatement,
           visaFeesCovered: opp.visa.visaFeesCovered,
           relocationSupport: opp.visa.relocationDetails,
-          applicationDeadline: opp.deadlineRaw,
-          fullDaysRemaining: opp.fullDaysRemaining,
+          ethiopianEligibility: opp.eligibility.nationalityEligibility,
+          applicationDeadline: liveDeadline.deadlineDateExact || opp.deadlineRaw,
+          deadlineStatusLabel: liveDeadline.deadlineStatusLabel,
+          deadlineTime: liveDeadline.deadlineTime,
+          deadlineTimezone: liveDeadline.deadlineTimezone,
+          fullDaysRemaining: liveDeadline.fullDaysRemaining,
+          officialSourceWebsite: opp.primarySourceName,
           officialApplicationLink: opp.officialApplicationUrl,
+          applicationLinkStatus: opp.applicationLinkVerification?.status || "VERIFIED",
+          lastVerifiedAt: opp.lastVerifiedAt,
           verificationStatus: opp.verificationBadge,
           whyMatchesReferenceProfile: evalRes.matchReasons,
           relevanceScore: evalRes.relevanceScore
@@ -23447,13 +23900,118 @@ function registerOpportunityIntelligenceRoutes(deps) {
           bankingYears: 9,
           managerialYears: 3,
           sector: "Branch Banking",
-          minimumMonthlySalaryUsd: minSalary
+          minimumMonthlySalaryUsd: null
         },
         totalMatched: results.length,
         jobs: results
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err?.message || "Unable to load Branch Banking intelligence." });
+    }
+  });
+  deps.app.post("/api/opportunity-intelligence/opportunities/:id/verify-live", async (req, res) => {
+    try {
+      const oppId = String(req.params.id || "").trim().slice(0, 128);
+      if (!oppId) {
+        res.status(400).json({ success: false, error: "Opportunity id is required." });
+        return;
+      }
+      const db = engine.loadDb();
+      const target = engine.getAllOpportunities(db).find((o) => o.id === oppId);
+      const explicitUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+      const targetUrl = target?.officialApplicationUrl || explicitUrl;
+      if (!targetUrl) {
+        res.status(404).json({ success: false, error: "Opportunity not found." });
+        return;
+      }
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const urlCheck = await validatePublicCrawlUrl(targetUrl);
+      if (!urlCheck.ok) {
+        res.json({
+          success: true,
+          opportunityId: oppId,
+          verified: false,
+          linkStatus: "NOT VERIFIED",
+          deadlineStatusLabel: target?.deadlineStatusLabel || "DEADLINE NOT PUBLISHED",
+          fullDaysRemaining: target?.fullDaysRemaining ?? null,
+          lastVerifiedAt: nowIso,
+          note: `Link failed public URL validation: ${urlCheck.reason}`
+        });
+        return;
+      }
+      let httpStatus = 0;
+      let isClosedPage = false;
+      let errorNote = null;
+      try {
+        const resp = await fetch(targetUrl, {
+          method: "GET",
+          headers: {
+            "User-Agent": "HopelandJobsBot/2.0 (+https://www.hopelandjobs.tech; Live Link Verifier)",
+            Accept: "text/html,application/xhtml+xml,*/*;q=0.8"
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(6500)
+        });
+        httpStatus = resp.status;
+        if (resp.ok) {
+          const snippet = (await resp.text()).slice(0, 4e4).toLowerCase();
+          isClosedPage = /\b(this\s+(?:position|job|vacancy|role|application)\s+(?:has\s+been\s+filled|is\s+closed|is\s+no\s+longer\s+(?:available|open|accepting))|applications?\s+(?:are\s+)?(?:now\s+)?closed|no\s+longer\s+accepting\s+applications|vacancy\s+(?:expired|closed|withdrawn)|posting\s+has\s+expired)\b/i.test(
+            snippet
+          );
+        } else if (resp.status === 404 || resp.status === 410) {
+          errorNote = `Official application link returned HTTP ${resp.status} (page removed or expired).`;
+        } else if (resp.status === 403 || resp.status === 429) {
+          errorNote = `Portal returned HTTP ${resp.status} (automated check restricted; open link directly in browser).`;
+        } else {
+          errorNote = `Official portal returned HTTP ${resp.status}.`;
+        }
+      } catch (err) {
+        errorNote = err?.name === "TimeoutError" ? "Official portal check timed out." : "Temporary network error while verifying official portal.";
+      }
+      const rawDeadline = (typeof req.body?.applicationDeadline === "string" ? req.body.applicationDeadline : null) || target?.deadlineDateExact || target?.deadlineRaw || null;
+      const deadlineEval = evaluateStrictThreeDayDeadline(rawDeadline, nowMs, isClosedPage);
+      const linkStatus = httpStatus >= 200 && httpStatus < 400 && !isClosedPage ? "VERIFIED" : "NOT VERIFIED";
+      if (target) {
+        target.lastVerifiedAt = nowIso;
+        target.deadlineLastVerifiedAt = nowIso;
+        target.fullDaysRemaining = deadlineEval.fullDaysRemaining;
+        target.deadlineStatusLabel = deadlineEval.deadlineStatusLabel;
+        if (target.applicationLinkVerification) {
+          target.applicationLinkVerification = {
+            ...target.applicationLinkVerification,
+            status: httpStatus === 403 || httpStatus === 429 ? target.applicationLinkVerification.status : linkStatus,
+            httpStatus: httpStatus || null,
+            checkedAt: nowIso,
+            note: errorNote || target.applicationLinkVerification.note
+          };
+        }
+        if (isClosedPage || deadlineEval.deadlineStatusLabel === "DEADLINE PASSED" || httpStatus === 404 || httpStatus === 410) {
+          target.status = deadlineEval.deadlineStatusLabel === "DEADLINE PASSED" ? "expired" : "unpublished";
+          target.unpublishedAt = nowIso;
+          target.unpublishedReason = isClosedPage ? "Official application page reports applications are closed." : httpStatus === 404 || httpStatus === 410 ? `Direct application link returned HTTP ${httpStatus}.` : deadlineEval.explanation;
+          target.verificationBadge = deadlineEval.deadlineStatusLabel;
+        }
+        engine.saveDb(db);
+      }
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        success: true,
+        opportunityId: oppId,
+        verified: linkStatus === "VERIFIED" && deadlineEval.passed,
+        httpStatus: httpStatus || null,
+        linkStatus: httpStatus === 403 || httpStatus === 429 ? "VERIFIED" : linkStatus,
+        isClosedPage,
+        deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+        deadlineDateExact: deadlineEval.deadlineDateExact,
+        deadlineTime: deadlineEval.deadlineTime,
+        deadlineTimezone: deadlineEval.deadlineTimezone,
+        fullDaysRemaining: deadlineEval.fullDaysRemaining,
+        lastVerifiedAt: nowIso,
+        note: isClosedPage ? "APPLICATIONS CLOSED \u2014 Official page indicates this vacancy is no longer accepting applications." : errorNote || `Live check verified (HTTP ${httpStatus}) \u2014 ${deadlineEval.deadlineStatusLabel}.`
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Live verification failed." });
     }
   });
   deps.app.get("/api/opportunity-intelligence/personalized", (req, res) => {

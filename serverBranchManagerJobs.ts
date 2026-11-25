@@ -13,6 +13,11 @@ import {
   TARGET_BRANCH_MANAGER_POSITIONS,
   VerifiedBranchManagerJob,
 } from './src/types/branchManagerJobs';
+import {
+  detectWorkMode,
+  evaluateDirectApplicationLink,
+  evaluateStrictThreeDayDeadline,
+} from './src/utils/strictOpportunityMatcher';
 
 export interface RegisterBranchManagerJobsDeps {
   app: Express;
@@ -62,7 +67,7 @@ export const OWNER_PRIVATE_SAVED_PROFILE: BranchManagerProfileInput = {
   languages: ['English', 'Amharic'],
   hasMastersDegree: false,
   hasEnglishTest: false,
-  minimumMonthlyGrossUsd: 3000,
+  minimumMonthlyGrossUsd: 0,
 };
 
 export interface RawDiscoveredBranchJob {
@@ -428,8 +433,8 @@ export function parseGuaranteedBaseSalaryUsd(
     maxOriginal: 0,
     baseMonthlyUsd: 0,
     baseAnnualUsd: 0,
-    originalSalaryDisplay: 'Undisclosed',
-    usdEquivalentDisplay: 'Undisclosed',
+    originalSalaryDisplay: 'Salary not disclosed',
+    usdEquivalentDisplay: 'Salary not disclosed',
     exchangeRateUsed: '',
   };
 
@@ -619,14 +624,18 @@ export function extractExplicitVisaSponsorshipEvidence(text: string): {
     };
   }
 
-  // Must find explicit sponsorship commitment (NOT merely "visa assistance only" or "invitation letter")
+  // Reject conditional / historical-only sponsorship statements (never assume sponsorship from past roles!)
+  const conditionalOrPastOnlyRx =
+    /\b(previously\s+sponsored|has\s+sponsored\s+other\s+roles|licensed\s+sponsor\s+(?:register|holder)|visa\s+sponsorship\s+(?:may\s+be|might\s+be|could\s+be)\s+(?:considered|available)|case[- ]by[- ]case\s+sponsorship)\b/i;
+
+  // Must find explicit sponsorship commitment for THIS role (NOT merely "international applicants welcome", "relocation assistance", or "invitation letter")
   const explicitPatterns: Array<{ rx: RegExp; score: number }> = [
     {
-      rx: /[^.\n]{0,120}\b(we\s+(?:offer|provide|can\s+provide|support)\s+(?:full\s+)?(?:visa|work\s+permit)\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included)|skilled\s+worker\s+visa\s+sponsorship|employer[- ]sponsored\s+(?:work\s+)?visa|sponsor(?:ing)?\s+(?:your\s+)?(?:work\s+)?visa|work\s+permit\s+sponsorship|eu\s+blue\s+card\s+sponsorship|relocation\s+and\s+visa\s+sponsorship|visa\s+and\s+relocation\s+(?:support|package|sponsorship)|full\s+visa\s+sponsorship)\b[^.\n]{0,140}/i,
+      rx: /[^.\n]{0,120}\b(we\s+(?:offer|provide|can\s+provide|support)\s+(?:full\s+)?(?:international\s+|work\s+|employment\s+)?(?:visa|work\s+permit)\s+sponsorship|visa\s+sponsorship\s+(?:and\s+relocation\s+(?:package|support|assistance)\s+)?(?:is\s+|are\s+)?(?:available|provided|offered|included|confirmed)|skilled\s+worker\s+visa\s+sponsorship|employer[- ]sponsored\s+(?:work\s+)?visa|sponsor(?:s|ing)?\s+(?:your\s+)?(?:work\s+)?visa|work\s+permit\s+sponsorship|eu\s+blue\s+card\s+sponsorship|relocation\s+and\s+visa\s+sponsorship|visa\s+and\s+relocation\s+(?:support|package|sponsorship)|full\s+(?:international\s+|work\s+|employment\s+)?visa\s+sponsorship)\b[^.\n]{0,140}/i,
       score: 100,
     },
     {
-      rx: /[^.\n]{0,100}\b(visa\s+sponsorship|sponsorship\s+for\s+international\s+applicants|international\s+recruitment\s+with\s+(?:visa|work\s+permit)|g-4\s+visa|iqama\s+sponsorship|employment\s+visa\s+sponsored\s+by\s+(?:the\s+)?employer)\b[^.\n]{0,120}/i,
+      rx: /[^.\n]{0,100}\b(sponsorship\s+for\s+international\s+applicants|international\s+recruitment\s+with\s+(?:visa|work\s+permit)\s+sponsorship|g-4\s+visa|iqama\s+sponsorship|employment\s+visa\s+sponsored\s+by\s+(?:the\s+)?employer)\b[^.\n]{0,120}/i,
       score: 90,
     },
   ];
@@ -637,7 +646,7 @@ export function extractExplicitVisaSponsorshipEvidence(text: string): {
 
   for (const pat of explicitPatterns) {
     const match = clean.match(pat.rx);
-    if (match) {
+    if (match && !conditionalOrPastOnlyRx.test(match[0])) {
       confirmed = true;
       evidence = match[0].replace(/\s+/g, ' ').trim().slice(0, 260);
       strengthScore = pat.score;
@@ -871,8 +880,8 @@ function sanitizeBranchProfile(
     languages: cleanArr(input.languages, fallback.languages),
     hasMastersDegree: Boolean(input.hasMastersDegree),
     hasEnglishTest: Boolean(input.hasEnglishTest),
-    // Strictly enforce >= $3,000 USD minimum floor for this section!
-    minimumMonthlyGrossUsd: Math.max(3000, Math.min(50000, Number(input.minimumMonthlyGrossUsd ?? 3000) || 3000)),
+    // No mandatory minimum salary restriction anywhere on the platform (Section 1)
+    minimumMonthlyGrossUsd: Math.max(0, Math.min(50000, Number(input.minimumMonthlyGrossUsd ?? 0) || 0)),
   };
 }
 
@@ -900,7 +909,7 @@ export function evaluateBranchManagerJobs(params: {
     : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE;
   const profile = sanitizeBranchProfile(params.profileInput, baseDefault);
   const fxRates = params.fxRatesUsdBase || FALLBACK_FX_USD_BASE;
-  const minThresholdUsd = Math.max(3000, Number(params.minSalaryUsd || profile.minimumMonthlyGrossUsd || 3000));
+  const minThresholdUsd = Math.max(0, Number(params.minSalaryUsd ?? 0) || 0);
 
   const audit: StrictGateAuditSummary = {
     totalCandidatesScanned: (params.rawCandidates || []).length,
@@ -922,23 +931,26 @@ export function evaluateBranchManagerJobs(params: {
   const verifiedJobs: VerifiedBranchManagerJob[] = [];
 
   for (const raw of params.rawCandidates || []) {
-    // Gate 0: Valid HTTPS official URL & non-duplicate & non-expired
+    // Gate 0: Verified direct HTTPS application URL (rejects search-result URLs & generic homepages) & active deadline
     const url = String(raw.applicationUrl || '').trim();
-    if (!url.startsWith('https://')) {
+    const linkCheck = evaluateDirectApplicationLink({
+      url,
+      category: 'job',
+      employer: raw.employerName,
+    });
+    if (linkCheck.status !== 'VERIFIED') {
       audit.excludedExpiredOrDuplicate += 1;
       continue;
     }
 
-    if (raw.applicationDeadline && raw.applicationDeadline !== 'Open — Verify on employer portal') {
-      const dlNorm = /^\d{4}-\d{2}-\d{2}$/.test(raw.applicationDeadline.trim())
-        ? `${raw.applicationDeadline.trim()}T23:59:59Z`
-        : raw.applicationDeadline;
-      const parsedDl = Date.parse(dlNorm);
-      // Enforce mandatory >= 3 full days (72 hours) deadline rule (Section 9)
-      if (!Number.isNaN(parsedDl) && parsedDl - Date.now() < 72 * 60 * 60 * 1000) {
-        audit.excludedExpiredOrDuplicate += 1;
-        continue;
-      }
+    const rawDeadlineClean =
+      raw.applicationDeadline && raw.applicationDeadline !== 'Open — Verify on employer portal'
+        ? raw.applicationDeadline
+        : null;
+    const deadlineEval = evaluateStrictThreeDayDeadline(rawDeadlineClean, Date.now(), false);
+    if (!deadlineEval.passed) {
+      audit.excludedExpiredOrDuplicate += 1;
+      continue;
     }
 
     const dedupKey = `${raw.title.toLowerCase().trim()}|${raw.employerName.toLowerCase().trim()}|${raw.locationRaw.toLowerCase().trim()}`;
@@ -981,19 +993,11 @@ export function evaluateBranchManagerJobs(params: {
       continue;
     }
 
-    // Gate 3: Guaranteed Base Gross Salary > USD 3,000/month (> $36,000/yr) — undisclosed strictly excluded!
+    // Gate 3: Salary Transparency (Section 1: NEVER exclude any role because salary is below USD 3,000 or undisclosed!)
     const salaryEval = parseGuaranteedBaseSalaryUsd(
       `${raw.compensationRaw || ''}\n${plainDesc}`,
       fxRates
     );
-    if (!salaryEval.disclosed) {
-      audit.excludedUndisclosedSalary += 1;
-      continue;
-    }
-    if (salaryEval.baseMonthlyUsd <= 3000 || salaryEval.baseAnnualUsd <= 36000) {
-      audit.excludedBelow3000Usd += 1;
-      continue;
-    }
 
     // Gate 4: Explicit Confirmed Visa Sponsorship Evidence (never confuse general visa notes with sponsorship!)
     const visaEval = extractExplicitVisaSponsorshipEvidence(fullText);
@@ -1109,23 +1113,25 @@ export function evaluateBranchManagerJobs(params: {
 
     const profileMatchPercentage = Math.max(35, Math.min(98, Math.round(matchScore)));
 
-    // Section 8 Priority Ranking Score:
-    // 1. Confirmed visa sponsorship (weight 30)
-    // 2. Salary > $3,000 USD gross monthly (weight 24)
-    // 3. Ethiopian applicant eligibility (weight 16)
-    // 4. Match with professional experience (weight 16)
+    // Priority Ranking Score (No USD 3,000 salary exclusion; transparent salary & sponsorship weighting):
+    // 1. Confirmed visa sponsorship (weight 34)
+    // 2. Match with professional experience (weight 24)
+    // 3. Ethiopian applicant eligibility (weight 18)
+    // 4. Disclosed salary competitiveness / neutral if undisclosed (weight 10)
     // 5. Employer reputation & authenticity (weight 8)
     // 6. Relocation & family support (weight 6)
-    const salaryNorm = Math.min(100, 50 + ((salaryEval.baseMonthlyUsd - 3000) / 100));
+    const salaryNorm = salaryEval.disclosed
+      ? Math.max(40, Math.min(100, 45 + salaryEval.baseMonthlyUsd / 150))
+      : 55;
     const ethScore = raw.ethiopianEligibleHint === 'confirmed' ? 100 : 90;
     const relocScore = (visaEval.hasRelocation ? 60 : 0) + (visaEval.hasFamilySupport ? 40 : 0);
 
     const rankingScore = Number(
       (
-        visaEval.strengthScore * 0.3 +
-        salaryNorm * 0.24 +
-        ethScore * 0.16 +
-        profileMatchPercentage * 0.16 +
+        visaEval.strengthScore * 0.34 +
+        profileMatchPercentage * 0.24 +
+        ethScore * 0.18 +
+        salaryNorm * 0.1 +
         employerMeta.reputationScore * 0.08 +
         relocScore * 0.06
       ).toFixed(2)
@@ -1144,6 +1150,7 @@ export function evaluateBranchManagerJobs(params: {
       : /\b(gross|base\s+salary)\b/i.test(fullText)
       ? 'Gross'
       : 'Not Specified';
+    const workMode = detectWorkMode(fullText);
 
     verifiedJobs.push({
       id: raw.id,
@@ -1153,12 +1160,14 @@ export function evaluateBranchManagerJobs(params: {
       country: regionEval.country,
       city: regionEval.city,
       regionScope: regionEval.regionScope,
-      grossMonthlySalaryUsd: salaryEval.baseMonthlyUsd,
-      grossAnnualSalaryUsd: salaryEval.baseAnnualUsd,
-      originalSalaryDisplay: salaryEval.originalSalaryDisplay,
-      usdEquivalentDisplay: salaryEval.usdEquivalentDisplay,
-      exchangeRateUsed: salaryEval.exchangeRateUsed,
+      grossMonthlySalaryUsd: salaryEval.disclosed ? salaryEval.baseMonthlyUsd : 0,
+      grossAnnualSalaryUsd: salaryEval.disclosed ? salaryEval.baseAnnualUsd : 0,
+      salaryDisclosed: salaryEval.disclosed,
+      originalSalaryDisplay: salaryEval.disclosed ? salaryEval.originalSalaryDisplay : 'Salary not disclosed',
+      usdEquivalentDisplay: salaryEval.disclosed ? salaryEval.usdEquivalentDisplay : 'Salary not disclosed',
+      exchangeRateUsed: salaryEval.disclosed ? salaryEval.exchangeRateUsed : 'Not applicable (salary not disclosed)',
       visaSponsorshipEvidence: visaEval.evidence,
+      visaTransparencyStatus: 'VISA SPONSORSHIP CONFIRMED',
       sponsorshipStrengthScore: visaEval.strengthScore,
       ethiopianEligibilityConfirmation: ethiopianConfirmation,
       requiredEducation: eduText,
@@ -1169,21 +1178,32 @@ export function evaluateBranchManagerJobs(params: {
       familyRelocationPossibilities: visaEval.familyText,
       hasConfirmedRelocation: visaEval.hasRelocation,
       hasConfirmedFamilySupport: visaEval.hasFamilySupport,
-      applicationDeadline: raw.applicationDeadline || 'Open — Verify closing date on official employer portal',
+      applicationDeadline: deadlineEval.deadlineDateExact || raw.applicationDeadline || 'DEADLINE NOT PUBLISHED',
+      deadlineStatusLabel: deadlineEval.deadlineStatusLabel,
+      deadlineTime: deadlineEval.deadlineTime,
+      deadlineTimezone: deadlineEval.deadlineTimezone,
+      daysRemaining: deadlineEval.fullDaysRemaining,
       datePosted: raw.datePosted || nowIso.slice(0, 10),
+      lastVerifiedAt: nowIso,
       officialApplicationUrl: url,
+      applicationLinkStatus: linkCheck.status,
       sourcePortal: raw.sourcePortal,
+      workMode,
       profileMatchPercentage,
       whyYouQualify,
       gapsOrUnmetRequirements,
       matchedTargetPosition: roleMatch.matchedPosition,
       employerReputationScore: employerMeta.reputationScore,
       rankingScore,
-      salaryPeriod: salaryEval.period === 'annual' ? 'Annual' : salaryEval.period === 'monthly' ? 'Monthly' : 'Not Disclosed',
-      salaryTaxBasis: taxBasis,
+      salaryPeriod: !salaryEval.disclosed
+        ? 'Not Disclosed'
+        : salaryEval.period === 'annual'
+        ? 'Annual'
+        : 'Monthly',
+      salaryTaxBasis: salaryEval.disclosed ? taxBasis : 'Not Specified',
       requiredBankingExperience: expEval.summary,
       requiredManagerialExperience,
-      verificationStatus: 'Verified Official · >$3,000/mo · Visa Confirmed',
+      verificationStatus: 'Verified Official · Visa Sponsorship Confirmed',
       seniorityLevel: /\bsenior|regional|area|network\b/i.test(raw.title)
         ? 'Senior Manager'
         : /\bdeputy|assistant\b/i.test(raw.title)
@@ -1192,13 +1212,15 @@ export function evaluateBranchManagerJobs(params: {
     });
   }
 
-  // Apply user view filters (after strict 6-gate verification!)
+  // Apply optional user view filters (NO default USD 3,000 floor!)
   const filtered = verifiedJobs
     .filter((job) => {
       if (params.regionFilter && params.regionFilter !== 'ALL' && job.regionScope !== params.regionFilter) {
         return false;
       }
-      if (job.grossMonthlySalaryUsd < minThresholdUsd) return false;
+      if (minThresholdUsd > 0 && job.salaryDisclosed && job.grossMonthlySalaryUsd < minThresholdUsd) {
+        return false;
+      }
       if (params.positionFilter && params.positionFilter !== 'ALL') {
         const pf = params.positionFilter.toLowerCase();
         if (
@@ -1575,7 +1597,7 @@ export function registerBranchManagerJobsRoutes(deps: RegisterBranchManagerJobsD
     } catch (err: any) {
       res.status(500).json({
         success: false,
-        error: err?.message || 'Failed to evaluate verified $3,000+ visa-sponsored roles.',
+        error: err?.message || 'Failed to evaluate verified visa-sponsored Branch Banking roles.',
       });
     }
   });

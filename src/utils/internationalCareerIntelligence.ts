@@ -153,8 +153,8 @@ export const PRIMARY_BENCHMARK_PROFILE: CareerApplicantProfile = {
   currentPosition: 'Branch Manager',
   languages: ['English'],
   englishOnly: true,
-  minimumMonthlySalaryUsd: 3000,
-  preferredSalaryRangeUsd: 'USD 3,500–6,000+ / month',
+  minimumMonthlySalaryUsd: 0,
+  preferredSalaryRangeUsd: 'All disclosed & undisclosed salaries (user decides)',
   willingRelocateAloneFirst: true,
   familyReunificationImportant: true,
   needsEmployerSponsorship: true,
@@ -456,7 +456,7 @@ const FX_TO_USD: Record<string, number> = {
 
 export function parseAndNormalizeSalaryUsd(
   opp: GlobalOpportunity,
-  targetMinMonthlyUsd: number = 3000
+  targetMinMonthlyUsd: number = 0
 ): SalaryBreakdownUsd {
   const combined = `${opp.funding?.stipendOrSalary || ''} ${opp.funding?.fundingSummary || ''} ${opp.summary || ''}`;
   const benefitsSummary: string[] = [];
@@ -626,7 +626,7 @@ export function evaluateWeightedCareerMatch(
   profile: CareerApplicantProfile
 ): WeightedCareerMatchResult {
   const visaChecklist = classifySevenTierVisaSponsorship(opp);
-  const salaryInfo = parseAndNormalizeSalaryUsd(opp, profile.minimumMonthlySalaryUsd || 3000);
+  const salaryInfo = parseAndNormalizeSalaryUsd(opp, profile.minimumMonthlySalaryUsd || 0);
   const careerSpecialty = classifyCareerSpecialtyCategory(opp.title, opp.summary, opp.organization);
   const regionGroup = detectInternationalRegion(opp.country, opp.location);
 
@@ -790,28 +790,23 @@ export function evaluateWeightedCareerMatch(
     gapOrMismatchReasons.push('Sponsorship not confirmed — verify employer work permit support before applying.');
   }
 
-  // 5. SALARY COMPATIBILITY (Max 10 pts)
-  let salaryScore = 6;
-  const minTarget = profile.minimumMonthlySalaryUsd || 3000;
+  // 5. SALARY COMPATIBILITY (Max 10 pts) — No mandatory USD 3,000 restriction anywhere; user decides!
+  let salaryScore = 8;
+  const minTarget = profile.minimumMonthlySalaryUsd && profile.minimumMonthlySalaryUsd > 0 ? profile.minimumMonthlySalaryUsd : 0;
   if (salaryInfo.hasAdvertisedSalary && salaryInfo.estimatedMonthlyUsd !== null) {
-    if (salaryInfo.estimatedMonthlyUsd >= minTarget) {
+    if (minTarget === 0 || salaryInfo.estimatedMonthlyUsd >= minTarget) {
       salaryScore = 10;
       matchReasons.push(
-        `Estimated salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) meets your USD ${minTarget.toLocaleString()}/mo target.`
-      );
-    } else if (salaryInfo.isExceptionalPathwayBelowTarget) {
-      salaryScore = 6;
-      gapOrMismatchReasons.push(
-        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below USD ${minTarget.toLocaleString()}/mo target, flagged under exceptional relocation/pathway opportunities.`
+        `Official disclosed salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) clearly displayed for your review.`
       );
     } else {
-      salaryScore = 2;
-      gapOrMismatchReasons.push(
-        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below your USD ${minTarget.toLocaleString()}/mo minimum expectation.`
+      salaryScore = 7;
+      matchReasons.push(
+        `Official disclosed salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) displayed transparently — no automatic salary rejection.`
       );
     }
   } else {
-    salaryScore = 6; // Neutral when employer does not publish salary (never invent salary!)
+    salaryScore = 8; // Neutral when salary is not disclosed (never invent or penalize)
   }
 
   // 6. LANGUAGE COMPATIBILITY (Max 10 pts)
@@ -1004,8 +999,8 @@ export function extractGroundedProfileFromCvText(
     currentPosition: currentPosition || 'Not specified in CV',
     languages,
     englishOnly: overrides.englishOnly ?? !nonEnglishEuropean,
-    minimumMonthlySalaryUsd: overrides.minimumMonthlySalaryUsd ?? 3000,
-    preferredSalaryRangeUsd: overrides.preferredSalaryRangeUsd || 'USD 3,000+ / month',
+    minimumMonthlySalaryUsd: overrides.minimumMonthlySalaryUsd ?? 0,
+    preferredSalaryRangeUsd: overrides.preferredSalaryRangeUsd || 'All salaries (no minimum filter)',
     willingRelocateAloneFirst: overrides.willingRelocateAloneFirst ?? true,
     familyReunificationImportant: overrides.familyReunificationImportant ?? true,
     needsEmployerSponsorship: overrides.needsEmployerSponsorship ?? true,

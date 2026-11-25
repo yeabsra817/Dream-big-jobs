@@ -3559,7 +3559,7 @@ export default function App() {
               </section>
             )}
 
-            {/* 4C. INTERNATIONAL JOBS OPPORTUNITY & VISA-SPONSORED JOBS $3,000+ (Side-by-Side + Live 1-Min Autonomous Monitor) */}
+            {/* 4C. INTERNATIONAL JOBS OPPORTUNITY & JOBS FOR BRANCH BANKING (Side-by-Side + Live Autonomous Monitor) */}
             <AutonomousDiscoveryHomepageSection
               onOpenInternationalOpportunities={() =>
                 handleOpenExpansionView('international-opportunities')

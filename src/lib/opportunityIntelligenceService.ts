@@ -24,7 +24,10 @@ export interface BranchBankingIntelligenceItem {
   employer: string;
   country: string;
   city: string;
+  workMode?: string;
   environment: OpportunityEnvironment;
+  category?: string;
+  publishedDate?: string | null;
   salary: string;
   salaryPeriod: string;
   salaryTaxBasis: string;
@@ -33,14 +36,38 @@ export interface BranchBankingIntelligenceItem {
   requiredManagerialExperience: string;
   actualResponsibilities: string[];
   visaSponsorshipStatus: string;
+  visaEvidence?: string;
   visaFeesCovered: string;
   relocationSupport: string;
+  ethiopianEligibility?: string;
   applicationDeadline: string;
+  deadlineStatusLabel?: string;
+  deadlineTime?: string | null;
+  deadlineTimezone?: string | null;
   fullDaysRemaining: number | null;
+  officialSourceWebsite?: string;
   officialApplicationLink: string;
+  applicationLinkStatus?: string;
+  lastVerifiedAt?: string;
   verificationStatus: string;
   whyMatchesReferenceProfile: string[];
   relevanceScore: number;
+}
+
+export interface LiveOpportunityVerificationResult {
+  success: boolean;
+  opportunityId: string;
+  verified: boolean;
+  httpStatus?: number | null;
+  linkStatus: 'VERIFIED' | 'NOT VERIFIED';
+  isClosedPage?: boolean;
+  deadlineStatusLabel: string;
+  deadlineDateExact?: string | null;
+  deadlineTime?: string | null;
+  deadlineTimezone?: string | null;
+  fullDaysRemaining: number | null;
+  lastVerifiedAt: string;
+  note: string;
 }
 
 export async function fetchAdminOpportunityIntelligenceDashboard(
@@ -83,7 +110,6 @@ export async function triggerAdminDailyOpportunityCheck(
 
 export async function fetchBranchBankingIntelligence(params?: {
   environment?: 'all' | 'international' | 'ethiopia_domestic';
-  minSalaryUsd?: number;
   q?: string;
 }): Promise<{
   success: boolean;
@@ -92,7 +118,6 @@ export async function fetchBranchBankingIntelligence(params?: {
 }> {
   const query = new URLSearchParams();
   if (params?.environment) query.set('environment', params.environment);
-  if (params?.minSalaryUsd) query.set('minSalaryUsd', String(params.minSalaryUsd));
   if (params?.q) query.set('q', params.q);
 
   const res = await fetch(`/api/opportunity-intelligence/branch-banking?${query.toString()}`, {
@@ -104,6 +129,27 @@ export async function fetchBranchBankingIntelligence(params?: {
     throw new Error(data?.error || `HTTP ${res.status}: Failed to load Branch Banking intelligence.`);
   }
   return data;
+}
+
+export async function verifyOpportunityLive(
+  opportunityId: string,
+  payload?: { url?: string; applicationDeadline?: string | null }
+): Promise<LiveOpportunityVerificationResult | null> {
+  try {
+    const res = await fetch(
+      `/api/opportunity-intelligence/opportunities/${encodeURIComponent(opportunityId)}/verify-live`,
+      {
+        method: 'POST',
+        headers: buildAuthHeaders(),
+        body: JSON.stringify(payload || {}),
+      }
+    );
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) return null;
+    return data as LiveOpportunityVerificationResult;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchUserNotificationPreferences(): Promise<{

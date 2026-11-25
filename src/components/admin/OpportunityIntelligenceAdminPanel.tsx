@@ -176,10 +176,11 @@ export const OpportunityIntelligenceAdminPanel: React.FC<OpportunityIntelligence
               40-Source Automatic Opportunity Monitor &amp; Strict Verification Engine
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-3xl">
-              Permanently tracks all {m?.totalSourcesMonitored ?? 40} registered sources across Middle East, Europe,
-              USA, and Scandinavia / Nordic. Runs automatically every 24 hours on the server in Africa/Addis_Ababa time,
-              respects robots.txt and rate limits, enforces permanent deduplication, and scopes the &gt;$3,000/month
-              salary filter strictly to international Branch Banking roles only.
+              Permanently tracks all {m?.totalSourcesMonitored ?? 40} registered websites across Middle East, Europe,
+              USA, and Scandinavia / Nordic plus broader internet official sources. Runs automatically every 24 hours
+              on the server in Africa/Addis_Ababa time, respects robots.txt and rate limits, enforces permanent
+              deduplication, applies zero minimum salary thresholds anywhere, and verifies direct official application
+              links, exact deadlines, and transparent visa sponsorship statuses.
             </p>
           </div>
 
@@ -318,12 +319,11 @@ export const OpportunityIntelligenceAdminPanel: React.FC<OpportunityIntelligence
           <div>
             <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-rose-600" />
-              <span>Strict Visa Sponsorship, Salary &amp; Profile Rejection Counters</span>
+              <span>Strict Verification, Sponsorship &amp; Profile Rejection Counters (No Salary Threshold)</span>
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <MetricTile label="Total Rejected" value={m.opportunitiesRejected} tone="rose" />
-              <MetricTile label="Unverified Sponsorship Rejected" value={m.visaSponsorshipFailures} tone="rose" />
-              <MetricTile label="Intl Branch Salary (<$3k) Rejected" value={m.salaryFilterFailures} tone="amber" />
+              <MetricTile label="Sponsorship Unconfirmed" value={m.visaSponsorshipFailures} tone="rose" />
               <MetricTile label="Experience Mismatches" value={m.experienceMismatchRejections} tone="amber" />
               <MetricTile label="Seniority Mismatches" value={m.seniorityMismatchRejections} tone="rose" />
             </div>

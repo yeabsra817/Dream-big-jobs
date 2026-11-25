@@ -1,7 +1,7 @@
 {
-  "checkedAt": "2026-11-25T16:13:51.152Z",
+  "checkedAt": "2026-11-25T16:55:50.153Z",
   "overallStatus": "HEALTHY",
-  "serverUptimeSeconds": 61,
+  "serverUptimeSeconds": 1682,
   "storage": {
     "persistentDbWritable": true,
     "filesPresent": {
@@ -23,8 +23,8 @@
     "channelId": "-1004499169829",
     "status": "CONNECTED",
     "statusCode": "connected",
-    "lastCheckedAt": "2026-11-25T16:13:51.101Z",
-    "lastSuccessfulTestAt": "2026-11-25T16:13:51.101Z",
+    "lastCheckedAt": "2026-11-25T16:55:50.088Z",
+    "lastSuccessfulTestAt": "2026-11-25T16:55:50.088Z",
     "lastError": null,
     "consecutiveFailures": 0,
     "reconnectAttempts": 0,
@@ -41,7 +41,7 @@
     "vacancies": 0,
     "staffProfiles": 8,
     "jobApplications": 1,
-    "auditLogs": 139,
+    "auditLogs": 141,
     "unacknowledgedAlerts": 6
   }
 }

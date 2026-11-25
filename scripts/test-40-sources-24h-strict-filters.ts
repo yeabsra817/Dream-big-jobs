@@ -157,8 +157,13 @@ async function runAll9Tests() {
     assert.equal(ethiopianUndisclosedBm.status, 'published', 'Ethiopian job with undisclosed salary MUST publish');
     assert.equal(
       ethiopianUndisclosedBm.salary.salaryDisplay,
-      'Not Disclosed',
-      'Undisclosed Ethiopian salary must be clearly marked as "Not Disclosed"'
+      'Salary not disclosed',
+      'Undisclosed salary must be clearly marked as "Salary not disclosed"'
+    );
+    assert.equal(
+      ethiopianUndisclosedBm.visa.transparencyStatus,
+      'Visa sponsorship not applicable — domestic opportunity',
+      'Domestic Ethiopian opportunity must carry exact domestic visa label'
     );
     assert.equal(
       ethiopianUndisclosedBm.isBranchBankingMatch,
@@ -167,10 +172,10 @@ async function runAll9Tests() {
     );
     const etMatchForUser = evaluateOpportunityForUserProfile(ethiopianUndisclosedBm, BRANCH_MANAGER_PROFILE);
     assert.equal(etMatchForUser.eligible, true, 'Ethiopian domestic job must match Ethiopian Branch Manager user');
-    console.log('[PASS] CASE 1: Ethiopian Branch Manager (<$3,000 & Not Disclosed) remained eligible and published.');
+    console.log('[PASS] CASE 1: Ethiopian Branch Manager (<$3,000 & "Salary not disclosed") eligible with exact domestic visa label.');
 
     // -------------------------------------------------------------------------
-    // TEST 2: International Branch Manager > $3,000 WITH confirmed employer visa sponsorship -> ELIGIBLE
+    // TEST 2: International Branch Manager WITH confirmed employer visa sponsorship -> ELIGIBLE
     // -------------------------------------------------------------------------
     const intlBmValid = buildAndVerifyCanonicalOpportunity(
       {
@@ -193,14 +198,17 @@ async function runAll9Tests() {
       { nowMs }
     );
 
-    assert.equal(intlBmValid.status, 'published', 'Valid international Branch Manager > $3k with sponsorship MUST publish');
+    assert.equal(intlBmValid.status, 'published', 'Valid international Branch Manager with sponsorship MUST publish');
     assert.equal(intlBmValid.isBranchBankingMatch, true, 'Valid international Branch Manager MUST match Branch Banking feature');
     assert.equal(intlBmValid.visa.verified, true);
-    assert.equal(intlBmValid.salary.meetsAbove3000UsdMonthly, true);
-    console.log('[PASS] CASE 2: International Branch Manager (>$3,000 + confirmed employer visa sponsorship) published & matched.');
+    assert.equal(intlBmValid.visa.transparencyStatus, 'VISA SPONSORSHIP CONFIRMED');
+    assert.equal(intlBmValid.applicationLinkVerification.status, 'VERIFIED');
+    assert.equal(intlBmValid.deadlineStatusLabel, 'OPEN — ACCEPTING APPLICATIONS');
+    console.log('[PASS] CASE 2: International Branch Manager (confirmed employer visa sponsorship + verified direct link) published & matched.');
 
     // -------------------------------------------------------------------------
-    // TEST 3: International Branch Manager > $3,000 WITHOUT confirmed sponsorship -> REJECTED
+    // TEST 3: Visa Sponsorship Transparency — All 4 International Statuses + Past Sponsorship Trap
+    //         Branch Banking MUST reject unconfirmed/past-only/relocation-only sponsorship
     // -------------------------------------------------------------------------
     const intlBmNoVisa = buildAndVerifyCanonicalOpportunity(
       {
@@ -215,25 +223,65 @@ async function runAll9Tests() {
         deadlineRaw: futureIso(20, nowMs),
         compensationRaw: 'USD 5,500 per month gross',
         explicitVisaNote:
-          'Permission to apply for a visa independently upon offer. Invitation letter only provided for local onboarding.',
+          'No visa sponsorship is offered. Applicants must already have work authorization in Qatar.',
         description:
           'Manage retail branch operations, deposits, credit controls, and branch KPIs. 8+ years banking experience and 3 years branch management.',
       },
       { nowMs }
     );
-
-    assert.equal(intlBmNoVisa.status, 'rejected', 'International job with permission-to-apply / invitation-letter-only MUST be rejected');
+    assert.equal(intlBmNoVisa.status, 'published', 'General international job without sponsorship publishes transparently');
     assert.equal(intlBmNoVisa.visa.verified, false);
-    assert.equal(intlBmNoVisa.isBranchBankingMatch, false);
-    assert.ok(
-      intlBmNoVisa.rejectionCodes.includes('visa_sponsorship_unconfirmed') ||
-        intlBmNoVisa.rejectionCodes.includes('invitation_letter_only'),
-      `Expected visa rejection code, got: ${intlBmNoVisa.rejectionCodes.join(', ')}`
+    assert.equal(intlBmNoVisa.visa.transparencyStatus, 'VISA SPONSORSHIP NOT OFFERED');
+    assert.equal(intlBmNoVisa.isBranchBankingMatch, false, 'Branch Banking MUST exclude VISA SPONSORSHIP NOT OFFERED');
+
+    const intlBmPastSponsorOnly = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Amsterdam',
+        employer: 'Dutch Retail Financial Group',
+        country: 'Netherlands',
+        city: 'Amsterdam',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.dutchretail.nl/jobs/bm-ams-12',
+        sourceUrl: 'https://careers.dutchretail.nl/jobs/bm-ams-12',
+        sourceName: 'Dutch Retail Financial Group',
+        deadlineRaw: futureIso(20, nowMs),
+        compensationRaw: 'EUR 4,500 per month gross',
+        explicitVisaNote:
+          'International applicants welcome with relocation assistance. Employer has previously sponsored other employees on a case-by-case basis.',
+        description:
+          'Manage retail branch operations, deposits, and team leadership. 8 years banking and 3 years management.',
+      },
+      { nowMs }
     );
-    console.log('[PASS] CASE 3: International Branch Manager (>$3,000 without confirmed visa sponsorship / permission to apply) rejected.');
+    assert.equal(intlBmPastSponsorOnly.visa.verified, false, 'Past sponsorship / relocation assistance MUST NOT count as confirmed visa sponsorship');
+    assert.equal(intlBmPastSponsorOnly.visa.transparencyStatus, 'VISA SPONSORSHIP REQUIRES CONFIRMATION');
+    assert.equal(intlBmPastSponsorOnly.isBranchBankingMatch, false, 'Branch Banking MUST NOT accept REQUIRES CONFIRMATION');
+
+    const intlSilentVisa = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Water Engineer - Municipal Systems',
+        employer: 'EuroWater Consultancy',
+        country: 'Germany',
+        city: 'Munich',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.eurowater.de/jobs/water-engineer-55',
+        sourceUrl: 'https://careers.eurowater.de/jobs/water-engineer-55',
+        sourceName: 'EuroWater Consultancy',
+        deadlineRaw: futureIso(20, nowMs),
+        compensationRaw: '',
+        description:
+          'Design municipal water supply and sanitation distribution networks across southern Germany. 5+ years water engineering experience.',
+      },
+      { nowMs }
+    );
+    assert.equal(intlSilentVisa.status, 'published');
+    assert.equal(intlSilentVisa.visa.transparencyStatus, 'VISA SPONSORSHIP NOT SPECIFIED');
+    assert.equal(intlSilentVisa.salary.salaryDisplay, 'Salary not disclosed');
+    console.log('[PASS] CASE 3: All 4 international visa statuses verified; past-sponsorship/relocation-only blocked from Branch Banking.');
 
     // -------------------------------------------------------------------------
-    // TEST 4: International Branch Manager WITH sponsorship but salary < $3,000 -> REJECTED from special category
+    // TEST 4: International Branch Manager WITH confirmed sponsorship AND salary < $3,000 + undisclosed salary
+    //         -> MUST NOW PASS & MATCH (Section 1 & 2: NO USD 3,000 SALARY RESTRICTION!)
     // -------------------------------------------------------------------------
     const intlBmLowSalary = buildAndVerifyCanonicalOpportunity(
       {
@@ -255,19 +303,43 @@ async function runAll9Tests() {
       { nowMs }
     );
 
+    assert.equal(intlBmLowSalary.status, 'published', 'Intl Branch Manager < $3,000 with confirmed sponsorship MUST publish');
     assert.equal(
       intlBmLowSalary.isBranchBankingMatch,
-      false,
-      'International Branch Manager paying < $3,000 MUST be rejected from the special Branch Banking category'
+      true,
+      'Intl Branch Manager < $3,000 with confirmed sponsorship MUST match Branch Banking (ALL $3,000 restrictions removed!)'
     );
-    assert.ok(
-      intlBmLowSalary.branchBankingRejectionReasons.some((r) => r.includes('$3,000')),
-      'Branch Banking rejection reason must explicitly cite the $3,000 threshold'
+    assert.ok(!intlBmLowSalary.rejectionCodes.includes('salary_below_threshold'));
+
+    const intlBmUndisclosedSalary = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Retail Branch Manager - Prague',
+        employer: 'Central Europe Commercial Bank',
+        country: 'Czech Republic',
+        city: 'Prague',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.cecb.cz/jobs/retail-branch-manager-99',
+        sourceUrl: 'https://careers.cecb.cz/jobs/retail-branch-manager-99',
+        sourceName: 'CECB Careers',
+        deadlineRaw: futureIso(20, nowMs),
+        compensationRaw: '',
+        explicitVisaNote: 'Employer provides full work visa sponsorship for international hires.',
+        description:
+          'Lead branch banking operations, retail deposits, credit operations, and KYC/AML compliance. Requires 8 years banking and 3 years managerial experience.',
+      },
+      { nowMs }
     );
-    console.log('[PASS] CASE 4: International Branch Manager (sponsorship OK, salary $2,400 < $3,000) rejected from special Branch Banking category.');
+    assert.equal(intlBmUndisclosedSalary.status, 'published');
+    assert.equal(intlBmUndisclosedSalary.salary.salaryDisplay, 'Salary not disclosed');
+    assert.equal(
+      intlBmUndisclosedSalary.isBranchBankingMatch,
+      true,
+      'Intl Branch Manager with undisclosed salary and confirmed visa sponsorship MUST match Branch Banking'
+    );
+    console.log('[PASS] CASE 4: International Branch Manager (<$3,000 & "Salary not disclosed" with confirmed visa sponsorship) BOTH matched with zero $3,000 restriction.');
 
     // -------------------------------------------------------------------------
-    // TEST 5: International NON-branch job paying < $3,000 with sponsorship -> NOT rejected solely because of salary
+    // TEST 5: International NON-branch job paying < $3,000 + Direct Link & Funding Verification
     // -------------------------------------------------------------------------
     const intlWashLowSalary = buildAndVerifyCanonicalOpportunity(
       {
@@ -289,25 +361,80 @@ async function runAll9Tests() {
       { nowMs }
     );
 
-    assert.equal(
-      intlWashLowSalary.status,
-      'published',
-      'International non-branch job < $3,000 with confirmed sponsorship MUST publish'
+    assert.equal(intlWashLowSalary.status, 'published');
+    assert.ok(!intlWashLowSalary.rejectionCodes.includes('salary_below_threshold'));
+    const washMatch = evaluateOpportunityForUserProfile(intlWashLowSalary, WASH_SPECIALIST_PROFILE);
+    assert.equal(washMatch.eligible, true);
+
+    // Direct Application Link Rejection: Search-result URL & generic homepage MUST be rejected (NOT VERIFIED)
+    const searchUrlRejected = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Search Link Trap',
+        employer: 'Example Bank',
+        country: 'United Kingdom',
+        city: 'London',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.examplebank.co.uk/jobs?search=branch-manager&q=london',
+        sourceUrl: 'https://careers.examplebank.co.uk/jobs?search=branch-manager',
+        sourceName: 'Example Bank',
+        deadlineRaw: futureIso(15, nowMs),
+        explicitVisaNote: 'Employer provides Skilled Worker visa sponsorship.',
+        description: 'Branch manager role with 8 years banking experience.',
+      },
+      { nowMs }
+    );
+    assert.equal(searchUrlRejected.status, 'rejected', 'Search-result URL MUST be rejected');
+    assert.equal(searchUrlRejected.applicationLinkVerification.status, 'NOT VERIFIED');
+
+    const homepageRejected = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Bare Homepage Trap',
+        employer: 'Example Bank Two',
+        country: 'United Kingdom',
+        city: 'London',
+        category: 'job',
+        officialApplicationUrl: 'https://www.examplebanktwo.co.uk/',
+        sourceUrl: 'https://www.examplebanktwo.co.uk/',
+        sourceName: 'Example Bank Two',
+        deadlineRaw: futureIso(15, nowMs),
+        explicitVisaNote: 'Employer provides Skilled Worker visa sponsorship.',
+        description: 'Branch manager role with 8 years banking experience.',
+      },
+      { nowMs }
+    );
+    assert.equal(homepageRejected.status, 'rejected', 'Generic bare homepage URL MUST be rejected');
+    assert.equal(homepageRejected.applicationLinkVerification.status, 'NOT VERIFIED');
+
+    // Accurate Scholarship Funding: Partial funding MUST NEVER be labeled "Fully Funded"
+    const partialScholarship = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'MSc Global Finance Partial Tuition Grant',
+        employer: 'University of Helsinki',
+        country: 'Finland',
+        city: 'Helsinki',
+        category: 'scholarship',
+        officialApplicationUrl: 'https://www.helsinki.fi/en/admissions/scholarships/global-finance-grant-2026',
+        sourceUrl: 'https://www.helsinki.fi/en/admissions/scholarships',
+        sourceName: 'Studyinfo Finland',
+        deadlineRaw: futureIso(30, nowMs),
+        explicitFundingNote: '50% tuition waiver; living expenses and travel are self-funded by the student.',
+        description: 'Graduate finance scholarship offering partial tuition fee waiver for international applicants.',
+      },
+      { nowMs }
+    );
+    assert.equal(partialScholarship.status, 'published');
+    assert.ok(
+      /partially funded/i.test(partialScholarship.eligibility.fundingCoverage),
+      `Partial grant must be classified as Partially Funded, got: ${partialScholarship.eligibility.fundingCoverage}`
     );
     assert.ok(
-      !intlWashLowSalary.rejectionCodes.includes('salary_below_threshold'),
-      'Non-branch international job must NOT be rejected for salary_below_threshold'
+      !/^fully funded/i.test(partialScholarship.eligibility.fundingCoverage.trim()),
+      'Partial scholarship MUST NEVER be labeled Fully Funded'
     );
-    const washMatch = evaluateOpportunityForUserProfile(intlWashLowSalary, WASH_SPECIALIST_PROFILE);
-    assert.equal(
-      washMatch.eligible,
-      true,
-      `Non-branch international job < $3k MUST remain eligible for matching user, got rejections: ${washMatch.rejectionExplanations.join('; ')}`
-    );
-    console.log('[PASS] CASE 5: International non-branch WASH job ($2,350/mo + confirmed sponsorship) published & matched without $3,000 rejection.');
+    console.log('[PASS] CASE 5: Non-branch WASH <$3k passed; search-result & homepage URLs rejected; partial scholarship never labeled Fully Funded.');
 
     // -------------------------------------------------------------------------
-    // TEST 6: Same opportunity discovered across 3 websites -> ONLY ONE published record
+    // TEST 6: Same opportunity discovered across 5 websites -> ONLY ONE published record
     // -------------------------------------------------------------------------
     const engine = new OpportunityIntelligenceEngine({
       runtimeBaseDir: tmpDir,
@@ -320,95 +447,86 @@ async function runAll9Tests() {
     });
     const db = engine.loadDb();
 
-    const firstSourceIngest = engine.ingestAndVerifyCandidate(
-      db,
+    const fiveWebsites = [
       {
+        name: 'Bayt',
+        appUrl: 'https://careers.bankfab.com/jobs/fab-bm-2026-501?utm_source=bayt',
+        srcUrl: 'https://www.bayt.com/en/uae/jobs/fab-bm-501/',
         title: 'Retail Branch Manager - Abu Dhabi Central',
-        employer: 'First Abu Dhabi Bank',
-        country: 'United Arab Emirates',
-        city: 'Abu Dhabi',
-        category: 'job',
-        officialApplicationUrl: 'https://careers.bankfab.com/jobs/fab-bm-2026-501?utm_source=bayt',
-        sourceUrl: 'https://www.bayt.com/en/uae/jobs/fab-bm-501/',
-        sourceName: 'Bayt',
-        referenceNumber: 'FAB-REQ-2026-501',
-        deadlineRaw: futureIso(24, nowMs),
-        compensationRaw: 'USD 5,400 per month gross',
-        explicitVisaNote:
-          'Full UAE employment visa sponsorship, work permit and relocation package provided by employer for Ethiopian and international applicants.',
-        description:
-          'Manage full retail branch banking operations, deposit mobilization, credit growth, KYC/AML compliance, and branch staff supervision. 8 years banking and 3 years managerial experience.',
       },
-      { nowMs }
-    );
-    assert.equal(firstSourceIngest.outcome, 'created');
-    assert.equal(firstSourceIngest.record.status, 'published');
-    assert.equal(firstSourceIngest.record.primarySourceName, 'Bayt');
-
-    const secondSourceIngest = engine.ingestAndVerifyCandidate(
-      db,
       {
+        name: 'GulfTalent',
+        appUrl: 'https://www.gulftalent.com/uae/jobs/fab-bm-501',
+        srcUrl: 'https://www.gulftalent.com/uae/jobs/fab-bm-501',
         title: 'Retail Branch Manager – Abu Dhabi Central',
-        employer: 'First Abu Dhabi Bank',
-        country: 'United Arab Emirates',
-        city: 'Abu Dhabi',
-        category: 'job',
-        officialApplicationUrl: 'https://www.gulftalent.com/uae/jobs/fab-bm-501', // Different URL!
-        sourceUrl: 'https://www.gulftalent.com/uae/jobs/fab-bm-501',
-        sourceName: 'GulfTalent',
-        referenceNumber: 'FAB-REQ-2026-501', // Same job reference number
-        deadlineRaw: futureIso(24, nowMs),
-        compensationRaw: 'USD 5,400 per month gross',
-        explicitVisaNote:
-          'Full UAE employment visa sponsorship, work permit and relocation package provided by employer.',
-        description:
-          'Manage full retail branch banking operations, deposit mobilization, credit growth, KYC/AML compliance, and branch staff supervision. 8 years banking and 3 years managerial experience.',
       },
-      { nowMs: nowMs + 1000 }
-    );
-    assert.equal(secondSourceIngest.outcome, 'duplicate_merged');
-
-    const thirdSourceIngest = engine.ingestAndVerifyCandidate(
-      db,
       {
+        name: 'Naukrigulf',
+        appUrl: 'https://www.naukrigulf.com/fab-retail-branch-manager-501',
+        srcUrl: 'https://www.naukrigulf.com/fab-retail-branch-manager-501',
         title: 'Retail Branch Manager - Abu Dhabi Central',
-        employer: 'First Abu Dhabi Bank',
-        country: 'United Arab Emirates',
-        city: 'Abu Dhabi',
-        category: 'job',
-        officialApplicationUrl: 'https://www.naukrigulf.com/fab-retail-branch-manager-501', // Third website URL!
-        sourceUrl: 'https://www.naukrigulf.com/fab-retail-branch-manager-501',
-        sourceName: 'Naukrigulf',
-        referenceNumber: 'FAB-REQ-2026-501',
-        deadlineRaw: futureIso(24, nowMs),
-        compensationRaw: 'USD 5,400 per month gross',
-        explicitVisaNote:
-          'Full UAE employment visa sponsorship, work permit and relocation package provided by employer.',
-        description:
-          'Manage full retail branch banking operations, deposit mobilization, credit growth, KYC/AML compliance, and branch staff supervision. 8 years banking and 3 years managerial experience.',
       },
-      { nowMs: nowMs + 2000 }
-    );
-    assert.equal(thirdSourceIngest.outcome, 'duplicate_merged');
+      {
+        name: 'EURES',
+        appUrl: 'https://eures.europa.eu/jobs/fab-bm-501',
+        srcUrl: 'https://eures.europa.eu/jobs/fab-bm-501',
+        title: 'Retail Branch Manager (Abu Dhabi Central)',
+      },
+      {
+        name: 'Indeed Worldwide',
+        appUrl: 'https://ae.indeed.com/viewjob?jk=fab501',
+        srcUrl: 'https://ae.indeed.com/viewjob?jk=fab501',
+        title: 'Retail Branch Manager - Abu Dhabi Central',
+      },
+    ];
+
+    let firstSourceIngest!: ReturnType<typeof engine.ingestAndVerifyCandidate>;
+    let lastSourceIngest!: ReturnType<typeof engine.ingestAndVerifyCandidate>;
+    fiveWebsites.forEach((site, idx) => {
+      const res = engine.ingestAndVerifyCandidate(
+        db,
+        {
+          title: site.title,
+          employer: 'First Abu Dhabi Bank',
+          country: 'United Arab Emirates',
+          city: 'Abu Dhabi',
+          category: 'job',
+          officialApplicationUrl: site.appUrl,
+          sourceUrl: site.srcUrl,
+          sourceName: site.name,
+          referenceNumber: 'FAB-REQ-2026-501',
+          deadlineRaw: futureIso(24, nowMs),
+          compensationRaw: 'USD 5,400 per month gross',
+          explicitVisaNote:
+            'Full UAE employment visa sponsorship, work permit and relocation package provided by employer for Ethiopian and international applicants.',
+          description:
+            'Manage full retail branch banking operations, deposit mobilization, credit growth, KYC/AML compliance, and branch staff supervision. 8 years banking and 3 years managerial experience.',
+        },
+        { nowMs: nowMs + idx * 1000 }
+      );
+      if (idx === 0) {
+        firstSourceIngest = res;
+        assert.equal(res.outcome, 'created');
+      } else {
+        assert.equal(res.outcome, 'duplicate_merged', `Site #${idx + 1} (${site.name}) must collapse into 1 canonical record`);
+      }
+      lastSourceIngest = res;
+    });
+
     const publishedNow = engine.getAllOpportunities(db).filter((o) => o.status === 'published');
-    assert.equal(publishedNow.length, 1, '3 websites with same opportunity MUST produce ONLY 1 published record');
-    assert.equal(thirdSourceIngest.record.primarySourceName, 'Bayt', 'Original primary source MUST be preserved');
-    assert.equal(thirdSourceIngest.record.sourceNames.length, 3, 'All 3 discovering sources must be tracked on the single record');
-    console.log('[PASS] CASE 6: Same opportunity across 3 websites (Bayt, GulfTalent, Naukrigulf) published as 1 canonical record with original source preserved.');
+    assert.equal(publishedNow.length, 1, '5 websites with same opportunity MUST produce ONLY 1 published record');
+    assert.equal(lastSourceIngest.record.primarySourceName, 'Bayt', 'Original primary source MUST be preserved');
+    assert.equal(lastSourceIngest.record.sourceNames.length, 5, 'All 5 discovering sources must be tracked on the single record');
+    console.log('[PASS] CASE 6: Same opportunity across 5 websites collapsed into 1 canonical record with original primary source preserved.');
 
     // -------------------------------------------------------------------------
-    // TEST 7: Re-discovered after 24 hours -> updates existing record, NO duplicate, NO repeat notification;
-    //         AND default notification preferences exclude scholarships/training/conferences unless opted in
+    // TEST 7: 24h re-discovery -> 0 duplicates, 0 repeat notifications;
+    //         Meaningful change (confirmed visa sponsorship added) -> notifies user ONCE
     // -------------------------------------------------------------------------
     db.user_professional_profiles[BRANCH_MANAGER_PROFILE.userId] = BRANCH_MANAGER_PROFILE;
     const defaultPrefs = engine.getOrCreateNotificationPreferences(db, BRANCH_MANAGER_PROFILE.userId);
-    assert.deepEqual(
-      defaultPrefs.categories,
-      ['job'],
-      'Default user notification preferences MUST only include jobs unless user explicitly enables scholarships/training/conferences'
-    );
+    assert.deepEqual(defaultPrefs.categories, ['job']);
 
-    // Ingest a Banking scholarship -> should NOT notify user while categories = ['job']
     const schIngest = engine.ingestAndVerifyCandidate(
       db,
       {
@@ -439,7 +557,7 @@ async function runAll9Tests() {
       nowMs,
       mirrorToLegacyUserNotifications: false,
     });
-    assert.equal(jobNotif1.sent, true, 'First eligible job match must notify user');
+    assert.equal(jobNotif1.sent, true);
 
     const schNotif1 = engine.dispatchDeduplicatedNotificationForUser(db, {
       userId: BRANCH_MANAGER_PROFILE.userId,
@@ -448,10 +566,9 @@ async function runAll9Tests() {
       nowMs,
       mirrorToLegacyUserNotifications: false,
     });
-    assert.equal(schNotif1.sent, false, 'Scholarship MUST NOT notify user by default');
-    assert.equal(schNotif1.reason, 'suppressed_preferences', 'Scholarship must be suppressed by default job-only preferences');
+    assert.equal(schNotif1.sent, false);
+    assert.equal(schNotif1.reason, 'suppressed_preferences');
 
-    // Re-discover the EXACT same FAB Branch Manager job 24.5 hours later
     const after24hMs = nowMs + 24.5 * 60 * 60 * 1000;
     const updatedBefore24h = db.opportunitiesUpdated;
     const rediscovered24h = engine.ingestAndVerifyCandidate(
@@ -475,17 +592,8 @@ async function runAll9Tests() {
       },
       { nowMs: after24hMs }
     );
-    assert.equal(rediscovered24h.outcome, 'duplicate_merged', 'Re-discovery after 24h MUST merge/update without duplicating');
-    assert.equal(
-      db.opportunitiesUpdated,
-      updatedBefore24h + 1,
-      '24-hour re-discovery must increment opportunitiesUpdated counter'
-    );
-    assert.equal(
-      engine.getAllOpportunities(db).filter((o) => o.status === 'published' && o.category === 'job').length,
-      1,
-      'Job count MUST remain 1 after 24h re-discovery'
-    );
+    assert.equal(rediscovered24h.outcome, 'duplicate_merged');
+    assert.equal(db.opportunitiesUpdated, updatedBefore24h + 1);
 
     const jobNotif2 = engine.dispatchDeduplicatedNotificationForUser(db, {
       userId: BRANCH_MANAGER_PROFILE.userId,
@@ -494,13 +602,119 @@ async function runAll9Tests() {
       nowMs: after24hMs,
       mirrorToLegacyUserNotifications: false,
     });
-    assert.equal(jobNotif2.sent, false, 'User MUST NOT be notified again about the same opportunity after 24h re-discovery');
+    assert.equal(jobNotif2.sent, false);
     assert.equal(jobNotif2.reason, 'suppressed_duplicate');
-    console.log('[PASS] CASE 7: 24h re-discovery updated existing record with 0 duplicates, 0 repeat notifications, and scholarships excluded unless opted in.');
+
+    // Meaningful change: deadline extended -> increments updateVersion & notifies ONCE
+    const deadlineExtended = engine.ingestAndVerifyCandidate(
+      db,
+      {
+        title: 'Retail Branch Manager - Abu Dhabi Central',
+        employer: 'First Abu Dhabi Bank',
+        country: 'United Arab Emirates',
+        city: 'Abu Dhabi',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.bankfab.com/jobs/fab-bm-2026-501',
+        sourceUrl: 'https://www.bayt.com/en/uae/jobs/fab-bm-501/',
+        sourceName: 'Bayt',
+        referenceNumber: 'FAB-REQ-2026-501',
+        deadlineRaw: futureIso(40, nowMs),
+        compensationRaw: 'USD 5,400 per month gross',
+        explicitVisaNote:
+          'Full UAE employment visa sponsorship, work permit and relocation package provided by employer for Ethiopian and international applicants.',
+        description:
+          'Manage full retail branch banking operations, deposit mobilization, credit growth, KYC/AML compliance, and branch staff supervision. 8 years banking and 3 years managerial experience.',
+      },
+      { nowMs: after24hMs + 5000 }
+    );
+    assert.equal(deadlineExtended.outcome, 'material_updated', 'Extended deadline must trigger material_updated');
+    const jobNotifMeaningful = engine.dispatchDeduplicatedNotificationForUser(db, {
+      userId: BRANCH_MANAGER_PROFILE.userId,
+      opportunity: deadlineExtended.record,
+      match: bmJobMatch,
+      nowMs: after24hMs + 5000,
+      mirrorToLegacyUserNotifications: false,
+    });
+    assert.equal(jobNotifMeaningful.sent, true, 'Meaningful deadline update MUST notify user');
+    console.log('[PASS] CASE 7: 24h re-discovery produced 0 duplicates & 0 repeat alerts; meaningful deadline update notified user cleanly.');
 
     // -------------------------------------------------------------------------
-    // TEST 8: Expired opportunity -> automatically unpublished/removed while preserving history
+    // TEST 8: All 6 Deadline Status Labels + Auto-Unpublish Expired & Permanent History
     // -------------------------------------------------------------------------
+    const closingSoonJob = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Closing Soon Test',
+        employer: 'Nordic Bank Group',
+        country: 'Sweden',
+        city: 'Stockholm',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.nordicbank.se/jobs/bm-soon-1',
+        sourceUrl: 'https://careers.nordicbank.se/jobs/bm-soon-1',
+        sourceName: 'Nordic Bank Group',
+        deadlineRaw: futureIso(5, nowMs), // 3..7 days -> CLOSING SOON
+        explicitVisaNote: 'Employer provides full Swedish work visa sponsorship.',
+        description: 'Branch banking management role. 8 years banking and 3 years managerial experience.',
+      },
+      { nowMs }
+    );
+    assert.equal(closingSoonJob.deadlineStatusLabel, 'CLOSING SOON');
+
+    const closedJob = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Closed Test',
+        employer: 'Nordic Bank Group',
+        country: 'Sweden',
+        city: 'Stockholm',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.nordicbank.se/jobs/bm-closed-1',
+        sourceUrl: 'https://careers.nordicbank.se/jobs/bm-closed-1',
+        sourceName: 'Nordic Bank Group',
+        deadlineRaw: futureIso(20, nowMs),
+        isClosedOrWithdrawn: true,
+        explicitVisaNote: 'Employer provides full Swedish work visa sponsorship.',
+        description: 'This position has been filled and applications are closed.',
+      },
+      { nowMs }
+    );
+    assert.equal(closedJob.deadlineStatusLabel, 'APPLICATIONS CLOSED');
+    assert.ok(closedJob.status === 'expired' || closedJob.status === 'rejected');
+
+    const notPublishedDeadline = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - No Deadline Published',
+        employer: 'Nordic Bank Group',
+        country: 'Sweden',
+        city: 'Stockholm',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.nordicbank.se/jobs/bm-nodate-1',
+        sourceUrl: 'https://careers.nordicbank.se/jobs/bm-nodate-1',
+        sourceName: 'Nordic Bank Group',
+        deadlineRaw: '',
+        explicitVisaNote: 'Employer provides full Swedish work visa sponsorship.',
+        description: 'Branch banking management role. 8 years banking and 3 years managerial experience.',
+      },
+      { nowMs }
+    );
+    assert.equal(notPublishedDeadline.deadlineStatusLabel, 'DEADLINE NOT PUBLISHED');
+
+    const notYetOpenJob = buildAndVerifyCanonicalOpportunity(
+      {
+        title: 'Branch Manager - Opens Next Month',
+        employer: 'Nordic Bank Group',
+        country: 'Sweden',
+        city: 'Stockholm',
+        category: 'job',
+        officialApplicationUrl: 'https://careers.nordicbank.se/jobs/bm-future-open-1',
+        sourceUrl: 'https://careers.nordicbank.se/jobs/bm-future-open-1',
+        sourceName: 'Nordic Bank Group',
+        deadlineRaw: `Applications open on ${futureIso(15, nowMs)}`,
+        explicitVisaNote: 'Employer provides full Swedish work visa sponsorship.',
+        description: 'Applications open next month for branch manager role.',
+      },
+      { nowMs }
+    );
+    assert.equal(notYetOpenJob.deadlineStatusLabel, 'NOT YET OPEN');
+
     const soonExpiringIngest = engine.ingestAndVerifyCandidate(
       db,
       {
@@ -512,7 +726,7 @@ async function runAll9Tests() {
         officialApplicationUrl: 'https://careers.alahli.com/jobs/snb-bm-riyadh-88',
         sourceUrl: 'https://www.gulftalent.com/saudi-arabia/jobs/snb-bm-88',
         sourceName: 'GulfTalent',
-        deadlineRaw: futureIso(5, nowMs), // 5 full days remaining now -> valid
+        deadlineRaw: futureIso(5, nowMs),
         compensationRaw: 'USD 6,000 per month gross',
         explicitVisaNote: 'Employer provides Saudi employment work visa sponsorship and relocation support.',
         description: 'Direct branch banking operations, deposits, and credit teams. 8 years banking and 3 years managerial experience.',
@@ -528,32 +742,30 @@ async function runAll9Tests() {
     assert.ok(recheck.unpublishedCount >= 1, 'Expired opportunity MUST be automatically unpublished');
     engine.saveDb(db);
 
-    const stillPublished = engine
+    const expiredRecord = engine
       .getAllOpportunities(db)
-      .find((o) => o.id === soonExpiringIngest.record.id && o.status === 'published');
-    assert.equal(stillPublished, undefined, 'Expired opportunity must NOT appear in active published recommendations');
+      .find((o) => o.id === soonExpiringIngest.record.id);
+    assert.equal(expiredRecord?.deadlineStatusLabel, 'DEADLINE PASSED');
+    assert.notEqual(expiredRecord?.status, 'published');
 
     const dashAfterExpiry = engine.buildAdminDashboard();
     assert.ok(
       dashAfterExpiry.recentVerificationLogs.some(
         (l) => l.opportunityId === soonExpiringIngest.record.id && l.action === 'auto_unpublish'
-      ),
-      'Auto-unpublish audit log must be preserved'
+      )
     );
-    // Verify permanent_opportunity_history preserved on disk
     const persistedRaw = JSON.parse(
       fs.readFileSync(path.join(tmpDir, 'data', 'opportunity_intelligence_db.json'), 'utf-8')
     );
     assert.equal(
       persistedRaw.permanent_opportunity_history[soonExpiringIngest.record.canonicalKey]?.status,
-      'unpublished',
-      'Expired/unpublished opportunity must remain recorded in permanent_opportunity_history'
+      'unpublished'
     );
-    console.log('[PASS] CASE 8: Expired opportunity auto-unpublished from public recommendations and retained in permanent history.');
+    console.log('[PASS] CASE 8: All 6 deadline status labels verified; expired opportunity auto-unpublished & retained in permanent history.');
 
     // -------------------------------------------------------------------------
     // TEST 9: Exact 40 sources (10 per region), 24h Africa/Addis_Ababa schedule,
-    //         and manual run preserving the automatic 24-hour schedule
+    //         manual run schedule preservation, AND Broader Internet Discovery ingestion
     // -------------------------------------------------------------------------
     const sources40 = buildInitialOfficialSourcesRegistry();
     assert.equal(sources40.length, 40, 'Must register EXACTLY 40 permanent sources');
@@ -570,19 +782,51 @@ async function runAll9Tests() {
       'Scandinavia / Nordic': 10,
     });
 
-    // Run initial automatic scheduled run (maxLiveNetworkSources: 0 for deterministic unit test speed)
+    // Seed broader internet discovery file (outside the 40 registered websites) using real autonomous_web_crawler_db.json schema
+    writeJsonFileAtomic(path.join(tmpDir, 'data', 'autonomous_web_crawler_db.json'), {
+      opportunities: {
+        crawl_dnb_991: {
+          id: 'crawl_dnb_991',
+          status: 'PUBLISHED',
+          title: 'Regional Banking Operations Manager',
+          employer: 'DNB Bank ASA',
+          country: 'Norway',
+          location: 'Oslo',
+          category: 'job',
+          officialApplicationUrl: 'https://careers.dnb.no/jobs/regional-banking-ops-manager-991',
+          sourcePageUrl: 'https://careers.dnb.no/jobs/regional-banking-ops-manager-991',
+          sourceDomain: 'careers.dnb.no',
+          deadline: futureIso(25, nowMs),
+          salaryDisplay: 'NOK 48,000 per month gross',
+          visaEvidence: 'Employer provides confirmed Norwegian Skilled Worker visa sponsorship for international hires.',
+          summary:
+            'Lead retail banking branch operations, deposit mobilization, credit operations, and team supervision in Oslo. 8 years banking and 3 years management.',
+        },
+      },
+    });
+
     const schedRun = await engine.runDailySourceMonitoringAndRecheck('startup_boot', {
       maxLiveNetworkSources: 0,
       nowMs,
     });
     assert.equal(schedRun.timezone, 'Africa/Addis_Ababa');
+    const postRunDb = engine.loadDb();
+    const broaderIngested = engine
+      .getAllOpportunities(postRunDb)
+      .find((o) => o.employer === 'DNB Bank ASA' && o.status === 'published');
+    assert.ok(
+      broaderIngested,
+      '24-hour monitoring cycle MUST ingest verified official opportunities from broader internet discovery beyond the 40 registered sites'
+    );
+    assert.equal(broaderIngested?.isBranchBankingMatch, true);
+
     const dashAfterAuto = engine.buildAdminDashboard();
     assert.equal(dashAfterAuto.timezone, 'Africa/Addis_Ababa');
     assert.equal(dashAfterAuto.schedulerIntervalHours, 24);
-    assert.ok(dashAfterAuto.metrics.lastSuccessfulExecution, 'Last successful execution must be recorded');
-    assert.ok(dashAfterAuto.metrics.nextScheduledExecution, 'Next 24h scheduled execution must be set');
-    assert.ok(dashAfterAuto.metrics.lastSuccessfulExecutionEat?.includes('EAT'), 'EAT timestamp must be formatted');
-    assert.ok(dashAfterAuto.metrics.nextScheduledExecutionEat?.includes('EAT'), 'Next scheduled EAT timestamp must be formatted');
+    assert.ok(dashAfterAuto.metrics.lastSuccessfulExecution);
+    assert.ok(dashAfterAuto.metrics.nextScheduledExecution);
+    assert.ok(dashAfterAuto.metrics.lastSuccessfulExecutionEat?.includes('EAT'));
+    assert.ok(dashAfterAuto.metrics.nextScheduledExecutionEat?.includes('EAT'));
 
     const scheduledNextBeforeManual = dashAfterAuto.metrics.nextScheduledExecution;
     const diffHours =
@@ -590,7 +834,6 @@ async function runAll9Tests() {
       (60 * 60 * 1000);
     assert.ok(Math.abs(diffHours - 24) < 0.05, `Next scheduled run must be 24h later, got ${diffHours.toFixed(2)}h`);
 
-    // Trigger manual admin run 2 hours later -> nextScheduledExecution MUST NOT shift!
     const manualRun = await engine.runDailySourceMonitoringAndRecheck('manual_admin', {
       maxLiveNetworkSources: 0,
       nowMs: nowMs + 2 * 60 * 60 * 1000,
@@ -603,11 +846,11 @@ async function runAll9Tests() {
       'Manual admin run MUST NOT change or reset the automatic 24-hour schedule'
     );
     console.log(
-      `[PASS] CASE 9: All 40 sources verified (10/10/10/10), Africa/Addis_Ababa 24h schedule active (${dashAfterManual.metrics.nextScheduledExecutionEat}), and manual run preserved schedule.`
+      `[PASS] CASE 9: All 40 sources (10/10/10/10), Africa/Addis_Ababa 24h schedule, manual schedule preservation, AND broader internet discovery ingestion verified.`
     );
 
     console.log('\n========================================================================');
-    console.log('ALL 9 MANDATORY SECTION 8 TEST CASES PASSED (100%)');
+    console.log('ALL 9 MANDATORY ACCEPTANCE CASES (SECTIONS 1–15) PASSED (100%)');
     console.log('========================================================================\n');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -615,6 +858,6 @@ async function runAll9Tests() {
 }
 
 runAll9Tests().catch((err) => {
-  console.error('\n[FAIL] 40-SOURCE & STRICT FILTER SUITE FAILED:', err);
+  console.error('\n[FAIL] 40-SOURCE & MANDATORY UPDATE SUITE FAILED:', err);
   process.exit(1);
 });

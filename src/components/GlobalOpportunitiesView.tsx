@@ -843,7 +843,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 >
                   <option value="0">Monthly Salary (USD): Any / Disclosed</option>
                   <option value="2000">USD $2,000+ / month</option>
-                  <option value="3000">USD $3,000+ / month (Target Min)</option>
+                  <option value="3000">USD $3,000+ / month (Optional)</option>
                   <option value="4000">USD $4,000+ / month</option>
                   <option value="5000">USD $5,000+ / month</option>
                 </select>

@@ -48,7 +48,7 @@ export function loadGuestBranchManagerProfile(): BranchManagerProfileInput {
         ? parsed.targetPositions
         : fallback.targetPositions,
       languages: Array.isArray(parsed.languages) ? parsed.languages : fallback.languages,
-      minimumMonthlyGrossUsd: Math.max(3000, Number(parsed.minimumMonthlyGrossUsd || 3000)),
+      minimumMonthlyGrossUsd: 0,
     };
   } catch {
     return fallback;
@@ -116,7 +116,7 @@ export async function searchBranchManagerJobs(params: {
   });
   const data = await res.json();
   if (!res.ok || !data?.success) {
-    throw new Error(data?.error || 'Failed to load verified visa-sponsored $3,000+ jobs.');
+    throw new Error(data?.error || 'Failed to load verified visa-sponsored Branch Banking jobs.');
   }
   return data as BranchManagerJobsSearchResponse;
 }
