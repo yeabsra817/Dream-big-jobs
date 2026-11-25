@@ -1,42 +1,42 @@
 {
-  "generatedAt": "2026-11-23T11:24:55.105Z",
-  "generatedAtEat": "23 Nov 2026, 14:24:55 EAT (Africa/Addis_Ababa)",
-  "trigger": "manual_admin",
-  "status": "success",
-  "durationMs": 93908,
+  "generatedAt": "2026-11-25T07:35:22.028Z",
+  "generatedAtEat": "25 Nov 2026, 10:35:22 EAT (Africa/Addis_Ababa)",
+  "trigger": "github_actions_cron",
+  "status": "partial",
+  "durationMs": 98513,
   "sourcesQueried": 5,
-  "candidatesDiscovered": 82,
-  "verifiedAndActiveCount": 62,
-  "verifiedTierCount": 17,
-  "partiallyVerifiedTierCount": 45,
-  "duplicatesSkipped": 53,
-  "rejectedUnderThreeDaysCount": 4,
-  "rejectedBrokenOrClosedCount": 0,
+  "candidatesDiscovered": 74,
+  "verifiedAndActiveCount": 74,
+  "verifiedTierCount": 28,
+  "partiallyVerifiedTierCount": 46,
+  "duplicatesSkipped": 60,
+  "rejectedUnderThreeDaysCount": 5,
+  "rejectedBrokenOrClosedCount": 1,
   "rejectedDueToVisaCount": 0,
-  "rejectedDueToProfessionalRestrictionCount": 7,
-  "permanentResidencyCountriesTotal": 14,
-  "permanentResidencyVerifiedHttp200": 13,
+  "rejectedDueToProfessionalRestrictionCount": 13,
+  "permanentResidencyCountriesTotal": 24,
+  "permanentResidencyVerifiedHttp200": 18,
   "departmentSummaries": [
     {
       "department": "banking_finance_jobs",
       "label": "Department 1: International Banking & Finance Jobs",
       "status": "success",
-      "candidatesFound": 34,
-      "verifiedCount": 13,
-      "partiallyVerifiedCount": 10,
+      "candidatesFound": 48,
+      "verifiedCount": 24,
+      "partiallyVerifiedCount": 12,
       "pendingCount": 0,
-      "rejectedOrExpiredCount": 11,
+      "rejectedOrExpiredCount": 12,
       "errors": []
     },
     {
       "department": "wash_jobs",
       "label": "Department 2: International WASH Jobs",
       "status": "success",
-      "candidatesFound": 36,
+      "candidatesFound": 41,
       "verifiedCount": 3,
-      "partiallyVerifiedCount": 29,
+      "partiallyVerifiedCount": 27,
       "pendingCount": 0,
-      "rejectedOrExpiredCount": 4,
+      "rejectedOrExpiredCount": 11,
       "errors": []
     },
     {
@@ -54,11 +54,11 @@
       "department": "banking_wash_training",
       "label": "Department 4: Banking & WASH Professional Training",
       "status": "success",
-      "candidatesFound": 22,
+      "candidatesFound": 25,
       "verifiedCount": 1,
-      "partiallyVerifiedCount": 6,
+      "partiallyVerifiedCount": 7,
       "pendingCount": 0,
-      "rejectedOrExpiredCount": 15,
+      "rejectedOrExpiredCount": 17,
       "errors": []
     },
     {
@@ -75,13 +75,17 @@
     {
       "department": "permanent_residency_intelligence",
       "label": "Department 6: Permanent Residency & Labour Shortage Intelligence",
-      "status": "success",
-      "candidatesFound": 14,
-      "verifiedCount": 13,
-      "partiallyVerifiedCount": 1,
-      "pendingCount": 0,
+      "status": "partial",
+      "candidatesFound": 24,
+      "verifiedCount": 18,
+      "partiallyVerifiedCount": 3,
+      "pendingCount": 3,
       "rejectedOrExpiredCount": 0,
-      "errors": []
+      "errors": [
+        "Poland (gov.pl): HTTP 404",
+        "Luxembourg (guichet.public.lu): HTTP 404",
+        "Malta (identita.gov.mt): HTTP 404"
+      ]
     }
   ],
   "sources": [
@@ -89,28 +93,28 @@
       "id": "arbeitnow_intl_banking_wash_jobs",
       "name": "Arbeitnow International & European Job Board API (Banking, Finance, Compliance & WASH)",
       "status": "connected",
-      "lastItemCount": 12,
+      "lastItemCount": 11,
       "lastError": null
     },
     {
       "id": "official_gov_pr_intelligence",
       "name": "Official Government Immigration & Shortage Occupation Portals (14 Countries)",
       "status": "connected",
-      "lastItemCount": 14,
-      "lastError": null
+      "lastItemCount": 24,
+      "lastError": "Poland (gov.pl): HTTP 404; Luxembourg (guichet.public.lu): HTTP 404; Malta (identita.gov.mt): HTTP 404"
     },
     {
       "id": "reliefweb_jobs_wash_intl",
       "name": "ReliefWeb Official UN & INGO Recruitment Feeds (WASH, Banking & Finance, International Jobs)",
       "status": "connected",
-      "lastItemCount": 37,
+      "lastItemCount": 34,
       "lastError": null
     },
     {
       "id": "reliefweb_training_conferences",
       "name": "ReliefWeb Official Training, Fellowships, Scholarships & Conferences Feeds",
       "status": "connected",
-      "lastItemCount": 26,
+      "lastItemCount": 22,
       "lastError": null
     },
     {
@@ -142,19 +146,11 @@
       "lastError": "Optional: Add BRAVE_SEARCH_API_KEY to enable Brave Search fallback (website works without it)."
     }
   ],
-  "errors": [],
+  "errors": [
+    "Poland (gov.pl): HTTP 404",
+    "Luxembourg (guichet.public.lu): HTTP 404"
+  ],
   "sampleActiveOpportunities": [
-    {
-      "title": "Humanitarian Programme Manager - online diploma course",
-      "organization": "Bioforce",
-      "department": "banking_wash_training",
-      "country": "Online / Global",
-      "verificationTier": "PARTIALLY VERIFIED",
-      "visaClassification": "No sponsorship stated",
-      "deadline": "7 Jan 2027",
-      "daysRemaining": 45,
-      "officialUrl": "https://reliefweb.int/training/4204614/humanitarian-programme-manager-online-diploma-course"
-    },
     {
       "title": "Master in Humanitarian Operations in Emergencies",
       "organization": "Social Change School",
@@ -163,7 +159,7 @@
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "15 Dec 2026",
-      "daysRemaining": 22,
+      "daysRemaining": 20,
       "officialUrl": "https://reliefweb.int/training/4143523/master-humanitarian-operations-emergencies"
     },
     {
@@ -174,7 +170,7 @@
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "7 Jan 2027",
-      "daysRemaining": 45,
+      "daysRemaining": 43,
       "officialUrl": "https://reliefweb.int/training/4214389/responsable-ressources-humaines-et-finances-parcours-distance"
     },
     {
@@ -185,7 +181,7 @@
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "5 Mar 2027",
-      "daysRemaining": 102,
+      "daysRemaining": 100,
       "officialUrl": "https://reliefweb.int/training/4224246/gestion-non-medicale-des-epidemies-blended"
     },
     {
@@ -196,7 +192,7 @@
       "verificationTier": "VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "29 Jan 2027",
-      "daysRemaining": 67,
+      "daysRemaining": 65,
       "officialUrl": "https://reliefweb.int/training/4225643/cas-wash-certificate-advanced-studies-water-sanitation-and-hygiene-humanitarian-and-developing-contexts"
     },
     {
@@ -207,7 +203,7 @@
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "11 Dec 2026",
-      "daysRemaining": 18,
+      "daysRemaining": 16,
       "officialUrl": "https://reliefweb.int/training/4232866/narrative-and-financial-reports-eu-funded-projects"
     },
     {
@@ -218,63 +214,74 @@
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
       "deadline": "14 Dec 2026",
-      "daysRemaining": 21,
+      "daysRemaining": 19,
       "officialUrl": "https://reliefweb.int/training/4232868/managing-financial-support-third-parties"
     },
     {
-      "title": "Consultancy for ECW FER Drought Response Project Baseline & Endline Evaluation",
-      "organization": "Norwegian Refugee Council",
-      "department": "wash_jobs",
-      "country": "Somalia",
+      "title": "Professional Certificate in Health, Safety & Environment (HSE) - Arabic Version",
+      "organization": "Dataville Research LLC",
+      "department": "banking_wash_training",
+      "country": "International",
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
-      "deadline": "2 Dec 2026",
+      "deadline": "4 Dec 2026",
       "daysRemaining": 9,
-      "officialUrl": "https://reliefweb.int/job/4239028/consultancy-ecw-fer-drought-response-project-baseline-endline-evaluation"
+      "officialUrl": "https://reliefweb.int/training/4239367/professional-certificate-health-safety-environment-hse-arabic-version"
     },
     {
-      "title": "WASH & Shelter Project Officer - AL Mayadin - AL-Bukamal",
-      "organization": "IYD International Humanitarian Relief Association",
+      "title": "Program Manager CRCSU",
+      "organization": "DT Global",
+      "department": "wash_jobs",
+      "country": "Australia",
+      "verificationTier": "PARTIALLY VERIFIED",
+      "visaClassification": "No sponsorship stated",
+      "deadline": "6 Dec 2026",
+      "daysRemaining": 11,
+      "officialUrl": "https://reliefweb.int/job/4239189/program-manager-crcsu"
+    },
+    {
+      "title": "Call for Expression of Interest: DEC Middle East Humanitarian Appeal Post Appeal Review",
+      "organization": "Disasters Emergency Committee",
+      "department": "wash_jobs",
+      "country": "International",
+      "verificationTier": "PARTIALLY VERIFIED",
+      "visaClassification": "No sponsorship stated",
+      "deadline": "4 Dec 2026",
+      "daysRemaining": 9,
+      "officialUrl": "https://reliefweb.int/job/4239233/call-expression-interest-dec-middle-east-humanitarian-appeal-post-appeal-review"
+    },
+    {
+      "title": "SYRIA - Field Coordinator - (M/F) - Aleppo",
+      "organization": "Solidarités International",
       "department": "wash_jobs",
       "country": "Syrian Arab Republic",
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
-      "deadline": "27 Nov 2026",
-      "daysRemaining": 4,
-      "officialUrl": "https://reliefweb.int/job/4239122/wash-shelter-project-officer-al-mayadin-al-bukamal"
+      "deadline": "15 Jan 2027",
+      "daysRemaining": 51,
+      "officialUrl": "https://reliefweb.int/job/4239283/syria-field-coordinator-mf-aleppo"
     },
     {
-      "title": "Shelter Site Engineer - AL Mayadin - AL-Bukamal",
-      "organization": "IYD International Humanitarian Relief Association",
+      "title": "Rapid Response Logistics Officer",
+      "organization": "Global Emergency Group",
       "department": "wash_jobs",
-      "country": "Syrian Arab Republic",
+      "country": "Democratic Republic of the Congo",
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
-      "deadline": "27 Nov 2026",
-      "daysRemaining": 4,
-      "officialUrl": "https://reliefweb.int/job/4239136/shelter-site-engineer-al-mayadin-al-bukamal"
+      "deadline": "4 Dec 2026",
+      "daysRemaining": 9,
+      "officialUrl": "https://reliefweb.int/job/4239315/rapid-response-logistics-officer"
     },
     {
-      "title": "Operations Coordinator",
-      "organization": "MENTOR Initiative",
+      "title": "Program Manager - International Hire",
+      "organization": "Project HOPE",
       "department": "wash_jobs",
-      "country": "Mozambique",
+      "country": "occupied Palestinian territory",
       "verificationTier": "PARTIALLY VERIFIED",
       "visaClassification": "No sponsorship stated",
-      "deadline": "27 Nov 2026",
-      "daysRemaining": 4,
-      "officialUrl": "https://reliefweb.int/job/4239137/operations-coordinator"
-    },
-    {
-      "title": "ERL Site Engineer - AL Mayadin",
-      "organization": "IYD International Humanitarian Relief Association",
-      "department": "wash_jobs",
-      "country": "Syrian Arab Republic",
-      "verificationTier": "PARTIALLY VERIFIED",
-      "visaClassification": "No sponsorship stated",
-      "deadline": "27 Nov 2026",
-      "daysRemaining": 4,
-      "officialUrl": "https://reliefweb.int/job/4239165/erl-site-engineer-al-mayadin"
+      "deadline": "31 Dec 2026",
+      "daysRemaining": 36,
+      "officialUrl": "https://reliefweb.int/job/4239325/program-manager-international-hire"
     }
   ]
 }

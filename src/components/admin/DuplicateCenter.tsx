@@ -73,6 +73,15 @@ export const DuplicateCenter: React.FC<Props> = ({
   const [dismissedPairIds, setDismissedPairIds] = useState<Set<string>>(new Set());
   const [lastAuditTime, setLastAuditTime] = useState<string | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
+  const [isBulkDiscardingUploads, setIsBulkDiscardingUploads] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    tone: 'danger' | 'warning';
+    onConfirm: () => Promise<void>;
+  } | null>(null);
 
   // Search filter inside duplicate lists
   const [searchQuery, setSearchQuery] = useState('');
@@ -155,7 +164,7 @@ export const DuplicateCenter: React.FC<Props> = ({
           : `Audit complete: detected ${pairs.length} duplicate ${pairs.length === 1 ? 'pair' : 'pairs'} inside the database.`
       );
     } catch (err: any) {
-      alert('Error running database duplicate audit: ' + err.message);
+      setActionErrorMessage('Error running database duplicate audit: ' + (err?.message || 'Unknown error'));
     } finally {
       setIsAuditing(false);
       setAuditProgressMessage('');
@@ -192,29 +201,35 @@ export const DuplicateCenter: React.FC<Props> = ({
         `Archived duplicate "${dup.title}" (ID: ${dup.id}). It has been removed from website categories and the Telegram publishing queue.`
       );
     } catch (err: any) {
-      alert('Error archiving duplicate vacancy: ' + err.message);
+      setActionErrorMessage('Error archiving duplicate vacancy: ' + (err?.message || 'Unknown error'));
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  // Permanently delete a duplicate vacancy
-  const handleDeleteDuplicateVacancy = async (pair: InternalDuplicatePair) => {
-    if (!confirm(`Are you sure you want to permanently delete duplicate vacancy "${pair.duplicate.title}" (ID: ${pair.duplicate.id})?`)) {
-      return;
-    }
-    setActionLoadingId(pair.id);
-    try {
-      if (onDeleteVacancy) {
-        await onDeleteVacancy(pair.duplicate.id);
-      }
-      setInternalPairs((prev) => prev.filter((p) => p.id !== pair.id));
-      setActionSuccessMessage(`Permanently deleted duplicate vacancy "${pair.duplicate.title}".`);
-    } catch (err: any) {
-      alert('Error deleting duplicate vacancy: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
+  // Permanently delete a single duplicate vacancy
+  const handleDeleteDuplicateVacancy = (pair: InternalDuplicatePair) => {
+    setActionErrorMessage(null);
+    setPendingConfirm({
+      title: 'Delete Duplicate Vacancy Permanently?',
+      message: `Permanently delete duplicate vacancy "${pair.duplicate.title}" (ID: ${pair.duplicate.id})? The original record will remain untouched.`,
+      confirmLabel: 'Delete Permanently',
+      tone: 'danger',
+      onConfirm: async () => {
+        setActionLoadingId(pair.id);
+        try {
+          if (onDeleteVacancy) {
+            await onDeleteVacancy(pair.duplicate.id);
+          }
+          setInternalPairs((prev) => prev.filter((p) => p.id !== pair.id));
+          setActionSuccessMessage(`Permanently deleted duplicate vacancy "${pair.duplicate.title}".`);
+        } catch (err: any) {
+          setActionErrorMessage('Error deleting duplicate vacancy: ' + (err?.message || 'Unknown error'));
+        } finally {
+          setActionLoadingId(null);
+        }
+      },
+    });
   };
 
   // Dismiss a duplicate pair as distinct
@@ -223,110 +238,161 @@ export const DuplicateCenter: React.FC<Props> = ({
   };
 
   // Batch archive all detected duplicates in one click
-  const handleBatchArchiveAllDuplicates = async () => {
+  const handleBatchArchiveAllDuplicates = () => {
     const activePairs = internalPairs.filter((p) => !dismissedPairIds.has(p.id));
     if (activePairs.length === 0) return;
+    setActionErrorMessage(null);
+    setPendingConfirm({
+      title: `Archive All ${activePairs.length} Duplicate Vacancies?`,
+      message: `Archive all ${activePairs.length} duplicate vacancies so they are immediately hidden from public website categories and the Telegram queue?`,
+      confirmLabel: `Archive All (${activePairs.length})`,
+      tone: 'warning',
+      onConfirm: async () => {
+        setIsAuditing(true);
+        setActionSuccessMessage(null);
+        try {
+          const duplicatesToArchive = activePairs.map((pair) => ({
+            ...pair.duplicate,
+            status: 'archived' as const,
+            duplicateOfId: pair.original.id,
+            duplicateReason: pair.reason,
+            updatedAt: new Date().toISOString(),
+          }));
 
-    if (
-      !confirm(
-        `Are you sure you want to archive all ${activePairs.length} duplicate vacancies? They will be removed from public website categories and the Telegram queue immediately.`
-      )
-    ) {
-      return;
-    }
+          if (onBatchUpdateVacancies) {
+            await onBatchUpdateVacancies(duplicatesToArchive);
+          } else if (onSaveVacancy) {
+            for (const dup of duplicatesToArchive) {
+              await onSaveVacancy(dup);
+            }
+          }
 
-    setIsAuditing(true);
-    setActionSuccessMessage(null);
-    try {
-      const duplicatesToArchive = activePairs.map((pair) => ({
-        ...pair.duplicate,
-        status: 'archived' as const,
-        duplicateOfId: pair.original.id,
-        duplicateReason: pair.reason,
-        updatedAt: new Date().toISOString(),
-      }));
-
-      if (onBatchUpdateVacancies) {
-        await onBatchUpdateVacancies(duplicatesToArchive);
-      } else if (onSaveVacancy) {
-        for (const dup of duplicatesToArchive) {
-          await onSaveVacancy(dup);
+          setInternalPairs([]);
+          setActionSuccessMessage(
+            `Archived ${duplicatesToArchive.length} duplicate vacancies. Public categories and Telegram queue are now clean.`
+          );
+        } catch (err: any) {
+          setActionErrorMessage('Error batch archiving duplicates: ' + (err?.message || 'Unknown error'));
+        } finally {
+          setIsAuditing(false);
         }
-      }
-
-      setInternalPairs([]);
-      setActionSuccessMessage(
-        `Successfully archived ${duplicatesToArchive.length} duplicate vacancies with 1 click! All website categories and Telegram queue are now 100% clean.`
-      );
-    } catch (err: any) {
-      alert('Error batch archiving duplicates: ' + err.message);
-    } finally {
-      setIsAuditing(false);
-    }
+      },
+    });
   };
 
-  // Automatically delete all duplicate vacancies in 1 click
-  const handleAutoDeleteAllDuplicates = async () => {
+  // Permanently delete all detected database duplicate vacancies in one click
+  const handleAutoDeleteAllDuplicates = () => {
     const activePairs = internalPairs.filter((p) => !dismissedPairIds.has(p.id));
     if (activePairs.length === 0) {
-      alert('No duplicate vacancies currently detected to delete.');
+      setActionErrorMessage('No duplicate vacancies currently detected to delete.');
       return;
     }
+    setActionErrorMessage(null);
+    setPendingConfirm({
+      title: `Delete All ${activePairs.length} Duplicate Vacancies Permanently?`,
+      message: `This will permanently delete ${activePairs.length} duplicate records from the database while keeping every original unique vacancy intact.`,
+      confirmLabel: `Delete All Duplicates (${activePairs.length})`,
+      tone: 'danger',
+      onConfirm: async () => {
+        setIsAuditing(true);
+        setActionSuccessMessage(null);
+        try {
+          const duplicateIds = Array.from(new Set(activePairs.map((pair) => pair.duplicate.id)));
+          if (onBatchDeleteVacancies) {
+            await onBatchDeleteVacancies(duplicateIds);
+          } else if (onDeleteVacancy) {
+            for (const id of duplicateIds) {
+              await onDeleteVacancy(id);
+            }
+          }
 
-    if (
-      !confirm(
-        `Automatically delete ${activePairs.length} duplicate vacancies? This will permanently remove the duplicate records from your database and ensure only the original unique vacancies remain.`
-      )
-    ) {
-      return;
-    }
-
-    setIsAuditing(true);
-    setActionSuccessMessage(null);
-    try {
-      const duplicateIds = Array.from(new Set(activePairs.map((pair) => pair.duplicate.id)));
-      if (onBatchDeleteVacancies) {
-        await onBatchDeleteVacancies(duplicateIds);
-      } else if (onDeleteVacancy) {
-        for (const id of duplicateIds) {
-          await onDeleteVacancy(id);
+          setInternalPairs([]);
+          setActionSuccessMessage(
+            `Permanently deleted all ${duplicateIds.length} duplicate vacancies. All website categories and the Telegram queue now contain only unique records.`
+          );
+        } catch (err: any) {
+          setActionErrorMessage('Error deleting duplicates: ' + (err?.message || 'Unknown error'));
+        } finally {
+          setIsAuditing(false);
         }
-      }
-
-      setInternalPairs([]);
-      setActionSuccessMessage(
-        `✨ Successfully auto-deleted ${duplicateIds.length} duplicate vacancies! All website categories and Telegram queue are 100% unique.`
-      );
-    } catch (err: any) {
-      alert('Error auto-deleting duplicates: ' + err.message);
-    } finally {
-      setIsAuditing(false);
-    }
+      },
+    });
   };
 
   // Restore uploaded duplicate candidate to pending queue
   const handleRestore = async (rep: DuplicateReportItem) => {
+    setActionErrorMessage(null);
     setActionLoadingId(rep.id);
     try {
       await onRestoreDuplicate(rep);
+      setActionSuccessMessage(`Restored "${rep.candidateTitle}" to the review queue as a distinct vacancy.`);
     } catch (err: any) {
-      alert('Error restoring duplicate: ' + err.message);
+      setActionErrorMessage('Error restoring duplicate: ' + (err?.message || 'Unknown error'));
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  // Permanently discard uploaded duplicate report
-  const handleDiscard = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently discard this duplicate record?')) return;
-    setActionLoadingId(id);
-    try {
-      await onDiscardDuplicate(id);
-    } catch (err: any) {
-      alert('Error discarding duplicate: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
+  // Permanently discard a single uploaded duplicate report
+  const handleDiscard = (report: DuplicateReportItem) => {
+    setActionErrorMessage(null);
+    setPendingConfirm({
+      title: 'Discard Duplicate Record Permanently?',
+      message: `Permanently delete screened duplicate "${report.candidateTitle}" (${report.candidateOrg}) from the upload discard queue?`,
+      confirmLabel: 'Discard Permanently',
+      tone: 'danger',
+      onConfirm: async () => {
+        setActionLoadingId(report.id);
+        try {
+          await onDiscardDuplicate(report.id);
+          setActionSuccessMessage(`Permanently deleted duplicate record "${report.candidateTitle}".`);
+        } catch (err: any) {
+          setActionErrorMessage('Error discarding duplicate: ' + (err?.message || 'Unknown error'));
+        } finally {
+          setActionLoadingId(null);
+        }
+      },
+    });
+  };
+
+  // Permanently delete ALL uploaded duplicate reports in the queue
+  const handleDeleteAllUploadDuplicates = () => {
+    const targets = filteredUploadReports;
+    if (targets.length === 0) return;
+    setActionErrorMessage(null);
+    setPendingConfirm({
+      title: `Delete All ${targets.length} Screened Duplicates Permanently?`,
+      message: `This will permanently delete ${targets.length} duplicate ${targets.length === 1 ? 'record' : 'records'} from the Upload Screening Discard Queue. Existing published originals are not affected.`,
+      confirmLabel: `Delete All Duplicates (${targets.length})`,
+      tone: 'danger',
+      onConfirm: async () => {
+        setIsBulkDiscardingUploads(true);
+        setActionSuccessMessage(null);
+        let deletedCount = 0;
+        let failedCount = 0;
+        try {
+          for (const report of targets) {
+            try {
+              await onDiscardDuplicate(report.id);
+              deletedCount += 1;
+            } catch {
+              failedCount += 1;
+            }
+          }
+          if (failedCount > 0) {
+            setActionErrorMessage(
+              `Deleted ${deletedCount} duplicate records, but ${failedCount} could not be removed. Please try again.`
+            );
+          } else {
+            setActionSuccessMessage(
+              `Permanently deleted all ${deletedCount} screened duplicate ${deletedCount === 1 ? 'record' : 'records'} from the discard queue.`
+            );
+          }
+        } finally {
+          setIsBulkDiscardingUploads(false);
+        }
+      },
+    });
   };
 
   // Filtered internal pairs
@@ -422,8 +488,24 @@ export const DuplicateCenter: React.FC<Props> = ({
               <span>{actionSuccessMessage}</span>
             </div>
             <button
+              type="button"
               onClick={() => setActionSuccessMessage(null)}
-              className="text-xs text-emerald-700 hover:underline"
+              className="text-xs text-emerald-700 hover:underline cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {actionErrorMessage && (
+          <div className="mt-4 p-4 rounded-2xl bg-rose-50 border border-rose-300 flex items-center justify-between gap-3 text-rose-900 text-xs font-semibold">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{actionErrorMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionErrorMessage(null)}
+              className="text-xs text-rose-700 hover:underline cursor-pointer"
             >
               Dismiss
             </button>
@@ -468,12 +550,13 @@ export const DuplicateCenter: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Audit Action Button */}
-          <div className="flex items-center gap-2">
+          {/* Audit Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={handleRunFullAudit}
-              disabled={isAuditing}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
+              disabled={isAuditing || isBulkDiscardingUploads}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isAuditing ? 'animate-spin text-amber-400' : ''}`} />
               <span>{isAuditing ? 'Auditing Database...' : 'Run Full Database Audit'}</span>
@@ -482,25 +565,44 @@ export const DuplicateCenter: React.FC<Props> = ({
             {activeSubTab === 'alwaysInside' && activeDuplicatesCount > 0 && (
               <>
                 <button
+                  type="button"
                   onClick={handleAutoDeleteAllDuplicates}
                   disabled={isAuditing}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition-colors shadow-sm"
-                  title="Automatically permanently delete all detected duplicate vacancies from the database"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                  title="Permanently delete all detected duplicate vacancies from the database"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Auto-Delete All Duplicates</span>
+                  <span>Delete All Duplicates ({activeDuplicatesCount})</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleBatchArchiveAllDuplicates}
                   disabled={isAuditing}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                   title="Archive all duplicate vacancies so they disappear from categories and Telegram"
                 >
                   <Archive className="w-3.5 h-3.5" />
                   <span>Archive All (1-Click)</span>
                 </button>
               </>
+            )}
+
+            {activeSubTab === 'uploadQueue' && filteredUploadReports.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAllUploadDuplicates}
+                disabled={isBulkDiscardingUploads}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                title="Permanently delete all screened duplicate records in the upload discard queue"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>
+                  {isBulkDiscardingUploads
+                    ? 'Deleting All Duplicates...'
+                    : `Delete All Duplicates (${filteredUploadReports.length})`}
+                </span>
+              </button>
             )}
           </div>
         </div>
@@ -706,13 +808,14 @@ export const DuplicateCenter: React.FC<Props> = ({
 
                           {onDeleteVacancy && (
                             <button
+                              type="button"
                               onClick={() => handleDeleteDuplicateVacancy(pair)}
                               disabled={actionLoadingId === pair.id}
-                              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors"
-                              title="Delete duplicate vacancy completely"
+                              className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer"
+                              title="Permanently delete this duplicate vacancy record"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete Record</span>
+                              <span>Delete Permanently</span>
                             </button>
                           )}
                         </div>
@@ -746,11 +849,24 @@ export const DuplicateCenter: React.FC<Props> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 px-1">
                   <span>
                     Showing <strong>{filteredUploadReports.length}</strong> candidates isolated during
                     vacancy uploads:
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllUploadDuplicates}
+                    disabled={isBulkDiscardingUploads}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {isBulkDiscardingUploads
+                        ? 'Deleting All...'
+                        : `Delete All Duplicates (${filteredUploadReports.length})`}
+                    </span>
+                  </button>
                 </div>
 
                 {filteredUploadReports.map((report) => {
@@ -858,10 +974,11 @@ export const DuplicateCenter: React.FC<Props> = ({
                           </button>
 
                           <button
-                            onClick={() => handleDiscard(report.id)}
-                            disabled={actionLoadingId === report.id}
-                            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors"
-                            title="Permanently remove duplicate record"
+                            type="button"
+                            onClick={() => handleDiscard(report)}
+                            disabled={actionLoadingId === report.id || isBulkDiscardingUploads}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors cursor-pointer disabled:opacity-50"
+                            title="Permanently remove this duplicate record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>Discard Permanently</span>
@@ -876,6 +993,53 @@ export const DuplicateCenter: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Inline Confirmation Modal (Iframe-safe replacement for window.confirm) */}
+      {pendingConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  pendingConfirm.tone === 'danger'
+                    ? 'bg-rose-100 text-rose-700'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-slate-900">{pendingConfirm.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{pendingConfirm.message}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPendingConfirm(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const action = pendingConfirm.onConfirm;
+                  setPendingConfirm(null);
+                  await action();
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-colors cursor-pointer ${
+                  pendingConfirm.tone === 'danger'
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                }`}
+              >
+                {pendingConfirm.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Detail Inspection Modal */}
       {selectedInspectVacancy && (

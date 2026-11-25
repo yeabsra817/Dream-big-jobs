@@ -6,6 +6,8 @@ import { registerUserNotificationAndAnalyticsRoutes } from './serverUserEngine';
 import { registerGlobalOpportunitiesRoutes } from './serverGlobalOpportunities';
 import { registerWritingAssistantRoutes } from './serverWritingAssistant';
 import { registerNexusClientFinderRoutes } from './serverNexusClientFinder';
+import { registerGlobalMigrationHubRoutes } from './serverGlobalMigrationHub';
+import { registerBranchManagerJobsRoutes } from './serverBranchManagerJobs';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11402,6 +11404,27 @@ Return strict JSON:
     getRequesterEmail,
     appendAuditLog,
     getAiClient,
+  });
+
+  registerGlobalMigrationHubRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    getRequesterUid,
+  });
+
+  registerBranchManagerJobsRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid,
   });
 
   function listPersistentBackups(): any[] {

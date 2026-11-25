@@ -1,7 +1,7 @@
 // serverApp.ts
-import * as path4 from "path";
+import * as path6 from "path";
 import * as fs2 from "fs";
-import * as crypto3 from "crypto";
+import * as crypto5 from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
@@ -10499,9 +10499,34 @@ function registerGlobalOpportunitiesRoutes(deps) {
         existingState.lastSuccessfulRunAtEat = formatEthiopiaDateTime(lastGood.finishedAt);
       }
     }
+    const existingPrById = new Map(
+      (loaded.permanent_residency_pathways || []).map((p) => [p.id, p])
+    );
+    const mergedPrPathways = OFFICIAL_GOVERNMENT_PR_SEEDS.map((seed) => {
+      const prev = existingPrById.get(seed.id);
+      if (prev) {
+        return {
+          ...prev,
+          ...seed,
+          httpStatus: prev.httpStatus,
+          verificationTier: prev.verificationTier,
+          sourceEvidenceExcerpt: prev.sourceEvidenceExcerpt,
+          officialDisclaimer: prev.officialDisclaimer,
+          lastVerifiedAt: prev.lastVerifiedAt
+        };
+      }
+      return {
+        ...seed,
+        httpStatus: null,
+        verificationTier: "PARTIALLY VERIFIED",
+        sourceEvidenceExcerpt: `Official national immigration ministry portal (${seed.officialDomain}). Scheduled live HTTP verification pending next 6-hour run.`,
+        officialDisclaimer: "Labour or skill shortages do NOT automatically grant permanent residency. Every pathway is governed exclusively by official national immigration law.",
+        lastVerifiedAt: loaded.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+      };
+    });
     return {
       ...loaded,
-      permanent_residency_pathways: loaded.permanent_residency_pathways || [],
+      permanent_residency_pathways: mergedPrPathways,
       opportunity_sources: mergedSources,
       opportunity_verification_logs: loaded.opportunity_verification_logs || [],
       opportunity_funding: loaded.opportunity_funding || [],
@@ -15558,6 +15583,2244 @@ function registerNexusClientFinderRoutes(deps) {
   };
 }
 
+// serverGlobalMigrationHub.ts
+import * as path4 from "path";
+import * as crypto3 from "crypto";
+
+// src/types/globalMigrationHub.ts
+var DEFAULT_GENERAL_MIGRATION_PROFILE = {
+  profileLabel: "My International Career Profile",
+  nationality: "Ethiopian",
+  currentResidence: "Ethiopia",
+  highestEducation: "Bachelor's Degree",
+  fieldOfStudy: "",
+  graduationYear: "",
+  totalExperienceYears: 3,
+  managementExperienceYears: 0,
+  currentOrRecentRole: "",
+  hasMastersDegree: false,
+  hasEnglishTest: false,
+  englishTestDetails: "No IELTS/TOEFL yet",
+  otherLanguages: "Amharic, English (working proficiency)",
+  maxUpfrontBudgetUsd: 500,
+  coreSkills: [],
+  targetSectors: ["Banking & Finance", "Accounting & Audit", "International Organizations"],
+  familyRelocationNeeded: false,
+  willingToRelocateInitiallyAlone: true
+};
+
+// serverGlobalMigrationHub.ts
+var REFRESH_INTERVAL_MS = 30 * 60 * 1e3;
+var PRIORITY_RELOCATION_COUNTRIES = {
+  "Saudi Arabia": "High employer-sponsored recruitment for commercial banking, fintech, audit, and operations managers; employers typically cover work visa, iqama, and relocation flights, making upfront cost realistic for budgets under $500.",
+  "United Arab Emirates": "Major international banking and financial hub actively recruiting experienced commercial bankers, risk/compliance specialists, and operations leaders with employer-paid residency visas and relocation packages.",
+  UAE: "Major international banking and financial hub actively recruiting experienced commercial bankers, risk/compliance specialists, and operations leaders with employer-paid residency visas and relocation packages.",
+  Qatar: "Recruits foreign banking, finance, and operations specialists through employer-sponsored work visas where relocation and visa costs are typically borne by the hiring institution.",
+  Oman: "Regional Gulf financial institutions occasionally hire experienced credit, compliance, and operations officers with employer-sponsored work permits.",
+  Kuwait: "Gulf financial and corporate employers sponsor qualified foreign accounting, treasury, and banking operations professionals under employer-funded work visas."
+};
+var PRIORITY_SETTLEMENT_COUNTRIES = {
+  Germany: "Active shortage of finance, audit, engineering, and skilled professionals; EU Blue Card and Skilled Worker Visa provide legal routes from Ethiopia to permanent residence in 21\u201336 months with family reunification.",
+  Canada: "Structured points-based Express Entry and Provincial Nominee Programs (PNP) open to Ethiopian citizens for Financial Auditors, Accountants, Banking Managers, and WASH Engineers, leading directly to Permanent Residence.",
+  Australia: "Skilled Independent (189), Nominated (190), and Employer-Sponsored (482 \u2192 186) pathways explicitly list Accountants, Auditors, Finance Managers, and Civil/Water Engineers with clear PR transition.",
+  "New Zealand": "Green List Tier 1 offers Straight-to-Residence PR for External/Internal Auditors and Water/Environmental Engineers with an accredited employer job offer.",
+  Ireland: "Critical Skills Employment Permit covers qualified finance, accounting, risk, and engineering roles with direct Stamp 4 long-term residency after 2 years and immediate spouse work rights.",
+  "United Kingdom": "Skilled Worker Visa via licensed sponsors covers financial managers, accountants, compliance, and engineering specialists, leading to Indefinite Leave to Remain (PR) after 5 years.",
+  Netherlands: "Highly Skilled Migrant Permit via IND-recognized sponsors processes rapidly (2\u20134 weeks) with no mandatory Dutch language test for English-speaking finance/fintech employers; PR after 5 years.",
+  Sweden: "Employer-sponsored work permits for finance, IT, and engineering professionals allow immediate family accompaniment and permanent residency eligibility after 4 years of work.",
+  Norway: "Skilled Worker Permit open to university-educated professionals with a Norwegian job offer; leads to permanent residence after 3 years of continuous residence.",
+  Finland: "Specialist Residence Permit for skilled professionals and development/engineering talent with fast-track processing and PR after 4 years.",
+  Denmark: "Pay Limit & Positive List schemes allow qualified foreign finance, audit, and engineering professionals to obtain work residence leading to permanent residency.",
+  Switzerland: "Major base for international organizations, development banks, and global WASH agencies (Geneva/Basel) offering employer-sponsored B permits and international staff contracts.",
+  Austria: "Red-White-Red Card points system for Very Highly Qualified and Shortage Occupations leading to permanent settlement.",
+  Luxembourg: "European banking, microfinance, and investment-fund hub recruiting English-speaking international finance, audit, and compliance specialists under the EU Blue Card.",
+  Singapore: "Global banking and fintech hub using the Employment Pass (COMPASS framework) for experienced finance and digital banking specialists.",
+  Japan: "Highly Skilled Professional (HSP) visa offers accelerated permanent residence in 1\u20133 years for experienced corporate and finance professionals.",
+  "United States": "Home to World Bank Group, IMF, IFC, UN headquarters, and major global banks offering G-4 international organization visas and H-1B / EB-2 employment pathways.",
+  Kenya: "East African regional hub for international banks, microfinance networks, UN agencies, and WASH NGOs with accessible regional relocation for Ethiopian professionals.",
+  Rwanda: "Growing Kigali International Financial Centre and African development hub offering accessible work permits and regional banking/microfinance roles.",
+  "South Africa": "Critical Skills Work Visa lists auditors, financial specialists, and water engineers with path to permanent residence after 5 years."
+};
+function normalizeCountryKey(country) {
+  const c = String(country || "").trim();
+  if (/^uae$/i.test(c) || /united arab emirates/i.test(c)) return "United Arab Emirates";
+  if (/^uk$/i.test(c) || /united kingdom/i.test(c)) return "United Kingdom";
+  if (/^usa$/i.test(c) || /^u\.s\.a\.?$/i.test(c) || /united states/i.test(c)) return "United States";
+  if (/^ksa$/i.test(c) || /saudi arabia/i.test(c)) return "Saudi Arabia";
+  return c || "International";
+}
+function sanitizeProfile(input) {
+  const base = DEFAULT_GENERAL_MIGRATION_PROFILE;
+  if (!input || typeof input !== "object") {
+    return { ...base, coreSkills: [...base.coreSkills], targetSectors: [...base.targetSectors] };
+  }
+  const cleanList = (arr, maxItems = 25) => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((item) => String(item || "").trim().slice(0, 80)).filter(Boolean).slice(0, maxItems);
+  };
+  return {
+    profileLabel: String(input.profileLabel || base.profileLabel || "").trim().slice(0, 120),
+    nationality: String(input.nationality || base.nationality).trim().slice(0, 60),
+    currentResidence: String(input.currentResidence || base.currentResidence).trim().slice(0, 60),
+    highestEducation: String(input.highestEducation || base.highestEducation).trim().slice(0, 80),
+    fieldOfStudy: String(input.fieldOfStudy ?? base.fieldOfStudy).trim().slice(0, 120),
+    graduationYear: String(input.graduationYear ?? "").trim().slice(0, 12),
+    totalExperienceYears: Math.max(0, Math.min(50, Number(input.totalExperienceYears ?? base.totalExperienceYears) || 0)),
+    managementExperienceYears: Math.max(
+      0,
+      Math.min(40, Number(input.managementExperienceYears ?? base.managementExperienceYears) || 0)
+    ),
+    currentOrRecentRole: String(input.currentOrRecentRole ?? base.currentOrRecentRole).trim().slice(0, 120),
+    hasMastersDegree: Boolean(input.hasMastersDegree),
+    hasEnglishTest: Boolean(input.hasEnglishTest),
+    englishTestDetails: String(input.englishTestDetails ?? base.englishTestDetails ?? "").trim().slice(0, 120),
+    otherLanguages: String(input.otherLanguages ?? base.otherLanguages ?? "").trim().slice(0, 140),
+    maxUpfrontBudgetUsd: Math.max(0, Math.min(1e5, Number(input.maxUpfrontBudgetUsd ?? 500) || 0)),
+    coreSkills: cleanList(input.coreSkills),
+    targetSectors: cleanList(input.targetSectors),
+    familyRelocationNeeded: Boolean(input.familyRelocationNeeded),
+    willingToRelocateInitiallyAlone: input.willingToRelocateInitiallyAlone !== false
+  };
+}
+function sanitizeSelectedCountries(countries) {
+  if (!Array.isArray(countries)) return [];
+  const unique = /* @__PURE__ */ new Set();
+  for (const raw of countries) {
+    const norm = normalizeCountryKey(String(raw || "").trim().slice(0, 60));
+    if (norm && norm !== "International") unique.add(norm);
+  }
+  return Array.from(unique).slice(0, 25);
+}
+function sanitizeTrackerItems(items) {
+  if (!Array.isArray(items)) return [];
+  const allowedStages = /* @__PURE__ */ new Set(["Researching", "Preparing Documents", "Applied", "Interview", "Offer", "Closed"]);
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const raw of items) {
+    if (!raw || typeof raw !== "object") continue;
+    const rec = raw;
+    const opportunityId = String(rec.opportunityId || "").trim().slice(0, 140);
+    if (!opportunityId || seen.has(opportunityId)) continue;
+    seen.add(opportunityId);
+    const stageRaw = String(rec.stage || "Researching");
+    const stage = allowedStages.has(stageRaw) ? stageRaw : "Researching";
+    out.push({
+      opportunityId,
+      title: String(rec.title || "Opportunity").trim().slice(0, 180),
+      employerOrInstitution: String(rec.employerOrInstitution || "").trim().slice(0, 140),
+      country: String(rec.country || "").trim().slice(0, 80),
+      officialUrl: String(rec.officialUrl || "").trim().slice(0, 400),
+      stage,
+      notes: String(rec.notes || "").trim().slice(0, 1e3),
+      updatedAt: String(rec.updatedAt || (/* @__PURE__ */ new Date()).toISOString())
+    });
+    if (out.length >= 150) break;
+  }
+  return out;
+}
+function detectWashOpportunity(opp) {
+  if (opp.isWashDedicated || opp.category === "wash_opportunity" || opp.department === "wash_jobs") {
+    return true;
+  }
+  if ((opp.sectors || []).includes("wash")) return true;
+  const hay = `${opp.title} ${opp.organization} ${opp.summary || ""}`.toLowerCase();
+  return /\b(wash|water supply|sanitation|hygiene|hydrolog|wastewater|faecal sludge|wateraid|un-ihe|siwi|world water)\b/i.test(hay);
+}
+function detectScholarshipOrTraining(opp) {
+  return opp.category === "university_scholarship" || opp.category === "professional_training" || opp.category === "conference_summit" || opp.department === "banking_wash_scholarships" || opp.department === "banking_wash_training" || opp.department === "banking_wash_conferences";
+}
+function detectMastersRequirement(opp) {
+  const minEdu = opp.eligibility?.minimumEducationLevel;
+  const text = `${opp.eligibility?.educationRequirement || ""} ${opp.summary || ""}`.toLowerCase();
+  if (minEdu === "masters" || minEdu === "phd") {
+    if (/or\s+(bachelor|ba\b|bsc\b|equivalent\s+experience)/i.test(text)) {
+      return "No";
+    }
+    return "Yes";
+  }
+  if (/(master['’]?s|msc|mba|postgraduate|phd|doctorate)\s+(degree\s+)?(is\s+)?(required|mandatory|essential|must hold|minimum)/i.test(text)) {
+    if (/or\s+(bachelor|ba\b|bsc\b|equivalent\s+experience)/i.test(text)) {
+      return "No";
+    }
+    return "Yes";
+  }
+  if (minEdu === "bachelors" || minEdu === "diploma" || minEdu === "none") {
+    return "No";
+  }
+  if (/bachelor|undergraduate|ba\b|bsc\b|first university degree|no master/i.test(text)) {
+    return "No";
+  }
+  if (/master|msc|mba/i.test(text)) {
+    return "Verify";
+  }
+  return "No";
+}
+function detectEnglishTestRequirement(opp) {
+  const langs = (opp.eligibility?.languagesRequired || []).join(" ");
+  const text = `${langs} ${opp.summary || ""} ${opp.verificationNotes || ""}`.toLowerCase();
+  if (/(ielts|toefl|pte|celpip|oet).{0,50}(required|mandatory|must submit|minimum score|band)/i.test(text)) {
+    return "Yes";
+  }
+  if (/no\s+(ielts|toefl|english test)|ielts\s+not\s+required|exempt|english\s+working\s+proficiency/i.test(text)) {
+    return "No";
+  }
+  if (/(ielts|toefl|german\s+b1|german\s+b2|french\s+b2|local\s+language\s+required)/i.test(text)) {
+    return "Verify";
+  }
+  return "No";
+}
+function detectMinimumExperienceYears(opp) {
+  if (typeof opp.eligibility?.minimumYearsExperience === "number") {
+    return opp.eligibility.minimumYearsExperience;
+  }
+  const text = `${opp.eligibility?.experienceRequirement || ""} ${opp.summary || ""}`;
+  const match = text.match(/(\d{1,2})\+?\s*(?:to\s*\d{1,2}\s*)?years?\b/i);
+  if (match) {
+    const parsed = Number(match[1]);
+    if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 30) return parsed;
+  }
+  return null;
+}
+function detectLocalCitizenRestriction(opp) {
+  if (opp.eligibility?.ethiopianEligible === "excluded") return true;
+  if (opp.funding?.employmentVisaClassification === "not_eligible_international") return true;
+  const text = `${(opp.eligibility?.eligibleNationalities || []).join(" ")} ${opp.funding?.visaSupportSummary || ""} ${opp.summary || ""}`.toLowerCase();
+  if (/(citizens?\s+only|nationals?\s+only|must\s+already\s+have\s+work\s+authorization|no\s+visa\s+sponsorship|unable\s+to\s+sponsor|local\s+candidates?\s+only|eu\/eea\s+citizens?\s+only)/i.test(
+    text
+  )) {
+    return true;
+  }
+  return false;
+}
+function buildCostBreakdown(opp, isScholarshipOrTraining, maxUpfrontBudgetUsd) {
+  const funding = opp.funding;
+  const text = `${funding?.fundingSummary || ""} ${funding?.visaSupportSummary || ""} ${funding?.stipendOrSalary || ""} ${funding?.applicationFee || ""} ${opp.summary || ""}`.toLowerCase();
+  const isFullyFunded = funding?.fundingLevel === "fully_funded" || funding?.fundingLevel === "free" || opp.verificationStatus === "Fully Funded" || /fully funded|full scholarship|full sponsorship|travel.*accommodation.*covered|airfare.*covered|all expenses/i.test(text);
+  const employerPaidRelocation = funding?.visaSupportType === "employer_sponsored_visa" || funding?.visaSupportType === "visa_fees_funded" || funding?.relocationAssistance === "yes" || funding?.employmentVisaClassification === "confirmed_visa_sponsorship" || funding?.employmentVisaClassification === "relocation_assistance" || /employer[- ]sponsored|relocation\s+(package|assistance|allowance|covered)|visa\s+sponsorship|iqama|g-4\s+visa|international\s+staff/i.test(
+    text
+  );
+  const proofOfFundsRequired = /proof\s+of\s+funds|settlement\s+funds|blocked\s+account|bank\s+statement\s+showing/i.test(text);
+  const appFeeRaw = String(funding?.applicationFee || "").toLowerCase();
+  const applicationFeeStatus = appFeeRaw.includes("none") || appFeeRaw.includes("free") || appFeeRaw === "$0" ? "Free application" : /government\s+fee|application\s+fee|\$\d+/.test(appFeeRaw) ? "Government application fee" : isScholarshipOrTraining ? "Free application" : "Free application";
+  let whoPaysSummary = "Verify expense coverage directly on the official employer/institution portal.";
+  if (isFullyFunded) {
+    whoPaysSummary = funding?.fundingSummary || "Sponsor/Government-funded: tuition, travel, and/or stipend covered per official programme terms.";
+  } else if (employerPaidRelocation) {
+    whoPaysSummary = funding?.visaSupportSummary || "Employer-sponsored recruitment: employer initiates work visa/permit; confirm flight, housing, and medical reimbursement terms in your official offer.";
+  }
+  let applicantPaidCosts = "Passport, document notarization/attestation, and any unstated local travel costs.";
+  if (proofOfFundsRequired) {
+    applicantPaidCosts = "Requires verifiable settlement/proof of funds plus official visa/credential evaluation fees.";
+  } else if (isFullyFunded) {
+    applicantPaidCosts = "Free online application; verify whether passport or local visa transit fees apply.";
+  }
+  let withinUserBudget = "Verify";
+  let budgetNote = `Compare official upfront expenses against your $${maxUpfrontBudgetUsd.toLocaleString()} budget before applying.`;
+  if (proofOfFundsRequired && maxUpfrontBudgetUsd < 2500) {
+    withinUserBudget = "No";
+    budgetNote = `Proof of settlement funds likely exceeds your $${maxUpfrontBudgetUsd.toLocaleString()} upfront budget unless covered by a confirmed sponsor.`;
+  } else if (funding?.fundingLevel === "self_funded" && maxUpfrontBudgetUsd < 2e3) {
+    withinUserBudget = "No";
+    budgetNote = `Self-funded listing likely exceeds your $${maxUpfrontBudgetUsd.toLocaleString()} budget.`;
+  } else if (isFullyFunded || employerPaidRelocation && !proofOfFundsRequired) {
+    withinUserBudget = "Yes";
+    budgetNote = `Free online application with employer/sponsor support \u2014 realistic within a $${maxUpfrontBudgetUsd.toLocaleString()} initial budget (confirm relocation reimbursement before signing).`;
+  }
+  return {
+    applicationFeeStatus,
+    whoPaysSummary,
+    employerPaidRelocation,
+    governmentFunded: isFullyFunded,
+    applicantPaidCosts,
+    proofOfFundsRequired,
+    proofOfFundsDetails: proofOfFundsRequired ? "Official proof of financial means/settlement funds is referenced; verify exact threshold on the official portal." : "No personal settlement proof-of-funds requirement stated for employer-sponsored or fully funded intake (verify during visa stage).",
+    withinUserBudget,
+    budgetNote
+  };
+}
+function formatCategoryLabel(cat) {
+  switch (cat) {
+    case "international_job":
+      return "International Job";
+    case "university_scholarship":
+      return "Scholarship";
+    case "professional_training":
+      return "Professional Training";
+    case "conference_summit":
+      return "Conference / Summit";
+    case "wash_opportunity":
+      return "WASH Opportunity";
+    default:
+      return "International Opportunity";
+  }
+}
+function evaluateSingleOpportunity(opp, profile, selectedCountrySet, changeStatus, firstSeenAt) {
+  const country = normalizeCountryKey(opp.country || "International");
+  const region = detectInternationalRegion(country, opp.location || "");
+  const isWash = detectWashOpportunity(opp);
+  const isScholarshipOrTraining = detectScholarshipOrTraining(opp);
+  const mastersRequired = detectMastersRequirement(opp);
+  const englishTestRequired = detectEnglishTestRequirement(opp);
+  const localRestricted = detectLocalCitizenRestriction(opp);
+  const minYears = detectMinimumExperienceYears(opp);
+  const costBreakdown = buildCostBreakdown(opp, isScholarshipOrTraining, profile.maxUpfrontBudgetUsd);
+  const deadlineRaw = opp.deadline?.deadlineDateRaw || opp.deadline?.deadlineUtcIso || "";
+  const deadlineEval = evaluateOpportunityDeadline(deadlineRaw, opp.deadline?.deadlineTimezone || "UTC");
+  const isInSelectedCountry = selectedCountrySet.has(country.toLowerCase());
+  const isInRecommendedCountry = Boolean(PRIORITY_RELOCATION_COUNTRIES[country]) || Boolean(PRIORITY_SETTLEMENT_COUNTRIES[country]);
+  const oppHay = [
+    opp.title,
+    opp.organization,
+    opp.category,
+    opp.department || "",
+    opp.summary || "",
+    opp.eligibility?.educationRequirement || "",
+    opp.eligibility?.experienceRequirement || "",
+    ...opp.eligibility?.requiredSkills || [],
+    ...opp.sectors || []
+  ].join(" ").toLowerCase();
+  const profileTerms = [
+    profile.fieldOfStudy,
+    profile.currentOrRecentRole,
+    ...profile.coreSkills,
+    ...profile.targetSectors
+  ].map((s) => s.toLowerCase().trim()).filter((s) => s.length >= 3);
+  const bankingFinanceSignals = /\b(bank|banking|branch|finance|financial|accounting|accountant|audit|auditor|credit|loan|risk|compliance|aml|microfinance|treasury|fintech|digital financial|deposit|internal control|investment|operations manager|relationship manager|corporate finance)\b/i;
+  const userIsBankingFinance = bankingFinanceSignals.test(profileTerms.join(" "));
+  const oppIsBankingFinance = Boolean(opp.isBankingFinance) || (opp.sectors || []).includes("banking_finance") || bankingFinanceSignals.test(oppHay);
+  const userWantsWash = profileTerms.some(
+    (t) => /\b(wash|water|sanitation|hygiene|civil|environmental|public health)\b/i.test(t)
+  );
+  let matchedSkillHits = 0;
+  for (const term of profileTerms) {
+    const tokens = term.split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+    if (tokens.length > 0 && tokens.some((tok) => oppHay.includes(tok))) {
+      matchedSkillHits += 1;
+    }
+  }
+  let canApplyFromEthiopia = "Verify";
+  if (localRestricted) {
+    canApplyFromEthiopia = "No";
+  } else if (opp.eligibility?.ethiopianEligible === "confirmed" || opp.eligibility?.ethiopianEligible === "likely_global" || opp.funding?.visaSupportType === "employer_sponsored_visa" || opp.funding?.fundingLevel === "fully_funded") {
+    canApplyFromEthiopia = "Yes";
+  }
+  const disqualifiers = [];
+  const confirmationNeededItems = [];
+  const positiveMatches = [];
+  if (localRestricted) {
+    disqualifiers.push("Requires existing local work authorization or restricts foreign/Ethiopian offshore applicants.");
+  } else if (canApplyFromEthiopia === "Yes") {
+    positiveMatches.push("Open to international/Ethiopian applicants applying from Ethiopia.");
+  } else {
+    confirmationNeededItems.push("Confirm offshore application eligibility for Ethiopian nationals on the official portal.");
+  }
+  if (mastersRequired === "Yes" && !profile.hasMastersDegree) {
+    disqualifiers.push("Published notice states a Master's or postgraduate degree is mandatory.");
+  } else if (mastersRequired === "Verify" && !profile.hasMastersDegree) {
+    confirmationNeededItems.push("Confirm whether a Bachelor's degree + years of experience is accepted in lieu of a Master's.");
+  } else {
+    positiveMatches.push(
+      `Education aligns (${profile.highestEducation}${profile.fieldOfStudy ? ` in ${profile.fieldOfStudy}` : ""}).`
+    );
+  }
+  if (englishTestRequired === "Yes" && !profile.hasEnglishTest) {
+    confirmationNeededItems.push(
+      "Official listing mentions IELTS/TOEFL or language test \u2014 verify if English-medium degree or work experience qualifies for an exemption."
+    );
+  } else if (englishTestRequired === "Verify" && !profile.hasEnglishTest) {
+    confirmationNeededItems.push(
+      "Confirm whether formal English/local language certification is required at application or visa stage."
+    );
+  }
+  if (minYears !== null) {
+    if (profile.totalExperienceYears >= minYears) {
+      positiveMatches.push(`${profile.totalExperienceYears} yrs experience meets the stated ${minYears}+ yrs requirement.`);
+    } else if (profile.totalExperienceYears + 2 >= minYears) {
+      confirmationNeededItems.push(
+        `Listed experience is ${minYears}+ years (your profile lists ${profile.totalExperienceYears} years).`
+      );
+    } else {
+      disqualifiers.push(
+        `Requires ${minYears}+ years of experience (profile currently lists ${profile.totalExperienceYears} years).`
+      );
+    }
+  }
+  let domainAligned = false;
+  if (isWash && !userWantsWash && userIsBankingFinance) {
+    if (/\b(finance|accounting|accountant|audit|grants|budget|financial)\b/i.test(oppHay)) {
+      domainAligned = true;
+      positiveMatches.push("Finance/accounting role within an international WASH organization.");
+    } else {
+      disqualifiers.push(
+        "Technical WASH/water engineering specialization outside your stated banking/finance profile (shown separately in WASH tab)."
+      );
+    }
+  } else if (oppIsBankingFinance && userIsBankingFinance) {
+    domainAligned = true;
+    positiveMatches.push("Direct alignment with Banking, Finance, Accounting, or Management experience.");
+  } else if (matchedSkillHits >= 2 || profileTerms.length === 0) {
+    domainAligned = true;
+    if (matchedSkillHits >= 2) {
+      positiveMatches.push(`Matches ${matchedSkillHits} core skills/sector keywords from your profile.`);
+    }
+  } else if (isScholarshipOrTraining) {
+    domainAligned = matchedSkillHits >= 1 || /leadership|management|development|finance|public|policy|professional/i.test(oppHay);
+    if (!domainAligned) {
+      confirmationNeededItems.push("Confirm field-of-study eligibility for your academic & professional background.");
+    }
+  } else {
+    confirmationNeededItems.push("Role focus partially overlaps your profile \u2014 verify detailed duties on the official notice.");
+  }
+  if (costBreakdown.withinUserBudget === "No") {
+    confirmationNeededItems.push(costBreakdown.budgetNote);
+  } else if (costBreakdown.withinUserBudget === "Yes") {
+    positiveMatches.push("Free online application with employer/sponsor funding aligned with your upfront budget.");
+  }
+  let eligibilityClassification;
+  if (disqualifiers.length > 0) {
+    eligibilityClassification = "NOT ELIGIBLE";
+  } else if (domainAligned && canApplyFromEthiopia === "Yes" && confirmationNeededItems.length === 0) {
+    eligibilityClassification = "HIGHLY SUITABLE";
+  } else if (domainAligned && canApplyFromEthiopia === "Yes" && confirmationNeededItems.length <= 1 && costBreakdown.withinUserBudget !== "No") {
+    eligibilityClassification = "HIGHLY SUITABLE";
+  } else {
+    eligibilityClassification = "POTENTIALLY SUITABLE";
+  }
+  let score = 50;
+  if (eligibilityClassification === "HIGHLY SUITABLE") score += 32;
+  else if (eligibilityClassification === "POTENTIALLY SUITABLE") score += 12;
+  else score -= 35;
+  if (domainAligned) score += 10;
+  if (costBreakdown.withinUserBudget === "Yes") score += 8;
+  if (isInSelectedCountry) score += 6;
+  if (profile.managementExperienceYears >= 2 && /\b(manager|lead|head|director|supervisor|branch)\b/i.test(oppHay)) {
+    score += 5;
+  }
+  score = Math.max(5, Math.min(99, score));
+  const suitabilityExplanation = eligibilityClassification === "NOT ELIGIBLE" ? `Not eligible: ${disqualifiers.join(" ")}` : eligibilityClassification === "HIGHLY SUITABLE" ? `${positiveMatches.slice(0, 3).join(" ")}${confirmationNeededItems.length > 0 ? ` Note to confirm: ${confirmationNeededItems[0]}` : ""}` : `${positiveMatches.slice(0, 2).join(" ")} Needs confirmation: ${confirmationNeededItems.join(" ")}`.trim();
+  const noNominationBarrier = opp.eligibility?.universityRecommendationRequired !== "required" && opp.eligibility?.institutionalNominationRequired !== "required";
+  const valuesExperienceOverGpa = isScholarshipOrTraining && noNominationBarrier && !/minimum\s+gpa\s+(3\.[5-9]|4\.0)|university\s+nomination\s+required/i.test(oppHay) && (mastersRequired !== "Yes" || /leadership|mid-career|professional|fellowship|experience|executive/i.test(oppHay));
+  const primarySector = isWash ? "WASH (Water, Sanitation & Hygiene)" : oppIsBankingFinance ? "Banking, Finance & Accounting" : (opp.sectors?.[0] || formatCategoryLabel(opp.category)).replace(/_/g, " ");
+  const nationalitiesText = (opp.eligibility?.eligibleNationalities || []).join(", ");
+  const languagesText = (opp.eligibility?.languagesRequired || []).join(", ");
+  return {
+    id: opp.id,
+    title: opp.title,
+    employerOrInstitution: opp.organization,
+    country,
+    region,
+    sector: primarySector,
+    category: formatCategoryLabel(opp.category),
+    salaryOrFunding: opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || "Verify official compensation/funding terms on employer portal",
+    nationalityEligibility: opp.eligibility?.ethiopianEligible === "confirmed" ? `Ethiopian citizens & international applicants confirmed eligible${nationalitiesText ? ` (${nationalitiesText})` : ""}` : localRestricted ? "Restricted to local citizens / existing work permit holders" : nationalitiesText || "International applicants \u2014 verify Ethiopian eligibility on official notice",
+    educationRequirement: opp.eligibility?.educationRequirement || (mastersRequired === "Yes" ? "Master's degree stated as required" : "Bachelor's degree or equivalent professional qualification"),
+    experienceRequirement: opp.eligibility?.experienceRequirement || (minYears !== null ? `${minYears}+ years relevant professional experience` : "Relevant professional experience (verify years on official portal)"),
+    languageRequirement: languagesText || (englishTestRequired === "Yes" ? "English proficiency test (IELTS/TOEFL) referenced \u2014 confirm exemptions" : "Professional working English (no IELTS/TOEFL stated in summary \u2014 confirm on portal)"),
+    visaOrImmigrationRoute: opp.funding?.visaSupportSummary || opp.funding?.employmentVisaLabel || "Confirm work permit / visa sponsorship pathway directly with employer",
+    costBreakdown,
+    familyRelocationOptions: opp.funding?.relocationAssistance === "yes" ? "Relocation assistance available \u2014 confirm spouse/children dependant visa terms in the official offer." : "Verify dependant visa & family reunification terms on the official employer or government immigration portal.",
+    deadline: deadlineRaw || "Verify on official portal",
+    deadlineDisplay: opp.deadline?.deadlineUtcIso?.slice(0, 10) || deadlineRaw || "Verify on official portal",
+    daysRemaining: typeof opp.deadline?.fullDaysRemaining === "number" ? opp.deadline.fullDaysRemaining : typeof deadlineEval.fullDaysRemaining === "number" ? deadlineEval.fullDaysRemaining : null,
+    eligibilityClassification,
+    suitabilityScore: score,
+    suitabilityExplanation,
+    confirmationNeededItems,
+    officialSource: opp.sourceName || opp.organization,
+    sourceDomain: opp.officialDomain || "",
+    directOfficialLink: opp.officialApplicationUrl || opp.originalSourceUrl || "",
+    canApplyFromEthiopia,
+    matchesUserProfile: eligibilityClassification !== "NOT ELIGIBLE",
+    isWashOpportunity: isWash,
+    isScholarshipOrTraining,
+    valuesExperienceOverGpa,
+    isInSelectedCountry,
+    isInRecommendedCountry,
+    mastersRequired,
+    englishTestRequired,
+    changeStatus,
+    firstSeenAt,
+    verifiedAt: opp.lastVerifiedAt || opp.updatedAt
+  };
+}
+function build13PointImmigrationRecords(profile, selectedCountrySet) {
+  const userIsBankingFinance = /\b(bank|finance|accounting|audit|credit|risk|microfinance|branch|treasury)\b/i.test(
+    `${profile.fieldOfStudy} ${profile.currentOrRecentRole} ${profile.coreSkills.join(" ")}`
+  );
+  const gulfEmployerSponsoredRoutes = [
+    {
+      id: "mig_saudi_arabia_work_visa",
+      country: "Saudi Arabia",
+      region: "Middle East",
+      programName: "Employer-Sponsored Work Visa (Iqama) & Skilled Professional Recruitment (Qiwa / MHRSD)",
+      officialAuthority: "Ministry of Human Resources and Social Development (MHRSD) & Ministry of Foreign Affairs (MOFA)",
+      officialUrl: "https://www.hrsd.gov.sa/en",
+      shortageListUrl: "https://www.qiwa.sa/en",
+      pathwayCategory: "Temporary Work Visa (No Direct PR)",
+      isRecommendedByResearch: true,
+      isSelectedByUser: selectedCountrySet.has("saudi arabia"),
+      whyRecommended: PRIORITY_RELOCATION_COUNTRIES["Saudi Arabia"],
+      eligibilityClassification: userIsBankingFinance && profile.totalExperienceYears >= 3 ? "HIGHLY SUITABLE" : "POTENTIALLY SUITABLE",
+      suitabilityNote: "Strong match for experienced commercial bankers, credit/risk specialists, accountants, and managers because licensed employers typically sponsor the visa and cover relocation flights \u2014 realistic under a $500 upfront budget. Important: This is a renewable work residency (Iqama), NOT permanent residency.",
+      budgetAlert: `Realistic for your $${profile.maxUpfrontBudgetUsd.toLocaleString()} budget: employer legally bears work visa & Iqama fees under Saudi Labour Law; confirm flight and housing allowance in your written offer.`,
+      withinUserBudget: "Yes",
+      q1_canEthiopianApplyFromEthiopia: "Yes. Ethiopian citizens living in Ethiopia can apply directly to Saudi banks, fintechs, audit firms, and corporates; once hired, the employer issues an electronic work visa processed through the Saudi Embassy in Addis Ababa.",
+      q2_educationRequired: "Bachelor's degree (attested by Ethiopian Ministry of Foreign Affairs & Saudi Embassy authentication) matching the sponsored job title. No Master's degree required for most banking/accounting roles.",
+      q3_experienceRequired: "Typically 3\u20138+ years of verified professional experience (commercial banking & branch management experience is competitive for mid-to-senior roles).",
+      q4_jobOfferNecessary: "Yes \u2014 a signed job offer and electronic visa authorization from a licensed Saudi employer is mandatory.",
+      q5_languageTestRequired: "No IELTS or TOEFL required for the work visa. Business English is standard in international banks and Big-4 audit firms; Arabic is an advantage for local retail branches.",
+      q6_financialProofRequired: "No personal settlement proof-of-funds requirement for employer-sponsored work visas.",
+      q7_officialFees: "Work visa issuance, Iqama residency permit, and work permit levies are legally paid by the sponsoring employer; applicant typically only covers local degree attestation/medical check if not reimbursed.",
+      q8_whoPaysExpenses: "Under Saudi Labour Law, the employer must pay recruitment fees, residence permit (Iqama) issuance/renewal, and return ticket; many banks also include mobilization flight and initial housing allowance.",
+      q9_canRelocateInitiallyAlone: "Yes \u2014 relocating alone first is the standard, most affordable approach while completing probation and setting up housing.",
+      q10_familyReunificationRules: "Once your Iqama is issued and salary/profession threshold is met, you can apply for a Family Residence Visa for spouse and children via Absher/MOFA (monthly dependent levy applies \u2014 verify current rate on official portal).",
+      q11_leadsToPermanentResidence: "No \u2014 standard employer-sponsored work visas (Iqama) are renewable temporary residence permits and do NOT automatically lead to permanent residency or citizenship. (Saudi Premium Residency exists separately under strict high-income/investment/exceptional-talent criteria.)",
+      q12_estimatedTimeline: "Typically 4\u201310 weeks after receiving a signed job offer (degree attestation, medical exam, visa stamping in Addis Ababa).",
+      q13_officialProcedureAndLink: "Apply directly on official Saudi bank/employer career portals -> sign offer -> employer obtains visa block via MHRSD/Qiwa -> attest BA degree & complete GAMCA medical -> embassy visa stamping. Official portal: https://www.hrsd.gov.sa/en"
+    },
+    {
+      id: "mig_uae_employment_visa",
+      country: "United Arab Emirates",
+      region: "Middle East",
+      programName: "UAE Standard Employment Residence Visa & Green Visa (Skilled Employees)",
+      officialAuthority: "Federal Authority for Identity, Citizenship, Customs & Port Security (ICP) & MOHRE",
+      officialUrl: "https://u.ae/en/information-and-services/visa-and-emirates-id/residence-visas/residence-visa-for-working-in-the-uae",
+      shortageListUrl: "https://www.mohre.gov.ae/en/home.aspx",
+      pathwayCategory: "Temporary Work Visa (No Direct PR)",
+      isRecommendedByResearch: true,
+      isSelectedByUser: selectedCountrySet.has("united arab emirates"),
+      whyRecommended: PRIORITY_RELOCATION_COUNTRIES["United Arab Emirates"],
+      eligibilityClassification: userIsBankingFinance && profile.totalExperienceYears >= 3 ? "HIGHLY SUITABLE" : "POTENTIALLY SUITABLE",
+      suitabilityNote: "Strong career and savings stepping stone for banking operations, compliance, accounting, and branch/relationship managers. UAE law prohibits employers from charging recruitment/visa fees to employees. Important: This is a renewable 2\u20135 year residence visa, NOT permanent residency.",
+      budgetAlert: `Realistic for your $${profile.maxUpfrontBudgetUsd.toLocaleString()} budget: UAE Federal Labour Law requires the employer to pay recruitment & employment visa costs (verify relocation flight & degree attestation reimbursement in your offer).`,
+      withinUserBudget: "Yes",
+      q1_canEthiopianApplyFromEthiopia: "Yes. Ethiopian citizens can apply online from Ethiopia to UAE banks, DIFC/ADGM financial institutions, audit firms, and multinational corporates; employer sponsors the entry permit.",
+      q2_educationRequired: "Attested Bachelor's degree in Accounting, Finance, Business, or related field for MoHRE Skill Level 1\u20132 roles. No Master's degree required.",
+      q3_experienceRequired: "Typically 3\u20137+ years of relevant banking, finance, audit, or operations experience.",
+      q4_jobOfferNecessary: "Yes \u2014 a verified employment contract from a UAE-registered employer is required for the Standard Work Visa (or skilled contract meeting salary threshold for 5-year Green Visa).",
+      q5_languageTestRequired: "No IELTS or TOEFL required for UAE employment visas. Strong English communication is required by international banks and DIFC/ADGM employers.",
+      q6_financialProofRequired: "No personal proof of settlement funds required for employer-sponsored employment visas.",
+      q7_officialFees: "Under UAE labour regulations, employment visa, work permit, and Emirates ID onboarding costs for employees are borne by the employer; confirm any degree attestation costs.",
+      q8_whoPaysExpenses: "Employer pays work permit, visa issuance, and health insurance; many international banks in Dubai/Abu Dhabi also provide joining flight ticket and temporary relocation allowance.",
+      q9_canRelocateInitiallyAlone: "Yes \u2014 moving alone first to complete Emirates ID, bank account, and tenancy contract (Ejari) before sponsoring family is standard practice.",
+      q10_familyReunificationRules: "Residents earning at least AED 4,000/month (or AED 3,000 + employer accommodation) with a valid tenancy contract can sponsor spouse and children on family residence visas via ICP/GDRFA.",
+      q11_leadsToPermanentResidence: "No \u2014 standard employment visas (2 years) and Green Visas (5 years) are renewable temporary residence permits, NOT permanent residency or citizenship. (10-year Golden Visa is renewable long-term residency for specific high-salary/specialized criteria, still distinct from citizenship.)",
+      q12_estimatedTimeline: "Typically 3\u20136 weeks from signed offer letter to entry permit issuance.",
+      q13_officialProcedureAndLink: "Apply directly on UAE bank/corporate career pages -> pass interviews -> employer secures MOHRE work permit & ICP entry permit -> complete degree attestation -> travel and complete Emirates ID. Official portal: https://u.ae/en/information-and-services/visa-and-emirates-id/residence-visas/residence-visa-for-working-in-the-uae"
+    }
+  ];
+  const mappedSeeds = OFFICIAL_GOVERNMENT_PR_SEEDS.map((seed) => {
+    const country = normalizeCountryKey(seed.country);
+    const isSelectedByUser = selectedCountrySet.has(country.toLowerCase());
+    const isRecommendedByResearch = Boolean(PRIORITY_SETTLEMENT_COUNTRIES[country]) || Boolean(PRIORITY_RELOCATION_COUNTRIES[country]);
+    const pathwayCategory = seed.pathwayClassification === "direct_pr" ? "Direct Permanent Residence" : seed.pathwayClassification === "route_to_pr" ? "Temporary Work Visa Leading to PR" : "Temporary Work Visa (No Direct PR)";
+    const langText = String(seed.languageRequirement || "");
+    const needsEnglishTest = /\b(ielts|celpip|pte|toefl|clb\s*[5-9]|mandatory)\b/i.test(langText);
+    const feeText = `${seed.governmentApplicationFees || ""} ${seed.financialProofRequirement || ""}`;
+    const hasHighProofOfFunds = /canada|australia|new zealand|express entry|blocked account|aud\s*\$4|cad\s*\$1|proof of funds|settlement funds/i.test(
+      `${country} ${feeText} ${seed.programName}`
+    );
+    let withinUserBudget = "Verify";
+    let budgetAlert = `Verify exact government visa fees and relocation coverage against your $${profile.maxUpfrontBudgetUsd.toLocaleString()} budget.`;
+    if (hasHighProofOfFunds && profile.maxUpfrontBudgetUsd < 2e3) {
+      withinUserBudget = "No";
+      budgetAlert = `Upfront Cost Warning: Independent PR/points routes in ${country} typically require government fees, credential/skills assessment, language exams, and/or proof of settlement funds well above $${profile.maxUpfrontBudgetUsd.toLocaleString()} UNLESS you first secure an employer-sponsored job offer that waives settlement funds and covers relocation.`;
+    } else if (/germany|netherlands|ireland|sweden|norway|finland|denmark|luxembourg|united kingdom/i.test(country)) {
+      withinUserBudget = "Verify";
+      budgetAlert = `Employer-Sponsored Route Recommended for $${profile.maxUpfrontBudgetUsd.toLocaleString()} budget: government work-visa fees are modest (or paid by licensed sponsor), and a valid employment contract avoids independent proof-of-funds requirements.`;
+    }
+    const confirmations = [];
+    if (needsEnglishTest && !profile.hasEnglishTest) {
+      confirmations.push("Language exam (IELTS/PTE/etc.) required for points-based PR \u2014 verify employer-sponsored exemptions.");
+    }
+    if (withinUserBudget === "No") {
+      confirmations.push(`Upfront fees/proof-of-funds exceed $${profile.maxUpfrontBudgetUsd.toLocaleString()} unless employer-sponsored.`);
+    }
+    const hasFinanceOccupations = (seed.bankingFinanceOccupations || []).length > 0;
+    const eligibilityClassification = !seed.foreignApplicantsEligible ? "NOT ELIGIBLE" : hasFinanceOccupations && confirmations.length === 0 ? "HIGHLY SUITABLE" : "POTENTIALLY SUITABLE";
+    const whyRecommended = PRIORITY_SETTLEMENT_COUNTRIES[country] || PRIORITY_RELOCATION_COUNTRIES[country] || `${country} publishes official foreign-worker demand across ${seed.professionalOccupationsInDemand.slice(0, 2).join(", ")}.`;
+    const isJobOfferNecessary = seed.jobOfferRequired || (seed.pathwayClassification === "direct_pr" && /canada|australia/i.test(country) ? "Not strictly mandatory for independent points streams (e.g., FSWP / Subclass 189), but an employer job offer significantly increases approval speed and can remove/reduce upfront settlement-fund barriers." : "Yes \u2014 a valid job offer from a licensed/recognized employer in the destination country is normally required before applying for the work residence permit.");
+    const financialProofAnswer = seed.financialProofRequirement || (hasHighProofOfFunds ? "Independent points-based streams require substantial proof of settlement funds (verify current family-size threshold on official portal). Employer-sponsored work visas generally rely on your employment contract salary instead." : "Generally satisfied by your signed employment contract meeting the statutory minimum salary threshold (confirm on official government portal).");
+    const whoPaysAnswer = /employer|sponsor/i.test(seed.employerSponsorshipOptions) ? "Employer typically pays sponsorship/licensing fees and may cover work-permit fees and relocation flights (negotiate in offer); applicant pays personal passport/document legalization and any non-reimbursed visa fee." : "Applicant normally pays government immigration fees, credential evaluations, and relocation unless an employer explicitly sponsors relocation.";
+    return {
+      id: seed.id,
+      country,
+      region: seed.region,
+      programName: seed.programName,
+      officialAuthority: seed.officialAuthority,
+      officialUrl: seed.officialApplicationUrl,
+      shortageListUrl: seed.shortageOccupationListUrl,
+      pathwayCategory,
+      isRecommendedByResearch,
+      isSelectedByUser,
+      whyRecommended,
+      eligibilityClassification,
+      suitabilityNote: confirmations.length > 0 ? `${seed.ethiopianEligibilityNotes} Items to verify: ${confirmations.join(" ")}` : `${seed.ethiopianEligibilityNotes} Finance/accounting occupations are listed among demand roles.`,
+      budgetAlert,
+      withinUserBudget,
+      q1_canEthiopianApplyFromEthiopia: seed.ethiopianEligibilityNotes,
+      q2_educationRequired: seed.educationRequirement,
+      q3_experienceRequired: seed.experienceRequirement,
+      q4_jobOfferNecessary: isJobOfferNecessary,
+      q5_languageTestRequired: seed.languageRequirement,
+      q6_financialProofRequired: financialProofAnswer,
+      q7_officialFees: seed.governmentApplicationFees,
+      q8_whoPaysExpenses: whoPaysAnswer,
+      q9_canRelocateInitiallyAlone: "Yes \u2014 principal applicants can relocate alone first to stabilize employment and housing before initiating dependent visas (verify dependent timing rules on official portal).",
+      q10_familyReunificationRules: seed.familyRelocationOptions,
+      q11_leadsToPermanentResidence: `${pathwayCategory}: ${seed.permanentResidencyRoute}`,
+      q12_estimatedTimeline: seed.estimatedProcessingStages || (seed.pathwayClassification === "direct_pr" ? "Typically 6\u201314 months end-to-end (credential assessment, language test, invitation, and PR decision)." : "Typically 1\u20134 months for employer-sponsored work visa processing, followed by 2\u20135 years of lawful work residence to qualify for PR."),
+      q13_officialProcedureAndLink: `Apply directly via ${seed.officialAuthority} (${seed.officialApplicationUrl}) \u2014 verify current occupation shortage list at ${seed.shortageOccupationListUrl}.`
+    };
+  });
+  return [...gulfEmployerSponsoredRoutes, ...mappedSeeds].sort((a, b) => {
+    if (a.isSelectedByUser !== b.isSelectedByUser) return a.isSelectedByUser ? -1 : 1;
+    if (a.isRecommendedByResearch !== b.isRecommendedByResearch) return a.isRecommendedByResearch ? -1 : 1;
+    const rank = {
+      "HIGHLY SUITABLE": 3,
+      "POTENTIALLY SUITABLE": 2,
+      "NOT ELIGIBLE": 1
+    };
+    return rank[b.eligibilityClassification] - rank[a.eligibilityClassification];
+  });
+}
+function buildCountryRecommendations(evaluatedOpps, pathways, selectedCountrySet) {
+  const byCountry = /* @__PURE__ */ new Map();
+  for (const p of pathways) {
+    const key = p.country.toLowerCase();
+    const isPriorityReloc = Boolean(PRIORITY_RELOCATION_COUNTRIES[p.country]);
+    const isPrioritySettle = Boolean(PRIORITY_SETTLEMENT_COUNTRIES[p.country]);
+    const tier = isPriorityReloc ? "priority_relocation" : isPrioritySettle ? "priority_settlement" : "recommended_global";
+    byCountry.set(key, {
+      country: p.country,
+      region: p.region,
+      tier,
+      tierLabel: tier === "priority_relocation" ? "Employer-Funded Relocation Priority" : tier === "priority_settlement" ? "Career & Long-Term Settlement Priority" : "Verified Global Demand",
+      isRecommendedByResearch: p.isRecommendedByResearch,
+      isSelectedByUser: selectedCountrySet.has(key),
+      whyRecommended: p.whyRecommended,
+      activeOpportunityCount: 0,
+      highlySuitableCount: 0,
+      potentiallySuitableCount: 0,
+      employerFundedCount: 0,
+      budgetFriendlyCount: 0,
+      pathwayTypeLabel: p.pathwayCategory,
+      officialPortalUrl: p.officialUrl
+    });
+  }
+  for (const opp of evaluatedOpps) {
+    const key = opp.country.toLowerCase();
+    if (!byCountry.has(key)) {
+      byCountry.set(key, {
+        country: opp.country,
+        region: opp.region,
+        tier: "recommended_global",
+        tierLabel: "Active International Hiring",
+        isRecommendedByResearch: Boolean(
+          PRIORITY_RELOCATION_COUNTRIES[opp.country] || PRIORITY_SETTLEMENT_COUNTRIES[opp.country]
+        ),
+        isSelectedByUser: selectedCountrySet.has(key),
+        whyRecommended: "Currently has verified active international recruitment listings open to eligible global applicants.",
+        activeOpportunityCount: 0,
+        highlySuitableCount: 0,
+        potentiallySuitableCount: 0,
+        employerFundedCount: 0,
+        budgetFriendlyCount: 0,
+        pathwayTypeLabel: "Employer-Sponsored / International Recruitment",
+        officialPortalUrl: opp.directOfficialLink
+      });
+    }
+    const entry = byCountry.get(key);
+    entry.activeOpportunityCount += 1;
+    if (opp.eligibilityClassification === "HIGHLY SUITABLE") entry.highlySuitableCount += 1;
+    if (opp.eligibilityClassification === "POTENTIALLY SUITABLE") entry.potentiallySuitableCount += 1;
+    if (opp.costBreakdown.employerPaidRelocation || opp.costBreakdown.governmentFunded) {
+      entry.employerFundedCount += 1;
+    }
+    if (opp.costBreakdown.withinUserBudget === "Yes") entry.budgetFriendlyCount += 1;
+  }
+  for (const selKey of selectedCountrySet) {
+    if (!byCountry.has(selKey)) {
+      const displayName = selKey.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      byCountry.set(selKey, {
+        country: displayName,
+        region: "Global",
+        tier: "recommended_global",
+        tierLabel: "User-Selected Focus Country",
+        isRecommendedByResearch: false,
+        isSelectedByUser: true,
+        whyRecommended: "Selected by you for continuous priority monitoring.",
+        activeOpportunityCount: 0,
+        highlySuitableCount: 0,
+        potentiallySuitableCount: 0,
+        employerFundedCount: 0,
+        budgetFriendlyCount: 0,
+        pathwayTypeLabel: "Monitor Official Portals",
+        officialPortalUrl: ""
+      });
+    }
+  }
+  return Array.from(byCountry.values()).sort((a, b) => {
+    if (a.isSelectedByUser !== b.isSelectedByUser) return a.isSelectedByUser ? -1 : 1;
+    const tierRank = { priority_relocation: 3, priority_settlement: 2, recommended_global: 1 };
+    if (tierRank[b.tier] !== tierRank[a.tier]) return tierRank[b.tier] - tierRank[a.tier];
+    if (b.highlySuitableCount !== a.highlySuitableCount) return b.highlySuitableCount - a.highlySuitableCount;
+    return b.activeOpportunityCount - a.activeOpportunityCount;
+  });
+}
+function computeOppFingerprint(opp) {
+  return crypto3.createHash("sha1").update(
+    `${opp.title}|${opp.organization}|${opp.country}|${opp.deadline?.deadlineDateRaw || ""}|${opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || ""}|${opp.officialApplicationUrl || ""}`
+  ).digest("hex").slice(0, 16);
+}
+function evaluateMigrationHubPayload(params) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const profile = sanitizeProfile(params.profileInput);
+  const selectedCountries = sanitizeSelectedCountries(params.selectedCountries);
+  const selectedCountrySet = new Set(selectedCountries.map((c) => c.toLowerCase()));
+  const snapshotMap = params.snapshotMap || {};
+  const seenKey = /* @__PURE__ */ new Set();
+  const activeVerified = [];
+  for (const opp of params.rawOpportunities || []) {
+    if (!isOpportunityActiveAndDisplayable(opp)) continue;
+    const dedupKey = `${String(opp.title || "").toLowerCase().trim()}|${String(opp.organization || "").toLowerCase().trim()}|${normalizeCountryKey(opp.country || "").toLowerCase()}`;
+    if (seenKey.has(dedupKey)) continue;
+    seenKey.add(dedupKey);
+    activeVerified.push(opp);
+  }
+  const evaluated = activeVerified.map((opp) => {
+    const snap = snapshotMap[opp.id];
+    const currentFp = computeOppFingerprint(opp);
+    let changeStatus = "unchanged";
+    if (Object.keys(snapshotMap).length > 0) {
+      if (!snap) {
+        changeStatus = "new";
+      } else if (snap.fingerprint !== currentFp) {
+        changeStatus = "updated";
+      }
+    }
+    return evaluateSingleOpportunity(opp, profile, selectedCountrySet, changeStatus, snap?.firstSeenAt);
+  }).sort((a, b) => {
+    const classRank = {
+      "HIGHLY SUITABLE": 3,
+      "POTENTIALLY SUITABLE": 2,
+      "NOT ELIGIBLE": 1
+    };
+    if (classRank[b.eligibilityClassification] !== classRank[a.eligibilityClassification]) {
+      return classRank[b.eligibilityClassification] - classRank[a.eligibilityClassification];
+    }
+    if (a.isInSelectedCountry !== b.isInSelectedCountry) {
+      return a.isInSelectedCountry ? -1 : 1;
+    }
+    if (b.suitabilityScore !== a.suitabilityScore) {
+      return b.suitabilityScore - a.suitabilityScore;
+    }
+    return a.title.localeCompare(b.title);
+  });
+  const pathways13 = build13PointImmigrationRecords(profile, selectedCountrySet);
+  const countryIntel = buildCountryRecommendations(evaluated, pathways13, selectedCountrySet);
+  const summary = {
+    totalActiveVerified: evaluated.length,
+    highlySuitableCount: evaluated.filter((o) => o.eligibilityClassification === "HIGHLY SUITABLE").length,
+    potentiallySuitableCount: evaluated.filter((o) => o.eligibilityClassification === "POTENTIALLY SUITABLE").length,
+    notEligibleCount: evaluated.filter((o) => o.eligibilityClassification === "NOT ELIGIBLE").length,
+    matchingProfileCount: evaluated.filter((o) => o.matchesUserProfile).length,
+    nonMatchingCount: evaluated.filter((o) => !o.matchesUserProfile).length,
+    washOpportunitiesCount: evaluated.filter((o) => o.isWashOpportunity).length,
+    scholarshipsAndTrainingCount: evaluated.filter((o) => o.isScholarshipOrTraining).length,
+    budgetFriendlyCount: evaluated.filter((o) => o.costBreakdown.withinUserBudget === "Yes").length,
+    applyFromEthiopiaCount: evaluated.filter((o) => o.canApplyFromEthiopia === "Yes").length,
+    selectedCountryMatchesCount: evaluated.filter((o) => o.isInSelectedCountry && o.matchesUserProfile).length,
+    newSinceLastCheckCount: evaluated.filter((o) => o.changeStatus === "new").length,
+    updatedSinceLastCheckCount: evaluated.filter((o) => o.changeStatus === "updated").length,
+    countriesTrackedCount: countryIntel.length
+  };
+  return {
+    success: true,
+    generatedAt: nowIso,
+    lastRefreshAt: params.lastRefreshAt || nowIso,
+    nextRefreshAt: params.nextRefreshAt || new Date(Date.now() + REFRESH_INTERVAL_MS).toISOString(),
+    refreshIntervalMinutes: 30,
+    officialDisclaimer: PR_OFFICIAL_DISCLAIMER,
+    summary,
+    profileUsed: profile,
+    selectedCountries,
+    recommendedCountries: countryIntel,
+    opportunities: evaluated,
+    immigrationPathways13Point: pathways13,
+    changeHistory: params.changeHistory || []
+  };
+}
+function registerGlobalMigrationHubRoutes(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    getRequesterUid
+  } = deps;
+  const hubStorePath = path4.join(runtimeBaseDir, "data", "global_migration_hub_store.json");
+  const globalOppsStorePath = path4.join(runtimeBaseDir, "data", "global_opportunities_store.json");
+  function loadHubStore() {
+    ensureRuntimeDataDir();
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const fallback = {
+      version: 1,
+      updatedAt: nowIso,
+      lastRefreshAt: nowIso,
+      nextRefreshAt: new Date(Date.now() + REFRESH_INTERVAL_MS).toISOString(),
+      users: {},
+      opportunitySnapshot: {},
+      changeHistory: []
+    };
+    const loaded = loadJsonFileSafe(hubStorePath, fallback);
+    return {
+      version: Number(loaded.version || 1),
+      updatedAt: loaded.updatedAt || nowIso,
+      lastRefreshAt: loaded.lastRefreshAt || nowIso,
+      nextRefreshAt: loaded.nextRefreshAt || new Date(Date.now() + REFRESH_INTERVAL_MS).toISOString(),
+      users: loaded.users && typeof loaded.users === "object" ? loaded.users : {},
+      opportunitySnapshot: loaded.opportunitySnapshot && typeof loaded.opportunitySnapshot === "object" ? loaded.opportunitySnapshot : {},
+      changeHistory: Array.isArray(loaded.changeHistory) ? loaded.changeHistory : []
+    };
+  }
+  function saveHubStore(store) {
+    ensureRuntimeDataDir();
+    store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    writeJsonFileAtomic(hubStorePath, store);
+  }
+  function loadLiveGlobalOpportunities() {
+    const store = loadJsonFileSafe(globalOppsStorePath, {});
+    return Array.isArray(store.international_opportunities) ? store.international_opportunities : [];
+  }
+  function runChangeMonitoringSweep(reason) {
+    const store = loadHubStore();
+    const liveOpps = loadLiveGlobalOpportunities().filter((o) => isOpportunityActiveAndDisplayable(o));
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const prevSnapshot = store.opportunitySnapshot || {};
+    const hadBaseline = Object.keys(prevSnapshot).length > 0;
+    const nextSnapshot = {};
+    const newTitles = [];
+    const updatedTitles = [];
+    const activeIds = /* @__PURE__ */ new Set();
+    for (const opp of liveOpps) {
+      activeIds.add(opp.id);
+      const fp = computeOppFingerprint(opp);
+      const prev = prevSnapshot[opp.id];
+      const dl = opp.deadline?.deadlineDateRaw || opp.deadline?.deadlineUtcIso || "";
+      const sf = opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || "";
+      if (!prev) {
+        if (hadBaseline) newTitles.push(`${opp.title} (${normalizeCountryKey(opp.country)})`);
+        nextSnapshot[opp.id] = {
+          id: opp.id,
+          title: opp.title,
+          deadline: dl,
+          salaryOrFunding: sf,
+          firstSeenAt: nowIso,
+          lastUpdatedAt: nowIso,
+          fingerprint: fp
+        };
+      } else {
+        const changed = prev.fingerprint !== fp;
+        if (changed) {
+          updatedTitles.push(`${opp.title} (${normalizeCountryKey(opp.country)})`);
+        }
+        nextSnapshot[opp.id] = {
+          ...prev,
+          title: opp.title,
+          deadline: dl,
+          salaryOrFunding: sf,
+          lastUpdatedAt: changed ? nowIso : prev.lastUpdatedAt,
+          fingerprint: fp
+        };
+      }
+    }
+    let expiredRemovedCount = 0;
+    if (hadBaseline) {
+      for (const oldId of Object.keys(prevSnapshot)) {
+        if (!activeIds.has(oldId)) expiredRemovedCount += 1;
+      }
+    }
+    store.opportunitySnapshot = nextSnapshot;
+    store.lastRefreshAt = nowIso;
+    store.nextRefreshAt = new Date(Date.now() + REFRESH_INTERVAL_MS).toISOString();
+    let createdEvent = null;
+    const hasMeaningfulDelta = !hadBaseline || newTitles.length > 0 || updatedTitles.length > 0 || expiredRemovedCount > 0;
+    if (hasMeaningfulDelta) {
+      createdEvent = {
+        id: `chg_${Date.now()}_${crypto3.randomBytes(3).toString("hex")}`,
+        detectedAt: nowIso,
+        summary: !hadBaseline ? `Baseline established: tracking ${liveOpps.length} active verified global opportunities across banking, finance, WASH, scholarships & training.` : `Monitoring check (${reason}): ${newTitles.length} new, ${updatedTitles.length} updated, ${expiredRemovedCount} expired/closed removed.`,
+        newCount: hadBaseline ? newTitles.length : liveOpps.length,
+        updatedCount: updatedTitles.length,
+        expiredRemovedCount,
+        totalActiveVerified: liveOpps.length,
+        newTitles: newTitles.slice(0, 12),
+        updatedTitles: updatedTitles.slice(0, 12)
+      };
+      store.changeHistory = [createdEvent, ...store.changeHistory || []].slice(0, 40);
+    }
+    saveHubStore(store);
+    return { store, event: createdEvent };
+  }
+  try {
+    runChangeMonitoringSweep("startup");
+  } catch (err) {
+    console.warn("[GlobalMigrationHub] Initial snapshot notice:", err);
+  }
+  if (!isVercel && process.env.NODE_ENV !== "test") {
+    const timer = setInterval(() => {
+      try {
+        runChangeMonitoringSweep("interval_30m");
+      } catch (err) {
+        console.warn("[GlobalMigrationHub] 30-min refresh notice:", err);
+      }
+    }, REFRESH_INTERVAL_MS);
+    if (typeof timer.unref === "function") timer.unref();
+  }
+  app.post("/api/global-migration-hub/evaluate", (req, res) => {
+    try {
+      const store = loadHubStore();
+      const uid = getRequesterUid(req);
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const ownWorkspace = uid ? store.users[uid] : void 0;
+      const profileInput = body.profile ?? ownWorkspace?.profile ?? DEFAULT_GENERAL_MIGRATION_PROFILE;
+      const selectedCountries = Array.isArray(body.selectedCountries) ? body.selectedCountries : ownWorkspace?.selectedCountries ?? [];
+      const liveOpps = loadLiveGlobalOpportunities();
+      const payload = evaluateMigrationHubPayload({
+        rawOpportunities: liveOpps,
+        profileInput,
+        selectedCountries,
+        snapshotMap: store.opportunitySnapshot,
+        changeHistory: store.changeHistory,
+        lastRefreshAt: store.lastRefreshAt,
+        nextRefreshAt: store.nextRefreshAt
+      });
+      res.json(payload);
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to evaluate global migration and career opportunities."
+      });
+    }
+  });
+  app.get("/api/global-migration-hub/user-state", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        error: "Sign in required to load your private career & migration workspace."
+      });
+    }
+    const store = loadHubStore();
+    const existing = store.users[uid];
+    const workspace = existing ? {
+      profile: sanitizeProfile(existing.profile),
+      selectedCountries: sanitizeSelectedCountries(existing.selectedCountries),
+      savedOpportunityIds: Array.isArray(existing.savedOpportunityIds) ? existing.savedOpportunityIds.slice(0, 200) : [],
+      applicationTracker: sanitizeTrackerItems(existing.applicationTracker),
+      updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+    } : {
+      profile: sanitizeProfile(DEFAULT_GENERAL_MIGRATION_PROFILE),
+      selectedCountries: [],
+      savedOpportunityIds: [],
+      applicationTracker: [],
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return res.json({ success: true, workspace });
+  });
+  app.put("/api/global-migration-hub/user-state", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        error: "Sign in required to save your private career & migration workspace."
+      });
+    }
+    try {
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const store = loadHubStore();
+      const prev = store.users[uid];
+      const nextWorkspace = {
+        profile: body.profile ? sanitizeProfile(body.profile) : sanitizeProfile(prev?.profile),
+        selectedCountries: Array.isArray(body.selectedCountries) ? sanitizeSelectedCountries(body.selectedCountries) : sanitizeSelectedCountries(prev?.selectedCountries),
+        savedOpportunityIds: Array.isArray(body.savedOpportunityIds) ? Array.from(
+          new Set(
+            body.savedOpportunityIds.map((id) => String(id || "").trim().slice(0, 140)).filter(Boolean)
+          )
+        ).slice(0, 200) : Array.isArray(prev?.savedOpportunityIds) ? prev.savedOpportunityIds : [],
+        applicationTracker: Array.isArray(body.applicationTracker) ? sanitizeTrackerItems(body.applicationTracker) : sanitizeTrackerItems(prev?.applicationTracker),
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      store.users[uid] = nextWorkspace;
+      saveHubStore(store);
+      return res.json({ success: true, workspace: nextWorkspace });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to save your private workspace."
+      });
+    }
+  });
+  app.post("/api/global-migration-hub/refresh-changes", (_req, res) => {
+    try {
+      const { store, event } = runChangeMonitoringSweep("manual");
+      res.json({
+        success: true,
+        lastRefreshAt: store.lastRefreshAt,
+        nextRefreshAt: store.nextRefreshAt,
+        meaningfulChangeDetected: Boolean(event),
+        latestEvent: event,
+        changeHistory: store.changeHistory
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to check for opportunity updates."
+      });
+    }
+  });
+}
+
+// serverBranchManagerJobs.ts
+import * as path5 from "path";
+import * as crypto4 from "crypto";
+
+// src/types/branchManagerJobs.ts
+var ALLOWED_BRANCH_MANAGER_REGIONS = [
+  "Scandinavian",
+  "Europe",
+  "Middle East",
+  "Africa (International Banks & Companies)"
+];
+var TARGET_BRANCH_MANAGER_POSITIONS = [
+  "Branch Manager",
+  "Banking Operations Manager",
+  "Finance Manager",
+  "Finance and Administration Manager",
+  "Financial Controller",
+  "Credit Manager",
+  "Relationship Manager",
+  "SME Banking Manager",
+  "Financial Operations Manager",
+  "Microfinance Operations Manager",
+  "Credit Operations Manager",
+  "Compliance Manager",
+  "Risk Manager",
+  "Internal Control Manager",
+  "AML/KYC Manager",
+  "Digital Banking Operations Manager",
+  "Payment Operations Manager",
+  "Grants Finance Manager",
+  "Project Finance Manager"
+];
+var DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE = {
+  profileLabel: "My Senior Banking & Finance Profile",
+  nationality: "Ethiopian",
+  currentResidence: "Ethiopia",
+  educationDegree: "Bachelor's Degree",
+  fieldOfStudy: "Accounting and Finance",
+  institution: "",
+  graduationYear: "",
+  totalBankingYears: 5,
+  branchManagerYears: 2,
+  currentOrRecentPosition: "Banking & Finance Manager",
+  employers: [],
+  coreSkills: [
+    "Banking operations",
+    "Branch management",
+    "Accounting",
+    "Financial management",
+    "Credit operations",
+    "Risk and internal controls",
+    "Customer relationship management",
+    "Staff supervision"
+  ],
+  targetPositions: [...TARGET_BRANCH_MANAGER_POSITIONS],
+  languages: ["English"],
+  hasMastersDegree: false,
+  hasEnglishTest: false,
+  minimumMonthlyGrossUsd: 3e3
+};
+
+// serverBranchManagerJobs.ts
+var OWNER_PRIVATE_SAVED_PROFILE = {
+  profileLabel: "Saved Branch Manager Profile (Owner Account)",
+  nationality: "Ethiopian",
+  currentResidence: "Ethiopia",
+  educationDegree: "Bachelor of Arts (BA)",
+  fieldOfStudy: "Accounting and Finance",
+  institution: "Mekelle University",
+  graduationYear: "2016",
+  totalBankingYears: 9,
+  branchManagerYears: 3,
+  currentOrRecentPosition: "Branch Manager",
+  employers: [
+    "Commercial Bank of Ethiopia (CBE)",
+    "Nib International Bank",
+    "Oromia Bank",
+    "Tsedey Bank S.C."
+  ],
+  coreSkills: [
+    "Banking operations",
+    "Branch management",
+    "Accounting",
+    "Financial management",
+    "Deposit mobilization",
+    "Credit operations",
+    "Customer service",
+    "Business development",
+    "Staff supervision",
+    "Performance management"
+  ],
+  targetPositions: [...TARGET_BRANCH_MANAGER_POSITIONS],
+  languages: ["English", "Amharic"],
+  hasMastersDegree: false,
+  hasEnglishTest: false,
+  minimumMonthlyGrossUsd: 3e3
+};
+var FALLBACK_FX_USD_BASE = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.785,
+  CHF: 0.88,
+  SEK: 10.65,
+  NOK: 10.9,
+  DKK: 6.88,
+  ISK: 138,
+  AED: 3.6725,
+  SAR: 3.75,
+  QAR: 3.64,
+  KWD: 0.307,
+  OMR: 0.385,
+  BHD: 0.376,
+  JOD: 0.709,
+  ZAR: 18.2,
+  KES: 129,
+  PLN: 4.02,
+  CZK: 23.4,
+  HUF: 372,
+  RON: 4.58,
+  EGP: 49,
+  MAD: 9.9,
+  NGN: 1580
+};
+var SCANDINAVIAN_COUNTRIES = [
+  { country: "Sweden", patterns: /\b(sweden|stockholm|gothenburg|malm[öo]|uppsala)\b/i },
+  { country: "Norway", patterns: /\b(norway|oslo|bergen|trondheim|stavanger)\b/i },
+  { country: "Denmark", patterns: /\b(denmark|copenhagen|aarhus|odense|danish)\b/i },
+  { country: "Finland", patterns: /\b(finland|helsinki|espoo|tampere|turku)\b/i },
+  { country: "Iceland", patterns: /\b(iceland|reykjavik)\b/i }
+];
+var EUROPE_COUNTRIES = [
+  { country: "United Kingdom", patterns: /\b(united kingdom|uk\b|london|manchester|edinburgh|birmingham|cardiff|bristol|glasgow|england|scotland)\b/i },
+  { country: "Germany", patterns: /\b(germany|deutschland|berlin|frankfurt|munich|münchen|hamburg|cologne|köln|düsseldorf|stuttgart)\b/i },
+  { country: "Netherlands", patterns: /\b(netherlands|amsterdam|rotterdam|utrecht|the hague|eindhoven|dutch)\b/i },
+  { country: "Ireland", patterns: /\b(ireland|dublin|cork|galway|limerick)\b/i },
+  { country: "Switzerland", patterns: /\b(switzerland|zurich|zürich|geneva|genève|basel|bern|lausanne|ch-)\b/i },
+  { country: "Luxembourg", patterns: /\b(luxembourg)\b/i },
+  { country: "France", patterns: /\b(france|paris|lyon|marseille|toulouse|nice|lille)\b/i },
+  { country: "Spain", patterns: /\b(spain|madrid|barcelona|valencia|malaga|seville|bilbao)\b/i },
+  { country: "Austria", patterns: /\b(austria|vienna|wien|graz|salzburg)\b/i },
+  { country: "Belgium", patterns: /\b(belgium|brussels|bruxelles|antwerp|ghent)\b/i },
+  { country: "Portugal", patterns: /\b(portugal|lisbon|porto)\b/i },
+  { country: "Italy", patterns: /\b(italy|milan|milano|rome|roma|turin|florence)\b/i },
+  { country: "Poland", patterns: /\b(poland|warsaw|krakow|kraków|wroclaw|gdansk)\b/i },
+  { country: "Estonia", patterns: /\b(estonia|tallinn)\b/i },
+  { country: "Lithuania", patterns: /\b(lithuania|vilnius)\b/i },
+  { country: "Latvia", patterns: /\b(latvia|riga)\b/i },
+  { country: "Czech Republic", patterns: /\b(czech|prague|praha|brno)\b/i },
+  { country: "Hungary", patterns: /\b(hungary|budapest)\b/i },
+  { country: "Malta", patterns: /\b(malta|valletta)\b/i },
+  { country: "Cyprus", patterns: /\b(cyprus|nicosia|limassol)\b/i },
+  { country: "Romania", patterns: /\b(romania|bucharest)\b/i },
+  { country: "Bulgaria", patterns: /\b(bulgaria|sofia)\b/i },
+  { country: "Greece", patterns: /\b(greece|athens)\b/i },
+  { country: "Croatia", patterns: /\b(croatia|zagreb)\b/i },
+  { country: "Slovakia", patterns: /\b(slovakia|bratislava)\b/i },
+  { country: "Slovenia", patterns: /\b(slovenia|ljubljana)\b/i },
+  { country: "Europe", patterns: /\b(europe|emea|eu\s+remote)\b/i }
+];
+var MIDDLE_EAST_COUNTRIES = [
+  { country: "United Arab Emirates", patterns: /\b(united arab emirates|uae\b|dubai|abu dhabi|sharjah|difc|adgm)\b/i },
+  { country: "Saudi Arabia", patterns: /\b(saudi arabia|ksa\b|riyadh|jeddah|dammam|al khobar|neom)\b/i },
+  { country: "Qatar", patterns: /\b(qatar|doha|qfc)\b/i },
+  { country: "Kuwait", patterns: /\b(kuwait)\b/i },
+  { country: "Bahrain", patterns: /\b(bahrain|manama)\b/i },
+  { country: "Oman", patterns: /\b(oman|muscat)\b/i },
+  { country: "Jordan", patterns: /\b(jordan|amman)\b/i }
+];
+var AFRICA_COUNTRIES = [
+  { country: "Kenya", patterns: /\b(kenya|nairobi|mombasa)\b/i },
+  { country: "South Africa", patterns: /\b(south africa|johannesburg|cape town|pretoria|sandton)\b/i },
+  { country: "Rwanda", patterns: /\b(rwanda|kigali)\b/i },
+  { country: "Egypt", patterns: /\b(egypt|cairo|alexandria)\b/i },
+  { country: "Morocco", patterns: /\b(morocco|casablanca|rabat)\b/i },
+  { country: "Nigeria", patterns: /\b(nigeria|lagos|abuja)\b/i },
+  { country: "Ghana", patterns: /\b(ghana|accra)\b/i },
+  { country: "C\xF4te d\u2019Ivoire", patterns: /\b(cote d'ivoire|côte d'ivoire|ivory coast|abidjan)\b/i },
+  { country: "Senegal", patterns: /\b(senegal|dakar)\b/i },
+  { country: "Tanzania", patterns: /\b(tanzania|dar es salaam)\b/i },
+  { country: "Uganda", patterns: /\b(uganda|kampala)\b/i },
+  { country: "Mauritius", patterns: /\b(mauritius|port louis|ebene)\b/i },
+  { country: "Botswana", patterns: /\b(botswana|gaborone)\b/i },
+  { country: "Namibia", patterns: /\b(namibia|windhoek)\b/i },
+  { country: "Zambia", patterns: /\b(zambia|lusaka)\b/i },
+  { country: "Tunisia", patterns: /\b(tunisia|tunis)\b/i },
+  { country: "Ethiopia", patterns: /\b(ethiopia|addis ababa)\b/i },
+  { country: "Democratic Republic of the Congo", patterns: /\b(drc|democratic republic of the congo|kinshasa)\b/i },
+  { country: "Cameroon", patterns: /\b(cameroon|yaounde|douala)\b/i },
+  { country: "Malawi", patterns: /\b(malawi|lilongwe)\b/i },
+  { country: "Mozambique", patterns: /\b(mozambique|maputo)\b/i }
+];
+var DISALLOWED_REGIONS_REGEX = /\b(united states|usa\b|u\.s\.a\.|new york|san francisco|chicago|seattle|austin|boston|atlanta|miami|california|texas|canada|toronto|vancouver|montreal|ottawa|calgary|australia|sydney|melbourne|brisbane|perth|new zealand|auckland|wellington|singapore|tokyo|japan|india|bengaluru|bangalore|mumbai|hyderabad|delhi|manila|philippines|brazil|sao paulo|mexico|argentina|colombia|chile|hong kong|china|shanghai|beijing|south korea|seoul)\b/i;
+var INTERNATIONAL_AFRICA_EMPLOYER_PATTERNS = [
+  /\b(african development bank|afdb|world bank|international finance corporation|ifc\b|imf\b|international monetary fund|afreximbank|trade and development bank|tdb\b|east african development bank|ebrd|eib\b|european investment bank|african union|uneca)\b/i,
+  /\b(standard chartered|citibank|citigroup|hsbc|barclays|absa group|standard bank|ecobank|société générale|societe generale|bnp paribas|jp ?morgan|goldman sachs|morgan stanley|deutsche bank|ing bank|rabobank|credit suisse|ubs\b|access bank plc|uba\b|united bank for africa|first bank|equity group|kcb group|bank of africa|attijariwafa|fnb\b|nedbank|investec)\b/i,
+  /\b(adyen|stripe|wise|sumup|visa\b|mastercard|western union|worldremit|zepz|flutterwave|paystack|chipper cash|m-kopa|tala\b|wave mobile|monzo|revolut|n26|mollie|pleo|gocardless|tide\b|transfergo|careem|paypal|dlocal|interswitch|mfs africa|onafric)\b/i,
+  /\b(deloitte|pwc|pricewaterhousecoopers|ernst\s*&\s*young|ey\b|kpmg|mckinsey|boston consulting|bain\s*&\s*company|accenture|bdo international|grant thornton)\b/i,
+  /\b(united nations|undp|unicef|unhcr|wfp\b|who\b|unops|iom\b|fao\b|ilo\b|ifrc|icrc|international rescue committee|irc\b|mercy corps|save the children|world vision|oxfam|care international|wateraid|danish refugee council|norwegian refugee council|action against hunger|plan international|tearfund|solidarités|médecins sans frontières|msf\b|catholic relief services|crs\b|fhi 360|chemonics|dai\b|abt global|dt global|rti international)\b/i
+];
+function isVerifiedInternationalEmployerInAfrica(employerName, descriptionText = "", explicitFlag = false) {
+  if (explicitFlag) return true;
+  const name = String(employerName || "").trim();
+  if (!name) return false;
+  if (INTERNATIONAL_AFRICA_EMPLOYER_PATTERNS.some((rx) => rx.test(name))) return true;
+  if (/\b(international bank|multinational|pan-african bank|development bank|global financial|global payments)\b/i.test(
+    `${name} ${descriptionText.slice(0, 600)}`
+  )) {
+    return true;
+  }
+  return false;
+}
+function classifyAllowedRegionScope(params) {
+  const combined = `${params.countryHint || ""} ${params.cityHint || ""} ${params.locationRaw || ""}`.trim();
+  for (const item of SCANDINAVIAN_COUNTRIES) {
+    if (item.patterns.test(combined)) {
+      return {
+        allowed: true,
+        regionScope: "Scandinavian",
+        country: item.country,
+        city: extractCityFromLocation(params.locationRaw, params.cityHint, item.country),
+        rejectedAsLocalAfrican: false
+      };
+    }
+  }
+  for (const item of MIDDLE_EAST_COUNTRIES) {
+    if (item.patterns.test(combined)) {
+      return {
+        allowed: true,
+        regionScope: "Middle East",
+        country: item.country,
+        city: extractCityFromLocation(params.locationRaw, params.cityHint, item.country),
+        rejectedAsLocalAfrican: false
+      };
+    }
+  }
+  for (const item of EUROPE_COUNTRIES) {
+    if (item.patterns.test(combined)) {
+      return {
+        allowed: true,
+        regionScope: "Europe",
+        country: item.country,
+        city: extractCityFromLocation(params.locationRaw, params.cityHint, item.country),
+        rejectedAsLocalAfrican: false
+      };
+    }
+  }
+  for (const item of AFRICA_COUNTRIES) {
+    if (item.patterns.test(combined)) {
+      const isIntl = isVerifiedInternationalEmployerInAfrica(
+        params.employerName,
+        params.descriptionText || "",
+        Boolean(params.isInternationalEmployerVerified)
+      );
+      if (!isIntl) {
+        return {
+          allowed: false,
+          regionScope: null,
+          country: item.country,
+          city: extractCityFromLocation(params.locationRaw, params.cityHint, item.country),
+          rejectedAsLocalAfrican: true
+        };
+      }
+      return {
+        allowed: true,
+        regionScope: "Africa (International Banks & Companies)",
+        country: item.country,
+        city: extractCityFromLocation(params.locationRaw, params.cityHint, item.country),
+        rejectedAsLocalAfrican: false
+      };
+    }
+  }
+  if (DISALLOWED_REGIONS_REGEX.test(combined) || !combined) {
+    return {
+      allowed: false,
+      regionScope: null,
+      country: params.countryHint || "Outside Scope",
+      city: params.cityHint || "",
+      rejectedAsLocalAfrican: false
+    };
+  }
+  return {
+    allowed: false,
+    regionScope: null,
+    country: params.countryHint || "Unconfirmed Region",
+    city: params.cityHint || "",
+    rejectedAsLocalAfrican: false
+  };
+}
+function extractCityFromLocation(locationRaw, cityHint, country) {
+  if (cityHint && cityHint.trim()) return cityHint.trim();
+  const parts = String(locationRaw || "").split(/[,;|/\-–]+/).map((p) => p.trim()).filter((p) => p.length >= 2 && p.toLowerCase() !== country.toLowerCase() && !/^remote$/i.test(p));
+  return parts[0] || country;
+}
+function stripHtmlToPlainText2(html) {
+  return String(html || "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&pound;/gi, "\xA3").replace(/&euro;/gi, "\u20AC").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|li|div|h[1-6])>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+function normalizeCurrencyCode(symOrCode) {
+  const s = symOrCode.trim().toUpperCase();
+  if (s === "$" || s === "US$" || s === "USD") return "USD";
+  if (s === "\u20AC" || s === "EUR") return "EUR";
+  if (s === "\xA3" || s === "GBP") return "GBP";
+  if (s === "CHF" || s === "SFR") return "CHF";
+  if (s === "KR" || s === "SEK") return "SEK";
+  if (s === "NOK") return "NOK";
+  if (s === "DKK") return "DKK";
+  if (s === "AED" || s === "DHS") return "AED";
+  if (s === "SAR" || s === "SR") return "SAR";
+  if (s === "QAR") return "QAR";
+  if (s === "KWD") return "KWD";
+  if (s === "OMR") return "OMR";
+  if (s === "BHD") return "BHD";
+  if (s === "ZAR" || s === "R") return "ZAR";
+  if (s === "KES") return "KES";
+  if (s === "PLN") return "PLN";
+  if (s === "CZK") return "CZK";
+  return s;
+}
+function currencySymbol(code) {
+  switch (code) {
+    case "USD":
+      return "$";
+    case "EUR":
+      return "\u20AC";
+    case "GBP":
+      return "\xA3";
+    default:
+      return `${code} `;
+  }
+}
+function parseNumberToken(raw) {
+  const cleaned = raw.trim().toLowerCase().replace(/,/g, "");
+  const kMatch = cleaned.match(/^(\d+(?:\.\d+)?)k$/);
+  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1e3);
+  const plain = parseFloat(cleaned);
+  if (Number.isNaN(plain) || plain <= 0) return null;
+  return Math.round(plain);
+}
+function parseGuaranteedBaseSalaryUsd(rawText, fxRatesUsdBase = FALLBACK_FX_USD_BASE) {
+  const empty = {
+    disclosed: false,
+    currency: "USD",
+    period: "annual",
+    minOriginal: 0,
+    maxOriginal: 0,
+    baseMonthlyUsd: 0,
+    baseAnnualUsd: 0,
+    originalSalaryDisplay: "Undisclosed",
+    usdEquivalentDisplay: "Undisclosed",
+    exchangeRateUsed: ""
+  };
+  if (!rawText || !rawText.trim()) return empty;
+  const salaryRegex = /(?:(USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|ZAR|KES|PLN|US\$|€|£|\$)\s*(\d{1,3}(?:,\d{3})+|\d{2,3}(?:\.\d+)?k|\d{4,7})(?:\s*(?:-|–|—|to)\s*(?:USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|ZAR|KES|PLN|US\$|€|£|\$)?\s*(\d{1,3}(?:,\d{3})+|\d{2,3}(?:\.\d+)?k|\d{4,7}))?(?:\s*(per\s+year|\/\s*year|\/\s*yr|annually|annual|p\.a\.|pa\b|per\s+annum|per\s+month|\/\s*month|\/\s*mo|monthly|p\.m\.))?)/gi;
+  const suffixCurrencyRegex = /(\d{1,3}(?:,\d{3})+|\d{2,3}(?:\.\d+)?k|\d{4,7})(?:\s*(?:-|–|—|to)\s*(\d{1,3}(?:,\d{3})+|\d{2,3}(?:\.\d+)?k|\d{4,7}))?\s*(USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|ZAR|KES|PLN|€|£)(?:\s*(per\s+year|\/\s*year|\/\s*yr|annually|annual|p\.a\.|per\s+annum|per\s+month|\/\s*month|\/\s*mo|monthly))?/gi;
+  const candidates = [];
+  const inspectMatch = (matchIndex, fullMatch, currRaw, minRaw, maxRaw, periodRaw) => {
+    const start = Math.max(0, matchIndex - 95);
+    const end = Math.min(rawText.length, matchIndex + fullMatch.length + 95);
+    const ctx = rawText.slice(start, end);
+    const ctxLower = ctx.toLowerCase();
+    if (/\b(raised|funding\s+round|valuation|series\s+[a-f]|revenue|aum|assets\s+under\s+management|customers|transactions|volume|budget\s+of|grant\s+portfolio|portfolio\s+of|equity\s+grant|sign[- ]on|relocation\s+allowance|learning\s+budget|wellness\s+stipend|home\s+office|commission[- ]only|ote\b|bonus\s+up\s+to|up\s+to\s+\d+%\s+bonus)\b/i.test(
+      ctxLower
+    ) && !/\b(base\s+salary|salary\s+range|gross\s+salary|annual\s+salary|monthly\s+salary|compensation|pay\s+range|starting\s+at)\b/i.test(
+      ctxLower
+    )) {
+      return;
+    }
+    const hasSalaryCue = /\b(salary|compensation|base\s+pay|gross\s+pay|remuneration|pay\s+range|starting\s+from|starting\s+at|package|earning|per\s+year|per\s+annum|annually|per\s+month|monthly|\/year|\/yr|\/month|\/mo|p\.a\.)\b/i.test(
+      ctxLower
+    );
+    if (!hasSalaryCue) return;
+    const currency = normalizeCurrencyCode(currRaw);
+    const rate2 = fxRatesUsdBase[currency] || FALLBACK_FX_USD_BASE[currency];
+    if (!rate2) return;
+    const minVal = parseNumberToken(minRaw);
+    if (!minVal) return;
+    const maxVal = maxRaw ? parseNumberToken(maxRaw) || minVal : minVal;
+    const low = Math.min(minVal, maxVal);
+    const high = Math.max(minVal, maxVal);
+    let period;
+    if (periodRaw && /month|mo\b|p\.m\./i.test(periodRaw)) {
+      period = "monthly";
+    } else if (periodRaw && /year|yr\b|annual|p\.a\.|annum/i.test(periodRaw)) {
+      period = "annual";
+    } else if (/\b(per\s+month|monthly|\/\s*mo|\/\s*month)\b/i.test(ctxLower)) {
+      period = "monthly";
+    } else if (/\b(per\s+year|annually|annual|\/\s*yr|\/\s*year|p\.a\.|per\s+annum)\b/i.test(ctxLower)) {
+      period = "annual";
+    } else {
+      const approxUsd = low / rate2;
+      period = approxUsd >= 18e3 ? "annual" : "monthly";
+    }
+    const lowAnnualUsd = period === "annual" ? low / rate2 : low / rate2 * 12;
+    if (lowAnnualUsd < 6e3 || lowAnnualUsd > 65e4) return;
+    const priority = /\b(base\s+salary|gross\s+salary|salary\s+range|starting\s+salary|annual\s+salary|monthly\s+salary)\b/i.test(
+      ctxLower
+    ) ? 3 : /\b(salary|compensation|remuneration)\b/i.test(ctxLower) ? 2 : 1;
+    candidates.push({
+      currency,
+      minVal: low,
+      maxVal: high,
+      period,
+      contextWindow: ctx,
+      priority
+    });
+  };
+  let m;
+  while ((m = salaryRegex.exec(rawText)) !== null) {
+    inspectMatch(m.index, m[0], m[1], m[2], m[3], m[4]);
+  }
+  while ((m = suffixCurrencyRegex.exec(rawText)) !== null) {
+    inspectMatch(m.index, m[0], m[3], m[1], m[2], m[4]);
+  }
+  if (candidates.length === 0) return empty;
+  candidates.sort((a, b) => b.priority - a.priority || b.minVal - a.minVal);
+  const best = candidates[0];
+  const rate = fxRatesUsdBase[best.currency] || FALLBACK_FX_USD_BASE[best.currency] || 1;
+  const baseAnnualUsd = Math.round(
+    best.period === "annual" ? best.minVal / rate : best.minVal / rate * 12
+  );
+  const baseMonthlyUsd = Math.round(baseAnnualUsd / 12);
+  const sym = currencySymbol(best.currency);
+  const rangeStr = best.maxVal > best.minVal ? `${sym}${best.minVal.toLocaleString()} \u2013 ${sym}${best.maxVal.toLocaleString()}` : `${sym}${best.minVal.toLocaleString()}`;
+  const periodLabel = best.period === "annual" ? "/ year" : "/ month";
+  const originalSalaryDisplay = `${rangeStr} ${periodLabel} (${best.currency} gross base)`;
+  const usdMaxAnnual = Math.round(
+    best.period === "annual" ? best.maxVal / rate : best.maxVal / rate * 12
+  );
+  const usdMaxMonthly = Math.round(usdMaxAnnual / 12);
+  const usdEquivalentDisplay = usdMaxMonthly > baseMonthlyUsd ? `$${baseMonthlyUsd.toLocaleString()} \u2013 $${usdMaxMonthly.toLocaleString()} / month USD ($${baseAnnualUsd.toLocaleString()} \u2013 $${usdMaxAnnual.toLocaleString()} / year)` : `$${baseMonthlyUsd.toLocaleString()} / month USD ($${baseAnnualUsd.toLocaleString()} / year)`;
+  const usdPerUnit = (1 / rate).toFixed(4);
+  const exchangeRateUsed = best.currency === "USD" ? "1 USD = 1.0000 USD (native USD)" : `1 ${best.currency} = $${usdPerUnit} USD`;
+  return {
+    disclosed: true,
+    currency: best.currency,
+    period: best.period,
+    minOriginal: best.minVal,
+    maxOriginal: best.maxVal,
+    baseMonthlyUsd,
+    baseAnnualUsd,
+    originalSalaryDisplay,
+    usdEquivalentDisplay,
+    exchangeRateUsed
+  };
+}
+function extractExplicitVisaSponsorshipEvidence(text) {
+  const clean = String(text || "");
+  const lower = clean.toLowerCase();
+  const negationRx = /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|without\s+requiring\s+sponsorship|must\s+already\s+have\s+(the\s+)?right\s+to\s+work|must\s+have\s+existing\s+work\s+authorization|citizens?\s+only|nationals?\s+only|eu\/eea\s+citizens?\s+only|local\s+candidates?\s+only)\b/i;
+  if (negationRx.test(lower)) {
+    return {
+      confirmed: false,
+      evidence: "",
+      strengthScore: 0,
+      hasRelocation: false,
+      relocationText: "Not confirmed",
+      hasFamilySupport: false,
+      familyText: "Not confirmed",
+      localOnlyBlocked: true
+    };
+  }
+  const explicitPatterns = [
+    {
+      rx: /[^.\n]{0,120}\b(we\s+(?:offer|provide|can\s+provide|support)\s+(?:full\s+)?(?:visa|work\s+permit)\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included)|skilled\s+worker\s+visa\s+sponsorship|employer[- ]sponsored\s+(?:work\s+)?visa|sponsor(?:ing)?\s+(?:your\s+)?(?:work\s+)?visa|work\s+permit\s+sponsorship|eu\s+blue\s+card\s+sponsorship|relocation\s+and\s+visa\s+sponsorship|visa\s+and\s+relocation\s+(?:support|package|sponsorship)|full\s+visa\s+sponsorship)\b[^.\n]{0,140}/i,
+      score: 100
+    },
+    {
+      rx: /[^.\n]{0,100}\b(visa\s+sponsorship|sponsorship\s+for\s+international\s+applicants|international\s+recruitment\s+with\s+(?:visa|work\s+permit)|g-4\s+visa|iqama\s+sponsorship|employment\s+visa\s+sponsored\s+by\s+(?:the\s+)?employer)\b[^.\n]{0,120}/i,
+      score: 90
+    }
+  ];
+  let confirmed = false;
+  let evidence = "";
+  let strengthScore = 0;
+  for (const pat of explicitPatterns) {
+    const match = clean.match(pat.rx);
+    if (match) {
+      confirmed = true;
+      evidence = match[0].replace(/\s+/g, " ").trim().slice(0, 260);
+      strengthScore = pat.score;
+      break;
+    }
+  }
+  const relocMatch = clean.match(
+    /[^.\n]{0,90}\b(relocation\s+(?:package|support|assistance|allowance|covered|provided)|flight\s+tickets?\s+(?:covered|provided)|temporary\s+housing|mobilization\s+flight)\b[^.\n]{0,110}/i
+  );
+  const hasRelocation = Boolean(relocMatch);
+  const relocationText = relocMatch ? relocMatch[0].replace(/\s+/g, " ").trim().slice(0, 220) : "Not explicitly detailed in posting \u2014 confirm relocation reimbursement on official offer.";
+  const familyMatch = clean.match(
+    /[^.\n]{0,90}\b(family\s+(?:relocation|visa|reunification|allowance|health\s+insurance)|dependants?|dependents?|spouse\s+visa|schooling\s+allowance)\b[^.\n]{0,110}/i
+  );
+  const hasFamilySupport = Boolean(familyMatch);
+  const familyText = familyMatch ? familyMatch[0].replace(/\s+/g, " ").trim().slice(0, 220) : "Not explicitly confirmed in job posting \u2014 verify dependant/family visa coverage with employer HR.";
+  return {
+    confirmed,
+    evidence,
+    strengthScore,
+    hasRelocation,
+    relocationText,
+    hasFamilySupport,
+    familyText,
+    localOnlyBlocked: false
+  };
+}
+var TARGET_POSITION_MATCHERS = [
+  { label: "Branch Manager", rx: /\b(branch\s+manager|retail\s+branch\s+manager|area\s+branch\s+manager|head\s+of\s+branch)\b/i },
+  { label: "Banking Operations Manager", rx: /\b(banking\s+operations\s+manager|bank\s+operations\s+manager|head\s+of\s+banking\s+operations|core\s+banking\s+operations)\b/i },
+  { label: "Finance Manager", rx: /\b(finance\s+manager|senior\s+finance\s+manager|commercial\s+finance\s+manager|regional\s+finance\s+manager|head\s+of\s+finance)\b/i },
+  { label: "Finance and Administration Manager", rx: /\b(finance\s+(?:and|&)\s+admin(?:istration)?\s+manager|admin\s+(?:and|&)\s+finance\s+manager)\b/i },
+  { label: "Financial Controller", rx: /\b(financial\s+controller|group\s+controller|assistant\s+controller|accounting\s+controller)\b/i },
+  { label: "Credit Manager", rx: /\b(credit\s+manager|senior\s+credit\s+manager|commercial\s+credit\s+manager|head\s+of\s+credit|lending\s+manager)\b/i },
+  { label: "Relationship Manager", rx: /\b((?:senior\s+|corporate\s+|commercial\s+|banking\s+|business\s+|private\s+)?relationship\s+manager)\b/i },
+  { label: "SME Banking Manager", rx: /\b(sme\s+banking\s+manager|business\s+banking\s+manager|commercial\s+banking\s+manager|corporate\s+banking\s+manager)\b/i },
+  { label: "Financial Operations Manager", rx: /\b(financial\s+operations\s+manager|finops\s+manager|treasury\s+operations\s+manager|treasury\s+manager|settlement\s+operations\s+manager)\b/i },
+  { label: "Microfinance Operations Manager", rx: /\b(microfinance\s+(?:operations\s+)?manager|financial\s+inclusion\s+manager|microfinance\s+director)\b/i },
+  { label: "Credit Operations Manager", rx: /\b(credit\s+operations\s+manager|loan\s+operations\s+manager|lending\s+operations\s+manager|collections\s+operations\s+manager)\b/i },
+  { label: "Compliance Manager", rx: /\b(compliance\s+manager|regulatory\s+compliance\s+manager|senior\s+compliance\s+manager|head\s+of\s+compliance|financial\s+crime\s+compliance)\b/i },
+  { label: "Risk Manager", rx: /\b((?:credit\s+|operational\s+|enterprise\s+|financial\s+|banking\s+)?risk\s+manager|head\s+of\s+risk)\b/i },
+  { label: "Internal Control Manager", rx: /\b(internal\s+control(?:s)?\s+manager|internal\s+audit\s+manager|audit\s+manager|head\s+of\s+internal\s+(?:audit|control))\b/i },
+  { label: "AML/KYC Manager", rx: /\b(aml(?:\/kyc)?\s+manager|kyc\s+manager|financial\s+crime\s+manager|fincrime\s+manager|sanctions\s+manager|anti[- ]money\s+laundering\s+manager)\b/i },
+  { label: "Digital Banking Operations Manager", rx: /\b(digital\s+banking\s+(?:operations\s+)?manager|mobile\s+banking\s+manager|fintech\s+operations\s+manager|customer\s+operations\s+manager.*bank)\b/i },
+  { label: "Payment Operations Manager", rx: /\b(payment(?:s)?\s+operations\s+manager|card\s+operations\s+manager|clearing\s+(?:and\s+settlement\s+)?manager|merchant\s+operations\s+manager)\b/i },
+  { label: "Grants Finance Manager", rx: /\b(grants?\s+finance\s+manager|grant(?:s)?\s+management\s+manager|donor\s+finance\s+manager)\b/i },
+  { label: "Project Finance Manager", rx: /\b(project\s+finance\s+manager|program(?:me)?\s+finance\s+manager|portfolio\s+finance\s+manager)\b/i }
+];
+var UNRELATED_HIGH_SALARY_DISQUALIFIER_RX = /\b(software\s+engineer|staff\s+engineer|backend\s+engineer|frontend\s+engineer|fullstack|full[- ]stack|devops|site\s+reliability|sre\b|machine\s+learning|data\s+scientist|ios\s+engineer|android\s+engineer|product\s+designer|ux\s+designer|ui\s+designer|registered\s+nurse|physician|doctor\b|surgeon|medical\s+officer|legal\s+counsel|attorney|lawyer|solicitor|marketing\s+manager|brand\s+manager|copywriter|writer\b|recruiter|talent\s+acquisition|people\s+partner|hr\s+business\s+partner|civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|architect\b)\b/i;
+function matchTargetSeniorBankingRole(title, description, profile) {
+  const titleClean = String(title || "").trim();
+  if (UNRELATED_HIGH_SALARY_DISQUALIFIER_RX.test(titleClean)) {
+    return { matched: false, matchedPosition: "" };
+  }
+  for (const item of TARGET_POSITION_MATCHERS) {
+    if (item.rx.test(titleClean)) {
+      return { matched: true, matchedPosition: item.label };
+    }
+  }
+  const seniorBankingTitleRx = /\b(senior|lead|head|director|manager|controller|vp\b|vice\s+president|officer|specialist)\b.*\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|deposit|sme|relationship)\b|\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|sme)\b.*\b(manager|lead|head|director|controller|supervisor)\b/i;
+  if (seniorBankingTitleRx.test(titleClean)) {
+    return { matched: true, matchedPosition: "Senior Banking & Finance Position" };
+  }
+  for (const custom of profile.targetPositions || []) {
+    const cleanTarget = custom.trim().toLowerCase();
+    if (cleanTarget.length >= 6 && titleClean.toLowerCase().includes(cleanTarget)) {
+      return { matched: true, matchedPosition: custom.trim() };
+    }
+  }
+  void description;
+  return { matched: false, matchedPosition: "" };
+}
+function extractEducationFromText(text) {
+  const m = text.match(
+    /[^.\n]{0,60}\b(bachelor['’]?s|ba\b|bsc\b|university\s+degree|master['’]?s|mba\b|cpa\b|acca\b|cfa\b|degree\s+in\s+[a-z\s,&]+)\b[^.\n]{0,90}/i
+  );
+  if (m) return m[0].replace(/\s+/g, " ").trim().slice(0, 180);
+  return "Bachelor's degree in Accounting, Finance, Banking, or equivalent relevant banking experience (verify on employer portal).";
+}
+function extractExperienceFromText(text) {
+  const m = text.match(/(\d{1,2})\+?\s*(?:to\s*\d{1,2}\s*)?years?\s+(?:of\s+)?(?:relevant\s+|progressive\s+)?[a-z\s,/-]{3,70}/i);
+  if (m) {
+    const yrs = parseInt(m[1], 10);
+    return {
+      summary: m[0].replace(/\s+/g, " ").trim().slice(0, 180),
+      minYears: Number.isNaN(yrs) ? null : yrs
+    };
+  }
+  return {
+    summary: "Proven senior banking, finance, operations, or people-management experience (verify exact years on employer portal).",
+    minYears: null
+  };
+}
+function extractLanguageFromText(text) {
+  const m = text.match(
+    /[^.\n]{0,50}\b(fluent\s+in\s+english|english\s+(?:proficiency|required|fluent)|ielts|toefl|arabic|german|french|swedish|norwegian|danish|dutch)\b[^.\n]{0,80}/i
+  );
+  if (m) return m[0].replace(/\s+/g, " ").trim().slice(0, 180);
+  return "Professional English proficiency (verify whether any additional local language is needed on official portal).";
+}
+function extractResponsibilities(text) {
+  const lines = text.split(/\n+/).map((l) => l.replace(/^[\s•\-–*▪▸\d.)]+/, "").trim()).filter((l) => l.length >= 24 && l.length <= 220);
+  const actionLines = lines.filter(
+    (l) => /^(lead|manage|oversee|supervise|drive|ensure|develop|prepare|monitor|coordinate|review|build|deliver|maintain|support|own|design|execute|partner|implement|control|analyze|analyse|report|establish)\b/i.test(
+      l
+    )
+  );
+  if (actionLines.length >= 2) return actionLines.slice(0, 5);
+  if (lines.length >= 2) return lines.slice(0, 4);
+  return [
+    "Review complete role responsibilities directly on the verified official employer application page."
+  ];
+}
+function classifyEmployerReputation(employerName) {
+  const n = employerName.toLowerCase();
+  if (/\b(world bank|ifc|imf|african development bank|afdb|ebrd|eib|european central bank|bis|unicef|undp|afreximbank|tdb)\b/i.test(n)) {
+    return { label: "Multilateral Development Bank / International Institution", reputationScore: 98 };
+  }
+  if (/\b(standard chartered|citibank|hsbc|barclays|absa|standard bank|ecobank|monzo|n26|revolut|starling|bunq|société générale|bnp paribas|deutsche bank|ing|rabobank)\b/i.test(n)) {
+    return { label: "Licensed International Bank", reputationScore: 95 };
+  }
+  if (/\b(adyen|stripe|wise|sumup|mollie|pleo|tide|gocardless|transfergo|careem|visa|mastercard|checkout|flutterwave|paystack|worldremit|zepz)\b/i.test(n)) {
+    return { label: "International Payments & Financial Services Institution", reputationScore: 92 };
+  }
+  if (/\b(deloitte|pwc|ey|kpmg|mercy corps|irc|save the children|oxfam|wateraid|world vision)\b/i.test(n)) {
+    return { label: "Global Advisory / International Organization", reputationScore: 90 };
+  }
+  return { label: "Verified International Employer", reputationScore: 80 };
+}
+function sanitizeBranchProfile(input, fallback = DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE) {
+  if (!input || typeof input !== "object") {
+    return {
+      ...fallback,
+      employers: [...fallback.employers],
+      coreSkills: [...fallback.coreSkills],
+      targetPositions: [...fallback.targetPositions],
+      languages: [...fallback.languages]
+    };
+  }
+  const cleanArr = (arr, def, max = 30) => {
+    if (!Array.isArray(arr)) return [...def];
+    return arr.map((s) => String(s || "").trim().slice(0, 90)).filter(Boolean).slice(0, max);
+  };
+  return {
+    profileLabel: String(input.profileLabel || fallback.profileLabel).trim().slice(0, 120),
+    nationality: String(input.nationality || fallback.nationality).trim().slice(0, 60),
+    currentResidence: String(input.currentResidence || fallback.currentResidence).trim().slice(0, 60),
+    educationDegree: String(input.educationDegree || fallback.educationDegree).trim().slice(0, 80),
+    fieldOfStudy: String(input.fieldOfStudy ?? fallback.fieldOfStudy).trim().slice(0, 120),
+    institution: String(input.institution ?? fallback.institution).trim().slice(0, 120),
+    graduationYear: String(input.graduationYear ?? fallback.graduationYear).trim().slice(0, 12),
+    totalBankingYears: Math.max(0, Math.min(50, Number(input.totalBankingYears ?? fallback.totalBankingYears) || 0)),
+    branchManagerYears: Math.max(0, Math.min(40, Number(input.branchManagerYears ?? fallback.branchManagerYears) || 0)),
+    currentOrRecentPosition: String(input.currentOrRecentPosition ?? fallback.currentOrRecentPosition).trim().slice(0, 120),
+    employers: cleanArr(input.employers, fallback.employers),
+    coreSkills: cleanArr(input.coreSkills, fallback.coreSkills),
+    targetPositions: cleanArr(input.targetPositions, fallback.targetPositions),
+    languages: cleanArr(input.languages, fallback.languages),
+    hasMastersDegree: Boolean(input.hasMastersDegree),
+    hasEnglishTest: Boolean(input.hasEnglishTest),
+    // Strictly enforce >= $3,000 USD minimum floor for this section!
+    minimumMonthlyGrossUsd: Math.max(3e3, Math.min(5e4, Number(input.minimumMonthlyGrossUsd ?? 3e3) || 3e3))
+  };
+}
+function evaluateBranchManagerJobs(params) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const baseDefault = params.isOwnerAccountProfile ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE;
+  const profile = sanitizeBranchProfile(params.profileInput, baseDefault);
+  const fxRates = params.fxRatesUsdBase || FALLBACK_FX_USD_BASE;
+  const minThresholdUsd = Math.max(3e3, Number(params.minSalaryUsd || profile.minimumMonthlyGrossUsd || 3e3));
+  const audit = {
+    totalCandidatesScanned: (params.rawCandidates || []).length,
+    passedAllSixGates: 0,
+    excludedUndisclosedSalary: 0,
+    excludedBelow3000Usd: 0,
+    excludedUnconfirmedVisaSponsorship: 0,
+    excludedOutsideAllowedRegions: 0,
+    excludedLocalAfricanNonInternational: 0,
+    excludedNonMatchingRole: 0,
+    excludedEthiopianIneligible: 0,
+    excludedExpiredOrDuplicate: 0,
+    sourcesChecked: params.sourcesChecked || [],
+    fxRatesUpdatedAt: params.fxUpdatedAt || nowIso,
+    fxSourceNote: params.fxSourceNote || "Live USD market FX rates (fallback baseline if offline)"
+  };
+  const seenDedup = /* @__PURE__ */ new Set();
+  const verifiedJobs = [];
+  for (const raw of params.rawCandidates || []) {
+    const url = String(raw.applicationUrl || "").trim();
+    if (!url.startsWith("https://")) {
+      audit.excludedExpiredOrDuplicate += 1;
+      continue;
+    }
+    if (raw.applicationDeadline && raw.applicationDeadline !== "Open \u2014 Verify on employer portal") {
+      const parsedDl = Date.parse(raw.applicationDeadline);
+      if (!Number.isNaN(parsedDl) && parsedDl < Date.now()) {
+        audit.excludedExpiredOrDuplicate += 1;
+        continue;
+      }
+    }
+    const dedupKey = `${raw.title.toLowerCase().trim()}|${raw.employerName.toLowerCase().trim()}|${raw.locationRaw.toLowerCase().trim()}`;
+    if (seenDedup.has(dedupKey)) {
+      audit.excludedExpiredOrDuplicate += 1;
+      continue;
+    }
+    seenDedup.add(dedupKey);
+    const plainDesc = stripHtmlToPlainText2(raw.descriptionText || "");
+    const fullText = `${raw.title}
+${raw.compensationRaw || ""}
+${raw.explicitVisaNote || ""}
+${plainDesc}`;
+    const regionEval = classifyAllowedRegionScope({
+      locationRaw: raw.locationRaw,
+      countryHint: raw.countryHint,
+      cityHint: raw.cityHint,
+      employerName: raw.employerName,
+      descriptionText: plainDesc,
+      isInternationalEmployerVerified: raw.isInternationalEmployerVerified
+    });
+    if (!regionEval.allowed || !regionEval.regionScope) {
+      if (regionEval.rejectedAsLocalAfrican) {
+        audit.excludedLocalAfricanNonInternational += 1;
+      } else {
+        audit.excludedOutsideAllowedRegions += 1;
+      }
+      continue;
+    }
+    const roleMatch = matchTargetSeniorBankingRole(raw.title, plainDesc, profile);
+    if (!roleMatch.matched) {
+      audit.excludedNonMatchingRole += 1;
+      continue;
+    }
+    const salaryEval = parseGuaranteedBaseSalaryUsd(
+      `${raw.compensationRaw || ""}
+${plainDesc}`,
+      fxRates
+    );
+    if (!salaryEval.disclosed) {
+      audit.excludedUndisclosedSalary += 1;
+      continue;
+    }
+    if (salaryEval.baseMonthlyUsd <= 3e3 || salaryEval.baseAnnualUsd <= 36e3) {
+      audit.excludedBelow3000Usd += 1;
+      continue;
+    }
+    const visaEval = extractExplicitVisaSponsorshipEvidence(fullText);
+    if (visaEval.localOnlyBlocked || raw.ethiopianEligibleHint === "excluded") {
+      audit.excludedEthiopianIneligible += 1;
+      continue;
+    }
+    if (!visaEval.confirmed) {
+      audit.excludedUnconfirmedVisaSponsorship += 1;
+      continue;
+    }
+    if (/\b(must\s+reside\s+in|must\s+currently\s+be\s+located\s+in|no\s+overseas\s+applicants|no\s+offshore\s+applicants|in-country\s+candidates\s+only)\b/i.test(fullText)) {
+      audit.excludedEthiopianIneligible += 1;
+      continue;
+    }
+    const ethiopianConfirmation = raw.ethiopianEligibleHint === "confirmed" ? "Confirmed: Ethiopian citizens living in Ethiopia are eligible to apply directly with employer visa sponsorship." : "Confirmed international sponsorship: Open to eligible offshore international applicants (including Ethiopian citizens living in Ethiopia) under employer visa sponsorship.";
+    const eduText = extractEducationFromText(plainDesc);
+    const expEval = extractExperienceFromText(plainDesc);
+    const langText = extractLanguageFromText(plainDesc);
+    const responsibilities = extractResponsibilities(plainDesc);
+    const employerMeta = classifyEmployerReputation(raw.employerName);
+    const whyYouQualify = [];
+    const gapsOrUnmetRequirements = [];
+    let matchScore = 52;
+    whyYouQualify.push(
+      `Direct senior role alignment (${roleMatch.matchedPosition}) matching your ${profile.currentOrRecentPosition || "banking management"} background.`
+    );
+    matchScore += 14;
+    if (profile.branchManagerYears >= 2 && /\b(manager|lead|head|director|supervis|team)\b/i.test(fullText)) {
+      whyYouQualify.push(
+        `${profile.branchManagerYears} years of Branch Manager leadership aligns with management and staff supervision responsibilities.`
+      );
+      matchScore += 10;
+    }
+    if (expEval.minYears !== null) {
+      if (profile.totalBankingYears >= expEval.minYears) {
+        whyYouQualify.push(
+          `${profile.totalBankingYears} years of banking experience exceeds the stated ${expEval.minYears}+ years requirement.`
+        );
+        matchScore += 10;
+      } else {
+        gapsOrUnmetRequirements.push(
+          `Employer requests ${expEval.minYears}+ years experience (your profile lists ${profile.totalBankingYears} years).`
+        );
+        matchScore -= 8;
+      }
+    } else if (profile.totalBankingYears >= 5) {
+      whyYouQualify.push(`${profile.totalBankingYears} years of commercial banking experience fits senior hiring expectations.`);
+      matchScore += 6;
+    }
+    const matchedSkills = [];
+    const descLower = `${raw.title} ${plainDesc}`.toLowerCase();
+    for (const sk of profile.coreSkills) {
+      const tokens = sk.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+      if (tokens.some((t) => descLower.includes(t))) {
+        matchedSkills.push(sk);
+      }
+    }
+    if (matchedSkills.length > 0) {
+      whyYouQualify.push(`Verified skill match: ${matchedSkills.slice(0, 5).join(", ")}.`);
+      matchScore += Math.min(12, matchedSkills.length * 3);
+    }
+    if (/\b(master['’]?s|mba\b|msc\b)\s+(degree\s+)?(required|mandatory|essential|preferred)/i.test(descLower) && !profile.hasMastersDegree) {
+      gapsOrUnmetRequirements.push(
+        `Posting mentions a Master's/MBA (${/\b(required|mandatory|essential)\b/i.test(eduText) ? "stated required" : "preferred"}) \u2014 your profile holds a ${profile.educationDegree} in ${profile.fieldOfStudy}.`
+      );
+      matchScore -= /\b(required|mandatory|essential)\b/i.test(eduText) ? 14 : 4;
+    }
+    if (/\b(cpa|acca|cfa|cima|aca)\b/i.test(descLower)) {
+      gapsOrUnmetRequirements.push(
+        "Posting references professional certification (CPA/ACCA/CFA/ACA) \u2014 confirm whether equivalent banking experience is accepted."
+      );
+      matchScore -= 6;
+    }
+    if (/\b(ielts|toefl)\b/i.test(descLower) && !profile.hasEnglishTest) {
+      gapsOrUnmetRequirements.push(
+        "Official posting or visa stage references an English language test (IELTS/TOEFL) \u2014 confirm whether English-medium BA degree qualifies for exemption."
+      );
+      matchScore -= 4;
+    }
+    const nonEnglishLangMatch = langText.match(/\b(german|french|arabic|swedish|norwegian|danish|dutch)\b/i);
+    if (nonEnglishLangMatch && !profile.languages.some((l) => l.toLowerCase().includes(nonEnglishLangMatch[1].toLowerCase()))) {
+      gapsOrUnmetRequirements.push(
+        `Posting mentions ${nonEnglishLangMatch[1]} language \u2014 verify if English-only candidates are considered.`
+      );
+      matchScore -= 6;
+    }
+    const profileMatchPercentage = Math.max(35, Math.min(98, Math.round(matchScore)));
+    const salaryNorm = Math.min(100, 50 + (salaryEval.baseMonthlyUsd - 3e3) / 100);
+    const ethScore = raw.ethiopianEligibleHint === "confirmed" ? 100 : 90;
+    const relocScore = (visaEval.hasRelocation ? 60 : 0) + (visaEval.hasFamilySupport ? 40 : 0);
+    const rankingScore = Number(
+      (visaEval.strengthScore * 0.3 + salaryNorm * 0.24 + ethScore * 0.16 + profileMatchPercentage * 0.16 + employerMeta.reputationScore * 0.08 + relocScore * 0.06).toFixed(2)
+    );
+    audit.passedAllSixGates += 1;
+    verifiedJobs.push({
+      id: raw.id,
+      jobTitle: raw.title,
+      employerName: raw.employerName,
+      employerTypeLabel: raw.employerTypeHint || employerMeta.label,
+      country: regionEval.country,
+      city: regionEval.city,
+      regionScope: regionEval.regionScope,
+      grossMonthlySalaryUsd: salaryEval.baseMonthlyUsd,
+      grossAnnualSalaryUsd: salaryEval.baseAnnualUsd,
+      originalSalaryDisplay: salaryEval.originalSalaryDisplay,
+      usdEquivalentDisplay: salaryEval.usdEquivalentDisplay,
+      exchangeRateUsed: salaryEval.exchangeRateUsed,
+      visaSponsorshipEvidence: visaEval.evidence,
+      sponsorshipStrengthScore: visaEval.strengthScore,
+      ethiopianEligibilityConfirmation: ethiopianConfirmation,
+      requiredEducation: eduText,
+      requiredExperience: expEval.summary,
+      languageRequirements: langText,
+      jobResponsibilities: responsibilities,
+      relocationSupport: visaEval.relocationText,
+      familyRelocationPossibilities: visaEval.familyText,
+      hasConfirmedRelocation: visaEval.hasRelocation,
+      hasConfirmedFamilySupport: visaEval.hasFamilySupport,
+      applicationDeadline: raw.applicationDeadline || "Open \u2014 Verify closing date on official employer portal",
+      datePosted: raw.datePosted || nowIso.slice(0, 10),
+      officialApplicationUrl: url,
+      sourcePortal: raw.sourcePortal,
+      profileMatchPercentage,
+      whyYouQualify,
+      gapsOrUnmetRequirements,
+      matchedTargetPosition: roleMatch.matchedPosition,
+      employerReputationScore: employerMeta.reputationScore,
+      rankingScore
+    });
+  }
+  const filtered = verifiedJobs.filter((job) => {
+    if (params.regionFilter && params.regionFilter !== "ALL" && job.regionScope !== params.regionFilter) {
+      return false;
+    }
+    if (job.grossMonthlySalaryUsd < minThresholdUsd) return false;
+    if (params.positionFilter && params.positionFilter !== "ALL") {
+      const pf = params.positionFilter.toLowerCase();
+      if (!job.matchedTargetPosition.toLowerCase().includes(pf) && !job.jobTitle.toLowerCase().includes(pf)) {
+        return false;
+      }
+    }
+    if (params.searchQuery && params.searchQuery.trim()) {
+      const q = params.searchQuery.toLowerCase().trim();
+      const hay = `${job.jobTitle} ${job.employerName} ${job.country} ${job.city} ${job.regionScope} ${job.matchedTargetPosition} ${job.visaSponsorshipEvidence}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    if (b.sponsorshipStrengthScore !== a.sponsorshipStrengthScore) {
+      return b.sponsorshipStrengthScore - a.sponsorshipStrengthScore;
+    }
+    if (b.rankingScore !== a.rankingScore) return b.rankingScore - a.rankingScore;
+    if (b.grossMonthlySalaryUsd !== a.grossMonthlySalaryUsd) {
+      return b.grossMonthlySalaryUsd - a.grossMonthlySalaryUsd;
+    }
+    return b.profileMatchPercentage - a.profileMatchPercentage;
+  });
+  return {
+    success: true,
+    generatedAt: nowIso,
+    lastDiscoveryAt: params.lastDiscoveryAt || nowIso,
+    allowedRegions: ALLOWED_BRANCH_MANAGER_REGIONS,
+    profileUsed: profile,
+    isOwnerAccountProfile: Boolean(params.isOwnerAccountProfile),
+    audit,
+    jobs: filtered
+  };
+}
+var LIVE_GREENHOUSE_BANKING_BOARDS = [
+  { slug: "monzo", employerName: "Monzo Bank", employerType: "Licensed International Bank" },
+  { slug: "adyen", employerName: "Adyen", employerType: "Licensed European Payments Bank" },
+  { slug: "n26", employerName: "N26 Bank", employerType: "Licensed European Digital Bank" },
+  { slug: "wise", employerName: "Wise", employerType: "Global Financial Services & Payments Institution" },
+  { slug: "sumup", employerName: "SumUp", employerType: "Global Financial Services & Payments Institution" },
+  { slug: "tide", employerName: "Tide", employerType: "International SME Banking Platform" },
+  { slug: "gocardless", employerName: "GoCardless", employerType: "International Bank Payments Institution" },
+  { slug: "transfergo", employerName: "TransferGo", employerType: "International Remittance & Financial Institution" },
+  { slug: "careem", employerName: "Careem Pay / Careem", employerType: "Middle East Digital Financial & Payments Platform" },
+  { slug: "stripe", employerName: "Stripe", employerType: "Global Financial Infrastructure Institution" }
+];
+var LIVE_ASHBY_BANKING_BOARDS = [
+  { slug: "pleo", employerName: "Pleo", employerType: "Nordic / European Corporate Finance Platform" },
+  { slug: "mollie", employerName: "Mollie", employerType: "European Regulated Payments Institution" }
+];
+async function fetchLiveFxRates() {
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/USD", {
+      signal: AbortSignal.timeout(5e3)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.rates && typeof json.rates.EUR === "number" && typeof json.rates.GBP === "number") {
+        return {
+          rates: { ...FALLBACK_FX_USD_BASE, ...json.rates },
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          sourceNote: `Live USD market rates via open.er-api.com (${json.time_last_update_utc || "current"})`
+        };
+      }
+    }
+  } catch {
+  }
+  return {
+    rates: { ...FALLBACK_FX_USD_BASE },
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    sourceNote: "Baseline market USD FX rates (live FX endpoint temporarily unreachable)"
+  };
+}
+async function discoverLiveBranchManagerCandidates(existingGlobalOpps) {
+  const candidates = [];
+  const sourcesChecked = [];
+  if (existingGlobalOpps.length > 0) {
+    sourcesChecked.push("Hopeland Verified Global Store (UN, World Bank, AfDB, ReliefWeb, EU Portals)");
+    for (const opp of existingGlobalOpps) {
+      if (opp.isArchived || opp.applicationStatus === "expired" || opp.applicationStatus === "closed") {
+        continue;
+      }
+      candidates.push({
+        id: `bm_store_${opp.id}`,
+        title: opp.title,
+        employerName: opp.organization,
+        locationRaw: `${opp.location || ""} ${opp.country || ""}`.trim(),
+        countryHint: opp.country,
+        descriptionText: [
+          opp.summary || "",
+          opp.funding?.fundingSummary || "",
+          opp.funding?.visaSupportSummary || "",
+          opp.eligibility?.educationRequirement || "",
+          opp.eligibility?.experienceRequirement || "",
+          (opp.eligibility?.languagesRequired || []).join(", ")
+        ].join("\n"),
+        compensationRaw: opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || "",
+        applicationUrl: opp.officialApplicationUrl || opp.originalSourceUrl || "",
+        sourcePortal: opp.sourceName || "Verified Official Portal",
+        datePosted: opp.publicationDate || opp.discoveredAt?.slice(0, 10),
+        applicationDeadline: opp.deadline?.deadlineUtcIso?.slice(0, 10) || opp.deadline?.deadlineDateRaw,
+        explicitVisaNote: opp.funding?.visaSupportSummary || "",
+        ethiopianEligibleHint: opp.eligibility?.ethiopianEligible
+      });
+    }
+  }
+  const ghResults = await Promise.allSettled(
+    LIVE_GREENHOUSE_BANKING_BOARDS.map(async (board) => {
+      const res = await fetch(
+        `https://boards-api.greenhouse.io/v1/boards/${board.slug}/jobs?content=true`,
+        { signal: AbortSignal.timeout(8e3) }
+      );
+      if (!res.ok) return { board, jobs: [] };
+      const data = await res.json();
+      return { board, jobs: Array.isArray(data?.jobs) ? data.jobs : [] };
+    })
+  );
+  for (const r of ghResults) {
+    if (r.status !== "fulfilled" || r.value.jobs.length === 0) continue;
+    const { board, jobs } = r.value;
+    sourcesChecked.push(`${board.employerName} Official Careers`);
+    for (const j of jobs) {
+      const url = String(j.absolute_url || "").trim();
+      if (!url.startsWith("https://")) continue;
+      candidates.push({
+        id: `bm_gh_${board.slug}_${j.id || crypto4.randomBytes(4).toString("hex")}`,
+        title: String(j.title || "").trim(),
+        employerName: board.employerName,
+        employerTypeHint: board.employerType,
+        isInternationalEmployerVerified: true,
+        locationRaw: String(j.location?.name || "").trim(),
+        descriptionText: String(j.content || ""),
+        applicationUrl: url,
+        sourcePortal: `${board.employerName} Official Careers`,
+        datePosted: typeof j.updated_at === "string" ? j.updated_at.slice(0, 10) : void 0
+      });
+    }
+  }
+  const ashbyResults = await Promise.allSettled(
+    LIVE_ASHBY_BANKING_BOARDS.map(async (board) => {
+      const res = await fetch(
+        `https://api.ashbyhq.com/posting-api/job-board/${board.slug}?includeCompensation=true`,
+        { signal: AbortSignal.timeout(8e3) }
+      );
+      if (!res.ok) return { board, jobs: [] };
+      const data = await res.json();
+      return { board, jobs: Array.isArray(data?.jobs) ? data.jobs : [] };
+    })
+  );
+  for (const r of ashbyResults) {
+    if (r.status !== "fulfilled" || r.value.jobs.length === 0) continue;
+    const { board, jobs } = r.value;
+    sourcesChecked.push(`${board.employerName} Official Careers`);
+    for (const j of jobs) {
+      const url = String(j.jobUrl || j.applyUrl || "").trim();
+      if (!url.startsWith("https://")) continue;
+      const compSummary = j.compensation?.compensationTierSummary || j.compensation?.summaryComponents?.map((c) => c.label).join(" ") || "";
+      candidates.push({
+        id: `bm_ash_${board.slug}_${j.id || crypto4.randomBytes(4).toString("hex")}`,
+        title: String(j.title || "").trim(),
+        employerName: board.employerName,
+        employerTypeHint: board.employerType,
+        isInternationalEmployerVerified: true,
+        locationRaw: String(j.location || j.address?.postalAddress?.addressCountry || "").trim(),
+        descriptionText: String(j.descriptionPlain || j.descriptionHtml || ""),
+        compensationRaw: compSummary ? `Base salary: ${compSummary}` : "",
+        applicationUrl: url,
+        sourcePortal: `${board.employerName} Official Careers`,
+        datePosted: typeof j.publishedAt === "string" ? j.publishedAt.slice(0, 10) : void 0
+      });
+    }
+  }
+  try {
+    const res = await fetch("https://www.arbeitnow.com/api/job-board-api", {
+      signal: AbortSignal.timeout(8e3)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data?.data) ? data.data : [];
+      if (list.length > 0) {
+        sourcesChecked.push("Arbeitnow Europe Live Board");
+        for (const j of list) {
+          const url = String(j.url || "").trim();
+          if (!url.startsWith("https://")) continue;
+          const desc = String(j.description || "");
+          const tags = Array.isArray(j.tags) ? j.tags.join(" ") : "";
+          candidates.push({
+            id: `bm_arb_${j.slug || crypto4.randomBytes(4).toString("hex")}`,
+            title: String(j.title || "").trim(),
+            employerName: String(j.company_name || "European Employer").trim(),
+            locationRaw: `${String(j.location || "")} Germany Europe`.trim(),
+            countryHint: "Germany",
+            descriptionText: `${desc}
+Tags: ${tags}`,
+            applicationUrl: url,
+            sourcePortal: "Arbeitnow Europe",
+            datePosted: typeof j.created_at === "number" ? new Date(j.created_at * 1e3).toISOString().slice(0, 10) : void 0
+          });
+        }
+      }
+    }
+  } catch {
+  }
+  return { candidates, sourcesChecked };
+}
+function registerBranchManagerJobsRoutes(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid
+  } = deps;
+  const storePath = path5.join(runtimeBaseDir, "data", "branch_manager_jobs_store.json");
+  const globalOppsStorePath = path5.join(runtimeBaseDir, "data", "global_opportunities_store.json");
+  let activeDiscoveryPromise = null;
+  function loadStore() {
+    ensureRuntimeDataDir();
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const fallback = {
+      version: 1,
+      updatedAt: nowIso,
+      lastDiscoveryAt: "",
+      fxUpdatedAt: nowIso,
+      fxSourceNote: "Baseline USD FX rates",
+      fxRatesUsdBase: { ...FALLBACK_FX_USD_BASE },
+      sourcesChecked: [],
+      rawCandidates: [],
+      users: {}
+    };
+    const loaded = loadJsonFileSafe(storePath, fallback);
+    return {
+      version: Number(loaded.version || 1),
+      updatedAt: loaded.updatedAt || nowIso,
+      lastDiscoveryAt: loaded.lastDiscoveryAt || "",
+      fxUpdatedAt: loaded.fxUpdatedAt || nowIso,
+      fxSourceNote: loaded.fxSourceNote || fallback.fxSourceNote,
+      fxRatesUsdBase: loaded.fxRatesUsdBase && typeof loaded.fxRatesUsdBase === "object" ? { ...FALLBACK_FX_USD_BASE, ...loaded.fxRatesUsdBase } : { ...FALLBACK_FX_USD_BASE },
+      sourcesChecked: Array.isArray(loaded.sourcesChecked) ? loaded.sourcesChecked : [],
+      rawCandidates: Array.isArray(loaded.rawCandidates) ? loaded.rawCandidates : [],
+      users: loaded.users && typeof loaded.users === "object" ? loaded.users : {}
+    };
+  }
+  function saveStore(store) {
+    ensureRuntimeDataDir();
+    store.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    writeJsonFileAtomic(storePath, store);
+  }
+  function loadExistingGlobalOpps() {
+    const s = loadJsonFileSafe(globalOppsStorePath, {});
+    return Array.isArray(s.international_opportunities) ? s.international_opportunities : [];
+  }
+  async function runLiveDiscoveryIfNeeded(force = false) {
+    const store = loadStore();
+    const ageMs = store.lastDiscoveryAt ? Date.now() - Date.parse(store.lastDiscoveryAt) : Infinity;
+    const stale = !store.lastDiscoveryAt || Number.isNaN(ageMs) || ageMs > 60 * 60 * 1e3 || store.rawCandidates.length === 0;
+    if (!force && !stale) return store;
+    if (activeDiscoveryPromise) return activeDiscoveryPromise;
+    activeDiscoveryPromise = (async () => {
+      try {
+        const [fx, discovered] = await Promise.all([
+          fetchLiveFxRates(),
+          discoverLiveBranchManagerCandidates(loadExistingGlobalOpps())
+        ]);
+        const fresh = loadStore();
+        fresh.fxRatesUsdBase = fx.rates;
+        fresh.fxUpdatedAt = fx.updatedAt;
+        fresh.fxSourceNote = fx.sourceNote;
+        fresh.rawCandidates = discovered.candidates;
+        fresh.sourcesChecked = discovered.sourcesChecked;
+        fresh.lastDiscoveryAt = (/* @__PURE__ */ new Date()).toISOString();
+        saveStore(fresh);
+        return fresh;
+      } finally {
+        activeDiscoveryPromise = null;
+      }
+    })();
+    return activeDiscoveryPromise;
+  }
+  app.post("/api/branch-manager-jobs/search", async (req, res) => {
+    try {
+      const store = await runLiveDiscoveryIfNeeded(false);
+      const uid = getRequesterUid(req);
+      const isOwner = isPersistentOwnerRequest(req);
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const savedOwnProfile = uid ? store.users[uid] : void 0;
+      const effectiveProfile = body.profile ?? savedOwnProfile ?? (isOwner ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE);
+      const response = evaluateBranchManagerJobs({
+        rawCandidates: store.rawCandidates,
+        profileInput: effectiveProfile,
+        isOwnerAccountProfile: isOwner && !body.profile && !savedOwnProfile,
+        fxRatesUsdBase: store.fxRatesUsdBase,
+        fxUpdatedAt: store.fxUpdatedAt,
+        fxSourceNote: store.fxSourceNote,
+        sourcesChecked: store.sourcesChecked,
+        lastDiscoveryAt: store.lastDiscoveryAt,
+        regionFilter: body.regionFilter || "ALL",
+        positionFilter: body.positionFilter || "ALL",
+        minSalaryUsd: body.minSalaryUsd,
+        searchQuery: body.searchQuery
+      });
+      res.json(response);
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to evaluate verified $3,000+ visa-sponsored roles."
+      });
+    }
+  });
+  app.post("/api/branch-manager-jobs/discover", async (req, res) => {
+    try {
+      const store = await runLiveDiscoveryIfNeeded(true);
+      const uid = getRequesterUid(req);
+      const isOwner = isPersistentOwnerRequest(req);
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const savedOwnProfile = uid ? store.users[uid] : void 0;
+      const effectiveProfile = body.profile ?? savedOwnProfile ?? (isOwner ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE);
+      const response = evaluateBranchManagerJobs({
+        rawCandidates: store.rawCandidates,
+        profileInput: effectiveProfile,
+        isOwnerAccountProfile: isOwner && !body.profile && !savedOwnProfile,
+        fxRatesUsdBase: store.fxRatesUsdBase,
+        fxUpdatedAt: store.fxUpdatedAt,
+        fxSourceNote: store.fxSourceNote,
+        sourcesChecked: store.sourcesChecked,
+        lastDiscoveryAt: store.lastDiscoveryAt
+      });
+      res.json(response);
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to refresh live official banking portals."
+      });
+    }
+  });
+  app.get("/api/branch-manager-jobs/user-profile", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        error: "Sign in required to load your saved personal profile."
+      });
+    }
+    const isOwner = isPersistentOwnerRequest(req);
+    const store = loadStore();
+    const saved = store.users[uid];
+    const profile = saved ? sanitizeBranchProfile(saved, isOwner ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE) : isOwner ? sanitizeBranchProfile(OWNER_PRIVATE_SAVED_PROFILE, OWNER_PRIVATE_SAVED_PROFILE) : sanitizeBranchProfile(DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE, DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE);
+    return res.json({
+      success: true,
+      profile,
+      isOwnerAccountProfile: isOwner
+    });
+  });
+  app.put("/api/branch-manager-jobs/user-profile", (req, res) => {
+    const uid = getRequesterUid(req);
+    if (!uid) {
+      return res.status(401).json({
+        success: false,
+        error: "Sign in required to save your personal profile."
+      });
+    }
+    try {
+      const isOwner = isPersistentOwnerRequest(req);
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const store = loadStore();
+      const nextProfile = sanitizeBranchProfile(
+        body.profile || body,
+        isOwner ? OWNER_PRIVATE_SAVED_PROFILE : DEFAULT_PUBLIC_BRANCH_MANAGER_PROFILE
+      );
+      store.users[uid] = nextProfile;
+      saveStore(store);
+      return res.json({ success: true, profile: nextProfile, isOwnerAccountProfile: isOwner });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to save your personal profile."
+      });
+    }
+  });
+}
+
 // src/utils/telegramSnapshot.ts
 function clip(val, maxLen) {
   const s = String(val ?? "").trim();
@@ -15689,7 +17952,7 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path4.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path6.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
     if (!fs2.existsSync(UPLOADS_DIR)) {
       fs2.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -15755,7 +18018,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path4.extname(req.file.originalname).toLowerCase();
+      const ext = path6.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -16582,25 +18845,25 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const VACANCIES_CATALOG_FILE_SERVER = path4.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
-  const BOT_HEALTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path4.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path4.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path6.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
+  const BOT_HEALTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path6.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
   const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
   const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
   function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
-    const salt = crypto3.randomBytes(16).toString("hex");
-    const derived = crypto3.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const salt = crypto5.randomBytes(16).toString("hex");
+    const derived = crypto5.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return {
       id,
@@ -16619,13 +18882,13 @@ ${text}`;
     try {
       if (!plainText || !record?.salt || !record?.hashHex) return false;
       const expectedBuf = Buffer.from(record.hashHex, "hex");
-      const derivedBuf = crypto3.scryptSync(plainText, record.salt, expectedBuf.length, {
+      const derivedBuf = crypto5.scryptSync(plainText, record.salt, expectedBuf.length, {
         N: record.cost || 16384,
         r: record.blockSize || 8,
         p: record.parallelization || 1
       });
       if (derivedBuf.length !== expectedBuf.length) return false;
-      return crypto3.timingSafeEqual(derivedBuf, expectedBuf);
+      return crypto5.timingSafeEqual(derivedBuf, expectedBuf);
     } catch {
       return false;
     }
@@ -16639,7 +18902,7 @@ ${text}`;
       passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
       sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
         mutated = true;
-        return crypto3.randomBytes(32).toString("hex");
+        return crypto5.randomBytes(32).toString("hex");
       })(),
       updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     } : (() => {
@@ -16648,7 +18911,7 @@ ${text}`;
         version: 1,
         algorithm: "scrypt",
         passwordHashes: [],
-        sessionSigningKey: crypto3.randomBytes(32).toString("hex"),
+        sessionSigningKey: crypto5.randomBytes(32).toString("hex"),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     })();
@@ -16727,7 +18990,7 @@ ${text}`;
       exp: now + DEV_SESSION_TTL_MS
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
-    const sig = crypto3.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    const sig = crypto5.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
     return `${encoded}.${sig}`;
   }
   function verifyDeveloperSessionToken(token) {
@@ -16736,10 +18999,10 @@ ${text}`;
       const [encoded, sig] = token.split(".");
       if (!encoded || !sig) return { valid: false };
       const store = ensureDeveloperAuthStore();
-      const expectedSig = crypto3.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const expectedSig = crypto5.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
       const sigBuf = Buffer.from(sig, "utf-8");
       const expBuf = Buffer.from(expectedSig, "utf-8");
-      if (sigBuf.length !== expBuf.length || !crypto3.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !crypto5.timingSafeEqual(sigBuf, expBuf)) {
         return { valid: false };
       }
       const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
@@ -16812,7 +19075,7 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path4.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path6.join(RUNTIME_BASE_DIR, "data");
     try {
       if (!fs2.existsSync(dataDir)) {
         fs2.mkdirSync(dataDir, { recursive: true });
@@ -16820,13 +19083,13 @@ ${text}`;
       if (!fs2.existsSync(BACKUPS_DIR)) {
         fs2.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
-      const bundledDataDir = path4.join(process.cwd(), "data");
-      if (path4.resolve(dataDir) !== path4.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
+      const bundledDataDir = path6.join(process.cwd(), "data");
+      if (path6.resolve(dataDir) !== path6.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
         const entries = fs2.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
-          const srcPath = path4.join(bundledDataDir, file);
-          const destPath = path4.join(dataDir, file);
+          const srcPath = path6.join(bundledDataDir, file);
+          const destPath = path6.join(dataDir, file);
           if (!fs2.existsSync(destPath)) {
             try {
               if (fs2.statSync(srcPath).isFile()) {
@@ -16861,7 +19124,7 @@ ${text}`;
       fs2.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path4.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path6.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -17083,7 +19346,7 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path4.join(process.cwd(), "firebase-applet-config.json")
+      path6.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
@@ -17239,8 +19502,8 @@ ${text}`;
   }
   function sendPublicFallbackIcon(res, filename) {
     const candidates = [
-      path4.join(process.cwd(), "public", filename),
-      path4.join(process.cwd(), "dist", filename)
+      path6.join(process.cwd(), "public", filename),
+      path6.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
       if (fs2.existsSync(p)) {
@@ -17279,7 +19542,7 @@ ${text}`;
     const brand = await getLiveBrandLogoState();
     const versionRaw = brand.appLogoUpdatedAt || "default";
     const versionTag = encodeURIComponent(
-      crypto3.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
+      crypto5.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
     const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
@@ -17417,9 +19680,9 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     const launchUrl = `${appOrigin}/?source=ios_app`;
     let iconBase64 = "";
     for (const candidate of [
-      path4.join(process.cwd(), "public", "apple-touch-icon.png"),
-      path4.join(process.cwd(), "dist", "apple-touch-icon.png"),
-      path4.join(process.cwd(), "public", "pwa-192x192.png")
+      path6.join(process.cwd(), "public", "apple-touch-icon.png"),
+      path6.join(process.cwd(), "dist", "apple-touch-icon.png"),
+      path6.join(process.cwd(), "public", "pwa-192x192.png")
     ]) {
       if (fs2.existsSync(candidate)) {
         try {
@@ -17803,8 +20066,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path4.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path4.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path6.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
       if (fs2.existsSync(USER_PROFILES_FILE)) {
@@ -18067,8 +20330,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path4.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path4.join(UPLOADS_DIR, safeName);
+      const safeName = `${Date.now()}_${path6.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path6.join(UPLOADS_DIR, safeName);
       fs2.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
@@ -20177,10 +22440,10 @@ ${footer}`;
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path4.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path4.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path4.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path4.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path6.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path6.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path6.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path6.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -21311,7 +23574,7 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path4.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path6.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
       if (fs2.existsSync(AUTO_APPLY_DATA_FILE)) {
@@ -21325,7 +23588,7 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path4.dirname(AUTO_APPLY_DATA_FILE);
+      const dir = path6.dirname(AUTO_APPLY_DATA_FILE);
       if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
       fs2.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
@@ -22444,8 +24707,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path4.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path4.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path6.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path6.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -25275,12 +27538,31 @@ Return strict JSON:
     appendAuditLog,
     getAiClient
   });
+  registerGlobalMigrationHubRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    getRequesterUid
+  });
+  registerBranchManagerJobsRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
       const files = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path4.join(BACKUPS_DIR, filename);
+        const fullPath = path6.join(BACKUPS_DIR, filename);
         const stat = fs2.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
@@ -25345,12 +27627,12 @@ Return strict JSON:
         ...userEngineBackupData
       }
     };
-    const fullPath = path4.join(BACKUPS_DIR, filename);
+    const fullPath = path6.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
       const autoFiles = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs2.unlinkSync(path4.join(BACKUPS_DIR, old));
+        fs2.unlinkSync(path6.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -25376,7 +27658,7 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path4.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      const probeFile = path6.join(RUNTIME_BASE_DIR, "data", ".write_probe");
       fs2.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
       fs2.unlinkSync(probeFile);
       writable = true;
@@ -25594,7 +27876,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path4.join(BACKUPS_DIR, target.filename);
+    const fullPath = path6.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });

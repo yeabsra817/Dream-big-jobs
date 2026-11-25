@@ -25,6 +25,7 @@ import {
   ExternalLink,
   FileEdit,
   FileCheck2,
+  Compass,
 } from 'lucide-react';
 import { SiteSettings } from '../types/job';
 import {
@@ -51,11 +52,13 @@ interface Props {
   onOpenSavedJobs?: () => void;
   onOpenAllCategories?: () => void;
   onOpenInternationalOpportunities?: () => void;
+  onOpenGlobalMigrationHub?: () => void;
   onOpenInternationalJobs?: () => void;
   onOpenImmigration?: () => void;
   onOpenScholarships?: () => void;
   onOpenHumanizeText?: () => void;
   onOpenHumanizeChecker?: () => void;
+  onOpenBranchManagerJobs?: () => void;
   onOpenAuth?: (mode: 'signin' | 'signup') => void;
   onOpenDashboard?: () => void;
   onSignOutUser?: () => void;
@@ -92,11 +95,13 @@ export const Navbar: React.FC<Props> = ({
   onOpenSavedJobs,
   onOpenAllCategories,
   onOpenInternationalOpportunities,
+  onOpenGlobalMigrationHub,
   onOpenInternationalJobs,
   onOpenImmigration,
   onOpenScholarships,
   onOpenHumanizeText,
   onOpenHumanizeChecker,
+  onOpenBranchManagerJobs,
   onOpenAuth,
   onOpenDashboard,
   onSignOutUser,
@@ -321,6 +326,15 @@ export const Navbar: React.FC<Props> = ({
                 International Opportunities
               </button>
             )}
+            {onOpenGlobalMigrationHub && (
+              <button
+                type="button"
+                onClick={onOpenGlobalMigrationHub}
+                className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Global Migration &amp; Career
+              </button>
+            )}
             {(onOpenHumanizeText || onOpenHumanizeChecker) && (
               <div ref={writingMenuRef} className="relative">
                 <button
@@ -383,6 +397,15 @@ export const Navbar: React.FC<Props> = ({
                   </div>
                 )}
               </div>
+            )}
+            {onOpenBranchManagerJobs && (
+              <button
+                type="button"
+                onClick={onOpenBranchManagerJobs}
+                className="py-1 text-slate-700 hover:text-[#16A34A] border-b-2 border-transparent hover:border-[#16A34A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Jobs for Branch Manager
+              </button>
             )}
             <button
               type="button"
@@ -858,6 +881,20 @@ export const Navbar: React.FC<Props> = ({
             </button>
           )}
 
+          {onOpenBranchManagerJobs && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenBranchManagerJobs();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-semibold hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <Briefcase className="w-4 h-4 text-[#16A34A]" />
+              <span>Jobs for Branch Manager</span>
+            </button>
+          )}
+
           {siteContent.showNavInternational && onOpenInternationalOpportunities && (
             <button
               type="button"
@@ -869,6 +906,20 @@ export const Navbar: React.FC<Props> = ({
             >
               <Globe className="w-4 h-4 text-[#16A34A]" />
               <span>International Opportunities</span>
+            </button>
+          )}
+
+          {onOpenGlobalMigrationHub && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenGlobalMigrationHub();
+                setMobileMenuOpen(false);
+              }}
+              className="flex items-center gap-2.5 w-full text-left py-2.5 px-2 text-[#0B132B] font-semibold hover:text-[#16A34A] text-sm cursor-pointer"
+            >
+              <Compass className="w-4 h-4 text-[#16A34A]" />
+              <span>Global Migration &amp; Career</span>
             </button>
           )}
 

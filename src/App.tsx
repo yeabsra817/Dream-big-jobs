@@ -198,6 +198,8 @@ import { JobApplicationModal } from './components/JobApplicationModal';
 const GlobalOpportunitiesView = lazy(() => import('./components/GlobalOpportunitiesView').then((m) => ({ default: m.GlobalOpportunitiesView })));
 const WritingAssistantView = lazy(() => import('./components/WritingAssistantView').then((m) => ({ default: m.WritingAssistantView })));
 const InternationalJobsView = lazy(() => import('./components/InternationalJobsView').then((m) => ({ default: m.InternationalJobsView })));
+const GlobalMigrationHubView = lazy(() => import('./components/GlobalMigrationHubView').then((m) => ({ default: m.GlobalMigrationHubView })));
+const BranchManagerJobsView = lazy(() => import('./components/BranchManagerJobsView').then((m) => ({ default: m.BranchManagerJobsView })));
 const ImmigrationResidenceView = lazy(() => import('./components/ImmigrationResidenceView').then((m) => ({ default: m.ImmigrationResidenceView })));
 const ScholarshipsView = lazy(() => import('./components/ScholarshipsView').then((m) => ({ default: m.ScholarshipsView })));
 const SavedJobsDrawer = lazy(() => import('./components/SavedJobsDrawer').then((m) => ({ default: m.SavedJobsDrawer })));
@@ -306,6 +308,8 @@ export default function App() {
   );
   const [activeExpansionView, setActiveExpansionView] = useState<
     | 'international-opportunities'
+    | 'global-migration-hub'
+    | 'branch-manager-jobs'
     | 'international-jobs'
     | 'immigration'
     | 'scholarships'
@@ -317,6 +321,8 @@ export default function App() {
     const v = new URLSearchParams(window.location.search).get('view');
     if (
       v === 'international-opportunities' ||
+      v === 'global-migration-hub' ||
+      v === 'branch-manager-jobs' ||
       v === 'international-jobs' ||
       v === 'immigration' ||
       v === 'scholarships' ||
@@ -1274,6 +1280,8 @@ export default function App() {
         setIsJobSeekerDashboardOpen(true);
       } else if (
         viewParam === 'international-opportunities' ||
+        viewParam === 'global-migration-hub' ||
+        viewParam === 'branch-manager-jobs' ||
         viewParam === 'international-jobs' ||
         viewParam === 'immigration' ||
         viewParam === 'scholarships'
@@ -1705,6 +1713,8 @@ export default function App() {
   const handleOpenExpansionView = (
     view:
       | 'international-opportunities'
+      | 'global-migration-hub'
+      | 'branch-manager-jobs'
       | 'international-jobs'
       | 'immigration'
       | 'scholarships'
@@ -2394,11 +2404,13 @@ export default function App() {
           window.scrollTo({ top: 0, behavior: 'auto' });
         }}
         onOpenInternationalOpportunities={() => handleOpenExpansionView('international-opportunities')}
+        onOpenGlobalMigrationHub={() => handleOpenExpansionView('global-migration-hub')}
         onOpenInternationalJobs={() => handleOpenExpansionView('international-jobs')}
         onOpenImmigration={() => handleOpenExpansionView('immigration')}
         onOpenScholarships={() => handleOpenExpansionView('scholarships')}
         onOpenHumanizeText={() => handleOpenExpansionView('humanize-text')}
         onOpenHumanizeChecker={() => handleOpenExpansionView('humanize-checker')}
+        onOpenBranchManagerJobs={() => handleOpenExpansionView('branch-manager-jobs')}
         onOpenLocations={() => handleSelectLocation('All')}
         onOpenSavedJobs={() => setIsSavedDrawerOpen(true)}
         savedCount={savedJobIds.size}
@@ -2497,6 +2509,28 @@ export default function App() {
                 setIsJobSeekerDashboardOpen(true);
               }}
               onOpenWritingTool={(tool) => handleOpenExpansionView(tool)}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'global-migration-hub' ? (
+          <Suspense fallback={<PageLoader />}>
+            <GlobalMigrationHubView
+              onBack={() => handleOpenExpansionView(null)}
+              userProfile={registeredProfile}
+              onOpenAuth={() => {
+                setUserAuthModalMode('signin');
+                setIsUserAuthModalOpen(true);
+              }}
+            />
+          </Suspense>
+        ) : activeExpansionView === 'branch-manager-jobs' ? (
+          <Suspense fallback={<PageLoader />}>
+            <BranchManagerJobsView
+              onBack={() => handleOpenExpansionView(null)}
+              userProfile={registeredProfile}
+              onOpenAuth={() => {
+                setUserAuthModalMode('signin');
+                setIsUserAuthModalOpen(true);
+              }}
             />
           </Suspense>
         ) : activeExpansionView === 'humanize-text' || activeExpansionView === 'humanize-checker' ? (

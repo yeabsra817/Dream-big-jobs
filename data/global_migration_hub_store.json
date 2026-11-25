@@ -1,0 +1,688 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-25T07:34:18.118Z",
+  "lastRefreshAt": "2026-11-25T07:34:18.117Z",
+  "nextRefreshAt": "2026-11-25T08:04:18.118Z",
+  "users": {},
+  "opportunitySnapshot": {
+    "gopp_8f4d8cdfa8be8ef089": {
+      "id": "gopp_8f4d8cdfa8be8ef089",
+      "title": "Master in Humanitarian Operations in Emergencies",
+      "deadline": "15 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "6030011c331ba73c"
+    },
+    "gopp_1161f51b0776570701": {
+      "id": "gopp_1161f51b0776570701",
+      "title": "Responsable Ressources humaines et Finances, parcours à distance",
+      "deadline": "7 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "eafcb83215dfbd8d"
+    },
+    "gopp_43ab9209fa3ab30f7d": {
+      "id": "gopp_43ab9209fa3ab30f7d",
+      "title": "Gestion non médicale des épidémies | Blended",
+      "deadline": "5 Mar 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "954b92e99c4e70d9"
+    },
+    "gopp_b75c5386f4f4f60c29": {
+      "id": "gopp_b75c5386f4f4f60c29",
+      "title": "CAS WASH - Certificate of Advanced Studies in Water Sanitation and Hygiene for humanitarian and developing contexts",
+      "deadline": "29 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "605046930220b2ac"
+    },
+    "gopp_72c3506735c213f936": {
+      "id": "gopp_72c3506735c213f936",
+      "title": "Narrative and Financial Reports for EU-Funded Projects",
+      "deadline": "11 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "dd36cd5241d14b35"
+    },
+    "gopp_860a9791bba8c6cca2": {
+      "id": "gopp_860a9791bba8c6cca2",
+      "title": "Managing Financial Support to Third Parties",
+      "deadline": "14 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "6d974ce46e97da83"
+    },
+    "gopp_eb4795d0ce90a89a4e": {
+      "id": "gopp_eb4795d0ce90a89a4e",
+      "title": "Professional Certificate in Health, Safety & Environment (HSE) - Arabic Version",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "55b7514354ea2020"
+    },
+    "gopp_dd2d14d9d0a53d7d03": {
+      "id": "gopp_dd2d14d9d0a53d7d03",
+      "title": "Program Manager CRCSU",
+      "deadline": "6 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "20ad0855e967329d"
+    },
+    "gopp_3221dfee0f554ef953": {
+      "id": "gopp_3221dfee0f554ef953",
+      "title": "Call for Expression of Interest: DEC Middle East Humanitarian Appeal Post Appeal Review",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "f57b4bb9369813ee"
+    },
+    "gopp_a8846ab5eb5d5fb69e": {
+      "id": "gopp_a8846ab5eb5d5fb69e",
+      "title": "SYRIA - Field Coordinator - (M/F) - Aleppo",
+      "deadline": "15 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "d51a34a7004753f1"
+    },
+    "gopp_43f1562e284634e663": {
+      "id": "gopp_43f1562e284634e663",
+      "title": "Rapid Response Logistics Officer",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "91c8c005501065d2"
+    },
+    "gopp_1c27e0d57bc0b331a2": {
+      "id": "gopp_1c27e0d57bc0b331a2",
+      "title": "Program Manager - International Hire",
+      "deadline": "31 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "b9e54eb619c163fd"
+    },
+    "gopp_d6f1d5579cc113ffcb": {
+      "id": "gopp_d6f1d5579cc113ffcb",
+      "title": "Shelter and WASH Specialist Lebanon",
+      "deadline": "14 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e0c28809800acf6b"
+    },
+    "gopp_dbe761fa7781108d9b": {
+      "id": "gopp_dbe761fa7781108d9b",
+      "title": "Readvertisement- Early Recovery and Livelihood Program Coordinator",
+      "deadline": "1 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "470de6c08438156c"
+    },
+    "gopp_2b22d22ff1d367496f": {
+      "id": "gopp_2b22d22ff1d367496f",
+      "title": "Deputy Head of Consortium for Ukraine",
+      "deadline": "30 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "88c4416973a8bb15"
+    },
+    "gopp_1f5522b2b04af66cbd": {
+      "id": "gopp_1f5522b2b04af66cbd",
+      "title": "TOR: SUPPLY, INSTALLATION AND COMMISSIONING OF MILK COOLING AND PROCESSING EQUIPMENT IN TANZANIA FORSolidaridad East and Central Africa",
+      "deadline": "6 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "8d85464bedd99a41"
+    },
+    "gopp_196cda0937a49789c3": {
+      "id": "gopp_196cda0937a49789c3",
+      "title": "Regional Accountant - ECA",
+      "deadline": "15 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "1fc16806b5f79f16"
+    },
+    "gopp_7e86a6547c2a3a3532": {
+      "id": "gopp_7e86a6547c2a3a3532",
+      "title": "Country Director for Gaza / Palestine",
+      "deadline": "1 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ae8cd81d46c5e70c"
+    },
+    "gopp_528d5208bf85ef3f7a": {
+      "id": "gopp_528d5208bf85ef3f7a",
+      "title": "Services d'audit financiers pour trois projets de la Croix-Rouge néerlandaise en République Centre Africaine",
+      "deadline": "7 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "28ea25e6786d6143"
+    },
+    "gopp_a80276c3e9eb970e94": {
+      "id": "gopp_a80276c3e9eb970e94",
+      "title": "PALESTINE - WASH PROGRAM MANAGER (M/F) - GAZA",
+      "deadline": "30 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "31a1e55efbcb2a8b"
+    },
+    "gopp_5c8b18fa6030f9b2d7": {
+      "id": "gopp_5c8b18fa6030f9b2d7",
+      "title": "Head of Mission Mali (f/m/d)",
+      "deadline": "15 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "b58d7c5afb8395f4"
+    },
+    "gopp_5c317718ca5c32a79a": {
+      "id": "gopp_5c317718ca5c32a79a",
+      "title": "Emergency Watsan Coordinator H/F",
+      "deadline": "30 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "bed1d72a85890bbe"
+    },
+    "gopp_8fd87f2553033e8710": {
+      "id": "gopp_8fd87f2553033e8710",
+      "title": "SUDAN - FIELD COORDINATOR (M/F) - KHARTOUM",
+      "deadline": "28 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "69e8a4f45decca3a"
+    },
+    "gopp_207f3d55b906539a16": {
+      "id": "gopp_207f3d55b906539a16",
+      "title": "Myanmar - Deputy Country Director Operations & Partnership (M/F) - Yangon",
+      "deadline": "17 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "b98c936f3034f7e8"
+    },
+    "gopp_d2cbcbe28e878b92be": {
+      "id": "gopp_d2cbcbe28e878b92be",
+      "title": "SUDAN - CONSORTIUM COORDINATOR (M/F) - GENEINA",
+      "deadline": "28 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ca749f51ca535fc1"
+    },
+    "gopp_426576640df4472cf8": {
+      "id": "gopp_426576640df4472cf8",
+      "title": "SUDAN - FIELD COORDINATOR (M/F) - TAWILA",
+      "deadline": "28 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "00ba97e023fa3e26"
+    },
+    "gopp_73501d06194932c958": {
+      "id": "gopp_73501d06194932c958",
+      "title": "WASH Engineer - Mindanao (Filipino Nationals Only)",
+      "deadline": "10 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "27ffc357a330a568"
+    },
+    "gopp_3c4f1af859a91a2fa2": {
+      "id": "gopp_3c4f1af859a91a2fa2",
+      "title": "Field Officer (WASH) - Mindanao (Filipino Nationals Only)",
+      "deadline": "10 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "1fd8c39d9f0a3fee"
+    },
+    "gopp_26af841e817b6244ff": {
+      "id": "gopp_26af841e817b6244ff",
+      "title": "Hydrology Database Manager",
+      "deadline": "13 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "3ad9f596faf14d2c"
+    },
+    "gopp_20d44d99d70edc26e0": {
+      "id": "gopp_20d44d99d70edc26e0",
+      "title": "Feasibility & Baseline Study (Multi-Country, East Africa)",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "c71af4002ea6516f"
+    },
+    "gopp_81da73409eb1a3f72a": {
+      "id": "gopp_81da73409eb1a3f72a",
+      "title": "Trainers: Journalism Training and Mentoring at the Nile Basin Development Forum",
+      "deadline": "11 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "b60293c97fde09cc"
+    },
+    "gopp_25a234d7d5df6def67": {
+      "id": "gopp_25a234d7d5df6def67",
+      "title": "WATER AND SANITATION MANAGER - CONSTRUCTION (M/F/D)",
+      "deadline": "17 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ea8ff530e9ed96ee"
+    },
+    "gopp_ff078bf22e78d5b0a7": {
+      "id": "gopp_ff078bf22e78d5b0a7",
+      "title": "WASH Program Manager- Re-advertised - Syria Aleppo & Idleb",
+      "deadline": "3 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "0704e548775316d6"
+    },
+    "gopp_f33deef783dc61a4f7": {
+      "id": "gopp_f33deef783dc61a4f7",
+      "title": "Water Quality Assistant - 1 Hasaka, 1 Tal Abyad, 1 Ras Al-Ayn",
+      "deadline": "29 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ae0c896beba8f676"
+    },
+    "gopp_9445420674398edb69": {
+      "id": "gopp_9445420674398edb69",
+      "title": "Hygiene Promotor - 2 Hasaka, 2 Tal Abyad, 2 Ras Al-Ayn",
+      "deadline": "29 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "5af6c38425043730"
+    },
+    "gopp_f629846639dc5dc460": {
+      "id": "gopp_f629846639dc5dc460",
+      "title": "Oficial WASH Shelter & Infrastructure - Maracaibo",
+      "deadline": "29 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ceb741f4af43e5fd"
+    },
+    "gopp_051dc9baeb23317f91": {
+      "id": "gopp_051dc9baeb23317f91",
+      "title": "Regulatory Compliance Officer",
+      "deadline": "2027-01-05T13:40:14+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "01e550f643cc6855"
+    },
+    "gopp_04d298659e63cb7d26": {
+      "id": "gopp_04d298659e63cb7d26",
+      "title": "Senior IT & Cybersecurity Auditor",
+      "deadline": "2027-01-05T07:31:22+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "5d5d10720c142517"
+    },
+    "gopp_118110ffccc6508257": {
+      "id": "gopp_118110ffccc6508257",
+      "title": "VP Embedded Finance & Strategic Partnerships (m/w/d) 80-100%",
+      "deadline": "2027-01-05T12:17:41+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "dd5801db5a402caf"
+    },
+    "gopp_ac7e764fb8d0037a99": {
+      "id": "gopp_ac7e764fb8d0037a99",
+      "title": "Group Accounting & Reporting Specialist (m/f/d)",
+      "deadline": "2027-01-05T16:32:53+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "9e0fa9334f0d8302"
+    },
+    "gopp_6adadc24e6a6287799": {
+      "id": "gopp_6adadc24e6a6287799",
+      "title": "Finance Operations Specialist H/F",
+      "deadline": "2027-01-05T16:40:17+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "d30e343d267b6600"
+    },
+    "gopp_d63ee98ab323493f30": {
+      "id": "gopp_d63ee98ab323493f30",
+      "title": "[ VO2 FORCE ] - Business Analyst Senior – Salesforce Financial Services Cloud",
+      "deadline": "2027-01-06T01:07:11+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "deccd9f24d2f6463"
+    },
+    "gopp_4dd631bffedcc6979d": {
+      "id": "gopp_4dd631bffedcc6979d",
+      "title": "(Associate) Finance Manager (f/m/d)",
+      "deadline": "2027-01-05T19:40:13+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "a34ca64aa5875c28"
+    },
+    "gopp_f94a304d90aa69216c": {
+      "id": "gopp_f94a304d90aa69216c",
+      "title": "(Senior) Accountant (w/m/d)",
+      "deadline": "2027-01-05T22:40:14+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "7cea9e5b18a952dd"
+    },
+    "gopp_7bf9740888019bfb9f": {
+      "id": "gopp_7bf9740888019bfb9f",
+      "title": "Senior/ Principal Group Accounting Manager (m/w/d)",
+      "deadline": "2027-01-06T01:07:08+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "220793bb96778098"
+    },
+    "gopp_621b0870c395bf96a8": {
+      "id": "gopp_621b0870c395bf96a8",
+      "title": "SAP Finance oder Sales (FI/CO/SD) Architect (m/w/d)",
+      "deadline": "2027-01-06T04:31:38+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "59e9d3273b1a6665"
+    },
+    "gopp_4b485ca6bea5daa103": {
+      "id": "gopp_4b485ca6bea5daa103",
+      "title": "Humanitarian Programme Manager - online diploma course",
+      "deadline": "7 Jan 2027",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "86360869578f4c90"
+    },
+    "gopp_ba812aca13303f26f0": {
+      "id": "gopp_ba812aca13303f26f0",
+      "title": "Consultancy for ECW FER Drought Response Project Baseline & Endline Evaluation",
+      "deadline": "2 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "98529309928e5945"
+    },
+    "gopp_194d01408a53276afa": {
+      "id": "gopp_194d01408a53276afa",
+      "title": "Délégué Administration et finance (M/F/D) Madagascar - CDD - 40h (7045)",
+      "deadline": "31 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "710db0838431b2cb"
+    },
+    "gopp_bbf7533b036aa53d0b": {
+      "id": "gopp_bbf7533b036aa53d0b",
+      "title": "Administrateur terrain H/F – Tillabéry - NIGER",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ea272b6aab8b232e"
+    },
+    "gopp_83d7f48df64ebcf016": {
+      "id": "gopp_83d7f48df64ebcf016",
+      "title": "Senior Public Financial Management (PFM) Specialist, Tuvalu",
+      "deadline": "14 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e07d08247fe0b860"
+    },
+    "gopp_8441fdd2e36d945f95": {
+      "id": "gopp_8441fdd2e36d945f95",
+      "title": "Financial Management Information System (FMIS) Adviser",
+      "deadline": "14 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "3da2c1ba9ccde07b"
+    },
+    "gopp_be7a21111ffa67f30b": {
+      "id": "gopp_be7a21111ffa67f30b",
+      "title": "Grants and Reporting Manager",
+      "deadline": "9 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "386f7ce5b372453d"
+    },
+    "gopp_238b80dfc1308a1ba5": {
+      "id": "gopp_238b80dfc1308a1ba5",
+      "title": "Group Finance Contractor",
+      "deadline": "2027-01-01T22:40:15+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "de0b2f8b63906924"
+    },
+    "gopp_8a8ccdff10f19c6fe5": {
+      "id": "gopp_8a8ccdff10f19c6fe5",
+      "title": "Senior Product Manager, Financial Statement Suite",
+      "deadline": "2027-01-02T19:40:33+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "05bdbae52a14481c"
+    },
+    "gopp_ef28a7c6435df8f9b4": {
+      "id": "gopp_ef28a7c6435df8f9b4",
+      "title": "Anti-Corruption & Trade Compliance Legal Counsel",
+      "deadline": "2027-01-03T16:40:13+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "f8ae63dec6404745"
+    },
+    "gopp_db14044225473e22d4": {
+      "id": "gopp_db14044225473e22d4",
+      "title": "Senior Data Engineer - Financial Flows",
+      "deadline": "2027-01-04T07:26:57+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "9ae95ef4fddaa5da"
+    },
+    "gopp_fe8630efc6e027eef8": {
+      "id": "gopp_fe8630efc6e027eef8",
+      "title": "Senior financial Writer at SetSales",
+      "deadline": "2027-01-03T21:55:16+00:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e67395e7e5cbd037"
+    },
+    "gopp_dca22e6cfe3c5684e9": {
+      "id": "gopp_dca22e6cfe3c5684e9",
+      "title": "Product Manager, Finance Engineering",
+      "deadline": "2027-01-04T09:55:21+00:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e226f6859ca27ac7"
+    },
+    "gopp_56cf7def229598e5d9": {
+      "id": "gopp_56cf7def229598e5d9",
+      "title": "Finance Business Partner (m/w/d)",
+      "deadline": "2027-01-03T22:40:12+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "0a73c7e6e470f7ae"
+    },
+    "gopp_d7271fb75fbde919a1": {
+      "id": "gopp_d7271fb75fbde919a1",
+      "title": "FINANCE DIRECTOR (m/w/d)",
+      "deadline": "2027-01-04T04:26:17+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "658ef7177f9e9b76"
+    },
+    "gopp_b088db6ec02cc5d0b6": {
+      "id": "gopp_b088db6ec02cc5d0b6",
+      "title": "Finance Assistant (gn) | Avalmanagement & Warenkreditversicherung",
+      "deadline": "2027-01-04T08:00:49+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "faea8a19165d338c"
+    },
+    "gopp_cd0b275fcf0cde3220": {
+      "id": "gopp_cd0b275fcf0cde3220",
+      "title": "Finance Manager (m/f/x)",
+      "deadline": "2027-01-04T10:30:53+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "ca3e3d04d1940d69"
+    },
+    "gopp_fa8598bdc1b0225f32": {
+      "id": "gopp_fa8598bdc1b0225f32",
+      "title": "Finance Manager (m/w/d)",
+      "deadline": "2027-01-04T11:01:09+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "0eee73cf74381a22"
+    },
+    "gopp_2ea240835162aa9a8a": {
+      "id": "gopp_2ea240835162aa9a8a",
+      "title": "(Senior) Consultant (m/w/d) - IT Security und Compliance",
+      "deadline": "2027-01-04T11:30:43+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "bb91eb30c79ec14f"
+    },
+    "gopp_5126077bf412537afb": {
+      "id": "gopp_5126077bf412537afb",
+      "title": "Finance Lead (m/w/d)",
+      "deadline": "2027-01-03T18:30:48+01:00",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "16174fb3ec9c7441"
+    },
+    "gopp_6830d30a443f377ebb": {
+      "id": "gopp_6830d30a443f377ebb",
+      "title": "Tupande Contract Management Specialist (Fixed-Term)",
+      "deadline": "17 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e655fb7a8a7c2a41"
+    },
+    "gopp_a7766881144e0638ae": {
+      "id": "gopp_a7766881144e0638ae",
+      "title": "Procurement Specialist",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "98d07ca505db86b0"
+    },
+    "gopp_75b2e781d1f7e2f2db": {
+      "id": "gopp_75b2e781d1f7e2f2db",
+      "title": "Philanthropy Advisor",
+      "deadline": "4 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "93c5f2043b58d59b"
+    },
+    "gopp_21a1c2bbbbc5a57adc": {
+      "id": "gopp_21a1c2bbbbc5a57adc",
+      "title": "Country Support Officer - West & Central Africa (national applicants only)",
+      "deadline": "6 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "e0083b6970b21aa0"
+    },
+    "gopp_bfce4ceb56d3779b5e": {
+      "id": "gopp_bfce4ceb56d3779b5e",
+      "title": "ASISTENTE DE ADMINISTRACIÓN Y RRHH",
+      "deadline": "12 Dec 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "0f574f92a118baac"
+    },
+    "gopp_36f08246dc5f47d922": {
+      "id": "gopp_36f08246dc5f47d922",
+      "title": "Oficial de Finanzas - Caracas",
+      "deadline": "29 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "396ec2c87495fe77"
+    },
+    "gopp_4c5058ae53e932fd1b": {
+      "id": "gopp_4c5058ae53e932fd1b",
+      "title": "ILO External Collaboration Contract",
+      "deadline": "30 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "3b16ac6c8f0f0ca0"
+    },
+    "gopp_14b947f77e34664a66": {
+      "id": "gopp_14b947f77e34664a66",
+      "title": "ILO External Collaboration Contract",
+      "deadline": "30 Nov 2026",
+      "salaryOrFunding": "Funding Not Confirmed",
+      "firstSeenAt": "2026-11-25T07:34:02.455Z",
+      "lastUpdatedAt": "2026-11-25T07:34:02.455Z",
+      "fingerprint": "c5c4e6364d231d2d"
+    }
+  },
+  "changeHistory": [
+    {
+      "id": "chg_1795592042456_c3bbd4",
+      "detectedAt": "2026-11-25T07:34:02.455Z",
+      "summary": "Baseline established: tracking 74 active verified global opportunities across banking, finance, WASH, scholarships & training.",
+      "newCount": 74,
+      "updatedCount": 0,
+      "expiredRemovedCount": 0,
+      "totalActiveVerified": 74,
+      "newTitles": [],
+      "updatedTitles": []
+    }
+  ]
+}
