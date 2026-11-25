@@ -1,7 +1,99 @@
 {
   "user_yeabsra_test": {
-    "recalculatedAt": "2026-11-23T11:26:48.897Z",
+    "recalculatedAt": "2026-11-25T06:44:46.204Z",
     "items": [
+      {
+        "id": "job_1795536743392_4_wo6gw",
+        "sourceType": "domestic_job",
+        "title": "Customer Service Officer II",
+        "organization": "Ahadu Bank S.C.",
+        "location": "Ziway, Oromia",
+        "category": "Banking and Financial Institutions",
+        "deadline": "1 December 2026",
+        "matchScore": 70,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Education eligible (BSc in Computer Science)",
+          "Meets 2+ yrs experience requirement",
+          "Experience background: core, banking",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "2 years of relevant experience, including 1 year as Customer Service Officer I or equivalent.",
+        "requiredEducationText": "Bachelor's degree in Banking and Insurance, Accounting, Management, Economics, Business Administration or related field.",
+        "applyUrl": "https://forms.gle/KVz1bHy1A9yVsSrV7"
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 57,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches IT & Software"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743392_5_gbein",
+        "sourceType": "domestic_job",
+        "title": "Customer Service Officer I",
+        "organization": "Ahadu Bank S.C.",
+        "location": "Ziway",
+        "category": "Banking and Financial Institutions",
+        "deadline": "1 December 2026",
+        "matchScore": 56,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Meets 1+ yrs experience requirement",
+          "Experience background: core, banking",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "At least 1 year of relevant banking experience.",
+        "requiredEducationText": "Bachelor's degree in Banking and Insurance, Accounting, Management, Economics, Business Administration or related field.",
+        "applyUrl": "https://forms.gle/KVz1bHy1A9yVsSrV7"
+      },
+      {
+        "id": "job_1795178043180_12_ft2ur",
+        "sourceType": "domestic_job",
+        "title": "Social Policy Officer, NO-1",
+        "organization": "UNICEF Ethiopia.",
+        "location": "Addis Ababa, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "26 November 2026.",
+        "matchScore": 55,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Meets 1+ yrs experience requirement",
+          "Preferred location: Addis Ababa, Ethiopia.",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Bachelor's degree in Economics, Social Science, International Studies, Political Science, Public Policy, International Relations or Development Studies.",
+        "applyUrl": "https://jobs.unicef.org/jobs/social-policy-officer-no-1-fixed-term-position-ethiopia-addis-ababa-ethiopia-00138478-ethiopia"
+      },
       {
         "id": "job_1794642856820_4_8yczm",
         "sourceType": "domestic_job",
@@ -118,6 +210,28 @@
         "applyUrl": "https://drc.ngo/jobs/"
       },
       {
+        "id": "job_1795337914321_50_lu0om",
+        "sourceType": "domestic_job",
+        "title": "Part-Time Tennis Coach",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "27 November 2026. Registration starts 23 November.",
+        "matchScore": 45,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "One year playing or coaching experience under the first qualification route, or two years under the second route.",
+        "requiredEducationText": "Either a minimum 10+1 or Level I Certificate in Sports Science, Physical Education, Sports Coaching, Recreation Management, Health and Fitness or related field; OR Grade 12/10th grade completion with valid tennis coaching certification.",
+        "applyUrl": "https://corporate.ethiopianairlines.com/AboutEthiopian/careers"
+      },
+      {
         "id": "job_1794759677414_8_cbrk8",
         "sourceType": "domestic_job",
         "title": "Finance Manager – Employment Outsourcing and Workforce Management",
@@ -138,6 +252,28 @@
         "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
         "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
         "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
+      },
+      {
+        "id": "job_1795536743392_2_h2bqt",
+        "sourceType": "domestic_job",
+        "title": "Banking Business Officer I",
+        "organization": "ZamZam Bank S.C.",
+        "location": "Shire",
+        "category": "Banking and Financial Institutions",
+        "deadline": "30 November 2026",
+        "matchScore": 44,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Meets 2+ yrs experience requirement",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Minimum 2 years of branch banking experience, including 1 year as a Junior Officer.",
+        "requiredEducationText": "Bachelor's degree in Business Administration, Finance or related field.",
+        "applyUrl": "https://forms.gle/Muqmf2ZrZCqzGuw58"
       },
       {
         "id": "job_1794643031646_11_hjca7",
@@ -184,6 +320,27 @@
         "requiredExperienceText": "Extensive senior-level administration and management experience.",
         "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
+      },
+      {
+        "id": "job_1795337914320_1_8k7tz",
+        "sourceType": "domestic_job",
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 40,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -306,28 +463,6 @@
         "applyUrl": "https://jobs.ebrd.com/job/London-Director-Banking-Technology/1456191433/"
       },
       {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Role alignment: full",
-          "Matches Full-Stack Lead Engineer"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
-      },
-      {
         "id": "job_1794759677414_23_k0u6v",
         "sourceType": "domestic_job",
         "title": "Country Protection Manager",
@@ -416,75 +551,174 @@
         "applyUrl": ""
       },
       {
-        "id": "job_1794642856820_3_l975o",
+        "id": "job_1795536743393_6_1rkxu",
         "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
         "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred location: Head Office, Addis Ababa",
-          "Related Field: Banking → Economics & Investment"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Related Field: Banking → Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
-      },
-      {
-        "id": "job_1795023121182_3_8cf4p",
-        "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
-        "matchScore": 41,
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 61,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
           "Role alignment: systems",
-          "Field of study match: science",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Field of study match: computer, science",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
+      },
+      {
+        "id": "job_1795178043180_16_5idi8",
+        "sourceType": "domestic_job",
+        "title": "IT Applications & Data Quality Auditor",
+        "organization": "Dashen Bank S.C.",
+        "location": "Head Office, Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 51,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Field of study match: computer, science",
+          "Preferred location: Head Office, Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 4 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "4 years.",
+        "requiredEducationText": "Bachelor's degree in IT, Computer Science, Information Systems or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2569&company=dashenbank"
+      },
+      {
+        "id": "job_1795338681456_2_f638r",
+        "sourceType": "domestic_job",
+        "title": "Senior Energy Expert – African Single Electricity Market (AfSEM) Coordinator (I&E)",
+        "organization": "African Union Commission",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Government and Public Sector",
+        "deadline": "7 December 2026.",
+        "matchScore": 46,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Full-Stack Lead Engineer"
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
-        "applyUrl": ""
+        "requiredExperienceText": "At least 7 years with a Master's degree or 10 years with a Bachelor's degree, including 3 years at supervisory level.",
+        "requiredEducationText": "Master's degree in Electrical Engineering, Electronics Engineering, Energy Systems, Energy Economics, Energy Policy or related field, with at least 7 years of relevant experience; OR Bachelor's degree in the same fields with at least 10 years of relevant experience.",
+        "applyUrl": "https://jobs.au.int/job/Senior-Energy-Expert-African-Single-Electricity-Market-AfSEM-Coordinator-I%26E/3125-en_US"
+      },
+      {
+        "id": "job_1795178043180_8_bntsa",
+        "sourceType": "domestic_job",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "30 November 2026.",
+        "matchScore": 37,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: science",
+          "Meets 1+ yrs experience requirement",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
+      },
+      {
+        "id": "job_1795178043180_17_ejs0i",
+        "sourceType": "domestic_job",
+        "title": "IT Infrastructure & Cyber Security Auditor",
+        "organization": "Dashen Bank S.C.",
+        "location": "Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 37,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: computer, science",
+          "Preferred location: Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 4 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "4 years.",
+        "requiredEducationText": "Bachelor's degree in Computer Science, IT, Computer Engineering or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2571&company=dashenbank"
+      },
+      {
+        "id": "job_1795338681457_9_rcu2t",
+        "sourceType": "domestic_job",
+        "title": "Safety and Security Coordinator",
+        "organization": "Mercy Corps Ethiopia",
+        "location": "Addis Ababa, Ethiopia, with frequent travel to field locations.",
+        "category": "Tourism and Travel",
+        "deadline": "30 November 2026.",
+        "matchScore": 35,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa, Ethiopia, with frequent travel to field locations.",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 5 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "At least 5 years of progressively responsible safety, security, access or operational-risk experience.",
+        "requiredEducationText": "Bachelor's degree in Security Management, International Relations, Peace and Conflict Studies, Political Science, Risk Management, Development Studies or related field.",
+        "applyUrl": "https://recruiting2.ultipro.com/MER1024MERCY/JobBoard/7de55979-49d4-4f59-b61b-9c7d0e38d500/OpportunityDetail?opportunityId=d34107af-7684-49f4-93a9-900ee6ac2186"
+      },
+      {
+        "id": "job_1795178043180_18_tk0f6",
+        "sourceType": "domestic_job",
+        "title": "Market Intelligence Specialist I",
+        "organization": "Dashen Bank S.C.",
+        "location": "Head Office, Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 32,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Preferred location: Head Office, Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 6 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "Minimum 6 years.",
+        "requiredEducationText": "Bachelor's degree in Economics, Business Administration, Management, Accounting and Finance, Statistics or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2566&company=dashenbank"
       },
       {
         "id": "job_1794759677414_14_pgs5w",
@@ -675,84 +909,104 @@
         "requiredExperienceText": "At least 3 years. Coffee cupping/roasting training certificate required.",
         "requiredEducationText": "BSc in Plant Science, Agronomy, Horticulture, Food Science, Crop Production or a related field.",
         "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1794643031646_17_52tb1",
-        "sourceType": "domestic_job",
-        "title": "Senior Cupper",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Field of study match: science",
-          "Matches Education: science"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 5 years. Coffee cupping/roasting training certificate required.",
-        "requiredEducationText": "BSc in Plant Science, Agronomy, Horticulture, Food Science, Crop Production or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1795023121182_4_s3opx",
-        "sourceType": "domestic_job",
-        "title": "Project Coordinator",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Hossana (1 position) and Yabelo (1 position).",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Education eligible (BSc in Computer Science)",
-          "Related Field: IT & Software → Project Management"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant field programme implementation experience.",
-        "requiredEducationText": "Bachelor's Degree or higher in Project Management, Social Work, Sociology, Development Studies or a related field.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Education eligible (BSc in Computer Science)",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
       }
     ]
   },
   "google_7965616273726134": {
-    "recalculatedAt": "2026-11-23T11:26:48.934Z",
+    "recalculatedAt": "2026-11-25T06:44:46.267Z",
     "items": [
+      {
+        "id": "job_1795536743392_4_wo6gw",
+        "sourceType": "domestic_job",
+        "title": "Customer Service Officer II",
+        "organization": "Ahadu Bank S.C.",
+        "location": "Ziway, Oromia",
+        "category": "Banking and Financial Institutions",
+        "deadline": "1 December 2026",
+        "matchScore": 70,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Education eligible (BSc in Computer Science)",
+          "Meets 2+ yrs experience requirement",
+          "Experience background: core, banking",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "2 years of relevant experience, including 1 year as Customer Service Officer I or equivalent.",
+        "requiredEducationText": "Bachelor's degree in Banking and Insurance, Accounting, Management, Economics, Business Administration or related field.",
+        "applyUrl": "https://forms.gle/KVz1bHy1A9yVsSrV7"
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 57,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches IT & Software"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743392_5_gbein",
+        "sourceType": "domestic_job",
+        "title": "Customer Service Officer I",
+        "organization": "Ahadu Bank S.C.",
+        "location": "Ziway",
+        "category": "Banking and Financial Institutions",
+        "deadline": "1 December 2026",
+        "matchScore": 56,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Meets 1+ yrs experience requirement",
+          "Experience background: core, banking",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "At least 1 year of relevant banking experience.",
+        "requiredEducationText": "Bachelor's degree in Banking and Insurance, Accounting, Management, Economics, Business Administration or related field.",
+        "applyUrl": "https://forms.gle/KVz1bHy1A9yVsSrV7"
+      },
+      {
+        "id": "job_1795178043180_12_ft2ur",
+        "sourceType": "domestic_job",
+        "title": "Social Policy Officer, NO-1",
+        "organization": "UNICEF Ethiopia.",
+        "location": "Addis Ababa, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "26 November 2026.",
+        "matchScore": 55,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Meets 1+ yrs experience requirement",
+          "Preferred location: Addis Ababa, Ethiopia.",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Bachelor's degree in Economics, Social Science, International Studies, Political Science, Public Policy, International Relations or Development Studies.",
+        "applyUrl": "https://jobs.unicef.org/jobs/social-policy-officer-no-1-fixed-term-position-ethiopia-addis-ababa-ethiopia-00138478-ethiopia"
+      },
       {
         "id": "job_1794642856820_4_8yczm",
         "sourceType": "domestic_job",
@@ -869,6 +1123,28 @@
         "applyUrl": "https://drc.ngo/jobs/"
       },
       {
+        "id": "job_1795337914321_50_lu0om",
+        "sourceType": "domestic_job",
+        "title": "Part-Time Tennis Coach",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "27 November 2026. Registration starts 23 November.",
+        "matchScore": 45,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "One year playing or coaching experience under the first qualification route, or two years under the second route.",
+        "requiredEducationText": "Either a minimum 10+1 or Level I Certificate in Sports Science, Physical Education, Sports Coaching, Recreation Management, Health and Fitness or related field; OR Grade 12/10th grade completion with valid tennis coaching certification.",
+        "applyUrl": "https://corporate.ethiopianairlines.com/AboutEthiopian/careers"
+      },
+      {
         "id": "job_1794759677414_8_cbrk8",
         "sourceType": "domestic_job",
         "title": "Finance Manager – Employment Outsourcing and Workforce Management",
@@ -889,6 +1165,28 @@
         "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
         "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
         "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
+      },
+      {
+        "id": "job_1795536743392_2_h2bqt",
+        "sourceType": "domestic_job",
+        "title": "Banking Business Officer I",
+        "organization": "ZamZam Bank S.C.",
+        "location": "Shire",
+        "category": "Banking and Financial Institutions",
+        "deadline": "30 November 2026",
+        "matchScore": 44,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Meets 2+ yrs experience requirement",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Minimum 2 years of branch banking experience, including 1 year as a Junior Officer.",
+        "requiredEducationText": "Bachelor's degree in Business Administration, Finance or related field.",
+        "applyUrl": "https://forms.gle/Muqmf2ZrZCqzGuw58"
       },
       {
         "id": "job_1794643031646_11_hjca7",
@@ -935,6 +1233,27 @@
         "requiredExperienceText": "Extensive senior-level administration and management experience.",
         "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
         "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
+      },
+      {
+        "id": "job_1795337914320_1_8k7tz",
+        "sourceType": "domestic_job",
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 40,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -1057,28 +1376,6 @@
         "applyUrl": "https://jobs.ebrd.com/job/London-Director-Banking-Technology/1456191433/"
       },
       {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Role alignment: full",
-          "Matches Full-Stack Lead Engineer"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
-      },
-      {
         "id": "job_1794759677414_23_k0u6v",
         "sourceType": "domestic_job",
         "title": "Country Protection Manager",
@@ -1167,75 +1464,174 @@
         "applyUrl": ""
       },
       {
-        "id": "job_1794642856820_3_l975o",
+        "id": "job_1795536743393_6_1rkxu",
         "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
         "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred location: Head Office, Addis Ababa",
-          "Related Field: Banking → Economics & Investment"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Related Field: Banking → Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
-      },
-      {
-        "id": "job_1795023121182_3_8cf4p",
-        "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
-        "matchScore": 41,
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 61,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
           "Role alignment: systems",
-          "Field of study match: science",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Field of study match: computer, science",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
+      },
+      {
+        "id": "job_1795178043180_16_5idi8",
+        "sourceType": "domestic_job",
+        "title": "IT Applications & Data Quality Auditor",
+        "organization": "Dashen Bank S.C.",
+        "location": "Head Office, Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 51,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Field of study match: computer, science",
+          "Preferred location: Head Office, Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 4 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "4 years.",
+        "requiredEducationText": "Bachelor's degree in IT, Computer Science, Information Systems or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2569&company=dashenbank"
+      },
+      {
+        "id": "job_1795338681456_2_f638r",
+        "sourceType": "domestic_job",
+        "title": "Senior Energy Expert – African Single Electricity Market (AfSEM) Coordinator (I&E)",
+        "organization": "African Union Commission",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Government and Public Sector",
+        "deadline": "7 December 2026.",
+        "matchScore": 46,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Role alignment: systems",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Full-Stack Lead Engineer"
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
-        "applyUrl": ""
+        "requiredExperienceText": "At least 7 years with a Master's degree or 10 years with a Bachelor's degree, including 3 years at supervisory level.",
+        "requiredEducationText": "Master's degree in Electrical Engineering, Electronics Engineering, Energy Systems, Energy Economics, Energy Policy or related field, with at least 7 years of relevant experience; OR Bachelor's degree in the same fields with at least 10 years of relevant experience.",
+        "applyUrl": "https://jobs.au.int/job/Senior-Energy-Expert-African-Single-Electricity-Market-AfSEM-Coordinator-I%26E/3125-en_US"
+      },
+      {
+        "id": "job_1795178043180_8_bntsa",
+        "sourceType": "domestic_job",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "30 November 2026.",
+        "matchScore": 37,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: science",
+          "Meets 1+ yrs experience requirement",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
+      },
+      {
+        "id": "job_1795178043180_17_ejs0i",
+        "sourceType": "domestic_job",
+        "title": "IT Infrastructure & Cyber Security Auditor",
+        "organization": "Dashen Bank S.C.",
+        "location": "Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 37,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: computer, science",
+          "Preferred location: Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 4 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "4 years.",
+        "requiredEducationText": "Bachelor's degree in Computer Science, IT, Computer Engineering or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2571&company=dashenbank"
+      },
+      {
+        "id": "job_1795338681457_9_rcu2t",
+        "sourceType": "domestic_job",
+        "title": "Safety and Security Coordinator",
+        "organization": "Mercy Corps Ethiopia",
+        "location": "Addis Ababa, Ethiopia, with frequent travel to field locations.",
+        "category": "Tourism and Travel",
+        "deadline": "30 November 2026.",
+        "matchScore": 35,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Field of study match: science",
+          "Preferred location: Addis Ababa, Ethiopia, with frequent travel to field locations.",
+          "Matches Education: science"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 5 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "At least 5 years of progressively responsible safety, security, access or operational-risk experience.",
+        "requiredEducationText": "Bachelor's degree in Security Management, International Relations, Peace and Conflict Studies, Political Science, Risk Management, Development Studies or related field.",
+        "applyUrl": "https://recruiting2.ultipro.com/MER1024MERCY/JobBoard/7de55979-49d4-4f59-b61b-9c7d0e38d500/OpportunityDetail?opportunityId=d34107af-7684-49f4-93a9-900ee6ac2186"
+      },
+      {
+        "id": "job_1795178043180_18_tk0f6",
+        "sourceType": "domestic_job",
+        "title": "Market Intelligence Specialist I",
+        "organization": "Dashen Bank S.C.",
+        "location": "Head Office, Addis Ababa.",
+        "category": "Banking and Financial Institutions",
+        "deadline": "28 November 2026.",
+        "matchScore": 32,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Education eligible (BSc in Computer Science)",
+          "Preferred location: Head Office, Addis Ababa.",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 6 yrs experience required (profile has 2 yrs)"
+        ],
+        "requiredExperienceText": "Minimum 6 years.",
+        "requiredEducationText": "Bachelor's degree in Economics, Business Administration, Management, Accounting and Finance, Statistics or related fields.",
+        "applyUrl": "https://career55.sapsf.eu/sfcareer/jobreqcareer?jobId=2566&company=dashenbank"
       },
       {
         "id": "job_1794759677414_14_pgs5w",
@@ -1426,109 +1822,12 @@
         "requiredExperienceText": "At least 3 years. Coffee cupping/roasting training certificate required.",
         "requiredEducationText": "BSc in Plant Science, Agronomy, Horticulture, Food Science, Crop Production or a related field.",
         "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1794643031646_17_52tb1",
-        "sourceType": "domestic_job",
-        "title": "Senior Cupper",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Field of study match: science",
-          "Matches Education: science"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 5 years. Coffee cupping/roasting training certificate required.",
-        "requiredEducationText": "BSc in Plant Science, Agronomy, Horticulture, Food Science, Crop Production or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1795023121182_4_s3opx",
-        "sourceType": "domestic_job",
-        "title": "Project Coordinator",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Hossana (1 position) and Yabelo (1 position).",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Education eligible (BSc in Computer Science)",
-          "Related Field: IT & Software → Project Management"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant field programme implementation experience.",
-        "requiredEducationText": "Bachelor's Degree or higher in Project Management, Social Work, Sociology, Development Studies or a related field.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 30,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Education eligible (BSc in Computer Science)",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 2 yrs)"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
       }
     ]
   },
   "nTsEK1c0RvgrJGUAp2ChyBtjhQZ2": {
-    "recalculatedAt": "2026-11-23T11:26:48.970Z",
+    "recalculatedAt": "2026-11-25T06:44:46.338Z",
     "items": [
-      {
-        "id": "job_1794642856820_3_l975o",
-        "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
-        "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 98,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Role alignment: managerial",
-          "Preferred Sector: Education and Universities",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Head Office, Addis Ababa",
-          "Matches Branch manager "
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": ""
-      },
       {
         "id": "job_1794642856820_4_8yczm",
         "sourceType": "domestic_job",
@@ -1580,6 +1879,52 @@
         "applyUrl": ""
       },
       {
+        "id": "job_1795337914320_1_8k7tz",
+        "sourceType": "domestic_job",
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 72,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Tourism and Travel",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_48_1rjke",
+        "sourceType": "domestic_job",
+        "title": "Executive Assistant to the General Manager",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 72,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the retrieved role-specific announcement.",
+        "requiredEducationText": "Not stated in the retrieved role-specific announcement.",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1794642856820_5_nw624",
         "sourceType": "domestic_job",
         "title": "Finance Supervisor",
@@ -1626,30 +1971,6 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 70,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Role alignment: finance",
-          "Preferred Sector: NGO and International Organizations",
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "job_1794759677414_26_autcv",
@@ -1699,29 +2020,6 @@
         "applyUrl": ""
       },
       {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 62,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Role alignment: finance",
-          "Preferred Sector: Private Companies",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
-      },
-      {
         "id": "job_1794648445935_28_gyknf",
         "sourceType": "domestic_job",
         "title": "Women and Girls Adviser, SEO",
@@ -1768,6 +2066,29 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1795337914321_25_w6i37",
+        "sourceType": "domestic_job",
+        "title": "Club Car / Guest Driver",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 62,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Previous driving experience is an advantage.",
+        "requiredEducationText": "Relevant driver training and valid driving licence for the assigned vehicle class.",
+        "applyUrl": ""
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -2074,30 +2395,208 @@
         "applyUrl": "https://ethio-jobs.net.et/vacancy-detail.php?id=53485"
       },
       {
-        "id": "job_1794643031646_9_ofu68",
+        "id": "job_1795337914321_33_jajst",
         "sourceType": "domestic_job",
-        "title": "Executive Assistant",
-        "organization": "SNV Netherlands Development Organisation",
+        "title": "Bartender",
+        "organization": "Chaka Skylight Hotel",
         "location": "Addis Ababa",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 80,
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: communication, microsoft, office",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Meets 1+ yrs experience requirement",
           "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_20_5vo6s",
+        "sourceType": "domestic_job",
+        "title": "Housekeeping Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Meets 1+ yrs experience requirement",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_24_0q1to",
+        "sourceType": "domestic_job",
+        "title": "Chief Steward",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_18_zpqri",
+        "sourceType": "domestic_job",
+        "title": "Airport Representative",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Meets 1+ yrs experience requirement",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Education and Universities",
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Branch manager "
         ],
         "missingMandatoryQualifications": [
           "Bachelor's Degree required"
         ],
-        "requiredExperienceText": "Substantial experience supporting senior leaders. Excellent English writing, communication and minute-taking skills; advanced Microsoft 365 skills.",
-        "requiredEducationText": "Bachelor's degree in Business Administration, Office Management, Public Administration or a related field.",
-        "applyUrl": "https://www.snv.org/careers/executive-assistant-744000161505579"
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743393_6_1rkxu",
+        "sourceType": "domestic_job",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
+        "location": "Head Office, Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Banking and Financial Institutions",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
+      },
+      {
+        "id": "job_1795178043180_12_ft2ur",
+        "sourceType": "domestic_job",
+        "title": "Social Policy Officer, NO-1",
+        "organization": "UNICEF Ethiopia.",
+        "location": "Addis Ababa, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "26 November 2026.",
+        "matchScore": 78,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Role alignment: finance",
+          "Preferred Sector: NGO and International Organizations",
+          "Matching expertise/skills: office",
+          "Meets 1+ yrs experience requirement",
+          "Preferred location: Addis Ababa, Ethiopia."
+        ],
+        "missingMandatoryQualifications": [
+          "Bachelor's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Bachelor's degree in Economics, Social Science, International Studies, Political Science, Public Policy, International Relations or Development Studies.",
+        "applyUrl": "https://jobs.unicef.org/jobs/social-policy-officer-no-1-fixed-term-position-ethiopia-addis-ababa-ethiopia-00138478-ethiopia"
+      },
+      {
+        "id": "job_1795178043180_8_bntsa",
+        "sourceType": "domestic_job",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
+        "category": "NGO and International Organizations",
+        "deadline": "30 November 2026.",
+        "matchScore": 76,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: NGO and International Organizations",
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Meets 1+ yrs experience requirement",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
       },
       {
         "id": "job_1794648445935_37_rq8tj",
@@ -2124,6 +2623,106 @@
         "requiredExperienceText": "Relevant programme-support and administrative experience.",
         "requiredEducationText": "Relevant university degree in Business Administration, Management, Social Sciences or a related discipline.",
         "applyUrl": "https://drc.ngo/jobs/"
+      },
+      {
+        "id": "job_1795337914321_27_b74k5",
+        "sourceType": "domestic_job",
+        "title": "Reservations Agent",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and customer-service skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_22_sbkjo",
+        "sourceType": "domestic_job",
+        "title": "Uniform & Linen Room Attendant",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Previous related experience is an advantage.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_19_6ijsx",
+        "sourceType": "domestic_job",
+        "title": "Telephone Operator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and communication skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_4_j0xss",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "British Embassy / Foreign, Commonwealth and Development Office (FCDO)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Embassy and Diplomatic Jobs",
+        "deadline": "4 December 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches Branch manager "
+        ],
+        "missingMandatoryQualifications": [
+          "Bachelor's Degree required"
+        ],
+        "requiredExperienceText": "Demonstrated experience in policy, advisory, programme, advocacy or coordination work involving gender equality, women's rights, social inclusion or safeguarding.",
+        "requiredEducationText": "Not stated as a specific degree requirement in the official announcement.",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
       },
       {
         "id": "job_1794643031646_11_hjca7",
@@ -2153,335 +2752,80 @@
         "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
       },
       {
-        "id": "job_1795023121182_3_8cf4p",
+        "id": "job_1795337914321_29_eiopo",
         "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
+        "title": "Sommelier",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
         "matchScore": 64,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: Tourism and Travel",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
           "Matches Branch manager "
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 1 yrs)",
+          "Minimum 2 yrs experience required (profile has 1 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794759677414_19_f93mw",
-        "sourceType": "domestic_job",
-        "title": "Head of Support Services",
-        "organization": "Danish Refugee Council",
-        "location": "Damascus",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "5 December 2026.",
-        "matchScore": 62,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Role alignment: finance",
-          "Preferred Sector: NGO and International Organizations",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
-        "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
-        "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794759677414_8_cbrk8",
-        "sourceType": "domestic_job",
-        "title": "Finance Manager – Employment Outsourcing and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026.",
-        "matchScore": 62,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Role alignment: finance",
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
-        "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
-        "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_2_nd30b",
-        "sourceType": "domestic_job",
-        "title": "Sales Consultant",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Banking and Financial Institutions",
-        "salary": "Not stated.",
-        "deadline": "30 November 2026.",
-        "matchScore": 58,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: communication",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 1 yrs)"
-        ],
-        "requiredExperienceText": "Minimum 3 years in sales.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/sales-consultant"
-      },
-      {
-        "id": "job_1794759677414_14_pgs5w",
-        "sourceType": "domestic_job",
-        "title": "Deputy Finance Manager",
-        "organization": "Danish Refugee Council",
-        "location": "Bunia",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "30 November 2026.",
-        "matchScore": 50,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Role alignment: finance",
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: microsoft",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 1 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years in international NGO financial management, including 2 years in a management role.",
-        "requiredEducationText": "Bachelor's or Master's in Finance, Accounting or related discipline.",
-        "applyUrl": "https://drc.ngo/jobs/job/?id=177164"
-      },
-      {
-        "id": "job_1794648445935_23_068vj",
-        "sourceType": "domestic_job",
-        "title": "Chief of Administration – Director, Administration and Conference Management Division, D1",
-        "organization": "United Nations Economic Commission for Africa (UNECA)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 December 2026.",
-        "matchScore": 46,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "Extensive senior-level administration and management experience.",
-        "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
-        "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
-      },
-      {
-        "id": "job_1794759677414_3_xmilj",
-        "sourceType": "domestic_job",
-        "title": "Sales Executive – B2C",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Government and Public Sector",
-        "salary": "AED 4,000 per month plus commission and incentives.",
-        "deadline": "30 November 2026.",
-        "matchScore": 44,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 2 yrs experience required (profile has 1 yrs)"
-        ],
-        "requiredExperienceText": "2 years of UAE sales experience.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/sales-executive-b2c-office-based"
-      },
-      {
-        "id": "job_1794759677414_9_a3cuq",
-        "sourceType": "domestic_job",
-        "title": "HR Operations and Administration Specialist – Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Accounting and Finance",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Accounting and Finance",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 1 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE HR operations or workforce administration.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/hr-operations-and-administration-specialist-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_6_pk8lv",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – EOR and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 1 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE B2B sales and business development.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-eor-and-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_7_4b0ac",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – SaaS-Based HRMS Software",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "IT and Technology",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: IT and Technology",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 1 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE/GCC B2B software sales.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-saas-based-hrms-software"
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: office",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 1 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794643031646_12_ot6gx",
-        "sourceType": "domestic_job",
-        "title": "Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 1 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years in B2B, wholesale, manufacturing or commercial sales.",
-        "requiredEducationText": "BSc/BA in Engineering, Automotive Technology, Business Management, Marketing, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
       }
     ]
   },
   "F25h34YBU1UPkMiFC1oK0r3KZxB3": {
-    "recalculatedAt": "2026-11-23T11:26:49.058Z",
+    "recalculatedAt": "2026-11-25T06:44:46.438Z",
     "items": [
       {
-        "id": "job_1794642856820_3_l975o",
+        "id": "job_1795337914320_1_8k7tz",
         "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
-        "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 84,
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 72,
         "eligibilityStatus": "Eligible",
         "isFullyQualified": true,
         "strictlyQualified": true,
         "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Head Office, Addis Ababa",
-          "Matches Your Experience"
+          "Preferred Sector: Tourism and Travel",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
         ],
         "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_48_1rjke",
+        "sourceType": "domestic_job",
+        "title": "Executive Assistant to the General Manager",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 72,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the retrieved role-specific announcement.",
+        "requiredEducationText": "Not stated in the retrieved role-specific announcement.",
         "applyUrl": ""
       },
       {
@@ -2628,6 +2972,29 @@
         "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
       },
       {
+        "id": "job_1795337914321_25_w6i37",
+        "sourceType": "domestic_job",
+        "title": "Club Car / Guest Driver",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 62,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Previous driving experience is an advantage.",
+        "requiredEducationText": "Relevant driver training and valid driving licence for the assigned vehicle class.",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1794642856820_5_nw624",
         "sourceType": "domestic_job",
         "title": "Finance Supervisor",
@@ -2672,29 +3039,6 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 56,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "intl_1794753290293_mikge",
@@ -2761,28 +3105,6 @@
         "requiredExperienceText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "requiredEducationText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "applyUrl": "https://careers.icrc.org/job/Mogadishu-Banadir-%28MOG%29-WATHAB-WASH-PROJECT-OFFICER-34138/1457272933/"
-      },
-      {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -3017,30 +3339,79 @@
         "applyUrl": "https://ethio-jobs.net.et/vacancy-detail.php?id=53485"
       },
       {
-        "id": "job_1794643031646_9_ofu68",
+        "id": "job_1795337914321_24_0q1to",
         "sourceType": "domestic_job",
-        "title": "Executive Assistant",
-        "organization": "SNV Netherlands Development Organisation",
+        "title": "Chief Steward",
+        "organization": "Chaka Skylight Hotel",
         "location": "Addis Ababa",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 80,
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: communication, microsoft, office",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
           "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Education and Universities",
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Bachelor's Degree required"
         ],
-        "requiredExperienceText": "Substantial experience supporting senior leaders. Excellent English writing, communication and minute-taking skills; advanced Microsoft 365 skills.",
-        "requiredEducationText": "Bachelor's degree in Business Administration, Office Management, Public Administration or a related field.",
-        "applyUrl": "https://www.snv.org/careers/executive-assistant-744000161505579"
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743393_6_1rkxu",
+        "sourceType": "domestic_job",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
+        "location": "Head Office, Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Banking and Financial Institutions",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
       },
       {
         "id": "job_1794648445935_37_rq8tj",
@@ -3069,30 +3440,233 @@
         "applyUrl": "https://drc.ngo/jobs/"
       },
       {
-        "id": "job_1795023121182_3_8cf4p",
+        "id": "job_1795337914321_27_b74k5",
         "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
+        "title": "Reservations Agent",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and customer-service skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_22_sbkjo",
+        "sourceType": "domestic_job",
+        "title": "Uniform & Linen Room Attendant",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Previous related experience is an advantage.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_19_6ijsx",
+        "sourceType": "domestic_job",
+        "title": "Telephone Operator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and communication skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_4_j0xss",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "British Embassy / Foreign, Commonwealth and Development Office (FCDO)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Embassy and Diplomatic Jobs",
+        "deadline": "4 December 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Bachelor's Degree required"
+        ],
+        "requiredExperienceText": "Demonstrated experience in policy, advisory, programme, advocacy or coordination work involving gender equality, women's rights, social inclusion or safeguarding.",
+        "requiredEducationText": "Not stated as a specific degree requirement in the official announcement.",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1795337914321_33_jajst",
+        "sourceType": "domestic_job",
+        "title": "Bartender",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
         "matchScore": 64,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: Tourism and Travel",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
+        "requiredExperienceText": "At least 1 year of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_20_5vo6s",
+        "sourceType": "domestic_job",
+        "title": "Housekeeping Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_29_eiopo",
+        "sourceType": "domestic_job",
+        "title": "Sommelier",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_18_zpqri",
+        "sourceType": "domestic_job",
+        "title": "Airport Representative",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_30_o6dh3",
+        "sourceType": "domestic_job",
+        "title": "Food & Beverage Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
         "applyUrl": ""
       },
       {
@@ -3121,306 +3695,79 @@
         "applyUrl": "https://www.acoup.com/jobs/sales-consultant"
       },
       {
-        "id": "job_1794759677414_19_f93mw",
+        "id": "job_1795178043180_8_bntsa",
         "sourceType": "domestic_job",
-        "title": "Head of Support Services",
-        "organization": "Danish Refugee Council",
-        "location": "Damascus",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
         "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "5 December 2026.",
-        "matchScore": 48,
+        "deadline": "30 November 2026.",
+        "matchScore": 56,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
           "Preferred Sector: NGO and International Organizations",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
-        "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
-        "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794759677414_8_cbrk8",
-        "sourceType": "domestic_job",
-        "title": "Finance Manager – Employment Outsourcing and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
-        "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
-        "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
-      },
-      {
-        "id": "job_1794648445935_23_068vj",
-        "sourceType": "domestic_job",
-        "title": "Chief of Administration – Director, Administration and Conference Management Division, D1",
-        "organization": "United Nations Economic Commission for Africa (UNECA)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 December 2026.",
-        "matchScore": 46,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "Extensive senior-level administration and management experience.",
-        "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
-        "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
-      },
-      {
-        "id": "job_1794759677414_3_xmilj",
-        "sourceType": "domestic_job",
-        "title": "Sales Executive – B2C",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Government and Public Sector",
-        "salary": "AED 4,000 per month plus commission and incentives.",
-        "deadline": "30 November 2026.",
-        "matchScore": 44,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 2 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "2 years of UAE sales experience.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/sales-executive-b2c-office-based"
-      },
-      {
-        "id": "job_1794759677414_9_a3cuq",
-        "sourceType": "domestic_job",
-        "title": "HR Operations and Administration Specialist – Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Accounting and Finance",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Accounting and Finance",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE HR operations or workforce administration.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/hr-operations-and-administration-specialist-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_14_pgs5w",
-        "sourceType": "domestic_job",
-        "title": "Deputy Finance Manager",
-        "organization": "Danish Refugee Council",
-        "location": "Bunia",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "30 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: microsoft",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years in international NGO financial management, including 2 years in a management role.",
-        "requiredEducationText": "Bachelor's or Master's in Finance, Accounting or related discipline.",
-        "applyUrl": "https://drc.ngo/jobs/job/?id=177164"
-      },
-      {
-        "id": "job_1794759677414_6_pk8lv",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – EOR and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE B2B sales and business development.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-eor-and-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_7_4b0ac",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – SaaS-Based HRMS Software",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "IT and Technology",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: IT and Technology",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE/GCC B2B software sales.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-saas-based-hrms-software"
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: office",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794643031646_11_hjca7",
-        "sourceType": "domestic_job",
-        "title": "Junior Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Gelan, Adama and branch offices",
-        "category": "Engineering and Construction",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "27 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Engineering and Construction",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Minimum 1 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
+          "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 1 year in sales, marketing, customer service or commercial operations.",
-        "requiredEducationText": "BSc/BA in Mechanical Engineering, Electrical Engineering, Industrial Engineering, Automotive Technology, Civil Engineering, Business Management, Marketing Management, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1794643031646_12_ot6gx",
-        "sourceType": "domestic_job",
-        "title": "Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years in B2B, wholesale, manufacturing or commercial sales.",
-        "requiredEducationText": "BSc/BA in Engineering, Automotive Technology, Business Management, Marketing, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
       }
     ]
   },
   "XPuREoTPhvTyYsvB14L3JpptCV53": {
-    "recalculatedAt": "2026-11-23T11:26:49.094Z",
+    "recalculatedAt": "2026-11-25T06:44:46.502Z",
     "items": [
       {
-        "id": "job_1794642856820_3_l975o",
+        "id": "job_1795337914320_1_8k7tz",
         "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
-        "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 84,
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 72,
         "eligibilityStatus": "Eligible",
         "isFullyQualified": true,
         "strictlyQualified": true,
         "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Head Office, Addis Ababa",
-          "Matches Your Experience"
+          "Preferred Sector: Tourism and Travel",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
         ],
         "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_48_1rjke",
+        "sourceType": "domestic_job",
+        "title": "Executive Assistant to the General Manager",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 72,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the retrieved role-specific announcement.",
+        "requiredEducationText": "Not stated in the retrieved role-specific announcement.",
         "applyUrl": ""
       },
       {
@@ -3567,6 +3914,29 @@
         "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
       },
       {
+        "id": "job_1795337914321_25_w6i37",
+        "sourceType": "domestic_job",
+        "title": "Club Car / Guest Driver",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 62,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Previous driving experience is an advantage.",
+        "requiredEducationText": "Relevant driver training and valid driving licence for the assigned vehicle class.",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1794642856820_5_nw624",
         "sourceType": "domestic_job",
         "title": "Finance Supervisor",
@@ -3611,29 +3981,6 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 56,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "intl_1794753290293_mikge",
@@ -3700,28 +4047,6 @@
         "requiredExperienceText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "requiredEducationText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "applyUrl": "https://careers.icrc.org/job/Mogadishu-Banadir-%28MOG%29-WATHAB-WASH-PROJECT-OFFICER-34138/1457272933/"
-      },
-      {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -3956,30 +4281,79 @@
         "applyUrl": "https://ethio-jobs.net.et/vacancy-detail.php?id=53485"
       },
       {
-        "id": "job_1794643031646_9_ofu68",
+        "id": "job_1795337914321_24_0q1to",
         "sourceType": "domestic_job",
-        "title": "Executive Assistant",
-        "organization": "SNV Netherlands Development Organisation",
+        "title": "Chief Steward",
+        "organization": "Chaka Skylight Hotel",
         "location": "Addis Ababa",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 80,
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: communication, microsoft, office",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
           "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Education and Universities",
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Bachelor's Degree required"
         ],
-        "requiredExperienceText": "Substantial experience supporting senior leaders. Excellent English writing, communication and minute-taking skills; advanced Microsoft 365 skills.",
-        "requiredEducationText": "Bachelor's degree in Business Administration, Office Management, Public Administration or a related field.",
-        "applyUrl": "https://www.snv.org/careers/executive-assistant-744000161505579"
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743393_6_1rkxu",
+        "sourceType": "domestic_job",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
+        "location": "Head Office, Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Banking and Financial Institutions",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
       },
       {
         "id": "job_1794648445935_37_rq8tj",
@@ -4008,30 +4382,233 @@
         "applyUrl": "https://drc.ngo/jobs/"
       },
       {
-        "id": "job_1795023121182_3_8cf4p",
+        "id": "job_1795337914321_27_b74k5",
         "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
+        "title": "Reservations Agent",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and customer-service skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_22_sbkjo",
+        "sourceType": "domestic_job",
+        "title": "Uniform & Linen Room Attendant",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Previous related experience is an advantage.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_19_6ijsx",
+        "sourceType": "domestic_job",
+        "title": "Telephone Operator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and communication skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_4_j0xss",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "British Embassy / Foreign, Commonwealth and Development Office (FCDO)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Embassy and Diplomatic Jobs",
+        "deadline": "4 December 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Bachelor's Degree required"
+        ],
+        "requiredExperienceText": "Demonstrated experience in policy, advisory, programme, advocacy or coordination work involving gender equality, women's rights, social inclusion or safeguarding.",
+        "requiredEducationText": "Not stated as a specific degree requirement in the official announcement.",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1795337914321_33_jajst",
+        "sourceType": "domestic_job",
+        "title": "Bartender",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
         "matchScore": 64,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: Tourism and Travel",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
+        "requiredExperienceText": "At least 1 year of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_20_5vo6s",
+        "sourceType": "domestic_job",
+        "title": "Housekeeping Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_29_eiopo",
+        "sourceType": "domestic_job",
+        "title": "Sommelier",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_18_zpqri",
+        "sourceType": "domestic_job",
+        "title": "Airport Representative",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_30_o6dh3",
+        "sourceType": "domestic_job",
+        "title": "Food & Beverage Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
         "applyUrl": ""
       },
       {
@@ -4060,306 +4637,79 @@
         "applyUrl": "https://www.acoup.com/jobs/sales-consultant"
       },
       {
-        "id": "job_1794759677414_19_f93mw",
+        "id": "job_1795178043180_8_bntsa",
         "sourceType": "domestic_job",
-        "title": "Head of Support Services",
-        "organization": "Danish Refugee Council",
-        "location": "Damascus",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
         "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "5 December 2026.",
-        "matchScore": 48,
+        "deadline": "30 November 2026.",
+        "matchScore": 56,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
           "Preferred Sector: NGO and International Organizations",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
-        "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
-        "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794759677414_8_cbrk8",
-        "sourceType": "domestic_job",
-        "title": "Finance Manager – Employment Outsourcing and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
-        "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
-        "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
-      },
-      {
-        "id": "job_1794648445935_23_068vj",
-        "sourceType": "domestic_job",
-        "title": "Chief of Administration – Director, Administration and Conference Management Division, D1",
-        "organization": "United Nations Economic Commission for Africa (UNECA)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 December 2026.",
-        "matchScore": 46,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "Extensive senior-level administration and management experience.",
-        "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
-        "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
-      },
-      {
-        "id": "job_1794759677414_3_xmilj",
-        "sourceType": "domestic_job",
-        "title": "Sales Executive – B2C",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Government and Public Sector",
-        "salary": "AED 4,000 per month plus commission and incentives.",
-        "deadline": "30 November 2026.",
-        "matchScore": 44,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 2 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "2 years of UAE sales experience.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/sales-executive-b2c-office-based"
-      },
-      {
-        "id": "job_1794759677414_9_a3cuq",
-        "sourceType": "domestic_job",
-        "title": "HR Operations and Administration Specialist – Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Accounting and Finance",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Accounting and Finance",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE HR operations or workforce administration.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/hr-operations-and-administration-specialist-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_14_pgs5w",
-        "sourceType": "domestic_job",
-        "title": "Deputy Finance Manager",
-        "organization": "Danish Refugee Council",
-        "location": "Bunia",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "30 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: microsoft",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years in international NGO financial management, including 2 years in a management role.",
-        "requiredEducationText": "Bachelor's or Master's in Finance, Accounting or related discipline.",
-        "applyUrl": "https://drc.ngo/jobs/job/?id=177164"
-      },
-      {
-        "id": "job_1794759677414_6_pk8lv",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – EOR and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE B2B sales and business development.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-eor-and-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_7_4b0ac",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – SaaS-Based HRMS Software",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "IT and Technology",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: IT and Technology",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE/GCC B2B software sales.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-saas-based-hrms-software"
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: office",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794643031646_11_hjca7",
-        "sourceType": "domestic_job",
-        "title": "Junior Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Gelan, Adama and branch offices",
-        "category": "Engineering and Construction",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "27 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Engineering and Construction",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Minimum 1 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
+          "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 1 year in sales, marketing, customer service or commercial operations.",
-        "requiredEducationText": "BSc/BA in Mechanical Engineering, Electrical Engineering, Industrial Engineering, Automotive Technology, Civil Engineering, Business Management, Marketing Management, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1794643031646_12_ot6gx",
-        "sourceType": "domestic_job",
-        "title": "Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years in B2B, wholesale, manufacturing or commercial sales.",
-        "requiredEducationText": "BSc/BA in Engineering, Automotive Technology, Business Management, Marketing, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
       }
     ]
   },
   "xieFVTlwLcb3o5698g8nWSnyboc2": {
-    "recalculatedAt": "2026-11-23T11:26:49.129Z",
+    "recalculatedAt": "2026-11-25T06:44:46.570Z",
     "items": [
       {
-        "id": "job_1794642856820_3_l975o",
+        "id": "job_1795337914320_1_8k7tz",
         "sourceType": "domestic_job",
-        "title": "Manager, Strategic Planning and Monitoring",
-        "organization": "Commercial Nominees PLC",
-        "location": "Head Office, Addis Ababa",
-        "category": "Education and Universities",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "November 24, 2026",
-        "matchScore": 84,
+        "title": "French & Arabic Language Speaking Customer Service Associate",
+        "organization": "Ethiopian Airlines Group",
+        "location": "Addis Ababa",
+        "category": "Tourism and Travel",
+        "deadline": "2 December 2026.",
+        "matchScore": 72,
         "eligibilityStatus": "Eligible",
         "isFullyQualified": true,
         "strictlyQualified": true,
         "matchReasons": [
-          "Preferred Sector: Education and Universities",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Head Office, Addis Ababa",
-          "Matches Your Experience"
+          "Preferred Sector: Tourism and Travel",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Related Field: Banking → Customer Service"
         ],
         "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Ethiopian University Entrance Examination completed, minimum score of 300.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_48_1rjke",
+        "sourceType": "domestic_job",
+        "title": "Executive Assistant to the General Manager",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 72,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Not stated in the retrieved role-specific announcement.",
+        "requiredEducationText": "Not stated in the retrieved role-specific announcement.",
         "applyUrl": ""
       },
       {
@@ -4506,6 +4856,29 @@
         "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
       },
       {
+        "id": "job_1795337914321_25_w6i37",
+        "sourceType": "domestic_job",
+        "title": "Club Car / Guest Driver",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 62,
+        "eligibilityStatus": "Eligible",
+        "isFullyQualified": true,
+        "strictlyQualified": true,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: office",
+          "Preferred location: Addis Ababa",
+          "Matches Skill: office"
+        ],
+        "missingMandatoryQualifications": [],
+        "requiredExperienceText": "Previous driving experience is an advantage.",
+        "requiredEducationText": "Relevant driver training and valid driving licence for the assigned vehicle class.",
+        "applyUrl": ""
+      },
+      {
         "id": "job_1794642856820_5_nw624",
         "sourceType": "domestic_job",
         "title": "Finance Supervisor",
@@ -4550,29 +4923,6 @@
         "requiredExperienceText": "Not specified in the original vacancy",
         "requiredEducationText": "Not specified in the original vacancy",
         "applyUrl": ""
-      },
-      {
-        "id": "job_1794916511980_9_s92k8",
-        "sourceType": "domestic_job",
-        "title": "Consultant – Baseline Study on Investment and Budgeting for Children in Africa",
-        "organization": "UNICEF",
-        "location": "Addis Ababa / Remote with travel",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 56,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Preferred location: Addis Ababa / Remote with travel",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Relevant research, public finance and budgeting experience. Detailed requirements should be checked in the official announcement.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://jobs.unicef.org/jobs/a-baseline-study-on-the-investment-and-budgeting-for-children-in-africa-towards-a-continental-benchmark-for-child-protection-addis-ababa-ethiopia-remote-with-travel-9-5-months-596990-ethiopia"
       },
       {
         "id": "intl_1794753290293_mikge",
@@ -4639,28 +4989,6 @@
         "requiredExperienceText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "requiredEducationText": "NOT STATED IN THE OFFICIAL ANNOUNCEMENT",
         "applyUrl": "https://careers.icrc.org/job/Mogadishu-Banadir-%28MOG%29-WATHAB-WASH-PROJECT-OFFICER-34138/1457272933/"
-      },
-      {
-        "id": "job_1794818427383_11_2njs3",
-        "sourceType": "domestic_job",
-        "title": "Project Team Leader – Enterprise Development, Rural Finance and Digital Agriculture",
-        "organization": "Self Help Africa",
-        "location": "Ethiopia",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Eligible",
-        "isFullyQualified": true,
-        "strictlyQualified": true,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [],
-        "requiredExperienceText": "Not specified in the original vacancy",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://selfhelpafrica.org/ie/project-team-leader-project-lead-enterprise-development-rural-finance-digital-agriculture/"
       },
       {
         "id": "intl_1794753290521_2n8cn",
@@ -4895,30 +5223,79 @@
         "applyUrl": "https://ethio-jobs.net.et/vacancy-detail.php?id=53485"
       },
       {
-        "id": "job_1794643031646_9_ofu68",
+        "id": "job_1795337914321_24_0q1to",
         "sourceType": "domestic_job",
-        "title": "Executive Assistant",
-        "organization": "SNV Netherlands Development Organisation",
+        "title": "Chief Steward",
+        "organization": "Chaka Skylight Hotel",
         "location": "Addis Ababa",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "23 November 2026",
-        "matchScore": 80,
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 82,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: communication, microsoft, office",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
           "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_5_8rqax",
+        "sourceType": "domestic_job",
+        "title": "Intern – Liaison and Protocol Unit",
+        "organization": "International Livestock Research Institute (ILRI)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Education and Universities",
+        "deadline": "30 November 2026.",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Education and Universities",
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Preferred location: Addis Ababa, Ethiopia",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Bachelor's Degree required"
         ],
-        "requiredExperienceText": "Substantial experience supporting senior leaders. Excellent English writing, communication and minute-taking skills; advanced Microsoft 365 skills.",
-        "requiredEducationText": "Bachelor's degree in Business Administration, Office Management, Public Administration or a related field.",
-        "applyUrl": "https://www.snv.org/careers/executive-assistant-744000161505579"
+        "requiredExperienceText": "Not stated in the official announcement.",
+        "requiredEducationText": "Currently enrolled in an undergraduate degree programme in International Relations, Law, Political Science, Business Administration, Administration or a related field at a recognized university.",
+        "applyUrl": "https://ilri.simplicant.com/careers/english/jobs/63056-ilri-internship-liaison-and-protocol-unit-ethiopia/detail"
+      },
+      {
+        "id": "job_1795536743393_6_1rkxu",
+        "sourceType": "domestic_job",
+        "title": "Vice President – IS Project Management Office",
+        "organization": "Commercial Bank of Ethiopia (CBE)",
+        "location": "Head Office, Addis Ababa",
+        "category": "Banking and Financial Institutions",
+        "deadline": "29 November 2026",
+        "matchScore": 82,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Banking and Financial Institutions",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Head Office, Addis Ababa",
+          "Matches Banking"
+        ],
+        "missingMandatoryQualifications": [
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "10 years for MSc or 12 years for BSc, including 4 years in senior management or equivalent technology leadership.",
+        "requiredEducationText": "MSc or BSc in Computer Science, Information Systems, IT, Software Engineering, Computer Engineering, Telecommunications Engineering or related technology fields.",
+        "applyUrl": "https://vacancy.cbe.com.et"
       },
       {
         "id": "job_1794648445935_37_rq8tj",
@@ -4947,30 +5324,233 @@
         "applyUrl": "https://drc.ngo/jobs/"
       },
       {
-        "id": "job_1795023121182_3_8cf4p",
+        "id": "job_1795337914321_27_b74k5",
         "sourceType": "domestic_job",
-        "title": "Programme and Impact Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Addis Ababa, with travel to programme implementation areas.",
-        "category": "Tourism and Travel",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "24 November 2026.",
+        "title": "Reservations Agent",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and customer-service skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_22_sbkjo",
+        "sourceType": "domestic_job",
+        "title": "Uniform & Linen Room Attendant",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Previous related experience is an advantage.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_19_6ijsx",
+        "sourceType": "domestic_job",
+        "title": "Telephone Operator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "TVET / Certificate required"
+        ],
+        "requiredExperienceText": "Relevant training and communication skills.",
+        "requiredEducationText": "Relevant vocational certificate, TVET training or secondary education with practical skills.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795338681457_4_j0xss",
+        "sourceType": "domestic_job",
+        "title": "Women and Girls Adviser – SEO",
+        "organization": "British Embassy / Foreign, Commonwealth and Development Office (FCDO)",
+        "location": "Addis Ababa, Ethiopia",
+        "category": "Embassy and Diplomatic Jobs",
+        "deadline": "4 December 2026.",
+        "matchScore": 74,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Embassy and Diplomatic Jobs",
+          "Matching expertise/skills: communication, office",
+          "Preferred location: Addis Ababa, Ethiopia",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Bachelor's Degree required"
+        ],
+        "requiredExperienceText": "Demonstrated experience in policy, advisory, programme, advocacy or coordination work involving gender equality, women's rights, social inclusion or safeguarding.",
+        "requiredEducationText": "Not stated as a specific degree requirement in the official announcement.",
+        "applyUrl": "https://fcdo.tal.net/vx/lang-en-GB/mobile-0/appcentre-1/brand-2/candidate/so/pm/4/pl/1/opp/27639-27639-Women-and-Girls-Adviser-SEO-ADD/en-GB"
+      },
+      {
+        "id": "job_1795337914321_33_jajst",
+        "sourceType": "domestic_job",
+        "title": "Bartender",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
         "matchScore": 64,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
-          "Preferred Sector: Tourism and Travel",
-          "Matching expertise/skills: communication, office",
-          "Preferred location: Addis Ababa, with travel to programme implementation areas.",
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
           "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
           "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 3 years of relevant professional experience.",
-        "requiredEducationText": "Bachelor's Degree in Monitoring and Evaluation, Statistics, Economics, Development Studies, Information Systems, Social Sciences or related fields. Master's Degree is an advantage.",
+        "requiredExperienceText": "At least 1 year of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_20_5vo6s",
+        "sourceType": "domestic_job",
+        "title": "Housekeeping Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_29_eiopo",
+        "sourceType": "domestic_job",
+        "title": "Sommelier",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_18_zpqri",
+        "sourceType": "domestic_job",
+        "title": "Airport Representative",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 1 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 1 year.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
+        "applyUrl": ""
+      },
+      {
+        "id": "job_1795337914321_30_o6dh3",
+        "sourceType": "domestic_job",
+        "title": "Food & Beverage Coordinator",
+        "organization": "Chaka Skylight Hotel",
+        "location": "Addis Ababa",
+        "category": "Hotel and Hospitality",
+        "deadline": "26 November 2026.",
+        "matchScore": 64,
+        "eligibilityStatus": "Partially Qualified",
+        "isFullyQualified": false,
+        "strictlyQualified": false,
+        "matchReasons": [
+          "Preferred Sector: Hotel and Hospitality",
+          "Matching expertise/skills: teamwork, office",
+          "Preferred location: Addis Ababa",
+          "Matches Your Experience"
+        ],
+        "missingMandatoryQualifications": [
+          "Minimum 2 yrs experience required (profile has 0 yrs)",
+          "Master's Degree required"
+        ],
+        "requiredExperienceText": "At least 2 years of relevant experience.",
+        "requiredEducationText": "Degree, diploma or vocational qualification in Hospitality or Hotel Operations.",
         "applyUrl": ""
       },
       {
@@ -4999,287 +5579,38 @@
         "applyUrl": "https://www.acoup.com/jobs/sales-consultant"
       },
       {
-        "id": "job_1794759677414_19_f93mw",
+        "id": "job_1795178043180_8_bntsa",
         "sourceType": "domestic_job",
-        "title": "Head of Support Services",
-        "organization": "Danish Refugee Council",
-        "location": "Damascus",
+        "title": "Protection Assistant – Monitoring",
+        "organization": "Danish Refugee Council (DRC).",
+        "location": "Humera, Ethiopia.",
         "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "5 December 2026.",
-        "matchScore": 48,
+        "deadline": "30 November 2026.",
+        "matchScore": 56,
         "eligibilityStatus": "Partially Qualified",
         "isFullyQualified": false,
         "strictlyQualified": false,
         "matchReasons": [
           "Preferred Sector: NGO and International Organizations",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "At least 10 years of management experience, including 5 years in a similar role.",
-        "requiredEducationText": "Master's degree in Finance, HR, Economics, Business Administration or related discipline.",
-        "applyUrl": "https://www.integration.drc.ngo/jobs/job/?id=177161"
-      },
-      {
-        "id": "job_1794759677414_8_cbrk8",
-        "sourceType": "domestic_job",
-        "title": "Finance Manager – Employment Outsourcing and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026.",
-        "matchScore": 48,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "7–10 years in finance and accounting, including 3 years in a senior finance management role.",
-        "requiredEducationText": "Bachelor's degree in Accounting, Finance or related discipline.",
-        "applyUrl": "https://www.acoup.com/jobs/finance-manager-employment-outsourcing-and-workforce-management"
-      },
-      {
-        "id": "job_1794648445935_23_068vj",
-        "sourceType": "domestic_job",
-        "title": "Chief of Administration – Director, Administration and Conference Management Division, D1",
-        "organization": "United Nations Economic Commission for Africa (UNECA)",
-        "location": "Addis Ababa, Ethiopia",
-        "category": "Government and Public Sector",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "18 December 2026.",
-        "matchScore": 46,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Preferred location: Addis Ababa, Ethiopia",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "Extensive senior-level administration and management experience.",
-        "requiredEducationText": "Advanced university degree in Business Administration, Public Administration, Management or a related field.",
-        "applyUrl": "https://careers.un.org/jobSearchDescription/287680"
-      },
-      {
-        "id": "job_1794759677414_3_xmilj",
-        "sourceType": "domestic_job",
-        "title": "Sales Executive – B2C",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Government and Public Sector",
-        "salary": "AED 4,000 per month plus commission and incentives.",
-        "deadline": "30 November 2026.",
-        "matchScore": 44,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Government and Public Sector",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 2 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "2 years of UAE sales experience.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/sales-executive-b2c-office-based"
-      },
-      {
-        "id": "job_1794759677414_9_a3cuq",
-        "sourceType": "domestic_job",
-        "title": "HR Operations and Administration Specialist – Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Accounting and Finance",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 38,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Accounting and Finance",
-          "Matches Finance & Accounting"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE HR operations or workforce administration.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/hr-operations-and-administration-specialist-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_14_pgs5w",
-        "sourceType": "domestic_job",
-        "title": "Deputy Finance Manager",
-        "organization": "Danish Refugee Council",
-        "location": "Bunia",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "30 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: microsoft",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)",
-          "Master's Degree required"
-        ],
-        "requiredExperienceText": "5 years in international NGO financial management, including 2 years in a management role.",
-        "requiredEducationText": "Bachelor's or Master's in Finance, Accounting or related discipline.",
-        "applyUrl": "https://drc.ngo/jobs/job/?id=177164"
-      },
-      {
-        "id": "job_1794759677414_6_pk8lv",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – EOR and Workforce Management",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "Private Companies",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Private Companies",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE B2B sales and business development.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-eor-and-workforce-management"
-      },
-      {
-        "id": "job_1794759677414_7_4b0ac",
-        "sourceType": "domestic_job",
-        "title": "Business Development Manager – SaaS-Based HRMS Software",
-        "organization": "ACOUP",
-        "location": "Dubai, UAE",
-        "category": "IT and Technology",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: IT and Technology",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 5 yrs experience required (profile has 0 yrs)"
-        ],
-        "requiredExperienceText": "3–5 years of UAE/GCC B2B software sales.",
-        "requiredEducationText": "Not specified in the original vacancy",
-        "applyUrl": "https://www.acoup.com/jobs/business-development-manager-saas-based-hrms-software"
-      },
-      {
-        "id": "job_1795023121182_5_ymddc",
-        "sourceType": "domestic_job",
-        "title": "Reintegration Officer",
-        "organization": "Nigat Global Initiative (NGI)",
-        "location": "Shashemene, Oromia Region.",
-        "category": "Banking and Financial Institutions",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "25 November 2026.",
-        "matchScore": 36,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Banking and Financial Institutions",
-          "Matching expertise/skills: office",
-          "Matches Banking"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years of relevant experience in survivor reintegration, social work, livelihoods, economic empowerment or microenterprise support.",
-        "requiredEducationText": "Bachelor's Degree in Social Work, Sociology, Economics, Development Studies, Business or related disciplines.",
-        "applyUrl": ""
-      },
-      {
-        "id": "job_1794643031646_11_hjca7",
-        "sourceType": "domestic_job",
-        "title": "Junior Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Gelan, Adama and branch offices",
-        "category": "Engineering and Construction",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "27 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: Engineering and Construction",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
+          "Matching expertise/skills: microsoft office, microsoft, office",
+          "Matches Your Experience"
         ],
         "missingMandatoryQualifications": [
           "Minimum 1 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
+          "Master's Degree required"
         ],
-        "requiredExperienceText": "At least 1 year in sales, marketing, customer service or commercial operations.",
-        "requiredEducationText": "BSc/BA in Mechanical Engineering, Electrical Engineering, Industrial Engineering, Automotive Technology, Civil Engineering, Business Management, Marketing Management, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
-      },
-      {
-        "id": "job_1794643031646_12_ot6gx",
-        "sourceType": "domestic_job",
-        "title": "Sales Officer",
-        "organization": "AMG Holdings",
-        "location": "Akaki/Gelan",
-        "category": "NGO and International Organizations",
-        "salary": "Attractive / Per Company Scale",
-        "deadline": "26 November 2026",
-        "matchScore": 34,
-        "eligibilityStatus": "Partially Qualified",
-        "isFullyQualified": false,
-        "strictlyQualified": false,
-        "matchReasons": [
-          "Preferred Sector: NGO and International Organizations",
-          "Matching expertise/skills: office",
-          "Related Field: Banking → Sales & Marketing"
-        ],
-        "missingMandatoryQualifications": [
-          "Minimum 3 yrs experience required (profile has 0 yrs)",
-          "Bachelor's Degree required"
-        ],
-        "requiredExperienceText": "At least 3 years in B2B, wholesale, manufacturing or commercial sales.",
-        "requiredEducationText": "BSc/BA in Engineering, Automotive Technology, Business Management, Marketing, Economics or a related field.",
-        "applyUrl": "https://www.amgholdingsplc.com/current-jobs/"
+        "requiredExperienceText": "Minimum 1 year.",
+        "requiredEducationText": "Degree or diploma in Social Sciences, Law, Social Work, International Development or related fields.",
+        "applyUrl": "https://drc.ngo/jobs/job/?id=177229"
       }
     ]
   },
   "H7wtgxkocOSFcfcHwZVj6JrLEGy1": {
-    "recalculatedAt": "2026-11-23T11:26:49.138Z",
+    "recalculatedAt": "2026-11-25T06:44:46.581Z",
     "items": []
   },
   "fSf3qBTVTxNpO2OCjpPt9bNrViR2": {
-    "recalculatedAt": "2026-11-23T11:26:49.147Z",
+    "recalculatedAt": "2026-11-25T06:44:46.591Z",
     "items": []
   }
 }

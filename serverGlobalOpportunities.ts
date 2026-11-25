@@ -43,7 +43,22 @@ import {
   isOpportunityActiveAndDisplayable,
   MINIMUM_FULL_DAYS_REMAINING,
 } from './src/utils/opportunityIntelligenceEngine';
-import { verifyOfficialPermanentResidencyPathways } from './serverPermanentResidency';
+import {
+  OFFICIAL_GOVERNMENT_PR_SEEDS,
+  verifyOfficialPermanentResidencyPathways,
+} from './serverPermanentResidency';
+import {
+  CareerApplicantProfile,
+  CAREER_SPECIALTY_LABELS,
+  classifyCareerSpecialtyCategory,
+  classifySevenTierVisaSponsorship,
+  detectInternationalRegion,
+  evaluateWeightedCareerMatch,
+  extractGroundedProfileFromCvText,
+  parseAndNormalizeSalaryUsd,
+  PRIMARY_BENCHMARK_PROFILE,
+  scorePrPathwayForCareerProfile,
+} from './src/utils/internationalCareerIntelligence';
 
 export interface GlobalOpportunitiesStore {
   version: number;
@@ -2756,9 +2771,37 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       }
     }
 
+    // Reconcile official government PR & recruiting-country registry (all 24 official ministries + 12-point details)
+    const existingPrById = new Map(
+      (loaded.permanent_residency_pathways || []).map((p) => [p.id, p])
+    );
+    const mergedPrPathways: PermanentResidencyCountryRecord[] = OFFICIAL_GOVERNMENT_PR_SEEDS.map((seed) => {
+      const prev = existingPrById.get(seed.id);
+      if (prev) {
+        return {
+          ...prev,
+          ...seed,
+          httpStatus: prev.httpStatus,
+          verificationTier: prev.verificationTier,
+          sourceEvidenceExcerpt: prev.sourceEvidenceExcerpt,
+          officialDisclaimer: prev.officialDisclaimer,
+          lastVerifiedAt: prev.lastVerifiedAt,
+        };
+      }
+      return {
+        ...seed,
+        httpStatus: null,
+        verificationTier: 'PARTIALLY VERIFIED',
+        sourceEvidenceExcerpt: `Official national immigration ministry portal (${seed.officialDomain}). Scheduled live HTTP verification pending next 6-hour run.`,
+        officialDisclaimer:
+          'Labour or skill shortages do NOT automatically grant permanent residency. Every pathway is governed exclusively by official national immigration law.',
+        lastVerifiedAt: loaded.updatedAt || new Date().toISOString(),
+      };
+    });
+
     return {
       ...loaded,
-      permanent_residency_pathways: loaded.permanent_residency_pathways || [],
+      permanent_residency_pathways: mergedPrPathways,
       opportunity_sources: mergedSources,
       opportunity_verification_logs: loaded.opportunity_verification_logs || [],
       opportunity_funding: loaded.opportunity_funding || [],
@@ -3875,14 +3918,31 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
     savedIdSet: Set<string>,
     permanentResidencyCount: number = 0
   ): Record<GlobalOpportunitySubsection, number> {
+    const isManagementOrFinanceRole = (o: GlobalOpportunityWithMatch): boolean => {
+      const sp = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+      return (
+        sp === 'corporate_operations_management' ||
+        sp === 'banking_financial_services' ||
+        sp === 'finance_accounting' ||
+        sp === 'risk_compliance' ||
+        sp === 'credit_microfinance' ||
+        /\b(manager|director|head of|controller|lead|officer|analyst|auditor|supervisor|coordinator)\b/i.test(o.title)
+      );
+    };
+
     return {
       international_jobs: activeList.filter((o) => o.category === 'international_job').length,
+      europe_jobs: activeList.filter((o) => detectInternationalRegion(o.country, o.location) === 'Europe').length,
+      middle_east_jobs: activeList.filter((o) => detectInternationalRegion(o.country, o.location) === 'Middle East').length,
+      management_jobs: activeList.filter(isManagementOrFinanceRole).length,
       scholarships: activeList.filter((o) => o.category === 'university_scholarship').length,
       professional_training: activeList.filter((o) => o.category === 'professional_training').length,
       conferences_summits: activeList.filter((o) => o.category === 'conference_summit').length,
       banking_finance: activeList.filter((o) => o.isBankingFinance || o.sectors.includes('banking_finance')).length,
       wash_opportunities: activeList.filter((o) => o.isWashDedicated || o.category === 'wash_opportunity' || o.sectors.includes('wash')).length,
       permanent_residency: permanentResidencyCount,
+      recruiting_countries: permanentResidencyCount,
+      cv_matching: activeList.length,
       recommended: activeList.filter((o) => o.recommendation?.eligible).length,
       closing_soon: activeList.filter((o) => o.deadline.isClosingSoon).length,
       saved: activeList.filter((o) => savedIdSet.has(o.id)).length,
@@ -3957,6 +4017,21 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       let filtered = activeVerified;
 
       if (subsection === 'international_jobs') filtered = filtered.filter((o) => o.category === 'international_job');
+      else if (subsection === 'europe_jobs') filtered = filtered.filter((o) => detectInternationalRegion(o.country, o.location) === 'Europe');
+      else if (subsection === 'middle_east_jobs') filtered = filtered.filter((o) => detectInternationalRegion(o.country, o.location) === 'Middle East');
+      else if (subsection === 'management_jobs') {
+        filtered = filtered.filter((o) => {
+          const sp = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+          return (
+            sp === 'corporate_operations_management' ||
+            sp === 'banking_financial_services' ||
+            sp === 'finance_accounting' ||
+            sp === 'risk_compliance' ||
+            sp === 'credit_microfinance' ||
+            /\b(manager|director|head of|controller|lead|officer|analyst|auditor|supervisor|coordinator)\b/i.test(o.title)
+          );
+        });
+      }
       else if (subsection === 'scholarships') filtered = filtered.filter((o) => o.category === 'university_scholarship');
       else if (subsection === 'professional_training') filtered = filtered.filter((o) => o.category === 'professional_training');
       else if (subsection === 'conferences_summits') filtered = filtered.filter((o) => o.category === 'conference_summit');
@@ -4292,6 +4367,63 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt),
     };
 
+    // Country-by-country & 7-tier sponsorship breakdown for Section 13 Admin Controls
+    const countryMap = new Map<string, { country: string; region: string; total: number; active: number; sponsored: number }>();
+    let confirmedSponsoredCount = 0;
+    let sponsorshipUnconfirmedCount = 0;
+
+    for (const opp of store.international_opportunities) {
+      const active = isOpportunityActiveAndDisplayable(opp, nowMs);
+      const visaCheck = classifySevenTierVisaSponsorship(opp);
+      const region = detectInternationalRegion(opp.country, opp.location);
+      const cName = (opp.country || 'International').trim();
+      const entry = countryMap.get(cName) || { country: cName, region, total: 0, active: 0, sponsored: 0 };
+      entry.total += 1;
+      if (active) {
+        entry.active += 1;
+        if (visaCheck.sponsorshipConfirmed) {
+          entry.sponsored += 1;
+          confirmedSponsoredCount += 1;
+        } else {
+          sponsorshipUnconfirmedCount += 1;
+        }
+      }
+      countryMap.set(cName, entry);
+    }
+
+    const countryStats = Array.from(countryMap.values()).sort((a, b) => b.active - a.active || b.total - a.total);
+
+    const manageableOpportunities = [...activeVerified, ...archivedRecords].slice(0, 120).map((o) => {
+      const visaCheck = classifySevenTierVisaSponsorship(o);
+      const salary = parseAndNormalizeSalaryUsd(o);
+      const specialty = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+      return {
+        id: o.id,
+        title: o.title,
+        organization: o.organization,
+        category: o.category,
+        careerSpecialtyLabel: CAREER_SPECIALTY_LABELS[specialty],
+        country: o.country,
+        region: detectInternationalRegion(o.country, o.location),
+        applicationStatus: o.applicationStatus,
+        verificationStatus: o.verificationStatus,
+        verificationTier: o.verificationTier || 'VERIFIED',
+        isActiveDisplayable: isOpportunityActiveAndDisplayable(o, nowMs),
+        officialApplicationUrl: o.officialApplicationUrl,
+        httpStatusCode: o.httpStatusCode ?? null,
+        deadlineUtcIso: o.deadline.deadlineUtcIso,
+        fullDaysRemaining: o.deadline.fullDaysRemaining,
+        stipendOrSalary: o.funding.stipendOrSalary || '',
+        estimatedMonthlyUsd: salary.estimatedMonthlyUsd,
+        visaSupportType: o.funding.visaSupportType,
+        employmentVisaClassification: o.funding.employmentVisaClassification || 'no_sponsorship_stated',
+        visaSupportSummary: o.funding.visaSupportSummary,
+        sevenTierVisaLabel: visaCheck.displayLabel,
+        sponsorshipConfirmed: visaCheck.sponsorshipConfirmed,
+        lastVerifiedAt: o.lastVerifiedAt,
+      };
+    });
+
     res.json({
       success: true,
       verificationLogs: store.opportunity_verification_logs.slice(0, 150),
@@ -4299,6 +4431,10 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       sources: store.opportunity_sources,
       schedulerInfo: buildSchedulerInfo(store),
       monitoringSummary,
+      countryStats,
+      confirmedSponsoredCount,
+      sponsorshipUnconfirmedCount,
+      manageableOpportunities,
       archivedOpportunities: archivedRecords.slice(0, 80).map((o) => ({
         id: o.id,
         title: o.title,
@@ -4381,6 +4517,418 @@ export function registerGlobalOpportunitiesRoutes(deps: RegisterGlobalOpportunit
       saveStore(store);
     }
     res.json({ success: true, schedulerInfo: buildSchedulerInfo(store) });
+  });
+
+  // =========================================================================
+  // SECTION 10: WEIGHTED CV & PROFILE MATCHING (ZERO FABRICATION)
+  // =========================================================================
+  app.post('/api/global-opportunities/match-cv', (req: Request, res: Response): void => {
+    try {
+      const store = loadStore();
+      const nowMs = Date.now();
+      const body = req.body || {};
+      const usePrimaryTestProfile = Boolean(body.usePrimaryTestProfile);
+      const rawCvText = typeof body.cvText === 'string' ? body.cvText.slice(0, 40000) : '';
+      const rawProfile = body.profile && typeof body.profile === 'object' ? body.profile : null;
+
+      let resolvedProfile: CareerApplicantProfile;
+      if (usePrimaryTestProfile) {
+        resolvedProfile = {
+          ...PRIMARY_BENCHMARK_PROFILE,
+          ...(rawProfile || {}),
+        };
+      } else if (rawCvText.trim().length > 0) {
+        resolvedProfile = extractGroundedProfileFromCvText(rawCvText, rawProfile || {});
+      } else if (rawProfile) {
+        resolvedProfile = {
+          profileName: String(rawProfile.profileName || 'Custom Applicant Profile').slice(0, 120),
+          nationality: String(rawProfile.nationality || 'Ethiopian').slice(0, 80),
+          currentResidence: String(rawProfile.currentResidence || 'Ethiopia').slice(0, 80),
+          educationDegree: String(rawProfile.educationDegree || 'Not specified').slice(0, 80),
+          educationField: String(rawProfile.educationField || 'Not specified').slice(0, 120),
+          institution: String(rawProfile.institution || '').slice(0, 140),
+          totalYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.totalYearsExperience) || 0)),
+          bankingYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.bankingYearsExperience) || 0)),
+          managementYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.managementYearsExperience) || 0)),
+          currentPosition: String(rawProfile.currentPosition || 'Not specified').slice(0, 120),
+          languages: Array.isArray(rawProfile.languages) && rawProfile.languages.length > 0
+            ? rawProfile.languages.map((l: any) => String(l).slice(0, 40)).slice(0, 10)
+            : ['English'],
+          englishOnly: rawProfile.englishOnly !== undefined ? Boolean(rawProfile.englishOnly) : true,
+          minimumMonthlySalaryUsd: Math.max(0, Math.min(50000, Number(rawProfile.minimumMonthlySalaryUsd) || 0)),
+          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || 'USD 3,000+ / month').slice(0, 80),
+          willingRelocateAloneFirst: Boolean(rawProfile.willingRelocateAloneFirst ?? true),
+          familyReunificationImportant: Boolean(rawProfile.familyReunificationImportant ?? true),
+          needsEmployerSponsorship: Boolean(rawProfile.needsEmployerSponsorship ?? true),
+          seeksPermanentResidencyPathway: Boolean(rawProfile.seeksPermanentResidencyPathway ?? true),
+          skillsAndResponsibilities: Array.isArray(rawProfile.skillsAndResponsibilities)
+            ? rawProfile.skillsAndResponsibilities.map((s: any) => String(s).trim().slice(0, 80)).filter(Boolean).slice(0, 30)
+            : [],
+          preferredRegions: Array.isArray(rawProfile.preferredRegions) && rawProfile.preferredRegions.length > 0
+            ? rawProfile.preferredRegions
+            : ['Europe', 'Middle East', 'Asia-Pacific', 'Africa & Other', 'North America'],
+        };
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Provide cvText, a custom profile object, or set usePrimaryTestProfile=true.',
+        });
+        return;
+      }
+
+      const activeVerified = store.international_opportunities.filter((o) =>
+        isOpportunityActiveAndDisplayable(o, nowMs)
+      );
+
+      const rankedMatches = activeVerified
+        .map((opportunity) => {
+          const match = evaluateWeightedCareerMatch(opportunity, resolvedProfile);
+          return {
+            opportunity,
+            match,
+          };
+        })
+        .sort((a, b) => b.match.totalScore - a.match.totalScore || a.opportunity.deadline.fullDaysRemaining - b.opportunity.deadline.fullDaysRemaining);
+
+      const prPathways = store.permanent_residency_pathways || [];
+      const prMatches = prPathways
+        .map((pathway) => ({
+          pathway,
+          assessment: scorePrPathwayForCareerProfile(pathway, resolvedProfile),
+        }))
+        .sort((a, b) => {
+          const rank = (lvl: string) =>
+            lvl.startsWith('Strong') ? 3 : lvl.startsWith('Possible') ? 2 : 1;
+          return rank(b.assessment.fitLevel) - rank(a.assessment.fitLevel);
+        });
+
+      res.json({
+        success: true,
+        generatedAt: new Date(nowMs).toISOString(),
+        profile: resolvedProfile,
+        weights: {
+          education: 15,
+          experience: 20,
+          responsibilities: 20,
+          visaAndEligibility: 20,
+          salary: 10,
+          language: 10,
+          relocationAndFamily: 5,
+        },
+        totalEvaluated: rankedMatches.length,
+        excellentCount: rankedMatches.filter((m) => m.match.band === 'Excellent match').length,
+        strongCount: rankedMatches.filter((m) => m.match.band === 'Strong match').length,
+        possibleCount: rankedMatches.filter((m) => m.match.band === 'Possible match').length,
+        matches: rankedMatches.slice(0, 100),
+        permanentResidencyMatches: prMatches,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to evaluate profile match.' });
+    }
+  });
+
+  // =========================================================================
+  // SECTION 13: ADMIN MODERATION, LIVE LINK TESTING & CSV REPORT EXPORT
+  // =========================================================================
+
+  function isSafePublicHttpUrl(rawUrl: string): boolean {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+      const host = parsed.hostname.toLowerCase();
+      if (!host || host === 'localhost' || host === '::1' || host.endsWith('.local') || host.endsWith('.internal')) {
+        return false;
+      }
+      // Block IPv4 loopback, private RFC1918, link-local & cloud metadata ranges
+      if (
+        /^127\./.test(host) ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^0\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+        /^\[?(fe80|fc|fd):/i.test(host)
+      ) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  app.patch('/api/admin/global-opportunities/:id', (req: Request, res: Response): void => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: 'Administrator access required.' });
+      return;
+    }
+    try {
+      const oppId = String(req.params.id || '').trim();
+      if (!oppId) {
+        res.status(400).json({ success: false, error: 'Opportunity ID is required.' });
+        return;
+      }
+      const store = loadStore();
+      const idx = store.international_opportunities.findIndex((o) => o.id === oppId);
+      if (idx < 0) {
+        res.status(404).json({ success: false, error: 'Opportunity not found.' });
+        return;
+      }
+
+      const opp = store.international_opportunities[idx];
+      const body = req.body || {};
+      const action = String(body.action || 'edit').toLowerCase();
+      const nowIso = new Date().toISOString();
+
+      if (action === 'approve') {
+        opp.applicationStatus = 'open';
+        opp.verificationStatus = 'Verified and Open';
+        opp.verificationTier = 'VERIFIED';
+        opp.hasVerifiedBadge = true;
+        opp.rejectionReason = undefined;
+        opp.rejectionCategory = undefined;
+        opp.archivedAt = undefined;
+        opp.unpublishedAt = undefined;
+      } else if (action === 'reject') {
+        opp.applicationStatus = 'rejected';
+        opp.verificationStatus = 'Unverified';
+        opp.verificationTier = 'PENDING VERIFICATION';
+        opp.hasVerifiedBadge = false;
+        opp.rejectionCategory = 'authenticity';
+        opp.rejectionReason = String(body.reason || 'Rejected by administrator during moderation review.').slice(0, 300);
+        opp.archivedAt = nowIso;
+      } else if (action === 'expire') {
+        opp.applicationStatus = 'expired';
+        opp.verificationStatus = 'Expired';
+        opp.hasVerifiedBadge = false;
+        opp.rejectionCategory = 'deadline';
+        opp.rejectionReason = String(body.reason || 'Marked expired by administrator.').slice(0, 300);
+        opp.archivedAt = nowIso;
+      }
+
+      // Optional field edits (salary, visa sponsorship classification, summary, country, title)
+      if (typeof body.stipendOrSalary === 'string') {
+        opp.funding.stipendOrSalary = body.stipendOrSalary.trim().slice(0, 200);
+      }
+      if (typeof body.visaSupportSummary === 'string' && body.visaSupportSummary.trim()) {
+        opp.funding.visaSupportSummary = body.visaSupportSummary.trim().slice(0, 300);
+      }
+      if (
+        typeof body.visaSupportType === 'string' &&
+        [
+          'employer_sponsored_visa',
+          'visa_fees_funded',
+          'visa_assistance_only',
+          'invitation_letter_only',
+          'not_provided',
+          'not_confirmed',
+        ].includes(body.visaSupportType)
+      ) {
+        opp.funding.visaSupportType = body.visaSupportType as any;
+      }
+      if (
+        typeof body.employmentVisaClassification === 'string' &&
+        [
+          'confirmed_visa_sponsorship',
+          'confirmed_international_recruitment',
+          'relocation_assistance',
+          'work_permit_assistance',
+          'no_sponsorship_stated',
+        ].includes(body.employmentVisaClassification)
+      ) {
+        opp.funding.employmentVisaClassification = body.employmentVisaClassification as any;
+      }
+      if (typeof body.title === 'string' && body.title.trim().length >= 3) {
+        opp.title = body.title.trim().slice(0, 220);
+      }
+      if (typeof body.country === 'string' && body.country.trim().length >= 2) {
+        opp.country = body.country.trim().slice(0, 120);
+      }
+      if (typeof body.summary === 'string' && body.summary.trim().length >= 5) {
+        opp.summary = body.summary.trim().slice(0, 1200);
+      }
+
+      opp.updatedAt = nowIso;
+      opp.lastVerifiedAt = nowIso;
+      store.international_opportunities[idx] = opp;
+      saveStore(store);
+
+      appendAuditLog({
+        action: `global_opportunity_admin_${action}`,
+        actorEmail: getRequesterEmail(req) || 'owner',
+        targetType: 'global_opportunity',
+        targetId: opp.id,
+        summary: `Admin ${action} on "${opp.title}" (${opp.country})`,
+        severity: 'info',
+      });
+
+      res.json({
+        success: true,
+        opportunity: opp,
+        visaChecklist: classifySevenTierVisaSponsorship(opp),
+        salaryInfo: parseAndNormalizeSalaryUsd(opp),
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to update opportunity.' });
+    }
+  });
+
+  app.post('/api/admin/global-opportunities/:id/test-link', async (req: Request, res: Response): Promise<void> => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: 'Administrator access required.' });
+      return;
+    }
+    try {
+      const oppId = String(req.params.id || '').trim();
+      const store = loadStore();
+      const idx = store.international_opportunities.findIndex((o) => o.id === oppId);
+      if (idx < 0) {
+        res.status(404).json({ success: false, error: 'Opportunity not found.' });
+        return;
+      }
+      const opp = store.international_opportunities[idx];
+      const targetUrl = opp.officialApplicationUrl;
+      if (!isSafePublicHttpUrl(targetUrl)) {
+        res.status(400).json({ success: false, error: 'Blocked non-public or invalid URL scheme.' });
+        return;
+      }
+
+      const started = Date.now();
+      let httpStatus: number | null = null;
+      let reachable = false;
+      let finalUrl = targetUrl;
+      let note = '';
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        try {
+          const response = await fetch(targetUrl, {
+            method: 'HEAD',
+            redirect: 'follow',
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'HopelandJobs-LinkVerifier/1.0 (+https://hopelandjobs.tech)',
+            },
+          });
+          httpStatus = response.status;
+          finalUrl = response.url || targetUrl;
+          if (httpStatus === 405 || httpStatus === 403) {
+            const getResp = await fetch(targetUrl, {
+              method: 'GET',
+              redirect: 'follow',
+              signal: controller.signal,
+              headers: {
+                'User-Agent': 'HopelandJobs-LinkVerifier/1.0 (+https://hopelandjobs.tech)',
+              },
+            });
+            httpStatus = getResp.status;
+            finalUrl = getResp.url || targetUrl;
+          }
+          reachable = httpStatus >= 200 && httpStatus < 400;
+          note = reachable ? `Live HTTP ${httpStatus} verified` : `Returned HTTP ${httpStatus}`;
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (fetchErr: any) {
+        note = `Network check failed: ${fetchErr?.message || 'Timeout or DNS error'}`;
+      }
+
+      const nowIso = new Date().toISOString();
+      opp.httpStatusCode = httpStatus;
+      opp.lastVerifiedAt = nowIso;
+      opp.updatedAt = nowIso;
+      store.international_opportunities[idx] = opp;
+      saveStore(store);
+
+      res.json({
+        success: true,
+        opportunityId: opp.id,
+        url: targetUrl,
+        finalUrl,
+        httpStatus,
+        reachable,
+        latencyMs: Date.now() - started,
+        checkedAt: nowIso,
+        note,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to test application link.' });
+    }
+  });
+
+  app.get('/api/admin/global-opportunities/export-csv', (req: Request, res: Response): void => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: 'Administrator access required.' });
+      return;
+    }
+    try {
+      const store = loadStore();
+      const csvCell = (val: unknown): string => {
+        const s = String(val ?? '').replace(/\r?\n/g, ' ');
+        if (/[",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      const headers = [
+        'ID',
+        'Title',
+        'Organization',
+        'Category',
+        'Career Specialty',
+        'Country',
+        'Region',
+        'Application Status',
+        'Verification Status',
+        'Verification Tier',
+        '7-Tier Visa Sponsorship',
+        'Sponsorship Confirmed',
+        'Original Salary / Stipend',
+        'Estimated Monthly USD',
+        'Deadline UTC',
+        'Days Remaining',
+        'Official Application URL',
+        'Last Verified At',
+      ];
+
+      const rows = store.international_opportunities.map((o) => {
+        const visa = classifySevenTierVisaSponsorship(o);
+        const salary = parseAndNormalizeSalaryUsd(o);
+        const specialty = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+        return [
+          o.id,
+          o.title,
+          o.organization,
+          o.category,
+          CAREER_SPECIALTY_LABELS[specialty],
+          o.country,
+          detectInternationalRegion(o.country, o.location),
+          o.applicationStatus,
+          o.verificationStatus,
+          o.verificationTier || 'VERIFIED',
+          visa.displayLabel,
+          visa.sponsorshipConfirmed ? 'YES' : 'NOT_CONFIRMED',
+          o.funding.stipendOrSalary || 'Not disclosed',
+          salary.estimatedMonthlyUsd ?? '',
+          o.deadline.deadlineUtcIso || o.deadline.deadlineDateRaw || '',
+          o.deadline.fullDaysRemaining,
+          o.officialApplicationUrl,
+          o.lastVerifiedAt,
+        ]
+          .map(csvCell)
+          .join(',');
+      });
+
+      const csv = [headers.map(csvCell).join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="hopelandjobs-global-opportunities-${new Date().toISOString().slice(0, 10)}.csv"`
+      );
+      res.send(csv);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to export CSV.' });
+    }
   });
 
   // Autonomous Scheduled Endpoint (Vercel Cron + GitHub Actions 6-Hour EAT Cron + External Cron)

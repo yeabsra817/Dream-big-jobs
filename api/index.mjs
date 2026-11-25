@@ -7111,6 +7111,437 @@ var OFFICIAL_GOVERNMENT_PR_SEEDS = [
     employerSponsorshipOptions: "Employer or Registered Support Organization sponsors the Certificate of Eligibility (CoE) in Japan.",
     familyRelocationOptions: "HSP and SSW Type 2 holders can bring spouse and children; SSW Type 1 does NOT allow family accompaniment.",
     governmentApplicationFees: "Verify on moj.go.jp/isa (CoE free; embassy visa approx. JPY \xA53,000; residence status change/PR fee JPY \xA54,000\u2013\xA58,000)."
+  },
+  {
+    id: "pr_luxembourg_blue_card",
+    country: "Luxembourg",
+    region: "Europe",
+    programName: "EU Blue Card & Salaried Worker Permit (5-Year Route to Long-Term Resident EU)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Government of the Grand Duchy of Luxembourg \u2014 Guichet.lu",
+    officialApplicationUrl: "https://guichet.public.lu/en/citoyens/immigration/plus-3-ans/ressortissant-tiers/hautement-qualifie/salarie-hautement-qualifie.html",
+    shortageOccupationListUrl: "https://adem.public.lu/en.html",
+    officialDomain: "guichet.public.lu",
+    professionalOccupationsInDemand: [
+      "Fund Accounting, Compliance, AML/KYC & Banking Managers (Europe Major Financial Center)",
+      "Risk Management, Internal Audit & Corporate Treasury Specialists",
+      "Software Engineers & Financial Technology Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Construction, Electrical & Technical Maintenance Specialists (Subject to ADEM Labour Test)"
+    ],
+    bankingFinanceOccupations: [
+      "Banking Operations, Fund Administration, Compliance & AML Managers",
+      "Senior Accountants, Financial Controllers & Audit Managers"
+    ],
+    washWaterOccupations: [
+      "Environmental & Civil Water Infrastructure Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Third-country nationals including Ethiopian citizens may apply from outside Luxembourg once they hold a qualifying Luxembourg employment contract.",
+    educationRequirement: "Recognized university degree (Bachelor/Master) or 5+ years senior equivalent experience for EU Blue Card.",
+    experienceRequirement: "Binding 1+ year contract with Luxembourg employer meeting EU Blue Card salary threshold.",
+    languageRequirement: "English is widely used across Luxembourg banking, fund management, and audit firms; French/German helpful for daily life.",
+    ageRestriction: "No upper age limit.",
+    skillsAssessmentRequired: "Degree verification via Luxembourg Ministry of Higher Education where requested.",
+    permanentResidencyRoute: "Eligible for Long-Term Resident EU (Permanent Residence) after 5 years uninterrupted legal stay; citizenship eligible after 5 years with Luxembourgish language exam.",
+    employerSponsorshipOptions: "Employer signs contract; EU Blue Card is exempt from ADEM labour market test.",
+    familyRelocationOptions: "EU Blue Card holders may bring spouse and minor children immediately with work authorization.",
+    governmentApplicationFees: "Verify on guichet.public.lu (residence permit issuance fee EUR \u20AC80).",
+    jobOfferRequired: "Yes \u2014 binding Luxembourg employment contract required.",
+    minimumSalaryRequirement: "At least 1.5x Luxembourg average gross annual salary (approx. EUR \u20AC58,968+ gross/year; verify live threshold on guichet.public.lu).",
+    financialProofRequirement: "Demonstrated by signed employment contract meeting statutory salary.",
+    recruiterOrEmployerRequired: "Direct Luxembourg employer required (no paid third-party agent required).",
+    estimatedProcessingStages: "1) Temporary Authorization to Stay (up to 90 days) -> 2) Type D Visa -> 3) Residence Permit card after arrival."
+  },
+  {
+    id: "pr_poland_work_blue_card",
+    country: "Poland",
+    region: "Europe",
+    programName: "EU Blue Card & Work Permit Type A (5-Year Route to EU Long-Term Resident Permit)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Government of Poland \u2014 Office for Foreigners (Gov.pl / UdSC)",
+    officialApplicationUrl: "https://www.gov.pl/web/udsc-en/temporary-residence-permit-in-order-to-perform-work-in-a-profession-requiring-high-qualifications",
+    shortageOccupationListUrl: "https://psz.praca.gov.pl/",
+    officialDomain: "gov.pl",
+    professionalOccupationsInDemand: [
+      "AML, KYC, Financial Crime & Banking Shared-Services Managers (Warsaw / Krakow Global Banking Hubs)",
+      "Financial Controllers, Accountants & Audit Specialists",
+      "IT, FinTech & Business Operations Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Construction Trades, Welders, Electricians & Logistics Drivers",
+      "Manufacturing Technicians & Warehouse Specialists"
+    ],
+    bankingFinanceOccupations: [
+      "Global Banking Operations, AML/KYC, Risk & Financial Reporting Managers (International English-Speaking Hubs)",
+      "Corporate Accounting & Treasury Specialists"
+    ],
+    washWaterOccupations: [
+      "Civil & Environmental Infrastructure Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Ethiopian citizens can apply from Ethiopia through the Polish Embassy in Addis Ababa with an approved Voivode Work Permit or Blue Card contract.",
+    educationRequirement: "University degree (or 5 years comparable professional experience) for EU Blue Card.",
+    experienceRequirement: "Signed Polish employment contract for at least 1 year for Blue Card.",
+    languageRequirement: "English is the primary working language in international banking/finance shared-service hubs in Warsaw, Krakow, and Wroclaw; Polish B1 needed later for EU Long-Term Resident PR.",
+    ageRestriction: "No upper age cap.",
+    skillsAssessmentRequired: "Employer verifies degree/experience; apostille/legalization may be requested at embassy.",
+    permanentResidencyRoute: "Temporary Residence / EU Blue Card -> EU Long-Term Resident Permit (PR) after 5 years legal residence + Polish B1 certificate.",
+    employerSponsorshipOptions: "Employer obtains Voivode Work Permit (Type A) or supports Blue Card residence permit.",
+    familyRelocationOptions: "Blue Card holders can bring spouse and minor children with full right to work in Poland.",
+    governmentApplicationFees: "Verify on gov.pl (Work permit fee PLN 100; residence permit PLN 440; national visa EUR \u20AC80\u2013\u20AC135).",
+    jobOfferRequired: "Yes \u2014 Polish employer contract required.",
+    minimumSalaryRequirement: "EU Blue Card requires 150% of Polish average gross wage (verify live annual figure on gov.pl).",
+    financialProofRequirement: "Employment contract salary + health insurance coverage.",
+    recruiterOrEmployerRequired: "Direct Polish employer required.",
+    estimatedProcessingStages: "1) Work Permit issuance -> 2) National D-Visa at Embassy -> 3) Temporary Residence / Blue Card in Poland."
+  },
+  {
+    id: "pr_lithuania_blue_card",
+    country: "Lithuania",
+    region: "Europe",
+    programName: "EU Blue Card & Highly Qualified Worker Residence Permit (5-Year Route to PR)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Migration Department of the Republic of Lithuania (Migracija.lt)",
+    officialApplicationUrl: "https://www.migracija.lt/en/noriu-gauti-leidima-laikinai-gyventi-dirbti-aukstos-kvalifikacijos-darba",
+    shortageOccupationListUrl: "https://uzt.lt/en/",
+    officialDomain: "migracija.lt",
+    professionalOccupationsInDemand: [
+      "FinTech, AML/Compliance, Payment Operations & Banking Specialists (Vilnius EU FinTech Hub)",
+      "Financial Analysts, Risk Managers & Software Engineers"
+    ],
+    labourOccupationsInDemand: [
+      "Welders, Electricians, Construction Technicians & Commercial Drivers (Shortage List)"
+    ],
+    bankingFinanceOccupations: [
+      "FinTech Operations, AML/KYC, Risk & Compliance Managers (English-speaking Vilnius hub)",
+      "Accounting & Financial Reporting Specialists"
+    ],
+    washWaterOccupations: [
+      "Civil & Environmental Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to third-country nationals including Ethiopian citizens applying via MIGRIS online portal with a Lithuanian employer mediation letter.",
+    educationRequirement: "Higher education degree OR 5+ years verified senior experience for EU Blue Card.",
+    experienceRequirement: "Binding job offer from a Lithuanian employer meeting salary rules.",
+    languageRequirement: "English widely used in Vilnius FinTech, banking compliance, and international tech firms; Lithuanian A2/constitution exam needed after 5 years for PR.",
+    ageRestriction: "No age cap.",
+    skillsAssessmentRequired: "Employer confirms higher education/experience through MIGRIS.",
+    permanentResidencyRoute: "EU Blue Card / Temporary Residence Permit -> Permanent Residence Permit after 5 continuous years.",
+    employerSponsorshipOptions: "Employer submits electronic mediation letter via MIGRIS (fast 1\u20132 month processing for Blue Card).",
+    familyRelocationOptions: "Spouse and minor children can apply simultaneously with EU Blue Card holder and gain work access.",
+    governmentApplicationFees: "Verify on migracija.lt (standard TRP fee EUR \u20AC160; urgent EUR \u20AC320).",
+    jobOfferRequired: "Yes \u2014 Lithuanian employer mediation letter required.",
+    minimumSalaryRequirement: "1.5x average Lithuanian gross salary (or 1.2x for official shortage/high-added-value professions).",
+    financialProofRequirement: "Covered by signed employment contract meeting statutory threshold.",
+    recruiterOrEmployerRequired: "Direct Lithuanian employer required.",
+    estimatedProcessingStages: "1) MIGRIS online application -> 2) External service center / embassy biometrics -> 3) Residence card decision (1\u20132 months)."
+  },
+  {
+    id: "pr_estonia_skilled",
+    country: "Estonia",
+    region: "Europe",
+    programName: "EU Blue Card & Temporary Residence Permit for Employment (5-Year Route to Long-Term PR)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Police and Border Guard Board of Estonia (Politsei.ee) & Work in Estonia",
+    officialApplicationUrl: "https://www.politsei.ee/en/instructions/residence-permit-for-employment",
+    shortageOccupationListUrl: "https://www.workinestonia.com/",
+    officialDomain: "politsei.ee",
+    professionalOccupationsInDemand: [
+      "FinTech, Digital Banking, Compliance & Financial Operations Specialists (Tallinn)",
+      "Software Engineering, Product & Data Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Industrial Technicians, Construction & Electrical Skilled Workers"
+    ],
+    bankingFinanceOccupations: [
+      "Digital Banking, Payment Operations, AML/KYC & Finance Managers"
+    ],
+    washWaterOccupations: [
+      "Environmental & Civil Infrastructure Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to non-EU citizens including Ethiopian applicants sponsored by an Estonian-registered employer; EU Blue Card and Top Specialist streams are exempt from the annual immigration quota.",
+    educationRequirement: "Higher education qualification or 5+ years specialized experience for EU Blue Card.",
+    experienceRequirement: "Signed employment contract with an Estonian employer.",
+    languageRequirement: "English widely used in Tallinn fintech, digital finance, and IT; Estonian B1 required after 5 years for Long-Term Resident PR.",
+    ageRestriction: "No upper age limit.",
+    skillsAssessmentRequired: "ENIC/NARIC credential verification where required.",
+    permanentResidencyRoute: "Temporary Residence Permit / EU Blue Card -> Long-Term Resident Residence Permit (PR) after 5 years + Estonian B1.",
+    employerSponsorshipOptions: "Employer registers short-term employment or sponsors EU Blue Card / Top Specialist permit.",
+    familyRelocationOptions: "Spouse and minor children eligible to accompany with work authorization.",
+    governmentApplicationFees: "Verify on politsei.ee (TRP state fee EUR \u20AC96\u2013\u20AC125).",
+    jobOfferRequired: "Yes \u2014 Estonian employer sponsorship required.",
+    minimumSalaryRequirement: "At least 1.5x Estonian average gross salary for EU Blue Card (or 1.2x for shortage professions / 1.5x for Top Specialist quota exemption).",
+    financialProofRequirement: "Satisfied by qualifying employment contract.",
+    recruiterOrEmployerRequired: "Direct Estonian employer required.",
+    estimatedProcessingStages: "1) Employer invitation / contract -> 2) Embassy submission -> 3) Decision within ~2 months."
+  },
+  {
+    id: "pr_malta_kei_blue_card",
+    country: "Malta",
+    region: "Europe",
+    programName: "Key Employee Initiative (KEI), Specialist Employee Initiative & EU Blue Card (5-Year Route to Long-Term PR)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with Route to Permanent Residency",
+    officialAuthority: "Identit\xE0 Malta (Government of Malta)",
+    officialApplicationUrl: "https://identita.gov.mt/expatriates-unit-main-page/noneu-nationals/employment-related-permits/key-employee-initiative/",
+    shortageOccupationListUrl: "https://jobsplus.gov.mt/",
+    officialDomain: "identita.gov.mt",
+    professionalOccupationsInDemand: [
+      "Banking, Financial Services, Accounting, Audit & Compliance Managers (English-Speaking EU Financial Hub)",
+      "Risk, AML/KYC, Insurance & Corporate Finance Managers",
+      "IT & FinTech Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Healthcare Workers, Construction Trades & Hospitality Supervisors (Single Permit)"
+    ],
+    bankingFinanceOccupations: [
+      "Financial Controllers, Auditors, Compliance/AML Managers & Banking Operations Managers (KEI Fast-Track)"
+    ],
+    washWaterOccupations: [
+      "Water Services & Civil Infrastructure Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "English is an official language of Malta. Third-country nationals including Ethiopian citizens with managerial/technical contracts (EUR \u20AC35,000+ gross/year) qualify for the 5-working-day KEI fast-track.",
+    educationRequirement: "Relevant university degree or verified managerial/technical qualifications.",
+    experienceRequirement: "Signed contract in a managerial or highly technical role paying EUR \u20AC35,000+ gross/year (KEI).",
+    languageRequirement: "English is an official national & business language of Malta \u2014 strong advantage for English-only professionals.",
+    ageRestriction: "No upper age restriction.",
+    skillsAssessmentRequired: "MQRIC recognition or employer qualification confirmation.",
+    permanentResidencyRoute: "KEI / Single Permit / EU Blue Card -> Long-Term Residence status after 5 years continuous legal stay + integration criteria.",
+    employerSponsorshipOptions: "Maltese employer initiates KEI / Single Permit online via Identit\xE0.",
+    familyRelocationOptions: "Eligible for family reunification once statutory income and accommodation thresholds are met (immediate under EU Blue Card).",
+    governmentApplicationFees: "Verify on identita.gov.mt (Single Permit / KEI fee EUR \u20AC300).",
+    jobOfferRequired: "Yes \u2014 Maltese employer contract required.",
+    minimumSalaryRequirement: "KEI requires minimum EUR \u20AC35,000 gross/year (approx. USD $3,150/month); EU Blue Card higher.",
+    financialProofRequirement: "Employment contract + private health insurance & lease agreement upon arrival.",
+    recruiterOrEmployerRequired: "Direct Maltese employer required.",
+    estimatedProcessingStages: "1) Online KEI employer submission -> 2) Approval in Principle (~5 working days for KEI) -> 3) Visa & Biometrics."
+  },
+  {
+    id: "pr_uae_work_green_golden",
+    country: "United Arab Emirates",
+    region: "Middle East",
+    programName: "Employer-Sponsored Skilled Work Residence Visa & 5-Year Green Residence Visa (Long-Term Renewable \u2014 No Automatic Citizenship)",
+    pathwayClassification: "temporary_work_permit",
+    pathwayClassificationLabel: "Long-Term Work / Renewable Residence Visa (No Automatic PR/Citizenship)",
+    officialAuthority: "UAE Federal Authority for Identity, Citizenship, Customs & Port Security (ICP) / MOHRE",
+    officialApplicationUrl: "https://u.ae/en/information-and-services/visa-and-emirates-id/residence-visas/residence-visa-for-working-in-the-uae",
+    shortageOccupationListUrl: "https://www.mohre.gov.ae/en/home.aspx",
+    officialDomain: "u.ae",
+    professionalOccupationsInDemand: [
+      "Commercial Banking, Branch/Relationship Managers, Corporate Finance & Treasury (Dubai DIFC / Abu Dhabi ADGM)",
+      "AML/KYC Compliance, Audit, Credit Risk & FinTech Managers",
+      "Corporate Operations, Insurance & Real Estate Finance Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Engineering Technicians, Construction Supervisors, Hospitality & Logistics (Employer-Sponsored)"
+    ],
+    bankingFinanceOccupations: [
+      "Retail & Corporate Banking Managers, Credit Managers, AML/Compliance & Finance Controllers (Tax-Free Salaries)",
+      "Digital Banking & Payment Operations Managers"
+    ],
+    washWaterOccupations: [
+      "Desalination, Water Network & Environmental Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to Ethiopian skilled professionals hired by UAE-licensed companies (free zone or mainland). Employers legally bear recruitment and visa sponsorship fees under UAE Labour Law.",
+    educationRequirement: "Attested Bachelor degree or equivalent (MOHRE Skill Level 1, 2, or 3 for Green Visa).",
+    experienceRequirement: "Valid UAE employment contract; Green Visa requires minimum AED 15,000/month (~USD $4,080/mo) + Bachelor degree.",
+    languageRequirement: "English is the dominant business language across UAE banking, DIFC, ADGM, and multinational firms; Arabic is a plus for local retail branches.",
+    ageRestriction: "No strict cutoff up to 60 (renewable past 60 with approval).",
+    skillsAssessmentRequired: "Degree attestation (MOFA Ethiopia + UAE Embassy + MOFA UAE).",
+    permanentResidencyRoute: "IMPORTANT: UAE does NOT offer standard permanent residency or citizenship via employment. Provides renewable 2-year work visas, 5-year Green Residence, and 10-year Golden Visa (for senior salaries AED 30,000+/mo).",
+    employerSponsorshipOptions: "UAE employer sponsors MOHRE work permit and 2-year residence visa (employer covers visa costs by law).",
+    familyRelocationOptions: "Skilled workers earning AED 4,000+/month (or AED 3,000 + accommodation) can legally sponsor spouse and children after arrival.",
+    governmentApplicationFees: "Employer pays work visa & permit fees under UAE Labour Law; family sponsorship & Emirates ID fees apply separately (verify on u.ae).",
+    jobOfferRequired: "Yes \u2014 UAE employment contract required.",
+    minimumSalaryRequirement: "No statutory floor for standard skilled visa (market pay for senior banking/finance USD $3,500\u2013$8,000+ tax-free); Green Visa requires AED 15,000/mo (~USD $4,080/mo).",
+    financialProofRequirement: "Signed employment contract (plus tenancy Ejari/Tawtheeq later for family sponsorship).",
+    recruiterOrEmployerRequired: "Direct UAE employer required (never pay job-offer fees \u2014 illegal in UAE).",
+    estimatedProcessingStages: "1) MOHRE job offer & work permit -> 2) Entry Permit e-visa -> 3) Medical fitness, Emirates ID & Residence Visa."
+  },
+  {
+    id: "pr_saudi_work_premium",
+    country: "Saudi Arabia",
+    region: "Middle East",
+    programName: "Employer-Sponsored Skilled Work Visa (Qiwa) & Special Talent Premium Residency (Long-Term Residence \u2014 No Standard PR)",
+    pathwayClassification: "temporary_work_permit",
+    pathwayClassificationLabel: "Employer-Sponsored Work Visa / Special Talent Residence",
+    officialAuthority: "Ministry of Human Resources and Social Development (HRSD) & Premium Residency Center",
+    officialApplicationUrl: "https://pr.gov.sa/",
+    shortageOccupationListUrl: "https://www.hrsd.gov.sa/en",
+    officialDomain: "pr.gov.sa",
+    professionalOccupationsInDemand: [
+      "Banking Transformation, Corporate Finance, Risk, Compliance & Financial Controllers (Riyadh Vision 2030)",
+      "Infrastructure, Water/Desalination & Mega-Project Finance Managers",
+      "Fintech, Digital Banking & Audit Specialists"
+    ],
+    labourOccupationsInDemand: [
+      "Skilled Engineering & Construction Supervisors (Employer-Sponsored)"
+    ],
+    bankingFinanceOccupations: [
+      "Finance Managers, Internal Audit, Credit Risk, Compliance & Digital Banking Specialists"
+    ],
+    washWaterOccupations: [
+      "Water Resource, Desalination & Environmental Infrastructure Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Ethiopian professionals with attested Bachelor/Master degrees and a verified Saudi employer contract can obtain a work visa through the Saudi Embassy in Addis Ababa.",
+    educationRequirement: "Attested university degree matching profession (Saudi Professional Accreditation / Takamol verification).",
+    experienceRequirement: "3\u20135+ years experience for skilled/managerial visas; executive/talent thresholds for Premium Residency.",
+    languageRequirement: "English widely used in multinational corporations, finance hubs, and major banks in Riyadh/Jeddah; Arabic advantageous in retail banking.",
+    ageRestriction: "Typically 21\u201360 years for new work visas.",
+    skillsAssessmentRequired: "Degree attestation and Professional Verification (PACC / Qiwa) where applicable.",
+    permanentResidencyRoute: "IMPORTANT: Standard employment visas are renewable temporary permits (Iqama) without automatic citizenship; Special Talent Premium Residency offers 5-year/permanent residency only for qualifying senior executives/specialists.",
+    employerSponsorshipOptions: "Saudi employer sponsors work visa and Iqama via Qiwa platform.",
+    familyRelocationOptions: "Skilled professionals on eligible managerial/professional Iqama professions can sponsor spouse and children on family residence visas.",
+    governmentApplicationFees: "Employer legally pays work visa, work permit, and Iqama fees; dependant levy (SAR 400/month per dependant) applies for family.",
+    jobOfferRequired: "Yes \u2014 verified Saudi employer contract via Qiwa.",
+    minimumSalaryRequirement: "Competitive tax-free packages often include housing + transport allowances (verify live offer terms).",
+    financialProofRequirement: "Verified employment contract (salary certificate for family visa later).",
+    recruiterOrEmployerRequired: "Direct Saudi employer required.",
+    estimatedProcessingStages: "1) Qiwa work visa authorization -> 2) Degree attestation & medical -> 3) Embassy stamping -> 4) Iqama issuance in KSA."
+  },
+  {
+    id: "pr_qatar_work_residency",
+    country: "Qatar",
+    region: "Middle East",
+    programName: "Employer-Sponsored Skilled Employment Visa (Renewable Residence Permit \u2014 Very Limited PR)",
+    pathwayClassification: "temporary_work_permit",
+    pathwayClassificationLabel: "Employer-Sponsored Work Visa (Renewable Residence)",
+    officialAuthority: "Government of Qatar \u2014 Hukoomi / Ministry of Labour",
+    officialApplicationUrl: "https://hukoomi.gov.qa/en/service/work-visa",
+    shortageOccupationListUrl: "https://www.mol.gov.qa/en",
+    officialDomain: "hukoomi.gov.qa",
+    professionalOccupationsInDemand: [
+      "Banking, Corporate Finance, Treasury, Compliance & Audit Professionals (Qatar Financial Centre \u2014 Doha)",
+      "Operations, Insurance & FinTech Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Construction, Maintenance, Logistics & Hospitality Personnel (Employer-Sponsored)"
+    ],
+    bankingFinanceOccupations: [
+      "Finance Managers, Relationship Managers, Risk & Compliance Officers (QFC & Qatari Banks)"
+    ],
+    washWaterOccupations: [
+      "Water Infrastructure & Environmental Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to Ethiopian skilled professionals hired by Qatari employers or QFC-licensed financial institutions.",
+    educationRequirement: "Attested university degree required for managerial/finance roles and family sponsorship.",
+    experienceRequirement: "3+ years relevant experience typically expected by Qatari banks and multinationals.",
+    languageRequirement: "English is widely used in Qatar Financial Centre, international banks, and corporate offices.",
+    ageRestriction: "Typically 21\u201360 years.",
+    skillsAssessmentRequired: "Authenticated degree certificate via MOFA & Qatar Embassy.",
+    permanentResidencyRoute: "IMPORTANT: Employment grants a renewable Qatar Residence Permit (QID), NOT automatic PR (Qatar PR cards have a strict annual quota requiring 20+ years legal residence + Arabic fluency).",
+    employerSponsorshipOptions: "Employer handles work visa, medical, and QID issuance at no cost to the worker under Qatar Labour Law.",
+    familyRelocationOptions: "Employees earning QAR 10,000+/month (or QAR 6,000 + family housing) can sponsor spouse and children.",
+    governmentApplicationFees: "Employer covers recruitment & work residence permit fees under Qatar Labour Law.",
+    jobOfferRequired: "Yes \u2014 Qatari employer contract required.",
+    minimumSalaryRequirement: "Senior banking/finance offers typically USD $3,000\u2013$7,000+/month tax-free plus housing/medical benefits.",
+    financialProofRequirement: "Employment contract + 6-month salary bank statement later for family sponsorship.",
+    recruiterOrEmployerRequired: "Direct Qatari employer required.",
+    estimatedProcessingStages: "1) Work visa approval by MOI/MOL -> 2) Entry to Qatar -> 3) Medical & fingerprints -> 4) QID Residence Permit."
+  },
+  {
+    id: "pr_singapore_employment_pass",
+    country: "Singapore",
+    region: "Asia",
+    programName: "Employment Pass (EP \u2014 COMPASS Points Framework -> Route to Singapore PR)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Pass with Route to Permanent Residency",
+    officialAuthority: "Ministry of Manpower (MOM) & Immigration & Checkpoints Authority (ICA Singapore)",
+    officialApplicationUrl: "https://www.mom.gov.sg/passes-and-permits/employment-pass",
+    shortageOccupationListUrl: "https://www.mom.gov.sg/passes-and-permits/employment-pass/eligibility",
+    officialDomain: "mom.gov.sg",
+    professionalOccupationsInDemand: [
+      "Financial Services, Banking Compliance, Risk, Treasury & Audit Managers (Major Asian Financial Hub)",
+      "FinTech, Digital Banking & Quantitative Analysts",
+      "Water Technology, Sustainability & Civil Engineers"
+    ],
+    labourOccupationsInDemand: [
+      "Work Permit / S Pass streams subject to strict sector quotas and source-country rules (verify MOM source list)."
+    ],
+    bankingFinanceOccupations: [
+      "Banking Operations, Risk, AML/Compliance & Finance Managers (Financial Services EP Salary Benchmark)"
+    ],
+    washWaterOccupations: [
+      "Water Treatment, Desalination & Environmental Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Employment Pass (EP) is open to all nationalities including Ethiopian professionals who pass the MOM salary benchmark and 40-point COMPASS framework.",
+    educationRequirement: "Verified university degree (from accredited institution; background verification required for COMPASS points).",
+    experienceRequirement: "Experienced managerial, executive, or specialist background.",
+    languageRequirement: "English is Singapore\u2019s primary business and government language \u2014 ideal for English-only professionals.",
+    ageRestriction: "No upper age bar, but EP minimum qualifying salary increases progressively with age.",
+    skillsAssessmentRequired: "Third-party degree verification (e.g., HireRight / RMI) required by MOM for COMPASS education points.",
+    permanentResidencyRoute: "Employment Pass holders may apply to ICA for Singapore Permanent Residency after establishing residence/employment (discretionary assessment \u2014 never automatic).",
+    employerSponsorshipOptions: "Singapore-registered employer applies online via MOM EP eService.",
+    familyRelocationOptions: "EP holders earning SGD $6,000+/month (~USD $4,440/mo) can bring spouse and unmarried children under 21 on Dependant\u2019s Pass.",
+    governmentApplicationFees: "Verify on mom.gov.sg (EP application SGD $105; issuance SGD $225; PR application SGD $100).",
+    jobOfferRequired: "Yes \u2014 Singapore employer sponsorship required.",
+    minimumSalaryRequirement: "Financial Services sector minimum SGD $6,200/month (~USD $4,580/mo) for younger applicants, scaling up with age (other sectors SGD $5,600+); verify live MOM table.",
+    financialProofRequirement: "Verified employer salary contract.",
+    recruiterOrEmployerRequired: "Direct Singapore employer required.",
+    estimatedProcessingStages: "1) Degree verification & COMPASS check -> 2) Employer submits EP -> 3) In-Principle Approval (~10 business days) -> 4) Pass issuance."
+  },
+  {
+    id: "pr_mauritius_occupation_permit",
+    country: "Mauritius",
+    region: "Africa & Other",
+    programName: "Professional Occupation Permit (Route to 20-Year Permanent Residence Permit after 3 Years)",
+    pathwayClassification: "route_to_pr",
+    pathwayClassificationLabel: "Work Permit with 3-Year Route to Permanent Residence",
+    officialAuthority: "Economic Development Board Mauritius (EDB Mauritius)",
+    officialApplicationUrl: "https://edbmauritius.org/work-and-live-in-mauritius",
+    shortageOccupationListUrl: "https://edbmauritius.org/work-and-live-in-mauritius",
+    officialDomain: "edbmauritius.org",
+    professionalOccupationsInDemand: [
+      "Banking, Fund Administration, Accounting, Audit & Financial Services Managers (Port Louis Financial Hub)",
+      "FinTech, Insurance & Corporate Operations Managers"
+    ],
+    labourOccupationsInDemand: [
+      "Work Permits via Ministry of Labour for specific hospitality/manufacturing sectors (separate from Occupation Permit)."
+    ],
+    bankingFinanceOccupations: [
+      "Financial Services, Offshore Banking, Accounting, Compliance & Risk Managers"
+    ],
+    washWaterOccupations: [
+      "Environmental & Water Resource Engineers"
+    ],
+    foreignApplicantsEligible: true,
+    ethiopianCitizensEligible: "confirmed",
+    ethiopianEligibilityNotes: "Open to all foreign professionals including Ethiopian citizens with a qualifying Mauritian employment contract; English is widely used in banking and financial services.",
+    educationRequirement: "Relevant university degree and/or professional finance credentials.",
+    experienceRequirement: "Signed employment contract meeting EDB Professional Occupation Permit monthly salary floor.",
+    languageRequirement: "English is the official parliamentary and corporate finance language (French also widely spoken).",
+    ageRestriction: "No upper age cap.",
+    skillsAssessmentRequired: "Employer submits qualification and contract documentation via EDB National Electronic Licensing System.",
+    permanentResidencyRoute: "Professional Occupation Permit holders earning above the statutory threshold for 3 consecutive years may apply for a 20-Year Permanent Residence Permit.",
+    employerSponsorshipOptions: "Mauritian employer applies online through EDB Mauritius.",
+    familyRelocationOptions: "Spouse and dependent children under 24 eligible for Dependant Permits.",
+    governmentApplicationFees: "Verify on edbmauritius.org (Professional Occupation Permit approx. USD $500\u2013$1,000 depending on duration).",
+    jobOfferRequired: "Yes \u2014 Mauritian employment contract required.",
+    minimumSalaryRequirement: "Standard Professional Occupation Permit threshold MUR 30,000\u201360,000/month (check live EDB Mauritius schedule; PR upgrade requires higher consecutive monthly basic salary).",
+    financialProofRequirement: "Signed employment contract.",
+    recruiterOrEmployerRequired: "Direct Mauritian employer required.",
+    estimatedProcessingStages: "1) Online NELS application -> 2) Approval in Principle -> 3) Entry & Permit issuance in Mauritius."
   }
 ];
 function stripHtmlClean(html) {
@@ -7211,6 +7642,672 @@ async function verifyOfficialPermanentResidencyPathways() {
     pendingCount,
     errors
   };
+}
+
+// src/utils/internationalCareerIntelligence.ts
+var SEVEN_TIER_VISA_LABELS = {
+  explicit_employer_visa_sponsorship: "Explicit employer visa sponsorship",
+  employer_sponsored_work_permit: "Employer-sponsored work permit",
+  employer_supported_relocation: "Employer-supported relocation",
+  foreign_applicants_accepted: "Foreign applicants explicitly accepted",
+  international_accepted_sponsorship_unclear: "International applicants accepted \u2014 Sponsorship not confirmed",
+  local_applicants_only: "Local applicants only",
+  no_sponsorship_info: "Sponsorship not confirmed"
+};
+var CAREER_SPECIALTY_LABELS = {
+  banking_financial_services: "Banking & Financial Services",
+  finance_accounting: "Finance & Accounting",
+  risk_compliance: "Risk & Compliance",
+  credit_microfinance: "Credit & Microfinance",
+  international_ngo_development: "International NGOs & Development",
+  insurance: "Insurance",
+  fintech_digital_finance: "Fintech & Digital Financial Services",
+  corporate_operations_management: "Corporate Operations & Management",
+  wash_engineering_health: "WASH & Water Engineering",
+  general_international: "International Skilled Roles"
+};
+var PRIMARY_BENCHMARK_PROFILE = {
+  profileName: "Ethiopian Banking & Branch Manager Profile (Benchmark)",
+  nationality: "Ethiopian",
+  currentResidence: "Ethiopia",
+  educationDegree: "BA",
+  educationField: "Accounting and Finance",
+  institution: "Mekelle University",
+  totalYearsExperience: 9,
+  bankingYearsExperience: 9,
+  managementYearsExperience: 3,
+  currentPosition: "Branch Manager",
+  languages: ["English"],
+  englishOnly: true,
+  minimumMonthlySalaryUsd: 3e3,
+  preferredSalaryRangeUsd: "USD 3,500\u20136,000+ / month",
+  willingRelocateAloneFirst: true,
+  familyReunificationImportant: true,
+  needsEmployerSponsorship: true,
+  seeksPermanentResidencyPathway: true,
+  skillsAndResponsibilities: [
+    "Banking operations management",
+    "Branch management",
+    "Financial management",
+    "Accounting and financial reporting",
+    "Deposit mobilization",
+    "Customer relationship management",
+    "Business development",
+    "Credit administration",
+    "Risk management",
+    "Internal controls",
+    "Staff supervision",
+    "Banking compliance",
+    "Digital banking operations",
+    "Microfinance and financial inclusion"
+  ],
+  preferredRegions: ["Europe", "Middle East", "Asia-Pacific", "Africa & Other", "North America"]
+};
+var EUROPE_COUNTRIES_RX = /\b(germany|ireland|netherlands|holland|luxembourg|poland|lithuania|latvia|estonia|romania|croatia|czech republic|czechia|slovakia|slovenia|hungary|bulgaria|sweden|norway|denmark|finland|iceland|belgium|france|spain|portugal|italy|greece|austria|switzerland|united kingdom|\buk\b|england|scotland|cyprus|malta|europe|european union|\beu\b|geneva|zurich|berlin|dublin|amsterdam|london|frankfurt|stockholm|oslo|copenhagen|helsinki|vienna|brussels|paris|madrid|lisbon|warsaw|prague|budapest|bucharest|tallinn|vilnius|riga)\b/i;
+var MIDDLE_EAST_COUNTRIES_RX = /\b(united arab emirates|\buae\b|dubai|abu dhabi|sharjah|saudi arabia|\bksa\b|riyadh|jeddah|qatar|doha|bahrain|manama|oman|muscat|kuwait|middle east|gcc|gulf)\b/i;
+var ASIA_PACIFIC_COUNTRIES_RX = /\b(singapore|malaysia|kuala lumpur|japan|tokyo|australia|sydney|melbourne|new zealand|auckland|wellington|asia[\s-]pacific)\b/i;
+var NORTH_AMERICA_COUNTRIES_RX = /\b(canada|toronto|vancouver|montreal|ottawa|united states|\busa\b|new york|washington|san francisco|north america)\b/i;
+var AFRICA_OTHER_RX = /\b(mauritius|port louis|south africa|johannesburg|cape town|turkey|türkiye|istanbul|ankara|kenya|nairobi|rwanda|kigali|morocco|egypt|cairo)\b/i;
+function detectInternationalRegion(country, location) {
+  const combined = `${country || ""} ${location || ""}`;
+  if (EUROPE_COUNTRIES_RX.test(combined)) return "Europe";
+  if (MIDDLE_EAST_COUNTRIES_RX.test(combined)) return "Middle East";
+  if (ASIA_PACIFIC_COUNTRIES_RX.test(combined)) return "Asia-Pacific";
+  if (NORTH_AMERICA_COUNTRIES_RX.test(combined)) return "North America";
+  if (AFRICA_OTHER_RX.test(combined)) return "Africa & Other";
+  return "Global / Multi-Country";
+}
+function classifyCareerSpecialtyCategory(title, summary, organization) {
+  const text = `${title || ""} ${summary || ""} ${organization || ""}`.toLowerCase();
+  if (/\b(wash\b|water\s+(?:and\s+)?sanitation|hygiene|hydrolog|wastewater|water\s+engineer|environmental\s+health)\b/i.test(
+    text
+  )) {
+    return "wash_engineering_health";
+  }
+  if (/\b(aml\b|anti[\s-]money\s+laundering|kyc\b|know\s+your\s+customer|compliance\s+(?:officer|manager|specialist|head)|operational\s+risk|credit\s+risk|internal\s+control|internal\s+audit|fraud\s+prevention|financial\s+crime)\b/i.test(
+    text
+  )) {
+    return "risk_compliance";
+  }
+  if (/\b(fintech|digital\s+banking|mobile\s+money|payment\s+operations|merchant\s+acquisition|agent\s+banking|digital\s+financial\s+services)\b/i.test(
+    text
+  )) {
+    return "fintech_digital_finance";
+  }
+  if (/\b(microfinance|credit\s+manager|credit\s+operations|loan\s+portfolio|lending\s+operations|sme\s+finance|credit\s+administration|loan\s+recovery|portfolio\s+quality|financial\s+inclusion)\b/i.test(
+    text
+  )) {
+    return "credit_microfinance";
+  }
+  if (/\b(insurance\s+(?:operations|branch|relationship)|claims\s+manager|underwriting\s+officer|actuary|reinsurance)\b/i.test(
+    text
+  )) {
+    return "insurance";
+  }
+  if (/\b(grants?\s+finance|project\s+finance|partnership\s+finance|unicef|undp|unhcr|who\b|wfp\b|iom\b|ifrc|red\s+cross|oxfam|save\s+the\s+children|world\s+vision|nrc\b|irc\b|ngo|humanitarian|donor\s+compliance)\b/i.test(
+    text
+  )) {
+    return "international_ngo_development";
+  }
+  if (/\b(branch\s+manager|banking\s+operations|regional\s+banking|retail\s+banking|relationship\s+manager|sme\s+banking|corporate\s+banking|deposit\s+mobilization|commercial\s+banking|financial\s+services\s+manager)\b/i.test(
+    text
+  )) {
+    return "banking_financial_services";
+  }
+  if (/\b(finance\s+manager|finance\s+and\s+administration|financial\s+controller|senior\s+accountant|financial\s+analyst|fp&a|financial\s+planning|management\s+accountant|treasury|financial\s+reporting|budget\s+and\s+reporting|chartered\s+accountant|auditor|accounting)\b/i.test(
+    text
+  )) {
+    return "finance_accounting";
+  }
+  if (/\b(business\s+operations|administration\s+manager|regional\s+operations|business\s+development\s+manager|procurement\s+and\s+finance|commercial\s+operations|revenue\s+assurance|customer\s+experience\s+manager|operations\s+manager|operations\s+coordinator)\b/i.test(
+    text
+  )) {
+    return "corporate_operations_management";
+  }
+  return "general_international";
+}
+function classifySevenTierVisaSponsorship(opp) {
+  const text = [
+    opp.title,
+    opp.summary,
+    opp.funding?.visaSupportSummary,
+    opp.funding?.fundingSummary,
+    opp.funding?.evidenceExcerpt,
+    opp.sourceEvidenceSnippet,
+    opp.verificationNotes,
+    (opp.eligibility?.languagesRequired || []).join(" "),
+    (opp.eligibility?.eligibleNationalities || []).join(" ")
+  ].filter(Boolean).join(" ").toLowerCase();
+  const localOnlyRx = /\b(local\s+applicants?\s+only|local\s+nationals?\s+only|citizens?\s+or\s+permanent\s+residents?\s+only|must\s+(?:already\s+)?(?:hold|have|possess)\s+(?:the\s+)?(?:legal\s+)?right\s+to\s+work|existing\s+work\s+permit\s+required|no\s+visa\s+sponsorship|cannot\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|eu\s+citizens?\s+only|national\s+position\s+only)\b/i;
+  const explicitVisaSponsorshipRx = /\b(explicit(?:ly)?\s+(?:confirm\w*\s+)?visa\s+sponsorship|employer[\s-]sponsored\s+(?:work\s+)?visa|visa\s+sponsorship\s+(?:provided|offered|available|confirmed|included)|we\s+sponsor\s+(?:work\s+)?visas?|skilled\s+worker\s+visa\s+sponsorship|tier\s*2\s+sponsorship|eu\s+blue\s+card\s+sponsorship)\b/i;
+  const employerWorkPermitRx = /\b(employer[\s-]sponsored\s+work\s+permit|work\s+permit\s+sponsorship|sponsor\w*\s+(?:your\s+)?work\s+permit|critical\s+skills\s+employment\s+permit|recognised\s+sponsor|work\s+permit\s+(?:provided|arranged|supported|assistance))\b/i;
+  const relocationRx = /\b(relocation\s+(?:package|assistance|support|allowance|covered|provided)|international\s+relocation|installation\s+grant|settling[\s-]in\s+grant)\b/i;
+  const foreignAcceptedRx = /\b(foreign\s+applicants?\s+(?:welcome|accepted|eligible)|international\s+(?:applicants?|candidates?|staff|recruitment|professionals?)\s+(?:welcome|accepted|eligible|encouraged)|open\s+to\s+all\s+nationalities|applicants?\s+outside\s+(?:the\s+)?country|worldwide\s+applicants?|p-?[1-5]\s+(?:post|level|grade))\b/i;
+  const localLangMandatoryRx = /\b((?:fluent|native|proficient|mandatory|required|c1|c2|b2)\s+(?:in\s+)?(?:german|french|dutch|arabic|swedish|norwegian|danish|finnish|spanish|italian|portuguese|polish|japanese)|(?:german|french|dutch|arabic|swedish|norwegian|danish|finnish)\s+(?:is\s+)?(?:mandatory|required|essential))\b/i;
+  const englishAcceptedRx = /\b(english\s+(?:is\s+the\s+working\s+language|only|required|fluent|proficient|working\s+language)|working\s+language\s*:?\s*english|international\s+english[\s-]speaking)\b/i;
+  const isLocalOnly = opp.eligibility?.ethiopianEligible === "excluded" || localOnlyRx.test(text);
+  let category = "no_sponsorship_info";
+  if (isLocalOnly || opp.funding?.visaSupportType === "none") {
+    category = "local_applicants_only";
+  } else if (opp.funding?.visaSupportType === "employer_sponsored_visa" || opp.funding?.employmentVisaClassification === "confirmed_visa_sponsorship" || explicitVisaSponsorshipRx.test(text)) {
+    category = "explicit_employer_visa_sponsorship";
+  } else if (opp.funding?.employmentVisaClassification === "work_permit_assistance" || employerWorkPermitRx.test(text)) {
+    category = "employer_sponsored_work_permit";
+  } else if (opp.funding?.relocationAssistance === "yes" || opp.funding?.employmentVisaClassification === "relocation_assistance" || relocationRx.test(text)) {
+    category = "employer_supported_relocation";
+  } else if (opp.funding?.employmentVisaClassification === "confirmed_international_recruitment" || foreignAcceptedRx.test(text) || opp.eligibility?.ethiopianEligible === "confirmed") {
+    category = "foreign_applicants_accepted";
+  } else if (opp.eligibility?.ethiopianEligible === "likely_global") {
+    category = "international_accepted_sponsorship_unclear";
+  } else {
+    category = "no_sponsorship_info";
+  }
+  const sponsorshipConfirmed = category === "explicit_employer_visa_sponsorship" || category === "employer_sponsored_work_permit";
+  const isPriorityTier = category === "explicit_employer_visa_sponsorship" || category === "employer_sponsored_work_permit" || category === "employer_supported_relocation" || category === "foreign_applicants_accepted";
+  const localLanguageMandatory = localLangMandatoryRx.test(text) ? "yes" : englishAcceptedRx.test(text) || (opp.eligibility?.languagesRequired || []).some((l) => /^english/i.test(l.trim())) ? "no" : "not_confirmed";
+  const englishSufficient = localLanguageMandatory === "yes" ? "no" : englishAcceptedRx.test(text) || (opp.eligibility?.languagesRequired || []).some((l) => /english/i.test(l)) ? "yes" : "not_confirmed";
+  const region = detectInternationalRegion(opp.country, opp.location);
+  const familyReunificationPossible = category === "local_applicants_only" ? "no" : sponsorshipConfirmed && (region === "Europe" || region === "Middle East" || region === "North America" || region === "Asia-Pacific") ? "yes" : /\b(family\s+(?:reunification|relocation|visa|dependants|dependents|benefits))\b/i.test(text) ? "yes" : "not_confirmed";
+  return {
+    category,
+    displayLabel: SEVEN_TIER_VISA_LABELS[category],
+    isPriorityTier,
+    sponsorshipConfirmed,
+    outsideCountryAllowed: isLocalOnly ? "no" : isPriorityTier ? "yes" : "not_confirmed",
+    ethiopianEligible: opp.eligibility?.ethiopianEligible === "excluded" || isLocalOnly ? "no" : opp.eligibility?.ethiopianEligible === "confirmed" ? "yes" : "not_confirmed",
+    employerSponsorsWorkPermit: sponsorshipConfirmed ? "yes" : isLocalOnly ? "no" : "not_confirmed",
+    relocationAssistanceProvided: opp.funding?.relocationAssistance === "yes" || relocationRx.test(text) ? "yes" : opp.funding?.relocationAssistance === "no" ? "no" : "not_confirmed",
+    existingWorkPermitRequired: isLocalOnly ? "yes" : sponsorshipConfirmed ? "no" : "not_confirmed",
+    englishSufficient,
+    localLanguageMandatory,
+    familyReunificationPossible,
+    legitimateContractConfirmed: opp.organizationAuthentic && opp.hasVerifiedBadge ? "yes" : "not_confirmed"
+  };
+}
+var FX_TO_USD = {
+  USD: 1,
+  $: 1,
+  EUR: 1.08,
+  "\u20AC": 1.08,
+  GBP: 1.27,
+  "\xA3": 1.27,
+  AED: 0.272,
+  SAR: 0.266,
+  QAR: 0.274,
+  KWD: 3.25,
+  BHD: 2.65,
+  OMR: 2.6,
+  CHF: 1.13,
+  CAD: 0.73,
+  AUD: 0.65,
+  NZD: 0.6,
+  SGD: 0.74,
+  SEK: 0.095,
+  NOK: 0.093,
+  DKK: 0.145,
+  PLN: 0.25,
+  JPY: 66e-4,
+  MYR: 0.225,
+  ZAR: 0.055,
+  MUR: 0.022
+};
+function parseAndNormalizeSalaryUsd(opp, targetMinMonthlyUsd = 3e3) {
+  const combined = `${opp.funding?.stipendOrSalary || ""} ${opp.funding?.fundingSummary || ""} ${opp.summary || ""}`;
+  const benefitsSummary = [];
+  const housingAllowance = /\b(housing\s+allowance|accommodation\s+(?:provided|allowance|covered)|free\s+housing)\b/i.test(
+    combined
+  ) ? "yes" : "not_confirmed";
+  const transportationAllowance = /\b(transport(?:ation)?\s+allowance|commuter\s+allowance|company\s+car|travel\s+allowance)\b/i.test(
+    combined
+  ) ? "yes" : "not_confirmed";
+  const medicalInsurance = opp.funding?.insuranceCovered === "yes" || /\b(medical\s+insurance|health\s+insurance|comprehensive\s+healthcare|private\s+medical)\b/i.test(combined) ? "yes" : "not_confirmed";
+  const relocationAssistance = opp.funding?.relocationAssistance === "yes" || /\b(relocation\s+(?:package|assistance|allowance|support))\b/i.test(combined) ? "yes" : "not_confirmed";
+  if (housingAllowance === "yes") benefitsSummary.push("Housing allowance");
+  if (transportationAllowance === "yes") benefitsSummary.push("Transportation allowance");
+  if (medicalInsurance === "yes") benefitsSummary.push("Medical insurance");
+  if (relocationAssistance === "yes") benefitsSummary.push("Relocation assistance");
+  const grossOrNet = /\b(net|tax[\s-]free|take[\s-]home)\b/i.test(combined) ? "net" : /\b(gross|before\s+tax|pre[\s-]tax)\b/i.test(combined) ? "gross" : "not_specified";
+  const salaryRx = /\b(USD|EUR|GBP|AED|SAR|QAR|KWD|BHD|OMR|CHF|CAD|AUD|NZD|SGD|SEK|NOK|DKK|PLN|JPY|MYR|ZAR|\$|€|£)\s*([\d,]{3,9}(?:k)?)(?:\s*[-–to]+\s*(?:USD|EUR|GBP|AED|SAR|QAR|KWD|BHD|OMR|CHF|CAD|AUD|NZD|SGD|\$|€|£)?\s*([\d,]{3,9}(?:k)?))?\s*(?:per\s+)?(year|yr|annum|annual|annually|p\.a\.|month|mo|monthly|p\.m\.)?/i;
+  const match = combined.match(salaryRx);
+  if (!match) {
+    return {
+      hasAdvertisedSalary: false,
+      originalText: opp.funding?.stipendOrSalary || null,
+      currency: null,
+      estimatedMonthlyUsd: null,
+      estimatedAnnualUsd: null,
+      grossOrNet,
+      housingAllowance,
+      transportationAllowance,
+      medicalInsurance,
+      relocationAssistance,
+      benefitsSummary,
+      meetsTargetMinimum: null,
+      isExceptionalPathwayBelowTarget: false
+    };
+  }
+  const rawCurr = match[1].toUpperCase();
+  const rate = FX_TO_USD[rawCurr] ?? 1;
+  const parseNum = (s) => {
+    if (!s) return null;
+    const isK = /k$/i.test(s);
+    const cleaned = Number(s.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(cleaned) || cleaned <= 0) return null;
+    return isK ? cleaned * 1e3 : cleaned;
+  };
+  const n1 = parseNum(match[2]);
+  const n2 = parseNum(match[3]);
+  if (!n1) {
+    return {
+      hasAdvertisedSalary: false,
+      originalText: opp.funding?.stipendOrSalary || null,
+      currency: null,
+      estimatedMonthlyUsd: null,
+      estimatedAnnualUsd: null,
+      grossOrNet,
+      housingAllowance,
+      transportationAllowance,
+      medicalInsurance,
+      relocationAssistance,
+      benefitsSummary,
+      meetsTargetMinimum: null,
+      isExceptionalPathwayBelowTarget: false
+    };
+  }
+  const representative = n2 && n2 > n1 ? (n1 + n2) / 2 : n1;
+  const periodToken = (match[4] || "").toLowerCase();
+  const usdValue = representative * rate;
+  let estimatedMonthlyUsd;
+  let estimatedAnnualUsd;
+  if (/month|mo|p\.m/i.test(periodToken)) {
+    estimatedMonthlyUsd = Math.round(usdValue);
+    estimatedAnnualUsd = Math.round(usdValue * 12);
+  } else if (/year|yr|annum|annual|p\.a/i.test(periodToken)) {
+    estimatedAnnualUsd = Math.round(usdValue);
+    estimatedMonthlyUsd = Math.round(usdValue / 12);
+  } else {
+    if (usdValue >= 18e3) {
+      estimatedAnnualUsd = Math.round(usdValue);
+      estimatedMonthlyUsd = Math.round(usdValue / 12);
+    } else {
+      estimatedMonthlyUsd = Math.round(usdValue);
+      estimatedAnnualUsd = Math.round(usdValue * 12);
+    }
+  }
+  const currencyLabel = rawCurr === "$" ? "USD" : rawCurr === "\u20AC" ? "EUR" : rawCurr === "\xA3" ? "GBP" : rawCurr;
+  const meetsTargetMinimum = estimatedMonthlyUsd >= targetMinMonthlyUsd;
+  const isExceptionalPathwayBelowTarget = !meetsTargetMinimum && estimatedMonthlyUsd >= Math.round(targetMinMonthlyUsd * 0.65) && (relocationAssistance === "yes" || housingAllowance === "yes" || opp.funding?.visaSupportType === "employer_sponsored_visa");
+  return {
+    hasAdvertisedSalary: true,
+    originalText: match[0].trim(),
+    currency: currencyLabel,
+    estimatedMonthlyUsd,
+    estimatedAnnualUsd,
+    grossOrNet,
+    housingAllowance,
+    transportationAllowance,
+    medicalInsurance,
+    relocationAssistance,
+    benefitsSummary,
+    meetsTargetMinimum,
+    isExceptionalPathwayBelowTarget
+  };
+}
+var EDU_LEVEL_ORDER = {
+  none: 0,
+  not_confirmed: 0,
+  diploma: 1,
+  bachelors: 2,
+  masters: 3,
+  phd: 4
+};
+function inferApplicantEducationRank(degreeText) {
+  const s = String(degreeText || "").toLowerCase();
+  if (/\b(phd|ph\.d|doctorate|doctoral)\b/.test(s)) return 4;
+  if (/\b(master|msc|m\.sc|mba|ma\b|m\.a|mph|llm|postgraduate)\b/.test(s)) return 3;
+  if (/\b(bachelor|bsc|b\.sc|ba\b|b\.a|bba|beng|degree|undergraduate)\b/.test(s)) return 2;
+  if (/\b(diploma|tvet|associate|certificate)\b/.test(s)) return 1;
+  return 0;
+}
+function evaluateWeightedCareerMatch(opp, profile) {
+  const visaChecklist = classifySevenTierVisaSponsorship(opp);
+  const salaryInfo = parseAndNormalizeSalaryUsd(opp, profile.minimumMonthlySalaryUsd || 3e3);
+  const careerSpecialty = classifyCareerSpecialtyCategory(opp.title, opp.summary, opp.organization);
+  const regionGroup = detectInternationalRegion(opp.country, opp.location);
+  const matchReasons = [];
+  const gapOrMismatchReasons = [];
+  const oppCorpus = [
+    opp.title,
+    opp.organization,
+    opp.summary,
+    opp.eligibility?.educationRequirement,
+    opp.eligibility?.experienceRequirement,
+    ...opp.eligibility?.requiredSkills || [],
+    ...opp.eligibility?.languagesRequired || []
+  ].filter(Boolean).join(" ").toLowerCase();
+  let educationScore = 10;
+  const userEduRank = inferApplicantEducationRank(`${profile.educationDegree} ${profile.educationField}`);
+  const reqEduRank = EDU_LEVEL_ORDER[opp.eligibility?.minimumEducationLevel || "not_confirmed"] ?? 0;
+  const fieldOverlap = profile.educationField && profile.educationField.toLowerCase().split(/[\s,/&]+/).filter((w) => w.length >= 4).some((w) => oppCorpus.includes(w));
+  if (reqEduRank === 0) {
+    educationScore = fieldOverlap ? 14 : 11;
+    if (fieldOverlap) matchReasons.push(`Education field (${profile.educationField}) aligns with role domain.`);
+  } else if (userEduRank >= reqEduRank) {
+    educationScore = fieldOverlap ? 15 : 13;
+    matchReasons.push(
+      `Education meets requirement (${profile.educationDegree} in ${profile.educationField || "relevant field"}).`
+    );
+  } else if (userEduRank === reqEduRank - 1 && profile.totalYearsExperience >= 7) {
+    educationScore = 9;
+    gapOrMismatchReasons.push(
+      `Role lists ${opp.eligibility.minimumEducationLevel.toUpperCase()} preferred/required; strong experience (${profile.totalYearsExperience} yrs) may offset if permitted.`
+    );
+  } else {
+    educationScore = 4;
+    gapOrMismatchReasons.push(
+      `Education gap: opportunity requires ${opp.eligibility.educationRequirement || opp.eligibility.minimumEducationLevel}.`
+    );
+  }
+  let experienceScore = 14;
+  const minYears = opp.eligibility?.minimumYearsExperience;
+  const isManagementRole = /\b(manager|director|head\s+of|lead|supervisor|controller|regional|branch)\b/i.test(
+    opp.title
+  );
+  if (typeof minYears === "number" && minYears > 0) {
+    if (profile.totalYearsExperience >= minYears) {
+      experienceScore = isManagementRole && profile.managementYearsExperience >= 2 ? 20 : 18;
+      matchReasons.push(
+        `Experience exceeds minimum (${profile.totalYearsExperience} yrs total${profile.managementYearsExperience > 0 ? `, ${profile.managementYearsExperience} yrs management` : ""} vs ${minYears}+ yrs required).`
+      );
+    } else if (profile.totalYearsExperience >= Math.max(1, minYears - 2)) {
+      experienceScore = 11;
+      gapOrMismatchReasons.push(
+        `Slightly below stated experience (${profile.totalYearsExperience} yrs vs ${minYears}+ yrs required).`
+      );
+    } else {
+      experienceScore = 4;
+      gapOrMismatchReasons.push(
+        `Experience gap: requires ${minYears}+ years (profile lists ${profile.totalYearsExperience} years).`
+      );
+    }
+  } else if (isManagementRole && profile.managementYearsExperience >= 2) {
+    experienceScore = 19;
+    matchReasons.push(`Management track record (${profile.managementYearsExperience} yrs as ${profile.currentPosition}) fits senior/managerial scope.`);
+  } else if (profile.totalYearsExperience >= 5) {
+    experienceScore = 16;
+    matchReasons.push(`Strong ${profile.totalYearsExperience}-year professional track record.`);
+  }
+  const profileSkillsCorpus = [
+    profile.currentPosition,
+    profile.educationField,
+    ...profile.skillsAndResponsibilities || []
+  ].join(" ").toLowerCase();
+  const stopWords = /* @__PURE__ */ new Set(["and", "the", "for", "with", "management", "officer", "senior", "international"]);
+  const skillTokens = Array.from(
+    new Set(
+      profileSkillsCorpus.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length >= 4 && !stopWords.has(w))
+    )
+  );
+  const matchedTokens = skillTokens.filter((tok) => oppCorpus.includes(tok));
+  const isFinanceBankingProfile = /\b(bank|branch|finance|accounting|credit|microfinance|audit|compliance|risk)\b/i.test(
+    profileSkillsCorpus
+  );
+  const isFinanceBankingOpp = opp.isBankingFinance || [
+    "banking_financial_services",
+    "finance_accounting",
+    "risk_compliance",
+    "credit_microfinance",
+    "insurance",
+    "fintech_digital_finance",
+    "corporate_operations_management"
+  ].includes(careerSpecialty);
+  let responsibilityScore = 0;
+  if (matchedTokens.length >= 5) {
+    responsibilityScore = 20;
+    matchReasons.push(`High responsibility match: ${matchedTokens.slice(0, 5).join(", ")}.`);
+  } else if (matchedTokens.length >= 3) {
+    responsibilityScore = 16;
+    matchReasons.push(`Relevant responsibility overlap: ${matchedTokens.slice(0, 4).join(", ")}.`);
+  } else if (matchedTokens.length >= 1 || isFinanceBankingProfile && isFinanceBankingOpp) {
+    responsibilityScore = 11;
+    matchReasons.push(`Sector alignment (${CAREER_SPECIALTY_LABELS[careerSpecialty]}).`);
+  } else {
+    responsibilityScore = 3;
+    gapOrMismatchReasons.push(
+      `Low direct responsibility overlap with ${profile.currentPosition || "your background"} (${CAREER_SPECIALTY_LABELS[careerSpecialty]}).`
+    );
+  }
+  let visaEligibilityScore = 8;
+  let workAuthorizationEligible = true;
+  if (visaChecklist.category === "local_applicants_only" || visaChecklist.ethiopianEligible === "no") {
+    visaEligibilityScore = 0;
+    workAuthorizationEligible = false;
+    gapOrMismatchReasons.push(
+      "Not eligible for work authorization from Ethiopia: listing requires existing local work permit or restricts to local nationals."
+    );
+  } else if (visaChecklist.category === "explicit_employer_visa_sponsorship") {
+    visaEligibilityScore = 20;
+    matchReasons.push("Explicit employer visa sponsorship verified.");
+  } else if (visaChecklist.category === "employer_sponsored_work_permit") {
+    visaEligibilityScore = 18;
+    matchReasons.push("Employer-sponsored work permit verified.");
+  } else if (visaChecklist.category === "employer_supported_relocation") {
+    visaEligibilityScore = 15;
+    matchReasons.push("Employer-supported international relocation confirmed.");
+  } else if (visaChecklist.category === "foreign_applicants_accepted") {
+    visaEligibilityScore = 13;
+    matchReasons.push("Foreign / international applicants explicitly accepted.");
+  } else {
+    visaEligibilityScore = profile.needsEmployerSponsorship ? 6 : 12;
+    gapOrMismatchReasons.push("Sponsorship not confirmed \u2014 verify employer work permit support before applying.");
+  }
+  let salaryScore = 6;
+  const minTarget = profile.minimumMonthlySalaryUsd || 3e3;
+  if (salaryInfo.hasAdvertisedSalary && salaryInfo.estimatedMonthlyUsd !== null) {
+    if (salaryInfo.estimatedMonthlyUsd >= minTarget) {
+      salaryScore = 10;
+      matchReasons.push(
+        `Estimated salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) meets your USD ${minTarget.toLocaleString()}/mo target.`
+      );
+    } else if (salaryInfo.isExceptionalPathwayBelowTarget) {
+      salaryScore = 6;
+      gapOrMismatchReasons.push(
+        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below USD ${minTarget.toLocaleString()}/mo target, flagged under exceptional relocation/pathway opportunities.`
+      );
+    } else {
+      salaryScore = 2;
+      gapOrMismatchReasons.push(
+        `Salary (~USD ${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo) is below your USD ${minTarget.toLocaleString()}/mo minimum expectation.`
+      );
+    }
+  } else {
+    salaryScore = 6;
+  }
+  let languageScore = 8;
+  if (profile.englishOnly && visaChecklist.localLanguageMandatory === "yes") {
+    languageScore = 1;
+    gapOrMismatchReasons.push("Requires mandatory local language proficiency (profile indicates English only).");
+  } else if (visaChecklist.englishSufficient === "yes") {
+    languageScore = 10;
+    matchReasons.push("English working language confirmed sufficient.");
+  } else {
+    languageScore = 7;
+  }
+  let relocationFamilyScore = 3;
+  if (visaChecklist.relocationAssistanceProvided === "yes" && visaChecklist.familyReunificationPossible === "yes") {
+    relocationFamilyScore = 5;
+    matchReasons.push("Supports relocation and legal family reunification pathway.");
+  } else if (visaChecklist.familyReunificationPossible === "yes" || visaChecklist.relocationAssistanceProvided === "yes") {
+    relocationFamilyScore = 4;
+  } else if (visaChecklist.category === "local_applicants_only") {
+    relocationFamilyScore = 0;
+  }
+  let rawTotal = educationScore + experienceScore + responsibilityScore + visaEligibilityScore + salaryScore + languageScore + relocationFamilyScore;
+  let cappedDueToWorkAuth = false;
+  if (!workAuthorizationEligible && rawTotal > 45) {
+    rawTotal = 45;
+    cappedDueToWorkAuth = true;
+  }
+  const totalScore = Math.max(0, Math.min(100, Math.round(rawTotal)));
+  const band = totalScore >= 90 ? "Excellent match" : totalScore >= 75 ? "Strong match" : totalScore >= 60 ? "Possible match" : "Low match";
+  return {
+    totalScore,
+    band,
+    workAuthorizationEligible,
+    cappedDueToWorkAuth,
+    breakdown: {
+      educationScore,
+      experienceScore,
+      responsibilityScore,
+      visaEligibilityScore,
+      salaryScore,
+      languageScore,
+      relocationFamilyScore
+    },
+    matchReasons: matchReasons.slice(0, 6),
+    gapOrMismatchReasons: gapOrMismatchReasons.slice(0, 5),
+    salaryInfo,
+    visaChecklist,
+    careerSpecialty,
+    regionGroup
+  };
+}
+function extractGroundedProfileFromCvText(cvText, overrides = {}) {
+  const clean = String(cvText || "").replace(/\r/g, "\n").trim();
+  const evidence = [];
+  let totalYears = overrides.totalYearsExperience ?? 0;
+  const yearsExplicit = clean.match(/\b(\d{1,2})\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:professional\s+|banking\s+|work\s+|relevant\s+)?experience\b/i);
+  if (yearsExplicit) {
+    totalYears = Math.min(40, parseInt(yearsExplicit[1], 10));
+    evidence.push(`Experience found in CV: "${yearsExplicit[0]}"`);
+  } else {
+    const yearMatches = Array.from(clean.matchAll(/\b(199\d|20[0-2]\d)\b/g)).map((m) => Number(m[1]));
+    if (yearMatches.length >= 2) {
+      const minY = Math.min(...yearMatches);
+      const maxY = Math.min((/* @__PURE__ */ new Date()).getFullYear(), Math.max(...yearMatches));
+      if (maxY - minY >= 1 && maxY - minY <= 35) {
+        totalYears = maxY - minY;
+        evidence.push(`Employment timeline span detected in CV: ${minY}\u2013${maxY}`);
+      }
+    }
+  }
+  let educationDegree = overrides.educationDegree || "";
+  let educationField = overrides.educationField || "";
+  const degreeMatch = clean.match(
+    /\b(Ph\.?D|Doctorate|Master(?:'s)?|M\.?Sc|MBA|M\.?A|Bachelor(?:'s)?|B\.?Sc|B\.?A|BBA|B\.?Eng|Diploma)\b(?:\.?\s*(?:degree\s*)?(?:in\s+([A-Za-z &/]{3,55})))?/i
+  );
+  if (degreeMatch) {
+    educationDegree = degreeMatch[1].trim();
+    if (degreeMatch[2]) {
+      educationField = degreeMatch[2].replace(/[\n.,;].*$/, "").trim();
+    }
+    evidence.push(`Education found in CV: "${degreeMatch[0].trim().slice(0, 90)}"`);
+  }
+  const knownCapabilities = [
+    "Branch management",
+    "Banking operations",
+    "Financial management",
+    "Accounting and financial reporting",
+    "Deposit mobilization",
+    "Customer relationship management",
+    "Business development",
+    "Credit administration",
+    "Risk management",
+    "Internal controls",
+    "Internal audit",
+    "Staff supervision",
+    "Banking compliance",
+    "AML / KYC compliance",
+    "Digital banking",
+    "Microfinance",
+    "Financial inclusion",
+    "Treasury management",
+    "Financial analysis",
+    "Budgeting and forecasting",
+    "Grants finance",
+    "WASH engineering",
+    "Water and sanitation",
+    "Project management",
+    "Insurance operations",
+    "Payment operations",
+    "Fintech"
+  ];
+  const extractedSkills = [];
+  for (const cap of knownCapabilities) {
+    const core = cap.split(" ")[0].toLowerCase();
+    if (clean.toLowerCase().includes(cap.toLowerCase()) || core.length >= 5 && clean.toLowerCase().includes(core)) {
+      extractedSkills.push(cap);
+    }
+  }
+  const detectedLangs = [];
+  for (const lang of ["English", "Amharic", "French", "German", "Arabic", "Dutch", "Spanish", "Swedish", "Norwegian"]) {
+    if (new RegExp(`\\b${lang}\\b`, "i").test(clean)) {
+      detectedLangs.push(lang);
+    }
+  }
+  const languages = detectedLangs.length > 0 ? detectedLangs : overrides.languages || ["English"];
+  const nonEnglishEuropean = languages.some(
+    (l) => ["French", "German", "Arabic", "Dutch", "Spanish", "Swedish", "Norwegian"].includes(l)
+  );
+  const roleMatch = clean.match(
+    /\b(Branch Manager|Banking Operations Manager|Finance Manager|Financial Controller|Senior Accountant|Compliance Manager|AML Officer|Credit Manager|Relationship Manager|Risk Manager|WASH Coordinator|Water Engineer|Operations Manager|Business Development Manager)\b/i
+  );
+  const currentPosition = roleMatch ? roleMatch[1] : overrides.currentPosition || "";
+  if (roleMatch) {
+    evidence.push(`Role title found in CV: "${roleMatch[1]}"`);
+  }
+  const isManagerInCv = /\b(branch manager|manager|head of|supervisor|team lead|director)\b/i.test(clean);
+  return {
+    profileName: overrides.profileName || "Custom CV Profile",
+    nationality: overrides.nationality || (/ethiopia/i.test(clean) ? "Ethiopian" : "International"),
+    currentResidence: overrides.currentResidence || (/ethiopia|addis ababa|mekelle/i.test(clean) ? "Ethiopia" : "Not specified"),
+    educationDegree: educationDegree || "Not specified in CV",
+    educationField: educationField || "Not specified in CV",
+    institution: overrides.institution || "",
+    totalYearsExperience: totalYears,
+    bankingYearsExperience: overrides.bankingYearsExperience ?? (/\bbank/i.test(clean) ? totalYears : 0),
+    managementYearsExperience: overrides.managementYearsExperience ?? (isManagerInCv ? Math.min(totalYears, 3) : 0),
+    currentPosition: currentPosition || "Not specified in CV",
+    languages,
+    englishOnly: overrides.englishOnly ?? !nonEnglishEuropean,
+    minimumMonthlySalaryUsd: overrides.minimumMonthlySalaryUsd ?? 3e3,
+    preferredSalaryRangeUsd: overrides.preferredSalaryRangeUsd || "USD 3,000+ / month",
+    willingRelocateAloneFirst: overrides.willingRelocateAloneFirst ?? true,
+    familyReunificationImportant: overrides.familyReunificationImportant ?? true,
+    needsEmployerSponsorship: overrides.needsEmployerSponsorship ?? true,
+    seeksPermanentResidencyPathway: overrides.seeksPermanentResidencyPathway ?? true,
+    skillsAndResponsibilities: overrides.skillsAndResponsibilities && overrides.skillsAndResponsibilities.length > 0 ? overrides.skillsAndResponsibilities : extractedSkills,
+    preferredRegions: overrides.preferredRegions || [
+      "Europe",
+      "Middle East",
+      "Asia-Pacific",
+      "Africa & Other",
+      "North America"
+    ],
+    extractedFromCv: true,
+    cvEvidenceSnippets: evidence
+  };
+}
+function scorePrPathwayForCareerProfile(pathway, profile) {
+  const notes = [];
+  const hasDegree = inferApplicantEducationRank(`${profile.educationDegree} ${profile.educationField}`) >= 2;
+  const isFinance = /\b(bank|finance|account|audit|credit|compliance|risk)\b/i.test(
+    `${profile.educationField} ${profile.currentPosition} ${profile.skillsAndResponsibilities.join(" ")}`
+  );
+  if (pathway.ethiopianCitizensEligible === "confirmed") {
+    notes.push("Ethiopian citizens can apply from Ethiopia under official rules.");
+  }
+  if (hasDegree) {
+    notes.push(`Degree (${profile.educationDegree} ${profile.educationField}) supports skilled stream assessment.`);
+  }
+  if (isFinance && (pathway.bankingFinanceOccupations?.length || 0) > 0) {
+    notes.push(`Banking/Finance demand documented: ${pathway.bankingFinanceOccupations[0]}.`);
+  }
+  if (profile.familyReunificationImportant && pathway.familyRelocationOptions) {
+    notes.push(`Family reunification: ${pathway.familyRelocationOptions.slice(0, 110)}`);
+  }
+  const fitLevel = pathway.ethiopianCitizensEligible === "confirmed" && hasDegree && isFinance && (pathway.bankingFinanceOccupations?.length || 0) > 0 ? "Strong Pathway Fit" : pathway.foreignApplicantsEligible && hasDegree ? "Possible Pathway (Requires Job Offer / Language)" : "Limited Fit";
+  return { fitLevel, notes };
 }
 
 // serverGlobalOpportunities.ts
@@ -10326,14 +11423,23 @@ function registerGlobalOpportunitiesRoutes(deps) {
     return lastLog;
   }
   function computeSubsectionCounts(activeList, savedIdSet, permanentResidencyCount = 0) {
+    const isManagementOrFinanceRole = (o) => {
+      const sp = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+      return sp === "corporate_operations_management" || sp === "banking_financial_services" || sp === "finance_accounting" || sp === "risk_compliance" || sp === "credit_microfinance" || /\b(manager|director|head of|controller|lead|officer|analyst|auditor|supervisor|coordinator)\b/i.test(o.title);
+    };
     return {
       international_jobs: activeList.filter((o) => o.category === "international_job").length,
+      europe_jobs: activeList.filter((o) => detectInternationalRegion(o.country, o.location) === "Europe").length,
+      middle_east_jobs: activeList.filter((o) => detectInternationalRegion(o.country, o.location) === "Middle East").length,
+      management_jobs: activeList.filter(isManagementOrFinanceRole).length,
       scholarships: activeList.filter((o) => o.category === "university_scholarship").length,
       professional_training: activeList.filter((o) => o.category === "professional_training").length,
       conferences_summits: activeList.filter((o) => o.category === "conference_summit").length,
       banking_finance: activeList.filter((o) => o.isBankingFinance || o.sectors.includes("banking_finance")).length,
       wash_opportunities: activeList.filter((o) => o.isWashDedicated || o.category === "wash_opportunity" || o.sectors.includes("wash")).length,
       permanent_residency: permanentResidencyCount,
+      recruiting_countries: permanentResidencyCount,
+      cv_matching: activeList.length,
       recommended: activeList.filter((o) => o.recommendation?.eligible).length,
       closing_soon: activeList.filter((o) => o.deadline.isClosingSoon).length,
       saved: activeList.filter((o) => savedIdSet.has(o.id)).length
@@ -10388,7 +11494,14 @@ function registerGlobalOpportunitiesRoutes(deps) {
       const q = String(req.query.q || "").trim().toLowerCase();
       let filtered = activeVerified;
       if (subsection === "international_jobs") filtered = filtered.filter((o) => o.category === "international_job");
-      else if (subsection === "scholarships") filtered = filtered.filter((o) => o.category === "university_scholarship");
+      else if (subsection === "europe_jobs") filtered = filtered.filter((o) => detectInternationalRegion(o.country, o.location) === "Europe");
+      else if (subsection === "middle_east_jobs") filtered = filtered.filter((o) => detectInternationalRegion(o.country, o.location) === "Middle East");
+      else if (subsection === "management_jobs") {
+        filtered = filtered.filter((o) => {
+          const sp = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+          return sp === "corporate_operations_management" || sp === "banking_financial_services" || sp === "finance_accounting" || sp === "risk_compliance" || sp === "credit_microfinance" || /\b(manager|director|head of|controller|lead|officer|analyst|auditor|supervisor|coordinator)\b/i.test(o.title);
+        });
+      } else if (subsection === "scholarships") filtered = filtered.filter((o) => o.category === "university_scholarship");
       else if (subsection === "professional_training") filtered = filtered.filter((o) => o.category === "professional_training");
       else if (subsection === "conferences_summits") filtered = filtered.filter((o) => o.category === "conference_summit");
       else if (subsection === "banking_finance") filtered = filtered.filter((o) => o.isBankingFinance || o.sectors.includes("banking_finance"));
@@ -10679,6 +11792,58 @@ function registerGlobalOpportunitiesRoutes(deps) {
       lastVerificationAt,
       lastVerificationAtEat: formatEthiopiaDateTime(lastVerificationAt)
     };
+    const countryMap = /* @__PURE__ */ new Map();
+    let confirmedSponsoredCount = 0;
+    let sponsorshipUnconfirmedCount = 0;
+    for (const opp of store.international_opportunities) {
+      const active = isOpportunityActiveAndDisplayable(opp, nowMs);
+      const visaCheck = classifySevenTierVisaSponsorship(opp);
+      const region = detectInternationalRegion(opp.country, opp.location);
+      const cName = (opp.country || "International").trim();
+      const entry = countryMap.get(cName) || { country: cName, region, total: 0, active: 0, sponsored: 0 };
+      entry.total += 1;
+      if (active) {
+        entry.active += 1;
+        if (visaCheck.sponsorshipConfirmed) {
+          entry.sponsored += 1;
+          confirmedSponsoredCount += 1;
+        } else {
+          sponsorshipUnconfirmedCount += 1;
+        }
+      }
+      countryMap.set(cName, entry);
+    }
+    const countryStats = Array.from(countryMap.values()).sort((a, b) => b.active - a.active || b.total - a.total);
+    const manageableOpportunities = [...activeVerified, ...archivedRecords].slice(0, 120).map((o) => {
+      const visaCheck = classifySevenTierVisaSponsorship(o);
+      const salary = parseAndNormalizeSalaryUsd(o);
+      const specialty = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+      return {
+        id: o.id,
+        title: o.title,
+        organization: o.organization,
+        category: o.category,
+        careerSpecialtyLabel: CAREER_SPECIALTY_LABELS[specialty],
+        country: o.country,
+        region: detectInternationalRegion(o.country, o.location),
+        applicationStatus: o.applicationStatus,
+        verificationStatus: o.verificationStatus,
+        verificationTier: o.verificationTier || "VERIFIED",
+        isActiveDisplayable: isOpportunityActiveAndDisplayable(o, nowMs),
+        officialApplicationUrl: o.officialApplicationUrl,
+        httpStatusCode: o.httpStatusCode ?? null,
+        deadlineUtcIso: o.deadline.deadlineUtcIso,
+        fullDaysRemaining: o.deadline.fullDaysRemaining,
+        stipendOrSalary: o.funding.stipendOrSalary || "",
+        estimatedMonthlyUsd: salary.estimatedMonthlyUsd,
+        visaSupportType: o.funding.visaSupportType,
+        employmentVisaClassification: o.funding.employmentVisaClassification || "no_sponsorship_stated",
+        visaSupportSummary: o.funding.visaSupportSummary,
+        sevenTierVisaLabel: visaCheck.displayLabel,
+        sponsorshipConfirmed: visaCheck.sponsorshipConfirmed,
+        lastVerifiedAt: o.lastVerifiedAt
+      };
+    });
     res.json({
       success: true,
       verificationLogs: store.opportunity_verification_logs.slice(0, 150),
@@ -10686,6 +11851,10 @@ function registerGlobalOpportunitiesRoutes(deps) {
       sources: store.opportunity_sources,
       schedulerInfo: buildSchedulerInfo(store),
       monitoringSummary,
+      countryStats,
+      confirmedSponsoredCount,
+      sponsorshipUnconfirmedCount,
+      manageableOpportunities,
       archivedOpportunities: archivedRecords.slice(0, 80).map((o) => ({
         id: o.id,
         title: o.title,
@@ -10764,6 +11933,359 @@ function registerGlobalOpportunitiesRoutes(deps) {
       saveStore(store);
     }
     res.json({ success: true, schedulerInfo: buildSchedulerInfo(store) });
+  });
+  app.post("/api/global-opportunities/match-cv", (req, res) => {
+    try {
+      const store = loadStore();
+      const nowMs = Date.now();
+      const body = req.body || {};
+      const usePrimaryTestProfile = Boolean(body.usePrimaryTestProfile);
+      const rawCvText = typeof body.cvText === "string" ? body.cvText.slice(0, 4e4) : "";
+      const rawProfile = body.profile && typeof body.profile === "object" ? body.profile : null;
+      let resolvedProfile;
+      if (usePrimaryTestProfile) {
+        resolvedProfile = {
+          ...PRIMARY_BENCHMARK_PROFILE,
+          ...rawProfile || {}
+        };
+      } else if (rawCvText.trim().length > 0) {
+        resolvedProfile = extractGroundedProfileFromCvText(rawCvText, rawProfile || {});
+      } else if (rawProfile) {
+        resolvedProfile = {
+          profileName: String(rawProfile.profileName || "Custom Applicant Profile").slice(0, 120),
+          nationality: String(rawProfile.nationality || "Ethiopian").slice(0, 80),
+          currentResidence: String(rawProfile.currentResidence || "Ethiopia").slice(0, 80),
+          educationDegree: String(rawProfile.educationDegree || "Not specified").slice(0, 80),
+          educationField: String(rawProfile.educationField || "Not specified").slice(0, 120),
+          institution: String(rawProfile.institution || "").slice(0, 140),
+          totalYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.totalYearsExperience) || 0)),
+          bankingYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.bankingYearsExperience) || 0)),
+          managementYearsExperience: Math.max(0, Math.min(50, Number(rawProfile.managementYearsExperience) || 0)),
+          currentPosition: String(rawProfile.currentPosition || "Not specified").slice(0, 120),
+          languages: Array.isArray(rawProfile.languages) && rawProfile.languages.length > 0 ? rawProfile.languages.map((l) => String(l).slice(0, 40)).slice(0, 10) : ["English"],
+          englishOnly: rawProfile.englishOnly !== void 0 ? Boolean(rawProfile.englishOnly) : true,
+          minimumMonthlySalaryUsd: Math.max(0, Math.min(5e4, Number(rawProfile.minimumMonthlySalaryUsd) || 0)),
+          preferredSalaryRangeUsd: String(rawProfile.preferredSalaryRangeUsd || "USD 3,000+ / month").slice(0, 80),
+          willingRelocateAloneFirst: Boolean(rawProfile.willingRelocateAloneFirst ?? true),
+          familyReunificationImportant: Boolean(rawProfile.familyReunificationImportant ?? true),
+          needsEmployerSponsorship: Boolean(rawProfile.needsEmployerSponsorship ?? true),
+          seeksPermanentResidencyPathway: Boolean(rawProfile.seeksPermanentResidencyPathway ?? true),
+          skillsAndResponsibilities: Array.isArray(rawProfile.skillsAndResponsibilities) ? rawProfile.skillsAndResponsibilities.map((s) => String(s).trim().slice(0, 80)).filter(Boolean).slice(0, 30) : [],
+          preferredRegions: Array.isArray(rawProfile.preferredRegions) && rawProfile.preferredRegions.length > 0 ? rawProfile.preferredRegions : ["Europe", "Middle East", "Asia-Pacific", "Africa & Other", "North America"]
+        };
+      } else {
+        res.status(400).json({
+          success: false,
+          error: "Provide cvText, a custom profile object, or set usePrimaryTestProfile=true."
+        });
+        return;
+      }
+      const activeVerified = store.international_opportunities.filter(
+        (o) => isOpportunityActiveAndDisplayable(o, nowMs)
+      );
+      const rankedMatches = activeVerified.map((opportunity) => {
+        const match = evaluateWeightedCareerMatch(opportunity, resolvedProfile);
+        return {
+          opportunity,
+          match
+        };
+      }).sort((a, b) => b.match.totalScore - a.match.totalScore || a.opportunity.deadline.fullDaysRemaining - b.opportunity.deadline.fullDaysRemaining);
+      const prPathways = store.permanent_residency_pathways || [];
+      const prMatches = prPathways.map((pathway) => ({
+        pathway,
+        assessment: scorePrPathwayForCareerProfile(pathway, resolvedProfile)
+      })).sort((a, b) => {
+        const rank = (lvl) => lvl.startsWith("Strong") ? 3 : lvl.startsWith("Possible") ? 2 : 1;
+        return rank(b.assessment.fitLevel) - rank(a.assessment.fitLevel);
+      });
+      res.json({
+        success: true,
+        generatedAt: new Date(nowMs).toISOString(),
+        profile: resolvedProfile,
+        weights: {
+          education: 15,
+          experience: 20,
+          responsibilities: 20,
+          visaAndEligibility: 20,
+          salary: 10,
+          language: 10,
+          relocationAndFamily: 5
+        },
+        totalEvaluated: rankedMatches.length,
+        excellentCount: rankedMatches.filter((m) => m.match.band === "Excellent match").length,
+        strongCount: rankedMatches.filter((m) => m.match.band === "Strong match").length,
+        possibleCount: rankedMatches.filter((m) => m.match.band === "Possible match").length,
+        matches: rankedMatches.slice(0, 100),
+        permanentResidencyMatches: prMatches
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to evaluate profile match." });
+    }
+  });
+  function isSafePublicHttpUrl(rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+      const host = parsed.hostname.toLowerCase();
+      if (!host || host === "localhost" || host === "::1" || host.endsWith(".local") || host.endsWith(".internal")) {
+        return false;
+      }
+      if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^0\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^\[?(fe80|fc|fd):/i.test(host)) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  app.patch("/api/admin/global-opportunities/:id", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    try {
+      const oppId = String(req.params.id || "").trim();
+      if (!oppId) {
+        res.status(400).json({ success: false, error: "Opportunity ID is required." });
+        return;
+      }
+      const store = loadStore();
+      const idx = store.international_opportunities.findIndex((o) => o.id === oppId);
+      if (idx < 0) {
+        res.status(404).json({ success: false, error: "Opportunity not found." });
+        return;
+      }
+      const opp = store.international_opportunities[idx];
+      const body = req.body || {};
+      const action = String(body.action || "edit").toLowerCase();
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      if (action === "approve") {
+        opp.applicationStatus = "open";
+        opp.verificationStatus = "Verified and Open";
+        opp.verificationTier = "VERIFIED";
+        opp.hasVerifiedBadge = true;
+        opp.rejectionReason = void 0;
+        opp.rejectionCategory = void 0;
+        opp.archivedAt = void 0;
+        opp.unpublishedAt = void 0;
+      } else if (action === "reject") {
+        opp.applicationStatus = "rejected";
+        opp.verificationStatus = "Unverified";
+        opp.verificationTier = "PENDING VERIFICATION";
+        opp.hasVerifiedBadge = false;
+        opp.rejectionCategory = "authenticity";
+        opp.rejectionReason = String(body.reason || "Rejected by administrator during moderation review.").slice(0, 300);
+        opp.archivedAt = nowIso;
+      } else if (action === "expire") {
+        opp.applicationStatus = "expired";
+        opp.verificationStatus = "Expired";
+        opp.hasVerifiedBadge = false;
+        opp.rejectionCategory = "deadline";
+        opp.rejectionReason = String(body.reason || "Marked expired by administrator.").slice(0, 300);
+        opp.archivedAt = nowIso;
+      }
+      if (typeof body.stipendOrSalary === "string") {
+        opp.funding.stipendOrSalary = body.stipendOrSalary.trim().slice(0, 200);
+      }
+      if (typeof body.visaSupportSummary === "string" && body.visaSupportSummary.trim()) {
+        opp.funding.visaSupportSummary = body.visaSupportSummary.trim().slice(0, 300);
+      }
+      if (typeof body.visaSupportType === "string" && [
+        "employer_sponsored_visa",
+        "visa_fees_funded",
+        "visa_assistance_only",
+        "invitation_letter_only",
+        "not_provided",
+        "not_confirmed"
+      ].includes(body.visaSupportType)) {
+        opp.funding.visaSupportType = body.visaSupportType;
+      }
+      if (typeof body.employmentVisaClassification === "string" && [
+        "confirmed_visa_sponsorship",
+        "confirmed_international_recruitment",
+        "relocation_assistance",
+        "work_permit_assistance",
+        "no_sponsorship_stated"
+      ].includes(body.employmentVisaClassification)) {
+        opp.funding.employmentVisaClassification = body.employmentVisaClassification;
+      }
+      if (typeof body.title === "string" && body.title.trim().length >= 3) {
+        opp.title = body.title.trim().slice(0, 220);
+      }
+      if (typeof body.country === "string" && body.country.trim().length >= 2) {
+        opp.country = body.country.trim().slice(0, 120);
+      }
+      if (typeof body.summary === "string" && body.summary.trim().length >= 5) {
+        opp.summary = body.summary.trim().slice(0, 1200);
+      }
+      opp.updatedAt = nowIso;
+      opp.lastVerifiedAt = nowIso;
+      store.international_opportunities[idx] = opp;
+      saveStore(store);
+      appendAuditLog({
+        action: `global_opportunity_admin_${action}`,
+        actorEmail: getRequesterEmail(req) || "owner",
+        targetType: "global_opportunity",
+        targetId: opp.id,
+        summary: `Admin ${action} on "${opp.title}" (${opp.country})`,
+        severity: "info"
+      });
+      res.json({
+        success: true,
+        opportunity: opp,
+        visaChecklist: classifySevenTierVisaSponsorship(opp),
+        salaryInfo: parseAndNormalizeSalaryUsd(opp)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to update opportunity." });
+    }
+  });
+  app.post("/api/admin/global-opportunities/:id/test-link", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    try {
+      const oppId = String(req.params.id || "").trim();
+      const store = loadStore();
+      const idx = store.international_opportunities.findIndex((o) => o.id === oppId);
+      if (idx < 0) {
+        res.status(404).json({ success: false, error: "Opportunity not found." });
+        return;
+      }
+      const opp = store.international_opportunities[idx];
+      const targetUrl = opp.officialApplicationUrl;
+      if (!isSafePublicHttpUrl(targetUrl)) {
+        res.status(400).json({ success: false, error: "Blocked non-public or invalid URL scheme." });
+        return;
+      }
+      const started = Date.now();
+      let httpStatus = null;
+      let reachable = false;
+      let finalUrl = targetUrl;
+      let note = "";
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8e3);
+        try {
+          const response = await fetch(targetUrl, {
+            method: "HEAD",
+            redirect: "follow",
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "HopelandJobs-LinkVerifier/1.0 (+https://hopelandjobs.tech)"
+            }
+          });
+          httpStatus = response.status;
+          finalUrl = response.url || targetUrl;
+          if (httpStatus === 405 || httpStatus === 403) {
+            const getResp = await fetch(targetUrl, {
+              method: "GET",
+              redirect: "follow",
+              signal: controller.signal,
+              headers: {
+                "User-Agent": "HopelandJobs-LinkVerifier/1.0 (+https://hopelandjobs.tech)"
+              }
+            });
+            httpStatus = getResp.status;
+            finalUrl = getResp.url || targetUrl;
+          }
+          reachable = httpStatus >= 200 && httpStatus < 400;
+          note = reachable ? `Live HTTP ${httpStatus} verified` : `Returned HTTP ${httpStatus}`;
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch (fetchErr) {
+        note = `Network check failed: ${fetchErr?.message || "Timeout or DNS error"}`;
+      }
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      opp.httpStatusCode = httpStatus;
+      opp.lastVerifiedAt = nowIso;
+      opp.updatedAt = nowIso;
+      store.international_opportunities[idx] = opp;
+      saveStore(store);
+      res.json({
+        success: true,
+        opportunityId: opp.id,
+        url: targetUrl,
+        finalUrl,
+        httpStatus,
+        reachable,
+        latencyMs: Date.now() - started,
+        checkedAt: nowIso,
+        note
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to test application link." });
+    }
+  });
+  app.get("/api/admin/global-opportunities/export-csv", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({ success: false, error: "Administrator access required." });
+      return;
+    }
+    try {
+      const store = loadStore();
+      const csvCell = (val) => {
+        const s = String(val ?? "").replace(/\r?\n/g, " ");
+        if (/[",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const headers = [
+        "ID",
+        "Title",
+        "Organization",
+        "Category",
+        "Career Specialty",
+        "Country",
+        "Region",
+        "Application Status",
+        "Verification Status",
+        "Verification Tier",
+        "7-Tier Visa Sponsorship",
+        "Sponsorship Confirmed",
+        "Original Salary / Stipend",
+        "Estimated Monthly USD",
+        "Deadline UTC",
+        "Days Remaining",
+        "Official Application URL",
+        "Last Verified At"
+      ];
+      const rows = store.international_opportunities.map((o) => {
+        const visa = classifySevenTierVisaSponsorship(o);
+        const salary = parseAndNormalizeSalaryUsd(o);
+        const specialty = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+        return [
+          o.id,
+          o.title,
+          o.organization,
+          o.category,
+          CAREER_SPECIALTY_LABELS[specialty],
+          o.country,
+          detectInternationalRegion(o.country, o.location),
+          o.applicationStatus,
+          o.verificationStatus,
+          o.verificationTier || "VERIFIED",
+          visa.displayLabel,
+          visa.sponsorshipConfirmed ? "YES" : "NOT_CONFIRMED",
+          o.funding.stipendOrSalary || "Not disclosed",
+          salary.estimatedMonthlyUsd ?? "",
+          o.deadline.deadlineUtcIso || o.deadline.deadlineDateRaw || "",
+          o.deadline.fullDaysRemaining,
+          o.officialApplicationUrl,
+          o.lastVerifiedAt
+        ].map(csvCell).join(",");
+      });
+      const csv = [headers.map(csvCell).join(","), ...rows].join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="hopelandjobs-global-opportunities-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.csv"`
+      );
+      res.send(csv);
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to export CSV." });
+    }
   });
   app.get("/api/cron/global-opportunities", async (req, res) => {
     const cronSecret = (process.env.CRON_SECRET || "").trim();

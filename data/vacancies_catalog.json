@@ -323,11 +323,11 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 247,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-16T08:13:40.380Z",
-    "updatedAt": "2026-11-16T08:12:49.653Z"
+    "updatedAt": "2026-11-16T08:12:49.653Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -605,11 +605,11 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 253,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-16T08:13:50.000Z",
-    "updatedAt": "2026-11-16T08:12:58.141Z"
+    "updatedAt": "2026-11-16T08:12:58.141Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -2876,11 +2876,11 @@
     "requiredSkills": [],
     "category": "NGO and International Organizations",
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 179,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-14T07:57:55.624Z",
-    "updatedAt": "2026-11-14T07:57:03.414Z"
+    "updatedAt": "2026-11-14T07:57:03.414Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -3008,11 +3008,11 @@
     "requiredSkills": [],
     "category": "Education and Universities",
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 167,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-14T07:56:37.139Z",
-    "updatedAt": "2026-11-14T07:55:44.918Z"
+    "updatedAt": "2026-11-14T07:55:44.918Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -4340,11 +4340,11 @@
     "category": "Tourism and Travel",
     "isExpired": false,
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 429,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-24T16:13:35.071Z",
-    "updatedAt": "2026-11-24T16:12:42.655Z"
+    "updatedAt": "2026-11-24T16:12:42.655Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -4528,11 +4528,11 @@
     "category": "Government and Public Sector",
     "isExpired": false,
     "specialRequirements": "Not specified in the original vacancy",
-    "status": "published",
     "telegramMessageId": 430,
     "telegramPublished": true,
     "telegramPublishedAt": "2026-11-24T16:13:37.411Z",
-    "updatedAt": "2026-11-24T16:12:44.980Z"
+    "updatedAt": "2026-11-24T16:12:44.980Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -5238,7 +5238,6 @@
     "physicalAddress": "",
     "id": "job_1795338681457_7_mdkqc",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-22T09:11:21.456Z",
     "ageRequirements": "",
     "employmentType": "Internship",
     "publishedAt": "2026-11-22T09:10:30.555Z",
@@ -5260,10 +5259,11 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Knowledge of Child Protection and GBV standards, case management, CPIMS, MHPSS, donor regulations, report writing and English and local-language communication. Open to Ethiopian nationals.",
-    "status": "published",
     "telegramMessageId": 417,
     "telegramPublished": true,
-    "telegramPublishedAt": "2026-11-22T09:11:36.316Z"
+    "telegramPublishedAt": "2026-11-22T09:11:36.316Z",
+    "updatedAt": "2026-11-22T09:11:21.456Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -5876,7 +5876,6 @@
     "id": "job_1795178043180_4_aaste",
     "telegramPublishedAt": "2026-11-20T12:34:14.924Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -5900,6 +5899,7 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Plumbing installation, repair and maintenance.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -6023,7 +6023,6 @@
     "id": "job_1795178043180_32_oux2c",
     "telegramPublishedAt": "2026-11-20T12:35:26.266Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Internship",
@@ -6047,6 +6046,7 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Programme implementation, team supervision, monitoring, evaluation and reporting.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -6072,7 +6072,6 @@
     "id": "job_1795178043179_0_qu60z",
     "telegramPublishedAt": "2026-11-20T12:34:09.865Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -6096,6 +6095,7 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Relevant store-management skills.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -6757,7 +6757,6 @@
     "physicalAddress": "",
     "id": "job_1795338681457_8_n4nfw",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-22T09:11:21.456Z",
     "ageRequirements": "",
     "employmentType": "Internship",
     "publishedAt": "2026-11-22T09:10:30.555Z",
@@ -6779,10 +6778,11 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Cash-based programming experience, beneficiary targeting, cash transfer implementation, financial reporting, database management and coordination with financial service providers. English and Amharic required; local language is an advantage.",
-    "status": "published",
     "telegramMessageId": 418,
     "telegramPublished": true,
-    "telegramPublishedAt": "2026-11-22T09:11:37.589Z"
+    "telegramPublishedAt": "2026-11-22T09:11:37.589Z",
+    "updatedAt": "2026-11-22T09:11:21.456Z",
+    "status": "published"
   },
   {
     "missingFields": [],
@@ -7101,7 +7101,6 @@
     "id": "job_1795178043180_31_t7si1",
     "telegramPublishedAt": "2026-11-20T12:35:24.931Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Internship",
@@ -7125,6 +7124,7 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Case management, safeguarding, GBV prevention, survivor referrals and community coordination.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -7493,7 +7493,6 @@
     "id": "job_1795178043180_3_000ri",
     "telegramPublishedAt": "2026-11-20T12:34:13.666Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -7517,6 +7516,7 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Electrical installation, maintenance and troubleshooting.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -7542,7 +7542,6 @@
     "id": "job_1795178043180_30_i5fe9",
     "telegramPublishedAt": "2026-11-20T12:35:23.636Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Internship",
@@ -7566,6 +7565,7 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Psychosocial support, counselling, psychological first aid, referrals and trauma-informed care.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -7591,7 +7591,6 @@
     "id": "job_1795178043179_1_rk3rs",
     "telegramPublishedAt": "2026-11-20T12:34:11.127Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -7615,6 +7614,7 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Data engineering experience.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -7934,7 +7934,6 @@
     "id": "job_1795178043180_38_fwa2m",
     "telegramPublishedAt": "2026-11-20T12:35:33.902Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -7958,6 +7957,7 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Petty cash, advances, reconciliation, financial documentation, Excel, English, Amharic and Afaan Oromo. NGO experience is an advantage.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -8375,7 +8375,6 @@
     "id": "job_1795178043180_33_k7rnu",
     "telegramPublishedAt": "2026-11-20T12:35:27.547Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Internship",
@@ -8399,6 +8398,7 @@
     "category": "NGO and International Organizations",
     "isExpired": false,
     "specialRequirements": "Psychosocial support, child protection, case management, referrals and community engagement.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -8424,7 +8424,6 @@
     "id": "job_1795178043180_2_onkhb",
     "telegramPublishedAt": "2026-11-20T12:34:12.405Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -8448,6 +8447,7 @@
     "category": "Banking and Financial Institutions",
     "isExpired": false,
     "specialRequirements": "Fintech management capabilities.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {
@@ -8571,7 +8571,6 @@
     "id": "job_1795178043180_39_d3hp5",
     "telegramPublishedAt": "2026-11-20T12:35:35.157Z",
     "languageRequirements": "English and Amharic",
-    "updatedAt": "2026-11-20T12:34:03.179Z",
     "ageRequirements": "",
     "telegramPublished": true,
     "employmentType": "Full-time",
@@ -8595,6 +8594,7 @@
     "category": "Private Companies",
     "isExpired": false,
     "specialRequirements": "Facility management, shelter operations, procurement, inventory management, supplier coordination and operational compliance.",
+    "updatedAt": "2026-11-20T12:34:03.179Z",
     "status": "published"
   },
   {

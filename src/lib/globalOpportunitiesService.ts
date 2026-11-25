@@ -17,9 +17,78 @@ import {
   GlobalOpportunitySubsection,
   OpportunitySourceRecord,
   OpportunityVerificationLogRecord,
+  PermanentResidencyCountryRecord,
   UserSavedOpportunityRecord,
   VerificationMonitoringSummary,
 } from '../types/globalOpportunities';
+import {
+  CareerApplicantProfile,
+  WeightedCareerMatchResult,
+} from '../utils/internationalCareerIntelligence';
+
+export interface AdminCountryStatRecord {
+  country: string;
+  region: string;
+  total: number;
+  active: number;
+  sponsored: number;
+}
+
+export interface AdminManageableOpportunityRecord {
+  id: string;
+  title: string;
+  organization: string;
+  category: GlobalOpportunityCategory;
+  careerSpecialtyLabel: string;
+  country: string;
+  region: string;
+  applicationStatus: string;
+  verificationStatus: string;
+  verificationTier: string;
+  isActiveDisplayable: boolean;
+  officialApplicationUrl: string;
+  httpStatusCode: number | null;
+  deadlineUtcIso: string | null;
+  fullDaysRemaining: number;
+  stipendOrSalary: string;
+  estimatedMonthlyUsd: number | null;
+  visaSupportType: string;
+  employmentVisaClassification: string;
+  visaSupportSummary: string;
+  sevenTierVisaLabel: string;
+  sponsorshipConfirmed: boolean;
+  lastVerifiedAt: string;
+}
+
+export interface CvMatchApiResponse {
+  success: boolean;
+  generatedAt: string;
+  profile: CareerApplicantProfile;
+  weights: {
+    education: number;
+    experience: number;
+    responsibilities: number;
+    visaAndEligibility: number;
+    salary: number;
+    language: number;
+    relocationAndFamily: number;
+  };
+  totalEvaluated: number;
+  excellentCount: number;
+  strongCount: number;
+  possibleCount: number;
+  matches: Array<{
+    opportunity: GlobalOpportunity;
+    match: WeightedCareerMatchResult;
+  }>;
+  permanentResidencyMatches: Array<{
+    pathway: PermanentResidencyCountryRecord;
+    assessment: {
+      fitLevel: string;
+      notes: string[];
+    };
+  }>;
+}
 
 export interface ArchivedOpportunityAuditRecord {
   id: string;
@@ -194,6 +263,10 @@ export async function fetchAdminGlobalOpportunityLogs(adminEmail?: string | null
   sources: OpportunitySourceRecord[];
   schedulerInfo?: AutonomousSchedulerInfo;
   monitoringSummary?: VerificationMonitoringSummary;
+  countryStats?: AdminCountryStatRecord[];
+  confirmedSponsoredCount?: number;
+  sponsorshipUnconfirmedCount?: number;
+  manageableOpportunities?: AdminManageableOpportunityRecord[];
   archivedOpportunities?: ArchivedOpportunityAuditRecord[];
   totals: {
     stored: number;
@@ -229,4 +302,97 @@ export async function acknowledgeAdminDiscoveryAlert(adminEmail?: string | null)
     throw new Error(data.error || `Could not acknowledge alert (HTTP ${resp.status})`);
   }
   return data;
+}
+
+export async function matchOpportunitiesByProfileOrCv(params: {
+  cvText?: string;
+  profile?: Partial<CareerApplicantProfile>;
+  usePrimaryTestProfile?: boolean;
+}): Promise<CvMatchApiResponse> {
+  const resp = await fetch('/api/global-opportunities/match-cv', {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(params),
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.success) {
+    throw new Error(data.error || `Could not evaluate profile match (HTTP ${resp.status})`);
+  }
+  return data;
+}
+
+export async function adminUpdateGlobalOpportunity(
+  id: string,
+  payload: {
+    action?: 'approve' | 'reject' | 'expire' | 'edit';
+    reason?: string;
+    stipendOrSalary?: string;
+    visaSupportType?: string;
+    employmentVisaClassification?: string;
+    visaSupportSummary?: string;
+    title?: string;
+    country?: string;
+    summary?: string;
+  },
+  adminEmail?: string | null
+): Promise<{ success: boolean; opportunity: GlobalOpportunity }> {
+  const resp = await fetch(`/api/admin/global-opportunities/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: buildAuthHeaders(auth?.currentUser?.uid, adminEmail),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.success) {
+    throw new Error(data.error || `Could not update opportunity (HTTP ${resp.status})`);
+  }
+  return data;
+}
+
+export async function adminTestOpportunityLink(
+  id: string,
+  adminEmail?: string | null
+): Promise<{
+  success: boolean;
+  opportunityId: string;
+  url: string;
+  finalUrl: string;
+  httpStatus: number | null;
+  reachable: boolean;
+  latencyMs: number;
+  checkedAt: string;
+  note: string;
+}> {
+  const resp = await fetch(`/api/admin/global-opportunities/${encodeURIComponent(id)}/test-link`, {
+    method: 'POST',
+    headers: buildAuthHeaders(auth?.currentUser?.uid, adminEmail),
+    credentials: 'include',
+    body: JSON.stringify({}),
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.success) {
+    throw new Error(data.error || `Link check failed (HTTP ${resp.status})`);
+  }
+  return data;
+}
+
+export async function downloadAdminGlobalOpportunitiesCsv(adminEmail?: string | null): Promise<void> {
+  const resp = await fetch('/api/admin/global-opportunities/export-csv', {
+    method: 'GET',
+    headers: buildAuthHeaders(auth?.currentUser?.uid, adminEmail),
+    credentials: 'include',
+  });
+  if (!resp.ok) {
+    throw new Error(`CSV export failed (HTTP ${resp.status})`);
+  }
+  const csvText = await resp.text();
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hopelandjobs-global-opportunities-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

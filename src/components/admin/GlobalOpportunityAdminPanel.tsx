@@ -11,6 +11,12 @@ import {
   Activity,
   Ban,
   Archive,
+  Download,
+  Edit3,
+  Link2,
+  MapPin,
+  Save,
+  X,
 } from 'lucide-react';
 import {
   AutonomousSchedulerInfo,
@@ -21,7 +27,12 @@ import {
 } from '../../types/globalOpportunities';
 import {
   acknowledgeAdminDiscoveryAlert,
+  AdminCountryStatRecord,
+  AdminManageableOpportunityRecord,
+  adminTestOpportunityLink,
+  adminUpdateGlobalOpportunity,
   ArchivedOpportunityAuditRecord,
+  downloadAdminGlobalOpportunitiesCsv,
   fetchAdminGlobalOpportunityLogs,
   triggerAdminDeadlineRecheck,
   triggerAdminGlobalDiscovery,
@@ -64,6 +75,18 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
   const [schedulerInfo, setSchedulerInfo] = useState<AutonomousSchedulerInfo | null>(null);
   const [monitoringSummary, setMonitoringSummary] = useState<VerificationMonitoringSummary | null>(null);
   const [archivedOpportunities, setArchivedOpportunities] = useState<ArchivedOpportunityAuditRecord[]>([]);
+  const [countryStats, setCountryStats] = useState<AdminCountryStatRecord[]>([]);
+  const [confirmedSponsoredCount, setConfirmedSponsoredCount] = useState<number>(0);
+  const [sponsorshipUnconfirmedCount, setSponsorshipUnconfirmedCount] = useState<number>(0);
+  const [manageableOpportunities, setManageableOpportunities] = useState<AdminManageableOpportunityRecord[]>([]);
+  const [moderationQuery, setModerationQuery] = useState('');
+  const [moderationFilter, setModerationFilter] = useState<'all' | 'active' | 'archived'>('all');
+  const [busyOppId, setBusyOppId] = useState<string | null>(null);
+  const [editingOppId, setEditingOppId] = useState<string | null>(null);
+  const [editSalary, setEditSalary] = useState('');
+  const [editVisaClass, setEditVisaClass] = useState('no_sponsorship_stated');
+  const [editVisaSummary, setEditVisaSummary] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [auditFilter, setAuditFilter] = useState<AuditFilterTab>('all');
   const [jobLogs, setJobLogs] = useState<DiscoveryJobLogRecord[]>([]);
   const [verLogs, setVerLogs] = useState<OpportunityVerificationLogRecord[]>([]);
@@ -82,6 +105,10 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
       setSources(data.sources || []);
       setSchedulerInfo(data.schedulerInfo || null);
       setMonitoringSummary(data.monitoringSummary || null);
+      setCountryStats(data.countryStats || []);
+      setConfirmedSponsoredCount(data.confirmedSponsoredCount ?? 0);
+      setSponsorshipUnconfirmedCount(data.sponsorshipUnconfirmedCount ?? 0);
+      setManageableOpportunities(data.manageableOpportunities || []);
       setArchivedOpportunities(data.archivedOpportunities || []);
       setJobLogs(data.discoveryJobLogs || []);
       setVerLogs(data.verificationLogs || []);
@@ -96,6 +123,105 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
+
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    setError(null);
+    try {
+      await downloadAdminGlobalOpportunitiesCsv(adminEmail);
+      setMessage('Exported verified & archived international opportunities CSV report.');
+    } catch (err: any) {
+      setError(err?.message || 'CSV export failed.');
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  const handleModerationAction = async (
+    id: string,
+    action: 'approve' | 'reject' | 'expire'
+  ) => {
+    setBusyOppId(id);
+    setError(null);
+    setMessage(null);
+    try {
+      await adminUpdateGlobalOpportunity(id, { action }, adminEmail);
+      setMessage(`Opportunity updated (${action}).`);
+      await loadLogs();
+    } catch (err: any) {
+      setError(err?.message || `Action "${action}" failed.`);
+    } finally {
+      setBusyOppId(null);
+    }
+  };
+
+  const handleStartEdit = (item: AdminManageableOpportunityRecord) => {
+    setEditingOppId(item.id);
+    setEditSalary(item.stipendOrSalary || '');
+    setEditVisaClass(item.employmentVisaClassification || 'no_sponsorship_stated');
+    setEditVisaSummary(item.visaSupportSummary || '');
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    setBusyOppId(id);
+    setError(null);
+    try {
+      const visaSupportType =
+        editVisaClass === 'confirmed_visa_sponsorship' || editVisaClass === 'work_permit_assistance'
+          ? 'employer_sponsored_visa'
+          : editVisaClass === 'no_sponsorship_stated'
+          ? 'not_confirmed'
+          : 'visa_assistance_only';
+      await adminUpdateGlobalOpportunity(
+        id,
+        {
+          action: 'edit',
+          stipendOrSalary: editSalary,
+          employmentVisaClassification: editVisaClass,
+          visaSupportType,
+          visaSupportSummary: editVisaSummary,
+        },
+        adminEmail
+      );
+      setEditingOppId(null);
+      setMessage('Saved updated salary & visa sponsorship verification fields.');
+      await loadLogs();
+    } catch (err: any) {
+      setError(err?.message || 'Could not save edits.');
+    } finally {
+      setBusyOppId(null);
+    }
+  };
+
+  const handleTestSingleLink = async (id: string) => {
+    setBusyOppId(id);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await adminTestOpportunityLink(id, adminEmail);
+      setMessage(
+        `Link test (${res.latencyMs}ms): ${res.note}${res.reachable ? ' — Official application link is live.' : ' — Review or mark expired.'}`
+      );
+      await loadLogs();
+    } catch (err: any) {
+      setError(err?.message || 'Live link test failed.');
+    } finally {
+      setBusyOppId(null);
+    }
+  };
+
+  const filteredManageable = useMemo(() => {
+    const q = moderationQuery.trim().toLowerCase();
+    return manageableOpportunities.filter((item) => {
+      if (moderationFilter === 'active' && !item.isActiveDisplayable) return false;
+      if (moderationFilter === 'archived' && item.isActiveDisplayable) return false;
+      if (q) {
+        const hay = `${item.title} ${item.organization} ${item.country} ${item.region} ${item.sevenTierVisaLabel}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [manageableOpportunities, moderationQuery, moderationFilter]);
 
   const handleRunDiscovery = async () => {
     setRunningDiscovery(true);
@@ -207,6 +333,15 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={exportingCsv}
+            onClick={handleExportCsv}
+            className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-bold text-[#0B132B] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+          >
+            {exportingCsv ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            <span>Export CSV Report</span>
+          </button>
           <button
             type="button"
             disabled={runningRecheck}
@@ -449,6 +584,221 @@ export const GlobalOpportunityAdminPanel: React.FC<Props> = ({ adminEmail }) => 
           </div>
         </div>
       )}
+
+      {/* Section 13: Country-by-Country Stats & Confirmed vs Unconfirmed Sponsorship */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>Country-by-Country Breakdown &amp; Sponsorship Verification</span>
+          </h4>
+          <div className="flex items-center gap-3 text-xs tabular-nums">
+            <span className="font-bold text-[#15803D]">
+              Confirmed Sponsored: {confirmedSponsoredCount}
+            </span>
+            <span className="text-slate-300">·</span>
+            <span className="font-bold text-amber-800">
+              Sponsorship Unconfirmed: {sponsorshipUnconfirmedCount}
+            </span>
+          </div>
+        </div>
+        {countryStats.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-xs tabular-nums">
+            {countryStats.slice(0, 12).map((cs) => (
+              <div key={cs.country} className="border border-slate-200 rounded-lg p-2.5 bg-slate-50/50">
+                <div className="font-bold text-[#0B132B] truncate" title={cs.country}>
+                  {cs.country}
+                </div>
+                <div className="text-[11px] text-slate-500">{cs.region}</div>
+                <div className="mt-1 text-[11px] font-semibold text-slate-700">
+                  Active: <strong>{cs.active}</strong> · Sponsored: <strong className="text-[#15803D]">{cs.sponsored}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-500 bg-slate-50/50">
+            Country statistics will populate after the live discovery engine collects international opportunities.
+          </div>
+        )}
+      </div>
+
+      {/* Section 13: Admin Review, Approve/Reject/Expire, Salary/Visa Edit & Live Link Testing */}
+      <div className="space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>Opportunity Review, Moderation &amp; Live Link Testing ({filteredManageable.length})</span>
+          </h4>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              type="text"
+              value={moderationQuery}
+              onChange={(e) => setModerationQuery(e.target.value)}
+              placeholder="Filter by title, org, country..."
+              className="px-2.5 py-1 rounded-md border border-slate-200 text-xs focus:outline-none focus:border-[#16A34A]"
+            />
+            {(['all', 'active', 'archived'] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setModerationFilter(tab)}
+                className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold capitalize cursor-pointer ${
+                  moderationFilter === tab
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredManageable.length === 0 ? (
+          <div className="border border-slate-200 rounded-xl px-4 py-4 text-xs text-slate-500 bg-slate-50/50">
+            No opportunities match this moderation filter.
+          </div>
+        ) : (
+          <div className="border border-slate-200 rounded-xl divide-y divide-slate-200 overflow-hidden text-xs max-h-96 overflow-y-auto">
+            {filteredManageable.slice(0, 35).map((item) => {
+              const isBusy = busyOppId === item.id;
+              const isEditing = editingOppId === item.id;
+              return (
+                <div key={item.id} className="p-3.5 bg-white hover:bg-slate-50/40 space-y-2">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[#0B132B] flex flex-wrap items-center gap-1.5">
+                        <span>{item.title}</span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            item.isActiveDisplayable
+                              ? 'bg-emerald-50 text-[#15803D] border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {item.applicationStatus.toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+                        {item.organization} · {item.country} ({item.region}) · {item.careerSpecialtyLabel} ·{' '}
+                        <span className={item.sponsorshipConfirmed ? 'text-[#15803D] font-semibold' : 'text-amber-800 font-semibold'}>
+                          {item.sevenTierVisaLabel}
+                        </span>
+                        {item.estimatedMonthlyUsd ? ` · Est. $${item.estimatedMonthlyUsd.toLocaleString()}/mo` : ''}
+                        {item.httpStatusCode ? ` · HTTP ${item.httpStatusCode}` : ''}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleTestSingleLink(item.id)}
+                        className="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Test official application URL live"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        <span>Test Link</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleStartEdit(item)}
+                        className="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleModerationAction(item.id, 'approve')}
+                        className="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-[11px] font-bold text-[#15803D] cursor-pointer disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleModerationAction(item.id, 'expire')}
+                        className="px-2 py-1 rounded border border-amber-200 bg-amber-50 hover:bg-amber-100 text-[11px] font-bold text-amber-800 cursor-pointer disabled:opacity-50"
+                      >
+                        Expire
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleModerationAction(item.id, 'reject')}
+                        className="px-2 py-1 rounded border border-rose-200 bg-rose-50 hover:bg-rose-100 text-[11px] font-bold text-rose-700 cursor-pointer disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                      <label className="space-y-1">
+                        <span className="font-semibold text-slate-600">Salary / Stipend Text</span>
+                        <input
+                          type="text"
+                          value={editSalary}
+                          onChange={(e) => setEditSalary(e.target.value)}
+                          placeholder="e.g. EUR 65,000/year gross"
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 bg-white"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="font-semibold text-slate-600">Visa Classification</span>
+                        <select
+                          value={editVisaClass}
+                          onChange={(e) => setEditVisaClass(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 bg-white"
+                        >
+                          <option value="confirmed_visa_sponsorship">Confirmed Visa Sponsorship</option>
+                          <option value="work_permit_assistance">Employer-Sponsored Work Permit</option>
+                          <option value="relocation_assistance">Employer-Supported Relocation</option>
+                          <option value="confirmed_international_recruitment">Foreign Applicants Accepted</option>
+                          <option value="no_sponsorship_stated">Sponsorship Not Confirmed</option>
+                        </select>
+                      </label>
+                      <label className="space-y-1">
+                        <span className="font-semibold text-slate-600">Visa Verification Summary</span>
+                        <input
+                          type="text"
+                          value={editVisaSummary}
+                          onChange={(e) => setEditVisaSummary(e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded border border-slate-300 bg-white"
+                        />
+                      </label>
+                      <div className="sm:col-span-3 flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingOppId(null)}
+                          className="px-2.5 py-1 rounded border border-slate-300 bg-white text-slate-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleSaveEdit(item.id)}
+                          className="px-3 py-1 rounded bg-[#16A34A] text-white font-bold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Save className="w-3 h-3" />
+                          <span>Save Verification Details</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Exact Rejection & Auto-Unpublish Audit History */}
       <div className="space-y-2.5">

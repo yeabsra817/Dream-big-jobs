@@ -45,6 +45,15 @@ import {
   formatRecommendationSummary,
   MINIMUM_FULL_DAYS_REMAINING,
 } from '../utils/opportunityIntelligenceEngine';
+import {
+  CAREER_SPECIALTY_LABELS,
+  classifyCareerSpecialtyCategory,
+  classifySevenTierVisaSponsorship,
+  detectInternationalRegion,
+  parseAndNormalizeSalaryUsd,
+  SEVEN_TIER_VISA_LABELS,
+} from '../utils/internationalCareerIntelligence';
+import { CareerCvMatcherPanel } from './CareerCvMatcherPanel';
 
 interface Props {
   onBack: () => void;
@@ -64,16 +73,21 @@ const SUBSECTIONS: Array<{
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   { id: 'all', label: 'All Verified', shortLabel: 'All', icon: Globe },
+  { id: 'international_jobs', label: 'International Sponsored Jobs', shortLabel: 'Sponsored Jobs', icon: Briefcase },
+  { id: 'europe_jobs', label: 'European Jobs', shortLabel: 'Europe', icon: Compass },
+  { id: 'middle_east_jobs', label: 'Middle East Jobs', shortLabel: 'Middle East', icon: Building2 },
   { id: 'banking_finance', label: 'Banking & Finance', shortLabel: 'Banking & Finance', icon: Landmark },
-  { id: 'wash_opportunities', label: 'WASH Opportunities', shortLabel: 'WASH', icon: Droplets },
-  { id: 'international_jobs', label: 'International Jobs', shortLabel: 'Intl Jobs', icon: Briefcase },
+  { id: 'management_jobs', label: 'Professional & Management', shortLabel: 'Management', icon: Briefcase },
+  { id: 'permanent_residency', label: 'Permanent Residency & Migration', shortLabel: 'PR & Migration', icon: ShieldCheck },
+  { id: 'recruiting_countries', label: 'Countries Recruiting Foreign Workers', shortLabel: 'Recruiting Countries', icon: MapPin },
   { id: 'scholarships', label: 'Scholarships', shortLabel: 'Scholarships', icon: GraduationCap },
-  { id: 'professional_training', label: 'Professional Training', shortLabel: 'Training', icon: BookOpen },
-  { id: 'conferences_summits', label: 'Conferences & Summits', shortLabel: 'Conferences', icon: Users },
-  { id: 'permanent_residency', label: 'Permanent Residency & Shortage Lists', shortLabel: 'PR & Shortage', icon: ShieldCheck },
-  { id: 'recommended', label: 'Recommended for You', shortLabel: 'Recommended', icon: Sparkles },
+  { id: 'professional_training', label: 'International Training', shortLabel: 'Training', icon: BookOpen },
+  { id: 'conferences_summits', label: 'Conferences & Fellowships', shortLabel: 'Conferences', icon: Users },
+  { id: 'cv_matching', label: 'CV & Profile Matching', shortLabel: 'CV Matcher', icon: Sparkles },
+  { id: 'recommended', label: 'My Opportunities', shortLabel: 'My Matches', icon: CheckCircle2 },
+  { id: 'wash_opportunities', label: 'WASH Opportunities', shortLabel: 'WASH', icon: Droplets },
   { id: 'closing_soon', label: 'Closing Soon', shortLabel: 'Closing Soon', icon: Clock },
-  { id: 'saved', label: 'Saved Opportunities', shortLabel: 'Saved', icon: Bookmark },
+  { id: 'saved', label: 'Saved', shortLabel: 'Saved', icon: Bookmark },
 ];
 
 function formatCategoryLabel(category: GlobalOpportunityCategory): string {
@@ -169,16 +183,20 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterSpecialty, setFilterSpecialty] = useState('all');
   const [filterCountry, setFilterCountry] = useState('all');
   const [filterFunding, setFilterFunding] = useState('all');
   const [filterVisa, setFilterVisa] = useState('all');
+  const [filterMinSalaryUsd, setFilterMinSalaryUsd] = useState('0');
+  const [filterEnglishOnly, setFilterEnglishOnly] = useState(false);
   const [filterExperience, setFilterExperience] = useState('all');
   const [filterEligibility, setFilterEligibility] = useState('all');
   const [filterDeadline, setFilterDeadline] = useState('all');
   const [showFiltersBar, setShowFiltersBar] = useState(true);
 
-  // Permanent Residency Intelligence filters (separate from job/scholarship filters)
+  // Permanent Residency & Recruiting Countries filters (separate from job/scholarship filters)
   const [prCountryFilter, setPrCountryFilter] = useState('all');
+  const [prRegionFilter, setPrRegionFilter] = useState('all');
   const [prPathwayFilter, setPrPathwayFilter] = useState('all');
   const [prQuery, setPrQuery] = useState('');
 
@@ -219,14 +237,32 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
-  // Client-side instant filtering across all 9 subsections + 7 filters
+  // Client-side instant filtering across all subsections + 7-tier visa, specialty & USD salary filters
   const filteredOpportunities = useMemo(() => {
     const all = data?.opportunities || [];
     const q = searchQuery.trim().toLowerCase();
+    const minSalaryNum = Number(filterMinSalaryUsd) || 0;
 
     return all
       .filter((o) => {
+        const region = detectInternationalRegion(o.country, o.location);
+        const specialty = classifyCareerSpecialtyCategory(o.title, o.summary, o.organization);
+        const visaCheck = classifySevenTierVisaSponsorship(o);
+        const salaryInfo = parseAndNormalizeSalaryUsd(o);
+
         if (activeSubsection === 'international_jobs' && o.category !== 'international_job') return false;
+        if (activeSubsection === 'europe_jobs' && region !== 'Europe') return false;
+        if (activeSubsection === 'middle_east_jobs' && region !== 'Middle East') return false;
+        if (activeSubsection === 'management_jobs') {
+          const isMgmt =
+            specialty === 'corporate_operations_management' ||
+            specialty === 'banking_financial_services' ||
+            specialty === 'finance_accounting' ||
+            specialty === 'risk_compliance' ||
+            specialty === 'credit_microfinance' ||
+            /\b(manager|director|head of|controller|lead|officer|analyst|auditor|supervisor|coordinator)\b/i.test(o.title);
+          if (!isMgmt) return false;
+        }
         if (activeSubsection === 'scholarships' && o.category !== 'university_scholarship') return false;
         if (activeSubsection === 'professional_training' && o.category !== 'professional_training') return false;
         if (activeSubsection === 'conferences_summits' && o.category !== 'conference_summit') return false;
@@ -244,49 +280,26 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
         if (activeSubsection === 'saved' && !o.isSaved) return false;
 
         if (filterCategory !== 'all' && o.category !== filterCategory) return false;
+        if (filterSpecialty !== 'all' && specialty !== filterSpecialty) return false;
         if (filterCountry !== 'all' && o.country !== filterCountry) return false;
         if (filterFunding !== 'all' && o.funding.fundingLevel !== filterFunding) return false;
         if (filterVisa !== 'all') {
-          if (
+          if (filterVisa === 'priority_1_to_4' && !visaCheck.isPriorityTier) return false;
+          else if (filterVisa in SEVEN_TIER_VISA_LABELS && visaCheck.category !== filterVisa) return false;
+          else if (
             (filterVisa === 'employer_sponsored' || filterVisa === 'confirmed_visa_sponsorship') &&
-            o.funding.visaSupportType !== 'employer_sponsored_visa' &&
-            o.funding.employmentVisaClassification !== 'confirmed_visa_sponsorship'
+            !visaCheck.sponsorshipConfirmed
           ) {
             return false;
-          }
-          if (
-            filterVisa === 'confirmed_international_recruitment' &&
-            o.funding.employmentVisaClassification !== 'confirmed_international_recruitment'
-          ) {
+          } else if (filterVisa === 'visa_fees_funded' && o.funding.visaSupportType !== 'visa_fees_funded') {
             return false;
           }
-          if (
-            filterVisa === 'relocation_assistance' &&
-            o.funding.relocationAssistance !== 'yes' &&
-            o.funding.employmentVisaClassification !== 'relocation_assistance'
-          ) {
-            return false;
-          }
-          if (
-            filterVisa === 'work_permit_assistance' &&
-            o.funding.employmentVisaClassification !== 'work_permit_assistance'
-          ) {
-            return false;
-          }
-          if (
-            filterVisa === 'no_sponsorship_stated' &&
-            o.funding.employmentVisaClassification !== 'no_sponsorship_stated'
-          ) {
-            return false;
-          }
-          if (filterVisa === 'visa_fees_funded' && o.funding.visaSupportType !== 'visa_fees_funded') return false;
-          if (
-            filterVisa === 'assistance_only' &&
-            o.funding.visaSupportType !== 'visa_assistance_only' &&
-            o.funding.visaSupportType !== 'invitation_letter_only'
-          ) {
-            return false;
-          }
+        }
+        if (minSalaryNum > 0) {
+          if (!salaryInfo.estimatedMonthlyUsd || salaryInfo.estimatedMonthlyUsd < minSalaryNum) return false;
+        }
+        if (filterEnglishOnly && visaCheck.localLanguageMandatory === 'yes') {
+          return false;
         }
         if (filterExperience !== 'all') {
           const minY = o.eligibility.minimumYearsExperience;
@@ -316,7 +329,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           if (filterDeadline === 'within_30_days' && !(d >= 3 && d <= 30)) return false;
         }
         if (q) {
-          const hay = `${o.title} ${o.organization} ${o.country} ${o.location} ${o.summary} ${o.eligibility.requiredSkills.join(' ')} ${o.funding.fundingSummary}`.toLowerCase();
+          const hay = `${o.title} ${o.organization} ${o.country} ${o.location} ${o.summary} ${o.eligibility.requiredSkills.join(' ')} ${o.funding.fundingSummary} ${CAREER_SPECIALTY_LABELS[specialty]}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
@@ -328,7 +341,10 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
         if (activeSubsection === 'closing_soon') {
           return a.deadline.fullDaysRemaining - b.deadline.fullDaysRemaining;
         }
-        // Default: prioritize personalized eligible match score when signed in, then freshest verified
+        // Prioritize confirmed 7-tier visa priority (Categories 1-4), then personalized match score, then deadline
+        const va = classifySevenTierVisaSponsorship(a).isPriorityTier ? 1 : 0;
+        const vb = classifySevenTierVisaSponsorship(b).isPriorityTier ? 1 : 0;
+        if (va !== vb) return vb - va;
         const sa = a.recommendation?.eligible ? a.recommendation.matchScore : 0;
         const sb = b.recommendation?.eligible ? b.recommendation.matchScore : 0;
         if (sa !== sb) return sb - sa;
@@ -339,9 +355,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
     activeSubsection,
     searchQuery,
     filterCategory,
+    filterSpecialty,
     filterCountry,
     filterFunding,
     filterVisa,
+    filterMinSalaryUsd,
+    filterEnglishOnly,
     filterExperience,
     filterEligibility,
     filterDeadline,
@@ -404,9 +423,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   const resetFilters = () => {
     setSearchQuery('');
     setFilterCategory('all');
+    setFilterSpecialty('all');
     setFilterCountry('all');
     setFilterFunding('all');
     setFilterVisa('all');
+    setFilterMinSalaryUsd('0');
+    setFilterEnglishOnly(false);
     setFilterExperience('all');
     setFilterEligibility('all');
     setFilterDeadline('all');
@@ -415,9 +437,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     filterCategory !== 'all' ||
+    filterSpecialty !== 'all' ||
     filterCountry !== 'all' ||
     filterFunding !== 'all' ||
     filterVisa !== 'all' ||
+    filterMinSalaryUsd !== '0' ||
+    filterEnglishOnly ||
     filterExperience !== 'all' ||
     filterEligibility !== 'all' ||
     filterDeadline !== 'all';
@@ -475,14 +500,25 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
               )}
               <button
                 type="button"
-                onClick={() => setShowSourcesDrawer((v) => !v)}
-                className="min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                onClick={() => setActiveSubsection('cv_matching')}
+                className="min-h-[40px] px-3.5 py-2 rounded-lg bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
               >
-                <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
-                <span>
-                  Official Sources (<span className="tabular-nums">{connectedSourcesCount}</span>/{data?.sources.length || 5})
-                </span>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Match My CV</span>
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowSourcesDrawer((v) => !v)}
+                  className="min-h-[40px] px-3.5 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
+                  <span>
+                    Admin Source Monitor (<span className="tabular-nums">{connectedSourcesCount}</span>/{data?.sources.length || 5})
+                  </span>
+                </button>
+              )}
 
               {isAdmin && (
                 <button
@@ -550,8 +586,8 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Transparent Official Source Status Drawer */}
-          {showSourcesDrawer && data && (
+          {/* Admin-Only Official Source Status Drawer (Hidden from Public Visitors) */}
+          {isAdmin && showSourcesDrawer && data && (
             <div className="mt-4 p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -684,7 +720,10 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
 
       {/* Main Content Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-        {/* Search & 7-Attribute Filter Bar */}
+        {/* Search & Filter Bar (Shown on Opportunity Listing Tabs) */}
+        {activeSubsection !== 'permanent_residency' &&
+          activeSubsection !== 'recruiting_countries' &&
+          activeSubsection !== 'cv_matching' && (
         <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -693,7 +732,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search title, UNICEF, WaterAid, World Bank, scholarship, WASH, banking, fintech..."
+                placeholder="Search title, Branch Manager, Finance, Audit, Compliance, UAE, Europe, WASH, scholarship..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 bg-[#FBFBFA] text-sm text-[#0B132B] placeholder:text-slate-400 focus:outline-none focus:border-[#16A34A] focus:bg-white transition-colors"
               />
             </div>
@@ -720,101 +759,133 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           </div>
 
           {showFiltersBar && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 pt-1">
-              <select
-                aria-label="Filter by category"
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Category: All</option>
-                <option value="international_job">International Jobs</option>
-                <option value="university_scholarship">Scholarships</option>
-                <option value="professional_training">Professional Training</option>
-                <option value="conference_summit">Conferences &amp; Summits</option>
-                <option value="wash_opportunity">WASH Dedicated</option>
-              </select>
+            <div className="space-y-2.5 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <select
+                  aria-label="Filter by professional specialty"
+                  value={filterSpecialty}
+                  onChange={(e) => setFilterSpecialty(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Sector / Specialty: All (8 Sectors)</option>
+                  {Object.entries(CAREER_SPECIALTY_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
 
-              <select
-                aria-label="Filter by country"
-                value={filterCountry}
-                onChange={(e) => setFilterCountry(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Country: All</option>
-                {availableCountries.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+                <select
+                  aria-label="Filter by country"
+                  value={filterCountry}
+                  onChange={(e) => setFilterCountry(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Country: All ({availableCountries.length})</option>
+                  {availableCountries.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
 
-              <select
-                aria-label="Filter by funding"
-                value={filterFunding}
-                onChange={(e) => setFilterFunding(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Funding: All</option>
-                <option value="fully_funded">Fully Funded</option>
-                <option value="partially_funded">Partially Funded</option>
-                <option value="free">Free Program</option>
-                <option value="self_funded">Self-Funded</option>
-                <option value="not_confirmed">Funding Not Confirmed</option>
-              </select>
+                <select
+                  aria-label="Filter by 7-tier visa sponsorship"
+                  value={filterVisa}
+                  onChange={(e) => setFilterVisa(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Visa Sponsorship (7-Tier): All</option>
+                  <option value="priority_1_to_4">Priority Tiers 1–4 (Confirmed / Foreign Accepted)</option>
+                  {Object.entries(SEVEN_TIER_VISA_LABELS).map(([k, label]) => (
+                    <option key={k} value={k}>
+                      {label}
+                    </option>
+                  ))}
+                  <option value="visa_fees_funded">Visa Fees Funded (Scholarships/Training)</option>
+                </select>
 
-              <select
-                aria-label="Filter by visa sponsorship"
-                value={filterVisa}
-                onChange={(e) => setFilterVisa(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Visa Status: All</option>
-                <option value="confirmed_visa_sponsorship">Confirmed Visa Sponsorship</option>
-                <option value="confirmed_international_recruitment">Confirmed Intl Recruitment</option>
-                <option value="relocation_assistance">Relocation Assistance</option>
-                <option value="work_permit_assistance">Work Permit Assistance</option>
-                <option value="no_sponsorship_stated">No Sponsorship Stated</option>
-                <option value="visa_fees_funded">Visa Fees Funded</option>
-              </select>
+                <select
+                  aria-label="Filter by minimum monthly USD salary"
+                  value={filterMinSalaryUsd}
+                  onChange={(e) => setFilterMinSalaryUsd(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="0">Monthly Salary (USD): Any / Disclosed</option>
+                  <option value="2000">USD $2,000+ / month</option>
+                  <option value="3000">USD $3,000+ / month (Target Min)</option>
+                  <option value="4000">USD $4,000+ / month</option>
+                  <option value="5000">USD $5,000+ / month</option>
+                </select>
+              </div>
 
-              <select
-                aria-label="Filter by experience"
-                value={filterExperience}
-                onChange={(e) => setFilterExperience(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Experience: All</option>
-                <option value="entry">Entry / 0–2 Years</option>
-                <option value="mid">Mid-Level / 2–6 Years</option>
-                <option value="senior">Senior / 6+ Years</option>
-              </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 items-center">
+                <select
+                  aria-label="Filter by category"
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Type: All Opportunities</option>
+                  <option value="international_job">International Jobs</option>
+                  <option value="university_scholarship">Scholarships</option>
+                  <option value="professional_training">Professional Training</option>
+                  <option value="conference_summit">Conferences &amp; Fellowships</option>
+                  <option value="wash_opportunity">WASH Dedicated</option>
+                </select>
 
-              <select
-                aria-label="Filter by eligibility"
-                value={filterEligibility}
-                onChange={(e) => setFilterEligibility(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Eligibility: All</option>
-                <option value="ethiopian_confirmed">Ethiopian Eligible Confirmed</option>
-                <option value="no_nomination">Direct Individual Application</option>
-              </select>
+                <select
+                  aria-label="Filter by funding"
+                  value={filterFunding}
+                  onChange={(e) => setFilterFunding(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Funding: All</option>
+                  <option value="fully_funded">Fully Funded</option>
+                  <option value="partially_funded">Partially Funded</option>
+                  <option value="free">Free Program</option>
+                  <option value="self_funded">Self-Funded</option>
+                  <option value="not_confirmed">Funding Not Confirmed</option>
+                </select>
 
-              <select
-                aria-label="Filter by deadline"
-                value={filterDeadline}
-                onChange={(e) => setFilterDeadline(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
-              >
-                <option value="all">Deadline: All (&ge;3 Days)</option>
-                <option value="closing_soon">Closing Soon (3–7 Days)</option>
-                <option value="within_14_days">Within 14 Days</option>
-                <option value="within_30_days">Within 30 Days</option>
-              </select>
+                <select
+                  aria-label="Filter by experience"
+                  value={filterExperience}
+                  onChange={(e) => setFilterExperience(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Experience: All</option>
+                  <option value="entry">Entry / 0–2 Years</option>
+                  <option value="mid">Mid-Level / 2–6 Years</option>
+                  <option value="senior">Senior / Management (6+ Yrs)</option>
+                </select>
+
+                <select
+                  aria-label="Filter by deadline"
+                  value={filterDeadline}
+                  onChange={(e) => setFilterDeadline(e.target.value)}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+                >
+                  <option value="all">Deadline: All (&ge;3 Days)</option>
+                  <option value="closing_soon">Closing Soon (3–7 Days)</option>
+                  <option value="within_14_days">Within 14 Days</option>
+                  <option value="within_30_days">Within 30 Days</option>
+                </select>
+
+                <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-[#FBFBFA] text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterEnglishOnly}
+                    onChange={(e) => setFilterEnglishOnly(e.target.checked)}
+                    className="rounded border-slate-300 text-[#16A34A] focus:ring-[#16A34A]"
+                  />
+                  <span>English-Only Sufficient</span>
+                </label>
+              </div>
             </div>
           )}
         </div>
+        )}
 
         {/* Contextual Prompt for Recommended / Saved when Guest */}
         {!userProfile?.uid && (activeSubsection === 'recommended' || activeSubsection === 'saved') && (
@@ -900,38 +971,58 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Department 6: Official Government Permanent Residency & Labour Shortage Intelligence View */}
-        {!loading && activeSubsection === 'permanent_residency' && (
+        {/* CV & Profile Weighted Matching View */}
+        {!loading && activeSubsection === 'cv_matching' && (
+          <CareerCvMatcherPanel onSelectOpportunity={(opp) => setSelectedOpportunity(opp)} />
+        )}
+
+        {/* Permanent Residency & Countries Recruiting Foreign Workers View (22 Official Governments, All 12 Criteria) */}
+        {!loading && (activeSubsection === 'permanent_residency' || activeSubsection === 'recruiting_countries') && (
           <div className="space-y-5">
             <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 text-xs text-amber-950 flex items-start gap-2.5">
               <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <div className="font-bold text-[#0B132B]">
-                  Official Government Immigration &amp; Labour Shortage Intelligence (All Eligible Sectors)
+                  {activeSubsection === 'recruiting_countries'
+                    ? 'Countries Actively Recruiting Foreign Professionals & Skilled Workers (22 Official Government Portals)'
+                    : 'Official Government Permanent Residency & Skilled Migration Intelligence (22 Countries)'}
                 </div>
                 <p className="leading-relaxed">
                   <strong>Mandatory Legal Accuracy Notice:</strong> Labour or skill shortages do{' '}
-                  <strong>NOT</strong> automatically grant permanent residency. HopelandJobs tracks official government
-                  immigration ministries and national shortage lists only (zero third-party blogs or agents) and clearly
-                  distinguishes <strong>Direct PR</strong>, <strong>Work Permit with Route to PR</strong>, and{' '}
-                  <strong>Temporary Work Permits</strong> across Finance/Banking, WASH/Engineering, Healthcare, IT,
-                  Construction, Manufacturing, Skilled Trades, Agriculture, Hospitality, and Transportation.
+                  <strong>NOT</strong> automatically grant permanent residency. Every pathway below links exclusively
+                  to official national immigration ministries and clearly separates <strong>Direct PR</strong>,{' '}
+                  <strong>Work Permit with Route to PR</strong>, and <strong>Temporary Work Permits</strong>, detailing
+                  Ethiopian offshore eligibility, minimum salary thresholds, financial proof, fees, and family reunification.
                 </p>
               </div>
             </div>
 
-            {/* PR Filters */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* PR & Recruiting Country Filters */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={prQuery}
                   onChange={(e) => setPrQuery(e.target.value)}
-                  placeholder="Search occupation (Auditor, Nurse, Water Engineer, Electrician...)"
+                  placeholder="Search occupation (Auditor, Banker, Nurse, Water Engineer...)"
                   className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-[#FBFBFA] text-xs focus:outline-none focus:border-[#16A34A]"
                 />
               </div>
+              <select
+                aria-label="Filter PR by region"
+                value={prRegionFilter}
+                onChange={(e) => setPrRegionFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 focus:outline-none focus:border-[#16A34A]"
+              >
+                <option value="all">Region: All Regions</option>
+                <option value="Europe">Europe</option>
+                <option value="Middle East">Middle East</option>
+                <option value="Asia">Asia (Singapore, Japan)</option>
+                <option value="North America">North America</option>
+                <option value="Oceania">Oceania (Australia, NZ)</option>
+                <option value="Africa & Other">Africa &amp; Other</option>
+              </select>
               <select
                 aria-label="Filter PR by country"
                 value={prCountryFilter}
@@ -1035,6 +1126,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {(data?.permanentResidencyPathways || [])
                 .filter((p) => {
+                  if (prRegionFilter !== 'all' && p.region !== prRegionFilter) return false;
                   if (prCountryFilter !== 'all' && p.country !== prCountryFilter) return false;
                   if (prPathwayFilter !== 'all' && p.pathwayClassification !== prPathwayFilter) return false;
                   if (prQuery.trim()) {
@@ -1060,7 +1152,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                             p.verificationTier === 'VERIFIED' ? 'text-[#15803D]' : 'text-[#1D4ED8]'
                           }`}
                         >
-                          {p.verificationTier} {p.httpStatus ? `(HTTP ${p.httpStatus})` : ''}
+                          {p.verificationTier} {isAdmin && p.httpStatus ? `(HTTP ${p.httpStatus})` : ''}
                         </span>
                       </div>
 
@@ -1127,12 +1219,36 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                           <span className="text-slate-800">{p.ethiopianEligibilityNotes}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-slate-500">Language &amp; Education: </span>
+                          <span className="font-semibold text-slate-500">Education &amp; Experience: </span>
+                          <span className="text-slate-800">{p.educationRequirement} · {p.experienceRequirement}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Language Requirement: </span>
                           <span className="text-slate-800">{p.languageRequirement}</span>
                         </div>
                         <div>
-                          <span className="font-semibold text-slate-500">Government Fees: </span>
-                          <span className="text-slate-800">{p.governmentApplicationFees}</span>
+                          <span className="font-semibold text-slate-500">Job Offer &amp; Min Salary: </span>
+                          <span className="text-slate-800">
+                            {p.jobOfferRequired || p.recruiterOrEmployerRequired || 'See official portal'}
+                            {p.minimumSalaryRequirement ? ` · ${p.minimumSalaryRequirement}` : ''}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Financial Proof &amp; Fees: </span>
+                          <span className="text-slate-800">
+                            {p.financialProofRequirement ? `${p.financialProofRequirement} · ` : ''}
+                            {p.governmentApplicationFees}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Family Reunification: </span>
+                          <span className="text-slate-800">{p.familyRelocationOptions}</span>
+                        </div>
+                        <div>
+                          <span className="font-semibold text-slate-500">Processing Stages: </span>
+                          <span className="text-slate-800">
+                            {p.estimatedProcessingStages || p.skillsAssessmentRequired}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1164,7 +1280,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
         )}
 
         {/* Empty State (Honest — Never Fakes Data) */}
-        {!loading && !error && activeSubsection !== 'permanent_residency' && filteredOpportunities.length === 0 && (
+        {!loading &&
+          !error &&
+          activeSubsection !== 'permanent_residency' &&
+          activeSubsection !== 'recruiting_countries' &&
+          activeSubsection !== 'cv_matching' &&
+          filteredOpportunities.length === 0 && (
           <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-3">
             <Compass className="w-8 h-8 text-slate-400 mx-auto" />
             <h2 className="text-base font-bold text-[#0B132B]">
@@ -1210,8 +1331,12 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Populated Opportunity Cards Grid — All 12 Required Card Fields, Zero-Pill Discipline */}
-        {!loading && activeSubsection !== 'permanent_residency' && filteredOpportunities.length > 0 && (
+        {/* Populated Opportunity Cards Grid — 7-Tier Visa, USD Salary Standardization, Zero-Pill Discipline */}
+        {!loading &&
+          activeSubsection !== 'permanent_residency' &&
+          activeSubsection !== 'recruiting_countries' &&
+          activeSubsection !== 'cv_matching' &&
+          filteredOpportunities.length > 0 && (
           <>
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>
@@ -1219,7 +1344,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 active {filteredOpportunities.length === 1 ? 'opportunity' : 'opportunities'}
               </span>
               <span className="hidden sm:inline">
-                Global Banking, Finance &amp; WASH Intelligence · Official source links only
+                Verified International Opportunities · Transparent 7-Tier Visa &amp; USD Salary Reporting
               </span>
             </div>
 
@@ -1227,6 +1352,10 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
               {filteredOpportunities.map((opp) => {
                 const isClosing = opp.deadline.isClosingSoon;
                 const rec = opp.recommendation;
+                const visaCheck = classifySevenTierVisaSponsorship(opp);
+                const salaryInfo = parseAndNormalizeSalaryUsd(opp);
+                const specialty = classifyCareerSpecialtyCategory(opp.title, opp.summary, opp.organization);
+                const region = detectInternationalRegion(opp.country, opp.location);
 
                 return (
                   <article
@@ -1294,33 +1423,39 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                         </div>
                       </div>
 
-                      {/* Row 3: Structured 6-Cell Verification Summary Grid (All Required Card Attributes) */}
+                      {/* Row 3: Structured 6-Cell Verification Summary Grid (7-Tier Visa + USD Salary Standardization) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 pt-3 border-t border-slate-100 text-xs">
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">Funding Status</div>
-                          <div className="font-semibold text-[#0B132B] mt-0.5 line-clamp-1">
-                            {opp.funding.transparencyTags.join(' · ')}
+                          <div className="text-[11px] font-medium text-slate-500">7-Tier Visa Sponsorship Status</div>
+                          <div
+                            className={`font-semibold mt-0.5 line-clamp-1 ${
+                              visaCheck.sponsorshipConfirmed ? 'text-[#15803D]' : 'text-amber-800'
+                            }`}
+                          >
+                            {visaCheck.displayLabel}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">Visa Sponsorship Verification</div>
-                          <div className="font-semibold text-[#0B132B] mt-0.5 line-clamp-1">
-                            {opp.funding.employmentVisaLabel || opp.funding.visaSupportSummary}
+                          <div className="text-[11px] font-medium text-slate-500">Salary / Funding (USD Est.)</div>
+                          <div className="font-semibold text-[#0B132B] mt-0.5 line-clamp-1 tabular-nums">
+                            {salaryInfo.hasAdvertisedSalary && salaryInfo.estimatedMonthlyUsd
+                              ? `$${salaryInfo.estimatedMonthlyUsd.toLocaleString()}/mo (${salaryInfo.grossOrNet === 'not_specified' ? 'est. USD' : salaryInfo.grossOrNet})`
+                              : opp.funding.transparencyTags.join(' · ')}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">Experience Requirements</div>
+                          <div className="text-[11px] font-medium text-slate-500">Sector &amp; Region</div>
                           <div className="font-semibold text-slate-800 mt-0.5 line-clamp-1">
-                            {opp.eligibility.experienceRequirement}
+                            {CAREER_SPECIALTY_LABELS[specialty]} · {region}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-[11px] font-medium text-slate-500">Recommendation / Nomination</div>
+                          <div className="text-[11px] font-medium text-slate-500">Experience &amp; Nomination</div>
                           <div className="font-semibold text-slate-800 mt-0.5 line-clamp-1">
-                            {formatRecommendationSummary(opp.eligibility)}
+                            {opp.eligibility.experienceRequirement} · {formatRecommendationSummary(opp.eligibility)}
                           </div>
                         </div>
 
@@ -1462,6 +1597,50 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                 </div>
               )}
 
+              {/* 9-Point Visa & USD Salary Verification Summary */}
+              {(() => {
+                const vc = classifySevenTierVisaSponsorship(selectedOpportunity);
+                const sal = parseAndNormalizeSalaryUsd(selectedOpportunity);
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        7-Tier Visa &amp; Relocation Verification
+                      </div>
+                      <div className={`font-bold text-xs ${vc.sponsorshipConfirmed ? 'text-[#15803D]' : 'text-amber-800'}`}>
+                        {vc.displayLabel}
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px] text-slate-700">
+                        <div>Outside Country: <strong>{vc.outsideCountryAllowed.replace('_', ' ')}</strong></div>
+                        <div>Ethiopian Eligible: <strong>{vc.ethiopianEligible.replace('_', ' ')}</strong></div>
+                        <div>Sponsors Permit: <strong>{vc.employerSponsorsWorkPermit.replace('_', ' ')}</strong></div>
+                        <div>Relocation: <strong>{vc.relocationAssistanceProvided.replace('_', ' ')}</strong></div>
+                        <div>English Sufficient: <strong>{vc.englishSufficient.replace('_', ' ')}</strong></div>
+                        <div>Family Reunification: <strong>{vc.familyReunificationPossible.replace('_', ' ')}</strong></div>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-1.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        USD Standardized Compensation &amp; Benefits
+                      </div>
+                      <div className="font-bold text-xs text-[#0B132B] tabular-nums">
+                        {sal.hasAdvertisedSalary && sal.estimatedMonthlyUsd
+                          ? `Est. $${sal.estimatedMonthlyUsd.toLocaleString()}/month ($${(sal.estimatedAnnualUsd || 0).toLocaleString()}/yr · ${sal.grossOrNet})`
+                          : 'Salary not disclosed in official posting'}
+                      </div>
+                      {sal.originalText && (
+                        <div className="text-[11px] text-slate-600">Original posting: {sal.originalText}</div>
+                      )}
+                      {sal.benefitsSummary.length > 0 && (
+                        <div className="text-[11px] text-[#15803D]">
+                          Benefits: {sal.benefitsSummary.join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 20 Verified Fields Table */}
               <div>
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
@@ -1488,7 +1667,7 @@ export const GlobalOpportunitiesView: React.FC<Props> = ({
                     ['17. Application Fees', selectedOpportunity.funding.applicationFee],
                     ['18. Location & Country', `${selectedOpportunity.location} (${selectedOpportunity.country})`],
                     ['19. Start Date', selectedOpportunity.deadline.startDate || 'Not Confirmed'],
-                    ['20. Last Verification Date', `${formatDateTimeShort(selectedOpportunity.lastVerifiedAt)} (HTTP ${selectedOpportunity.httpStatusCode ?? 'API Verified'})`],
+                    ['20. Last Verification Date', `${formatDateTimeShort(selectedOpportunity.lastVerifiedAt)}${isAdmin ? ` (HTTP ${selectedOpportunity.httpStatusCode ?? 'Verified'})` : ''}`],
                   ].map(([label, value]) => (
                     <div key={label} className="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-4 px-4 py-2.5 bg-white">
                       <div className="font-semibold text-slate-600">{label}</div>

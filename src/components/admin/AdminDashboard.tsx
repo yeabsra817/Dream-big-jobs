@@ -542,19 +542,33 @@ export const AdminDashboard: React.FC<Props> = ({
             {isYeabsraOwner && (
               <button
                 onClick={() => setActiveTab('international')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
                   activeTab === 'international'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm font-black'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? 'bg-sky-400 text-slate-950 shadow-sm font-black border-sky-300'
+                    : 'text-sky-300 hover:text-white hover:bg-slate-800 border-sky-500/35'
                 }`}
               >
                 <Globe className="w-4 h-4 text-sky-400" />
-                <span>Private Research Engine (Yeabsra Only)</span>
+                <span>Global Career Radar (Yeabsra)</span>
                 {(internationalJobs.length + immigrationPathways.length + experienceScholarships.length) > 0 && (
                   <span className="ml-1 px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-200 text-[10px] font-black">
                     {internationalJobs.length + immigrationPathways.length + experienceScholarships.length}
                   </span>
                 )}
+              </button>
+            )}
+
+            {isYeabsraOwner && (
+              <button
+                onClick={() => setActiveTab('nexusClientFinder')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
+                  activeTab === 'nexusClientFinder'
+                    ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
+                    : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/35'
+                }`}
+              >
+                <Globe className="w-4 h-4 text-emerald-400" />
+                <span>Nexus Client Radar (Web &amp; IT)</span>
               </button>
             )}
 
@@ -689,19 +703,6 @@ export const AdminDashboard: React.FC<Props> = ({
               </button>
             )}
 
-            {isYeabsraOwner && (
-              <button
-                onClick={() => setActiveTab('nexusClientFinder')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border ${
-                  activeTab === 'nexusClientFinder'
-                    ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
-                    : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/30'
-                }`}
-              >
-                <Globe className="w-4 h-4 text-emerald-400" />
-                <span>Nexus Client Finder</span>
-              </button>
-            )}
 
             <button
               onClick={() => setActiveTab('telegram')}

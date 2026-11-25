@@ -15,12 +15,17 @@ export type GlobalDiscoveryDepartment =
 
 export type GlobalOpportunitySubsection =
   | 'international_jobs'
+  | 'europe_jobs'
+  | 'middle_east_jobs'
+  | 'management_jobs'
   | 'scholarships'
   | 'professional_training'
   | 'conferences_summits'
   | 'banking_finance'
   | 'wash_opportunities'
   | 'permanent_residency'
+  | 'recruiting_countries'
+  | 'cv_matching'
   | 'recommended'
   | 'closing_soon'
   | 'saved';
@@ -232,7 +237,7 @@ export interface GlobalOpportunity {
 export interface PermanentResidencyCountryRecord {
   id: string;
   country: string;
-  region: 'North America' | 'Oceania' | 'Europe' | 'Asia' | 'Middle East';
+  region: 'North America' | 'Oceania' | 'Europe' | 'Asia' | 'Middle East' | 'Africa & Other';
   programName: string;
   pathwayClassification: PermanentResidencyPathwayType;
   pathwayClassificationLabel: string;
@@ -259,6 +264,12 @@ export interface PermanentResidencyCountryRecord {
   employerSponsorshipOptions: string;
   familyRelocationOptions: string;
   governmentApplicationFees: string;
+  // Extended 12-point Immigration Transparency Details (Section 7)
+  jobOfferRequired?: string;
+  minimumSalaryRequirement?: string;
+  financialProofRequirement?: string;
+  recruiterOrEmployerRequired?: string;
+  estimatedProcessingStages?: string;
   officialDisclaimer: string;
   lastVerifiedAt: string;
 }
