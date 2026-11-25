@@ -186,12 +186,12 @@
   },
   "XPuREoTPhvTyYsvB14L3JpptCV53": {
     "jobPreferences": {
+      "partTime": false,
+      "fullTime": true,
       "internship": false,
       "freshGraduate": true,
-      "remote": false,
-      "fullTime": true,
       "contract": false,
-      "partTime": false
+      "remote": false
     },
     "uid": "XPuREoTPhvTyYsvB14L3JpptCV53",
     "experience": [],
@@ -216,7 +216,7 @@
     "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocJC_Wg2_Ief7gQOnbBlr9ensgL4R5U1ySkyiGMleWpY_P3Vog=s96-c",
     "authProvider": "google",
     "email": "nexusitsoultion@gmail.com",
-    "updatedAt": "2026-11-22T12:22:03.646Z",
+    "updatedAt": "2026-11-25T15:55:12.747Z",
     "phone": "",
     "locationCity": "Addis Ababa",
     "employmentStatus": "unemployed",
@@ -225,12 +225,12 @@
     "accountStatus": "active",
     "professionalInterests": [],
     "certifications": [],
-    "lastActiveAt": "2026-11-22T12:22:03.646Z",
+    "lastActiveAt": "2026-11-25T15:55:12.747Z",
     "areasOfExpertise": [],
     "previousPositions": [],
     "profileStatus": "incomplete",
     "noExperience": false,
-    "lastLoginAt": "2026-11-22T11:59:59.637Z",
+    "lastLoginAt": "2026-11-25T15:33:12.076Z",
     "preferredSectors": [
       "Banking and Financial Institutions"
     ],

@@ -674,7 +674,18 @@ export function extractExplicitVisaSponsorshipEvidence(text: string): {
 }
 
 const TARGET_POSITION_MATCHERS: Array<{ label: string; rx: RegExp }> = [
-  { label: 'Branch Manager', rx: /\b(branch\s+manager|retail\s+branch\s+manager|area\s+branch\s+manager|head\s+of\s+branch)\b/i },
+  { label: 'Senior Branch Manager', rx: /\bsenior\s+(?:retail\s+|commercial\s+|bank\s+)?branch\s+manager\b/i },
+  { label: 'Area Branch Manager', rx: /\barea\s+(?:bank\s+|retail\s+)?branch\s+manager\b|\barea\s+banking\s+manager\b/i },
+  { label: 'Regional Branch Manager', rx: /\bregional\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: 'Branch Operations Manager', rx: /\bbranch\s+operations\s+manager\b/i },
+  { label: 'Banking Operations and Administration Manager', rx: /\b(?:banking|branch)\s+operations\s+(?:and|&)\s+admin(?:istration)?\s+manager\b/i },
+  { label: 'Branch Manager', rx: /\b(branch\s+manager|retail\s+branch\s+manager|head\s+of\s+branch)\b/i },
+  { label: 'Deputy Branch Manager', rx: /\bdeputy\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: 'Assistant Branch Manager', rx: /\bassistant\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: 'Banking Service Manager', rx: /\b(?:banking|branch)\s+service(?:s)?\s+manager\b/i },
+  { label: 'Retail Banking Manager', rx: /\bretail\s+banking\s+manager\b/i },
+  { label: 'Branch Network Manager', rx: /\bbranch\s+network\s+manager\b/i },
+  { label: 'Banking Business Development Manager', rx: /\b(?:banking|bank|retail\s+banking|branch)\s+business\s+development\s+manager\b/i },
   { label: 'Banking Operations Manager', rx: /\b(banking\s+operations\s+manager|bank\s+operations\s+manager|head\s+of\s+banking\s+operations|core\s+banking\s+operations)\b/i },
   { label: 'Finance Manager', rx: /\b(finance\s+manager|senior\s+finance\s+manager|commercial\s+finance\s+manager|regional\s+finance\s+manager|head\s+of\s+finance)\b/i },
   { label: 'Finance and Administration Manager', rx: /\b(finance\s+(?:and|&)\s+admin(?:istration)?\s+manager|admin\s+(?:and|&)\s+finance\s+manager)\b/i },
@@ -683,7 +694,7 @@ const TARGET_POSITION_MATCHERS: Array<{ label: string; rx: RegExp }> = [
   { label: 'Relationship Manager', rx: /\b((?:senior\s+|corporate\s+|commercial\s+|banking\s+|business\s+|private\s+)?relationship\s+manager)\b/i },
   { label: 'SME Banking Manager', rx: /\b(sme\s+banking\s+manager|business\s+banking\s+manager|commercial\s+banking\s+manager|corporate\s+banking\s+manager)\b/i },
   { label: 'Financial Operations Manager', rx: /\b(financial\s+operations\s+manager|finops\s+manager|treasury\s+operations\s+manager|treasury\s+manager|settlement\s+operations\s+manager)\b/i },
-  { label: 'Microfinance Operations Manager', rx: /\b(microfinance\s+(?:operations\s+)?manager|financial\s+inclusion\s+manager|microfinance\s+director)\b/i },
+  { label: 'Microfinance Operations Manager', rx: /\b(microfinance\s+(?:operations\s+)?manager|financial\s+inclusion\s+manager)\b/i },
   { label: 'Credit Operations Manager', rx: /\b(credit\s+operations\s+manager|loan\s+operations\s+manager|lending\s+operations\s+manager|collections\s+operations\s+manager)\b/i },
   { label: 'Compliance Manager', rx: /\b(compliance\s+manager|regulatory\s+compliance\s+manager|senior\s+compliance\s+manager|head\s+of\s+compliance|financial\s+crime\s+compliance)\b/i },
   { label: 'Risk Manager', rx: /\b((?:credit\s+|operational\s+|enterprise\s+|financial\s+|banking\s+)?risk\s+manager|head\s+of\s+risk)\b/i },
@@ -696,17 +707,37 @@ const TARGET_POSITION_MATCHERS: Array<{ label: string; rx: RegExp }> = [
 ];
 
 const UNRELATED_HIGH_SALARY_DISQUALIFIER_RX =
-  /\b(software\s+engineer|staff\s+engineer|backend\s+engineer|frontend\s+engineer|fullstack|full[- ]stack|devops|site\s+reliability|sre\b|machine\s+learning|data\s+scientist|ios\s+engineer|android\s+engineer|product\s+designer|ux\s+designer|ui\s+designer|registered\s+nurse|physician|doctor\b|surgeon|medical\s+officer|legal\s+counsel|attorney|lawyer|solicitor|marketing\s+manager|brand\s+manager|copywriter|writer\b|recruiter|talent\s+acquisition|people\s+partner|hr\s+business\s+partner|civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|architect\b)\b/i;
+  /\b(software\s+engineer|staff\s+engineer|backend\s+engineer|frontend\s+engineer|fullstack|full[- ]stack|devops|site\s+reliability|sre\b|machine\s+learning|data\s+scientist|ios\s+engineer|android\s+engineer|product\s+designer|ux\s+designer|ui\s+designer|registered\s+nurse|physician|doctor\b|surgeon|medical\s+officer|legal\s+counsel|attorney|lawyer|solicitor|marketing\s+manager|brand\s+manager|copywriter|writer\b|recruiter|talent\s+acquisition|people\s+partner|hr\s+business\s+partner|civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|architect\b|wash\s+manager|water\s+and\s+sanitation)\b/i;
+
+const OVER_SENIOR_EXECUTIVE_DISQUALIFIER_RX =
+  /\b(vice\s+president|\bsvp\b|\bevp\b|\bvp\b|chief\s+[a-z\s]+officer|\bceo\b|\bcfo\b|\bcoo\b|\bcro\b|managing\s+director|executive\s+director|group\s+head|global\s+head)\b/i;
+
+const JUNIOR_NON_MANAGERIAL_DISQUALIFIER_RX =
+  /\b(customer\s+service\s+representative|\bcsr\b|bank\s+teller|\bteller\b|\bcashier\b|junior\s+banking\s+assistant|banking\s+assistant|entry[- ]level|graduate\s+trainee|\bintern\b|\binternship\b|clerical|receptionist|administrative\s+assistant)\b/i;
 
 function matchTargetSeniorBankingRole(
   title: string,
   description: string,
   profile: BranchManagerProfileInput
-): { matched: boolean; matchedPosition: string } {
+): { matched: boolean; matchedPosition: string; seniorityRejected?: boolean } {
   const titleClean = String(title || '').trim();
-  // Never recommend unrelated high-salary engineering/medical/legal/marketing jobs!
+  // Never recommend unrelated high-salary engineering/medical/legal/marketing/WASH jobs!
   if (UNRELATED_HIGH_SALARY_DISQUALIFIER_RX.test(titleClean)) {
     return { matched: false, matchedPosition: '' };
+  }
+
+  // Strictly reject Vice President / C-Suite executive roles & Teller/CSR/Junior roles (Section 2B)
+  if (OVER_SENIOR_EXECUTIVE_DISQUALIFIER_RX.test(titleClean) || JUNIOR_NON_MANAGERIAL_DISQUALIFIER_RX.test(titleClean)) {
+    return { matched: false, matchedPosition: '', seniorityRejected: true };
+  }
+
+  // Reject positions explicitly requiring 13+ years of executive banking experience for a 9yr/3yr manager
+  const reqYearsMatch = String(description || '').match(/(\d{1,2})\+?\s*years?\s+(?:of\s+)?(?:progressive\s+|executive\s+|senior\s+)?(?:banking|financial|executive|leadership|management)/i);
+  if (reqYearsMatch) {
+    const reqYrs = parseInt(reqYearsMatch[1], 10);
+    if (!Number.isNaN(reqYrs) && reqYrs >= Math.max(13, (profile.totalBankingYears || 9) + 4)) {
+      return { matched: false, matchedPosition: '', seniorityRejected: true };
+    }
   }
 
   for (const item of TARGET_POSITION_MATCHERS) {
@@ -715,12 +746,12 @@ function matchTargetSeniorBankingRole(
     }
   }
 
-  // Also check equivalent senior banking/finance titles matching user's custom target positions
+  // Also check equivalent managerial banking/finance titles (excluding VP/Executive & Junior/Entry!)
   const seniorBankingTitleRx =
-    /\b(senior|lead|head|director|manager|controller|vp\b|vice\s+president|officer|specialist)\b.*\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|deposit|sme|relationship)\b|\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|sme)\b.*\b(manager|lead|head|director|controller|supervisor)\b/i;
+    /\b(senior|lead|manager|controller|supervisor)\b.*\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|deposit|sme|relationship|branch)\b|\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|sme|branch)\b.*\b(manager|lead|controller|supervisor)\b/i;
 
   if (seniorBankingTitleRx.test(titleClean)) {
-    return { matched: true, matchedPosition: 'Senior Banking & Finance Position' };
+    return { matched: true, matchedPosition: 'Branch & Banking Management Equivalent' };
   }
 
   // Check if user specified custom target positions in their own profile
@@ -731,8 +762,6 @@ function matchTargetSeniorBankingRole(
     }
   }
 
-  // Do not match purely on description when title is unrelated
-  void description;
   return { matched: false, matchedPosition: '' };
 }
 
@@ -901,8 +930,12 @@ export function evaluateBranchManagerJobs(params: {
     }
 
     if (raw.applicationDeadline && raw.applicationDeadline !== 'Open — Verify on employer portal') {
-      const parsedDl = Date.parse(raw.applicationDeadline);
-      if (!Number.isNaN(parsedDl) && parsedDl < Date.now()) {
+      const dlNorm = /^\d{4}-\d{2}-\d{2}$/.test(raw.applicationDeadline.trim())
+        ? `${raw.applicationDeadline.trim()}T23:59:59Z`
+        : raw.applicationDeadline;
+      const parsedDl = Date.parse(dlNorm);
+      // Enforce mandatory >= 3 full days (72 hours) deadline rule (Section 9)
+      if (!Number.isNaN(parsedDl) && parsedDl - Date.now() < 72 * 60 * 60 * 1000) {
         audit.excludedExpiredOrDuplicate += 1;
         continue;
       }
@@ -937,10 +970,14 @@ export function evaluateBranchManagerJobs(params: {
       continue;
     }
 
-    // Gate 2: Target Senior Banking & Finance Role Match (never recommend unrelated high-salary jobs!)
+    // Gate 2: Target Branch Banking Management Role & Strict Seniority Match
     const roleMatch = matchTargetSeniorBankingRole(raw.title, plainDesc, profile);
     if (!roleMatch.matched) {
       audit.excludedNonMatchingRole += 1;
+      if (roleMatch.seniorityRejected) {
+        audit.excludedSeniorityOrExperienceMismatch =
+          (audit.excludedSeniorityOrExperienceMismatch || 0) + 1;
+      }
       continue;
     }
 
@@ -1096,6 +1133,18 @@ export function evaluateBranchManagerJobs(params: {
 
     audit.passedAllSixGates += 1;
 
+    const mgmtExpMatch = plainDesc.match(
+      /(\d{1,2})\+?\s*years?\s+(?:of\s+)?(?:progressive\s+|direct\s+)?(?:managerial|management|leadership|supervisory|branch\s+manager)/i
+    );
+    const requiredManagerialExperience = mgmtExpMatch
+      ? `${mgmtExpMatch[1]}+ years managerial / supervisory experience`
+      : 'Managerial & staff supervision experience required';
+    const taxBasis: 'Gross' | 'Net' | 'Not Specified' = /\b(net\s+salary|tax[- ]free|after[- ]tax)\b/i.test(fullText)
+      ? 'Net'
+      : /\b(gross|base\s+salary)\b/i.test(fullText)
+      ? 'Gross'
+      : 'Not Specified';
+
     verifiedJobs.push({
       id: raw.id,
       jobTitle: raw.title,
@@ -1130,6 +1179,16 @@ export function evaluateBranchManagerJobs(params: {
       matchedTargetPosition: roleMatch.matchedPosition,
       employerReputationScore: employerMeta.reputationScore,
       rankingScore,
+      salaryPeriod: salaryEval.period === 'annual' ? 'Annual' : salaryEval.period === 'monthly' ? 'Monthly' : 'Not Disclosed',
+      salaryTaxBasis: taxBasis,
+      requiredBankingExperience: expEval.summary,
+      requiredManagerialExperience,
+      verificationStatus: 'Verified Official · >$3,000/mo · Visa Confirmed',
+      seniorityLevel: /\bsenior|regional|area|network\b/i.test(raw.title)
+        ? 'Senior Manager'
+        : /\bdeputy|assistant\b/i.test(raw.title)
+        ? 'Assistant / Deputy Manager'
+        : 'Manager',
     });
   }
 

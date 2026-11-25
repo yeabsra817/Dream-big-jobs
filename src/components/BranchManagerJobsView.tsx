@@ -1029,11 +1029,19 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap text-[11px]">
                       <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                        Confirmed Visa Sponsorship
+                        {job.verificationStatus || 'Verified Active & Visa Confirmed'}
                       </span>
                       <span className="font-semibold text-slate-700">{job.regionScope}</span>
                       <span className="text-slate-300">·</span>
                       <span className="text-slate-600">{job.matchedTargetPosition}</span>
+                      {job.seniorityLevel && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-slate-600 capitalize">
+                            {job.seniorityLevel.replace(/_/g, ' ')}
+                          </span>
+                        </>
+                      )}
                     </div>
                     <h3 className="text-lg font-bold text-[#0B132B] leading-snug">
                       {job.jobTitle}
@@ -1045,8 +1053,8 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                         {job.city}, {job.country}
                       </span>
                       <span className="text-slate-300">·</span>
-                      <span className="text-emerald-700 font-semibold tabular-nums">
-                        {job.profileMatchPercentage}% Profile Match
+                      <span className="text-emerald-700 font-bold tabular-nums">
+                        Relevance Score: {job.profileMatchPercentage}%
                       </span>
                     </div>
                   </div>
@@ -1055,21 +1063,61 @@ export const BranchManagerJobsView: React.FC<Props> = ({
                     <div className="text-lg font-bold text-emerald-800 tabular-nums">
                       ${job.grossMonthlySalaryUsd.toLocaleString()} / mo USD
                     </div>
-                    <div className="text-[11px] text-slate-600">{job.originalSalaryDisplay}</div>
+                    <div className="text-[11px] text-slate-700 font-medium">
+                      {job.originalSalaryDisplay} · {job.salaryPeriod || 'Annual / Monthly Normalized'} (
+                      {job.salaryTaxBasis || 'Gross'})
+                    </div>
                     <div className="text-[10px] text-slate-400">{job.exchangeRateUsed}</div>
                   </div>
                 </div>
 
-                {/* Visa Sponsorship Evidence */}
-                <div className="text-xs text-slate-700 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
-                  <strong className="text-emerald-900">Visa Sponsorship Evidence:</strong>{' '}
-                  &ldquo;{job.visaSponsorshipEvidence}&rdquo;
+                {/* Required Banking & Managerial Experience + Visa Status */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Required Banking Experience
+                    </div>
+                    <div className="text-slate-800 font-semibold mt-0.5">
+                      {job.requiredBankingExperience || 'Matches 9-year banking profile'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      Required Managerial Experience
+                    </div>
+                    <div className="text-slate-800 font-semibold mt-0.5">
+                      {job.requiredManagerialExperience || 'Matches 3-year management profile'}
+                    </div>
+                  </div>
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                      Visa Sponsorship / Work Auth
+                    </div>
+                    <div className="text-emerald-950 font-semibold mt-0.5">
+                      Confirmed Employer Work Visa Sponsorship
+                    </div>
+                  </div>
                 </div>
 
-                {/* Why You Qualify + Gaps Snapshot */}
+                {/* Actual Responsibilities & Visa Evidence */}
+                <div className="text-xs text-slate-700 bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                  <div>
+                    <strong className="text-slate-900">Actual Responsibilities:</strong>{' '}
+                    <span>
+                      {job.jobResponsibilities && job.jobResponsibilities.length > 0
+                        ? job.jobResponsibilities.slice(0, 3).join('; ')
+                        : job.requiredExperience}
+                    </span>
+                  </div>
+                  <div className="text-emerald-900">
+                    <strong>Visa Sponsorship Evidence:</strong> &ldquo;{job.visaSponsorshipEvidence}&rdquo;
+                  </div>
+                </div>
+
+                {/* Why It Matches Reference Profile + Gaps Snapshot */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="font-bold text-slate-800">Why You Qualify:</span>{' '}
+                    <span className="font-bold text-slate-800">Why It Matches Reference Profile:</span>{' '}
                     <span className="text-slate-600">{job.whyYouQualify.slice(0, 2).join(' ')}</span>
                   </div>
                   <div>

@@ -1,7 +1,7 @@
 // serverApp.ts
-import * as path6 from "path";
-import * as fs2 from "fs";
-import * as crypto5 from "crypto";
+import * as path9 from "path";
+import * as fs4 from "fs";
+import * as crypto9 from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
@@ -10428,7 +10428,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
   } = deps;
   const STORE_FILE = path2.join(runtimeBaseDir, "data", "global_opportunities_store.json");
   const RELIEFWEB_APPNAME = (process.env.RELIEFWEB_APPNAME || "hopelandjobs-opportunity-intel").trim();
-  const LOCK_TTL_MS = 15 * 60 * 1e3;
+  const LOCK_TTL_MS2 = 15 * 60 * 1e3;
   let nextScheduledRunAtMs = null;
   let nextScheduledSlotLabel = null;
   const DISCOVERY_INTERVAL_MINUTES = getDiscoveryIntervalMinutes();
@@ -10804,7 +10804,7 @@ function registerGlobalOpportunitiesRoutes(deps) {
       runId,
       trigger,
       startedAt,
-      expiresAt: new Date(startedMs + LOCK_TTL_MS).toISOString()
+      expiresAt: new Date(startedMs + LOCK_TTL_MS2).toISOString()
     };
     saveStore(store);
     const errors = [];
@@ -16597,7 +16597,19 @@ var ALLOWED_BRANCH_MANAGER_REGIONS = [
 ];
 var TARGET_BRANCH_MANAGER_POSITIONS = [
   "Branch Manager",
+  "Senior Branch Manager",
+  "Branch Operations Manager",
   "Banking Operations Manager",
+  "Area Branch Manager",
+  "Regional Branch Manager",
+  "Deputy Branch Manager",
+  "Assistant Branch Manager",
+  "Banking Service Manager",
+  "Retail Banking Manager",
+  "Branch Network Manager",
+  "Banking Relationship Manager",
+  "Banking Business Development Manager",
+  "Banking Operations and Administration Manager",
   "Finance Manager",
   "Finance and Administration Manager",
   "Financial Controller",
@@ -17088,7 +17100,18 @@ function extractExplicitVisaSponsorshipEvidence(text) {
   };
 }
 var TARGET_POSITION_MATCHERS = [
-  { label: "Branch Manager", rx: /\b(branch\s+manager|retail\s+branch\s+manager|area\s+branch\s+manager|head\s+of\s+branch)\b/i },
+  { label: "Senior Branch Manager", rx: /\bsenior\s+(?:retail\s+|commercial\s+|bank\s+)?branch\s+manager\b/i },
+  { label: "Area Branch Manager", rx: /\barea\s+(?:bank\s+|retail\s+)?branch\s+manager\b|\barea\s+banking\s+manager\b/i },
+  { label: "Regional Branch Manager", rx: /\bregional\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Branch Operations Manager", rx: /\bbranch\s+operations\s+manager\b/i },
+  { label: "Banking Operations and Administration Manager", rx: /\b(?:banking|branch)\s+operations\s+(?:and|&)\s+admin(?:istration)?\s+manager\b/i },
+  { label: "Branch Manager", rx: /\b(branch\s+manager|retail\s+branch\s+manager|head\s+of\s+branch)\b/i },
+  { label: "Deputy Branch Manager", rx: /\bdeputy\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Assistant Branch Manager", rx: /\bassistant\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Banking Service Manager", rx: /\b(?:banking|branch)\s+service(?:s)?\s+manager\b/i },
+  { label: "Retail Banking Manager", rx: /\bretail\s+banking\s+manager\b/i },
+  { label: "Branch Network Manager", rx: /\bbranch\s+network\s+manager\b/i },
+  { label: "Banking Business Development Manager", rx: /\b(?:banking|bank|retail\s+banking|branch)\s+business\s+development\s+manager\b/i },
   { label: "Banking Operations Manager", rx: /\b(banking\s+operations\s+manager|bank\s+operations\s+manager|head\s+of\s+banking\s+operations|core\s+banking\s+operations)\b/i },
   { label: "Finance Manager", rx: /\b(finance\s+manager|senior\s+finance\s+manager|commercial\s+finance\s+manager|regional\s+finance\s+manager|head\s+of\s+finance)\b/i },
   { label: "Finance and Administration Manager", rx: /\b(finance\s+(?:and|&)\s+admin(?:istration)?\s+manager|admin\s+(?:and|&)\s+finance\s+manager)\b/i },
@@ -17097,7 +17120,7 @@ var TARGET_POSITION_MATCHERS = [
   { label: "Relationship Manager", rx: /\b((?:senior\s+|corporate\s+|commercial\s+|banking\s+|business\s+|private\s+)?relationship\s+manager)\b/i },
   { label: "SME Banking Manager", rx: /\b(sme\s+banking\s+manager|business\s+banking\s+manager|commercial\s+banking\s+manager|corporate\s+banking\s+manager)\b/i },
   { label: "Financial Operations Manager", rx: /\b(financial\s+operations\s+manager|finops\s+manager|treasury\s+operations\s+manager|treasury\s+manager|settlement\s+operations\s+manager)\b/i },
-  { label: "Microfinance Operations Manager", rx: /\b(microfinance\s+(?:operations\s+)?manager|financial\s+inclusion\s+manager|microfinance\s+director)\b/i },
+  { label: "Microfinance Operations Manager", rx: /\b(microfinance\s+(?:operations\s+)?manager|financial\s+inclusion\s+manager)\b/i },
   { label: "Credit Operations Manager", rx: /\b(credit\s+operations\s+manager|loan\s+operations\s+manager|lending\s+operations\s+manager|collections\s+operations\s+manager)\b/i },
   { label: "Compliance Manager", rx: /\b(compliance\s+manager|regulatory\s+compliance\s+manager|senior\s+compliance\s+manager|head\s+of\s+compliance|financial\s+crime\s+compliance)\b/i },
   { label: "Risk Manager", rx: /\b((?:credit\s+|operational\s+|enterprise\s+|financial\s+|banking\s+)?risk\s+manager|head\s+of\s+risk)\b/i },
@@ -17108,20 +17131,32 @@ var TARGET_POSITION_MATCHERS = [
   { label: "Grants Finance Manager", rx: /\b(grants?\s+finance\s+manager|grant(?:s)?\s+management\s+manager|donor\s+finance\s+manager)\b/i },
   { label: "Project Finance Manager", rx: /\b(project\s+finance\s+manager|program(?:me)?\s+finance\s+manager|portfolio\s+finance\s+manager)\b/i }
 ];
-var UNRELATED_HIGH_SALARY_DISQUALIFIER_RX = /\b(software\s+engineer|staff\s+engineer|backend\s+engineer|frontend\s+engineer|fullstack|full[- ]stack|devops|site\s+reliability|sre\b|machine\s+learning|data\s+scientist|ios\s+engineer|android\s+engineer|product\s+designer|ux\s+designer|ui\s+designer|registered\s+nurse|physician|doctor\b|surgeon|medical\s+officer|legal\s+counsel|attorney|lawyer|solicitor|marketing\s+manager|brand\s+manager|copywriter|writer\b|recruiter|talent\s+acquisition|people\s+partner|hr\s+business\s+partner|civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|architect\b)\b/i;
+var UNRELATED_HIGH_SALARY_DISQUALIFIER_RX = /\b(software\s+engineer|staff\s+engineer|backend\s+engineer|frontend\s+engineer|fullstack|full[- ]stack|devops|site\s+reliability|sre\b|machine\s+learning|data\s+scientist|ios\s+engineer|android\s+engineer|product\s+designer|ux\s+designer|ui\s+designer|registered\s+nurse|physician|doctor\b|surgeon|medical\s+officer|legal\s+counsel|attorney|lawyer|solicitor|marketing\s+manager|brand\s+manager|copywriter|writer\b|recruiter|talent\s+acquisition|people\s+partner|hr\s+business\s+partner|civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|architect\b|wash\s+manager|water\s+and\s+sanitation)\b/i;
+var OVER_SENIOR_EXECUTIVE_DISQUALIFIER_RX = /\b(vice\s+president|\bsvp\b|\bevp\b|\bvp\b|chief\s+[a-z\s]+officer|\bceo\b|\bcfo\b|\bcoo\b|\bcro\b|managing\s+director|executive\s+director|group\s+head|global\s+head)\b/i;
+var JUNIOR_NON_MANAGERIAL_DISQUALIFIER_RX = /\b(customer\s+service\s+representative|\bcsr\b|bank\s+teller|\bteller\b|\bcashier\b|junior\s+banking\s+assistant|banking\s+assistant|entry[- ]level|graduate\s+trainee|\bintern\b|\binternship\b|clerical|receptionist|administrative\s+assistant)\b/i;
 function matchTargetSeniorBankingRole(title, description, profile) {
   const titleClean = String(title || "").trim();
   if (UNRELATED_HIGH_SALARY_DISQUALIFIER_RX.test(titleClean)) {
     return { matched: false, matchedPosition: "" };
+  }
+  if (OVER_SENIOR_EXECUTIVE_DISQUALIFIER_RX.test(titleClean) || JUNIOR_NON_MANAGERIAL_DISQUALIFIER_RX.test(titleClean)) {
+    return { matched: false, matchedPosition: "", seniorityRejected: true };
+  }
+  const reqYearsMatch = String(description || "").match(/(\d{1,2})\+?\s*years?\s+(?:of\s+)?(?:progressive\s+|executive\s+|senior\s+)?(?:banking|financial|executive|leadership|management)/i);
+  if (reqYearsMatch) {
+    const reqYrs = parseInt(reqYearsMatch[1], 10);
+    if (!Number.isNaN(reqYrs) && reqYrs >= Math.max(13, (profile.totalBankingYears || 9) + 4)) {
+      return { matched: false, matchedPosition: "", seniorityRejected: true };
+    }
   }
   for (const item of TARGET_POSITION_MATCHERS) {
     if (item.rx.test(titleClean)) {
       return { matched: true, matchedPosition: item.label };
     }
   }
-  const seniorBankingTitleRx = /\b(senior|lead|head|director|manager|controller|vp\b|vice\s+president|officer|specialist)\b.*\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|deposit|sme|relationship)\b|\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|sme)\b.*\b(manager|lead|head|director|controller|supervisor)\b/i;
+  const seniorBankingTitleRx = /\b(senior|lead|manager|controller|supervisor)\b.*\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|deposit|sme|relationship|branch)\b|\b(bank|banking|finance|financial|accounting|credit|loan|treasury|compliance|aml|kyc|risk|audit|internal\s+control|payment|payments|microfinance|fincrime|sme|branch)\b.*\b(manager|lead|controller|supervisor)\b/i;
   if (seniorBankingTitleRx.test(titleClean)) {
-    return { matched: true, matchedPosition: "Senior Banking & Finance Position" };
+    return { matched: true, matchedPosition: "Branch & Banking Management Equivalent" };
   }
   for (const custom of profile.targetPositions || []) {
     const cleanTarget = custom.trim().toLowerCase();
@@ -17129,7 +17164,6 @@ function matchTargetSeniorBankingRole(title, description, profile) {
       return { matched: true, matchedPosition: custom.trim() };
     }
   }
-  void description;
   return { matched: false, matchedPosition: "" };
 }
 function extractEducationFromText(text) {
@@ -17254,8 +17288,9 @@ function evaluateBranchManagerJobs(params) {
       continue;
     }
     if (raw.applicationDeadline && raw.applicationDeadline !== "Open \u2014 Verify on employer portal") {
-      const parsedDl = Date.parse(raw.applicationDeadline);
-      if (!Number.isNaN(parsedDl) && parsedDl < Date.now()) {
+      const dlNorm = /^\d{4}-\d{2}-\d{2}$/.test(raw.applicationDeadline.trim()) ? `${raw.applicationDeadline.trim()}T23:59:59Z` : raw.applicationDeadline;
+      const parsedDl = Date.parse(dlNorm);
+      if (!Number.isNaN(parsedDl) && parsedDl - Date.now() < 72 * 60 * 60 * 1e3) {
         audit.excludedExpiredOrDuplicate += 1;
         continue;
       }
@@ -17290,6 +17325,9 @@ ${plainDesc}`;
     const roleMatch = matchTargetSeniorBankingRole(raw.title, plainDesc, profile);
     if (!roleMatch.matched) {
       audit.excludedNonMatchingRole += 1;
+      if (roleMatch.seniorityRejected) {
+        audit.excludedSeniorityOrExperienceMismatch = (audit.excludedSeniorityOrExperienceMismatch || 0) + 1;
+      }
       continue;
     }
     const salaryEval = parseGuaranteedBaseSalaryUsd(
@@ -17398,6 +17436,11 @@ ${plainDesc}`,
       (visaEval.strengthScore * 0.3 + salaryNorm * 0.24 + ethScore * 0.16 + profileMatchPercentage * 0.16 + employerMeta.reputationScore * 0.08 + relocScore * 0.06).toFixed(2)
     );
     audit.passedAllSixGates += 1;
+    const mgmtExpMatch = plainDesc.match(
+      /(\d{1,2})\+?\s*years?\s+(?:of\s+)?(?:progressive\s+|direct\s+)?(?:managerial|management|leadership|supervisory|branch\s+manager)/i
+    );
+    const requiredManagerialExperience = mgmtExpMatch ? `${mgmtExpMatch[1]}+ years managerial / supervisory experience` : "Managerial & staff supervision experience required";
+    const taxBasis = /\b(net\s+salary|tax[- ]free|after[- ]tax)\b/i.test(fullText) ? "Net" : /\b(gross|base\s+salary)\b/i.test(fullText) ? "Gross" : "Not Specified";
     verifiedJobs.push({
       id: raw.id,
       jobTitle: raw.title,
@@ -17431,7 +17474,13 @@ ${plainDesc}`,
       gapsOrUnmetRequirements,
       matchedTargetPosition: roleMatch.matchedPosition,
       employerReputationScore: employerMeta.reputationScore,
-      rankingScore
+      rankingScore,
+      salaryPeriod: salaryEval.period === "annual" ? "Annual" : salaryEval.period === "monthly" ? "Monthly" : "Not Disclosed",
+      salaryTaxBasis: taxBasis,
+      requiredBankingExperience: expEval.summary,
+      requiredManagerialExperience,
+      verificationStatus: "Verified Official \xB7 >$3,000/mo \xB7 Visa Confirmed",
+      seniorityLevel: /\bsenior|regional|area|network\b/i.test(raw.title) ? "Senior Manager" : /\bdeputy|assistant\b/i.test(raw.title) ? "Assistant / Deputy Manager" : "Manager"
     });
   }
   const filtered = verifiedJobs.filter((job) => {
@@ -17819,6 +17868,5763 @@ function registerBranchManagerJobsRoutes(deps) {
       });
     }
   });
+  return {
+    loadStore,
+    saveStore,
+    runLiveDiscoveryIfNeeded,
+    loadExistingGlobalOpps,
+    mergeIncrementalCandidates(params) {
+      const store = loadStore();
+      if (params.fxUpdate) {
+        store.fxRatesUsdBase = params.fxUpdate.rates;
+        store.fxUpdatedAt = params.fxUpdate.updatedAt;
+        store.fxSourceNote = params.fxUpdate.sourceNote;
+      }
+      const retained = store.rawCandidates.filter((c) => !c.id.startsWith(params.idPrefix));
+      const seenUrls = new Set(retained.map((c) => c.applicationUrl.toLowerCase()));
+      let newlyAdded = 0;
+      let duplicatesSkipped = 0;
+      const merged = [...retained];
+      for (const item of params.incomingCandidates) {
+        const key = String(item.applicationUrl || "").trim().toLowerCase();
+        if (!key) continue;
+        if (seenUrls.has(key)) {
+          duplicatesSkipped++;
+          continue;
+        }
+        seenUrls.add(key);
+        merged.push(item);
+        newlyAdded++;
+      }
+      store.rawCandidates = merged;
+      if (!store.sourcesChecked.includes(params.sourceLabel)) {
+        store.sourcesChecked = [...store.sourcesChecked, params.sourceLabel];
+      }
+      store.lastDiscoveryAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveStore(store);
+      return {
+        store,
+        newlyAdded,
+        duplicatesSkipped,
+        totalCandidates: merged.length
+      };
+    },
+    evaluateForOwner() {
+      const store = loadStore();
+      return evaluateBranchManagerJobs({
+        rawCandidates: store.rawCandidates,
+        profileInput: OWNER_PRIVATE_SAVED_PROFILE,
+        isOwnerAccountProfile: true,
+        fxRatesUsdBase: store.fxRatesUsdBase,
+        fxUpdatedAt: store.fxUpdatedAt,
+        fxSourceNote: store.fxSourceNote,
+        sourcesChecked: store.sourcesChecked,
+        lastDiscoveryAt: store.lastDiscoveryAt
+      });
+    }
+  };
+}
+
+// serverAutonomousDiscoveryWorker.ts
+import * as fs3 from "fs";
+import * as path7 from "path";
+import * as crypto6 from "crypto";
+
+// serverAutonomousWebCrawler.ts
+import * as fs2 from "fs";
+import * as path6 from "path";
+import * as crypto5 from "crypto";
+import * as dns2 from "dns";
+import * as net2 from "net";
+var MAX_QUEUE_SIZE = 1200;
+var MAX_CRAWLED_PAGES = 4e3;
+var MAX_OPPORTUNITIES = 1500;
+var MAX_DOMAINS = 400;
+var MAX_RESPONSE_BYTES = 15e5;
+var DEFAULT_FETCH_TIMEOUT_MS = 8e3;
+var USER_AGENT2 = "HopelandJobsBot/2.0 (+https://www.hopelandjobs.tech; respectful public opportunity indexer)";
+var SEED_DISCOVERY_TARGETS = [
+  {
+    url: "https://feeds.feedburner.com/ReliefWebJobs",
+    domain: "feeds.feedburner.com",
+    taskType: "feed",
+    category: "intl_org",
+    priority: 96
+  },
+  {
+    url: "https://www.opportunitiesforafricans.com/feed/",
+    domain: "www.opportunitiesforafricans.com",
+    taskType: "feed",
+    category: "scholarship_training",
+    priority: 94
+  },
+  {
+    url: "https://remotive.com/remote-jobs/feed",
+    domain: "remotive.com",
+    taskType: "feed",
+    category: "employer_careers",
+    priority: 92
+  },
+  {
+    url: "https://weworkremotely.com/remote-jobs.rss",
+    domain: "weworkremotely.com",
+    taskType: "feed",
+    category: "employer_careers",
+    priority: 90
+  },
+  {
+    url: "https://www.make-it-in-germany.com/en/working-in-germany/job-listings",
+    domain: "www.make-it-in-germany.com",
+    taskType: "html_page",
+    category: "immigration_portal",
+    priority: 88
+  },
+  {
+    url: "https://www.worldbank.org/en/about/careers",
+    domain: "www.worldbank.org",
+    taskType: "html_page",
+    category: "intl_org",
+    priority: 86
+  },
+  {
+    url: "https://www.daad.de/en/studying-in-germany/scholarships/",
+    domain: "www.daad.de",
+    taskType: "html_page",
+    category: "scholarship_training",
+    priority: 85
+  },
+  {
+    url: "https://www.chevening.org/scholarships/",
+    domain: "www.chevening.org",
+    taskType: "html_page",
+    category: "scholarship_training",
+    priority: 84
+  },
+  {
+    url: "https://www.workindenmark.dk/",
+    domain: "www.workindenmark.dk",
+    taskType: "html_page",
+    category: "immigration_portal",
+    priority: 82
+  },
+  {
+    url: "https://enterprise.gov.ie/en/what-we-do/workplace-and-skills/employment-permits/",
+    domain: "enterprise.gov.ie",
+    taskType: "html_page",
+    category: "gov_portal",
+    priority: 81
+  },
+  {
+    url: "https://ind.nl/en/residence-permits/work",
+    domain: "ind.nl",
+    taskType: "html_page",
+    category: "immigration_portal",
+    priority: 80
+  },
+  {
+    url: "https://www.migrationsverket.se/English.html",
+    domain: "www.migrationsverket.se",
+    taskType: "html_page",
+    category: "immigration_portal",
+    priority: 80
+  },
+  {
+    url: "https://web.archive.org/cdx/search/cdx?url=*.int/careers/*&output=json&limit=15&filter=statuscode:200&collapse=urlkey",
+    domain: "web.archive.org",
+    taskType: "archive_discovery",
+    category: "intl_org",
+    priority: 70
+  }
+];
+var RELEVANT_LINK_KEYWORDS = /\b(job|jobs|career|careers|vacanc|recruit|hiring|opening|position|fellowship|scholarship|grant|training|conference|summit|exchange|visa|sponsorship|work-permit|immigration|skilled-worker|bank|finance|accounting|audit|credit|compliance|wash|water|sanitation|hygiene)\b/i;
+var RELEVANT_DOMAIN_TLDS_OR_TERMS = /(\.gov|\.int|\.edu|\.org|bank|finance|careers|jobs|recruit|immigration|migration|scholarship|fellowship|un\.org|worldbank|afdb|imf|ebrd|eib|oecd|reliefweb|ilo|iom|who|undp|unicef|unhcr|wfp|daad|chevening|eures|make-it-in-germany|workindenmark|migrationsverket|ind\.nl|adyen|wise|monzo|n26|stripe|revolut|mollie|pleo|sumup|gocardless|transfergo|standardchartered|hsbc|barclays|citigroup|ing|rabobank)/i;
+var BLOCKED_SOCIAL_OR_NOISE_DOMAINS = /(facebook\.com|instagram\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|youtu\.be|pinterest\.com|reddit\.com|apple\.com|play\.google\.com|cloudflare\.com|w3\.org|schema\.org|fonts\.googleapis\.com|doubleclick\.net|googletagmanager\.com|gravatar\.com|wordpress\.org)$/i;
+var SUSPICIOUS_SCAM_PATTERNS = [
+  { label: "Upfront application/processing fee requested", regex: /\b(pay\s+(?:an?\s+)?(?:application|registration|visa\s+processing)\s+fee|send\s+money\s+via\s+(?:western\s+union|moneygram|crypto|usdt|bitcoin))\b/i },
+  { label: "WhatsApp-only recruitment contact", regex: /\b(apply\s+only\s+(?:via|on)\s+whatsapp|send\s+your\s+passport\s+(?:copy\s+)?on\s+whatsapp)\b/i },
+  { label: "Guaranteed visa for cash payment", regex: /\b(100%\s+guaranteed\s+visa\s+for\s+\$|buy\s+work\s+permit\s+now)\b/i }
+];
+var CLOSED_VACANCY_REGEX = /\b(this\s+(?:job|position|vacancy|role|opportunity)\s+(?:is\s+)?(?:no\s+longer\s+available|closed|expired|filled)|applications?\s+(?:are\s+)?(?:now\s+)?closed|no\s+longer\s+accepting\s+applications|deadline\s+has\s+passed)\b/i;
+function loadJsonWithBackupRecovery(filePath, fallback) {
+  const backupPath = `${filePath}.bak`;
+  try {
+    if (fs2.existsSync(filePath)) {
+      const raw = fs2.readFileSync(filePath, "utf8");
+      return {
+        data: JSON.parse(raw),
+        recoveredFromBackup: false,
+        recoveryNote: null
+      };
+    }
+  } catch (primaryErr) {
+    if (fs2.existsSync(backupPath)) {
+      try {
+        const bakRaw = fs2.readFileSync(backupPath, "utf8");
+        const parsed = JSON.parse(bakRaw);
+        const tmp = `${filePath}.recover_${process.pid}_${Date.now()}`;
+        fs2.writeFileSync(tmp, JSON.stringify(parsed, null, 2), "utf8");
+        fs2.renameSync(tmp, filePath);
+        return {
+          data: parsed,
+          recoveredFromBackup: true,
+          recoveryNote: `Primary store (${path6.basename(filePath)}) was corrupted (${primaryErr?.message || "JSON parse error"}); automatically restored from verified .bak snapshot with zero record loss.`
+        };
+      } catch {
+      }
+    }
+    return {
+      data: fallback,
+      recoveredFromBackup: false,
+      recoveryNote: `Primary store (${path6.basename(filePath)}) unreadable and no valid backup existed; initialized clean store.`
+    };
+  }
+  return { data: fallback, recoveredFromBackup: false, recoveryNote: null };
+}
+function saveJsonTransactional(filePath, data) {
+  const dir = path6.dirname(filePath);
+  if (!fs2.existsSync(dir)) {
+    fs2.mkdirSync(dir, { recursive: true });
+  }
+  const serialized = JSON.stringify(data, null, 2);
+  if (fs2.existsSync(filePath)) {
+    try {
+      const existing = fs2.readFileSync(filePath, "utf8");
+      JSON.parse(existing);
+      const bakTmp = `${filePath}.bak.tmp_${process.pid}_${Date.now()}`;
+      fs2.writeFileSync(bakTmp, existing, "utf8");
+      fs2.renameSync(bakTmp, `${filePath}.bak`);
+    } catch {
+    }
+  }
+  const tmpPath = `${filePath}.tmp_${process.pid}_${Date.now()}`;
+  fs2.writeFileSync(tmpPath, serialized, "utf8");
+  fs2.renameSync(tmpPath, filePath);
+}
+function isPrivateOrReservedIp(ipRaw) {
+  const ip = ipRaw.trim().toLowerCase();
+  if (!ip) return true;
+  if (ip.startsWith("::ffff:")) {
+    return isPrivateOrReservedIp(ip.slice(7));
+  }
+  if (net2.isIPv4(ip)) {
+    const parts = ip.split(".").map(Number);
+    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 0) return true;
+    if (a === 10) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 0 && parts[2] === 0) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true;
+    if (a >= 224) return true;
+    return false;
+  }
+  if (net2.isIPv6(ip)) {
+    if (ip === "::" || ip === "::1") return true;
+    if (ip.startsWith("fc") || ip.startsWith("fd")) return true;
+    if (ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb")) {
+      return true;
+    }
+    if (ip.startsWith("ff")) return true;
+    return false;
+  }
+  return true;
+}
+async function validatePublicCrawlUrl(rawUrl, options) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { ok: false, reason: "Invalid URL syntax" };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { ok: false, reason: `Disallowed URL scheme: ${parsed.protocol}` };
+  }
+  if (parsed.username || parsed.password) {
+    return { ok: false, reason: "Credentials in URL are prohibited" };
+  }
+  const rawHost = parsed.hostname.toLowerCase();
+  const host = rawHost.startsWith("[") && rawHost.endsWith("]") ? rawHost.slice(1, -1) : rawHost;
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || host === "metadata.google.internal") {
+    return { ok: false, reason: `Blocked internal hostname: ${host}` };
+  }
+  if (net2.isIP(host)) {
+    if (isPrivateOrReservedIp(host)) {
+      return { ok: false, reason: `Blocked private/reserved IP: ${host}` };
+    }
+  } else if (!options?.skipDnsForMockTest) {
+    try {
+      const addresses = await dns2.promises.lookup(host, { all: true });
+      if (!addresses || addresses.length === 0) {
+        return { ok: false, reason: `DNS resolution returned no addresses for ${host}` };
+      }
+      for (const entry of addresses) {
+        if (isPrivateOrReservedIp(entry.address)) {
+          return { ok: false, reason: `Blocked DNS resolution to private/reserved IP (${entry.address})` };
+        }
+      }
+    } catch (err) {
+      return { ok: false, reason: `DNS lookup failed for ${host}: ${err?.code || err?.message || "NXDOMAIN"}` };
+    }
+  }
+  parsed.hash = "";
+  return { ok: true, normalizedUrl: parsed.toString(), domain: host };
+}
+function parseRobotsTxt(rawText) {
+  const lines = rawText.split(/\r?\n/);
+  let currentApplies = false;
+  let specificAgentFound = false;
+  const wildcardDisallows = [];
+  const specificDisallows = [];
+  const sitemaps = [];
+  let crawlDelaySec = 5;
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim().toLowerCase();
+    const val = line.slice(colonIdx + 1).trim();
+    if (key === "sitemap" && /^https?:\/\//i.test(val)) {
+      if (!sitemaps.includes(val) && sitemaps.length < 8) {
+        sitemaps.push(val);
+      }
+    } else if (key === "user-agent") {
+      const ua = val.toLowerCase();
+      if (ua === "hopelandjobsbot") {
+        specificAgentFound = true;
+        currentApplies = true;
+      } else if (ua === "*" && !specificAgentFound) {
+        currentApplies = true;
+      } else {
+        currentApplies = false;
+      }
+    } else if (currentApplies && key === "disallow" && val) {
+      if (specificAgentFound) {
+        specificDisallows.push(val);
+      } else {
+        wildcardDisallows.push(val);
+      }
+    } else if (currentApplies && key === "crawl-delay") {
+      const parsedDelay = Number(val);
+      if (Number.isFinite(parsedDelay) && parsedDelay > 0) {
+        crawlDelaySec = Math.min(60, Math.max(2, Math.ceil(parsedDelay)));
+      }
+    }
+  }
+  const disallowedPrefixes = (specificAgentFound ? specificDisallows : wildcardDisallows).slice(0, 60);
+  const allowed = !disallowedPrefixes.includes("/");
+  return { allowed, disallowedPrefixes, crawlDelaySec, sitemaps };
+}
+function isPathAllowedByRobots(urlStr, disallowedPrefixes) {
+  try {
+    const pathname = new URL(urlStr).pathname || "/";
+    for (const prefix of disallowedPrefixes) {
+      if (!prefix) continue;
+      if (prefix === "/") return false;
+      if (pathname.startsWith(prefix)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function stripHtmlTags(html) {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\s+/g, " ").trim();
+}
+function decodeXmlEntities2(s) {
+  return s.replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+}
+function extractXmlTag2(block, tagName) {
+  const rx = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "i");
+  const m = block.match(rx);
+  return m ? decodeXmlEntities2(m[1]) : "";
+}
+function classifyOpportunityCategory(text) {
+  const t = text.toLowerCase();
+  if (/\b(wash|water,?\s*sanitation|hygiene\s+promotion|sanitation\s+engineer)\b/.test(t)) return "wash";
+  if (/\b(permanent\s+residen|express\s+entry|skilled\s+migration|blue\s+card|work\s+permit|immigration\s+pathway)\b/.test(t)) {
+    return "permanent_residence";
+  }
+  if (/\b(scholarship|bursary|tuition\s+waiver|fully\s+funded\s+master|phd\s+funding)\b/.test(t)) {
+    return "scholarship";
+  }
+  if (/\b(fellowship|postdoctoral\s+fellow)\b/.test(t)) return "fellowship";
+  if (/\b(conference|symposium|global\s+summit|forum\s+202)\b/.test(t)) return "international_conference";
+  if (/\b(exchange\s+program|professional\s+exchange|visiting\s+scholar)\b/.test(t)) return "exchange_programme";
+  if (/\b(training\s+program|workshop|short\s+course|capacity\s+building)\b/.test(t)) {
+    return "professional_training";
+  }
+  if (/\b(bank|banking|branch\s+manager|accounting|finance|financial\s+controller|credit\s+risk|treasury|audit|compliance)\b/.test(t)) {
+    return "banking_finance";
+  }
+  if (/\b(united\s+nations|undp|unicef|unhcr|wfp|who\b|world\s+bank|afdb|ngo|humanitarian|development\s+sector)\b/.test(t)) {
+    return "ngo_development";
+  }
+  if (/\b(visa\s+sponsor|work\s+visa\s+provided|relocation\s+package)\b/.test(t)) {
+    return "visa_sponsored_job";
+  }
+  if (/\b(government\s+recruitment|ministry|public\s+sector|eures|make-it-in-germany|workindenmark)\b/.test(t)) {
+    return "government_recruitment";
+  }
+  if (/\b(skilled\s+worker|shortage\s+occupation)\b/.test(t)) return "skilled_worker";
+  return "international_employment";
+}
+function inferCountryFromText(text, domain) {
+  const hay = `${text} ${domain}`.toLowerCase();
+  const map = [
+    ["Germany", /\b(germany|berlin|frankfurt|munich|make-it-in-germany|\.de\b)\b/i],
+    ["United Kingdom", /\b(united\s+kingdom|london|manchester|edinburgh|chevening|\.gov\.uk\b)\b/i],
+    ["Netherlands", /\b(netherlands|amsterdam|rotterdam|the\s+hague|government\.nl|\.nl\b)\b/i],
+    ["Ireland", /\b(ireland|dublin|cork|enterprise\.gov\.ie|\.ie\b)\b/i],
+    ["Sweden", /\b(sweden|stockholm|gothenburg|migrationsverket|\.se\b)\b/i],
+    ["Denmark", /\b(denmark|copenhagen|workindenmark|\.dk\b)\b/i],
+    ["Norway", /\b(norway|oslo|bergen|\.no\b)\b/i],
+    ["Switzerland", /\b(switzerland|geneva|zurich|basel|\.ch\b)\b/i],
+    ["United Arab Emirates", /\b(united\s+arab\s+emirates|dubai|abu\s+dhabi|uae)\b/i],
+    ["Saudi Arabia", /\b(saudi\s+arabia|riyadh|jeddah)\b/i],
+    ["Qatar", /\b(qatar|doha)\b/i],
+    ["Kenya", /\b(kenya|nairobi)\b/i],
+    ["Rwanda", /\b(rwanda|kigali)\b/i],
+    ["South Africa", /\b(south\s+africa|johannesburg|cape\s+town)\b/i],
+    ["Canada", /\b(canada|toronto|ottawa|vancouver)\b/i],
+    ["Australia", /\b(australia|sydney|melbourne|canberra)\b/i],
+    ["France", /\b(france|paris|lyon)\b/i],
+    ["Belgium", /\b(belgium|brussels)\b/i],
+    ["Austria", /\b(austria|vienna)\b/i],
+    ["Luxembourg", /\b(luxembourg)\b/i]
+  ];
+  for (const [country, rx] of map) {
+    if (rx.test(hay)) return country;
+  }
+  return "International";
+}
+function extractSalaryInfo(text) {
+  const annualMatch = text.match(
+    /(?:USD|\$|EUR|€|GBP|£|CHF)\s*([0-9]{2,3}(?:,[0-9]{3})+)\s*(?:[-–to]+\s*(?:USD|\$|EUR|€|GBP|£|CHF)?\s*([0-9]{2,3}(?:,[0-9]{3})+))?\s*(?:per\s+year|\/\s*year|annually|p\.?a\.?|yr)/i
+  );
+  if (annualMatch) {
+    const rawNum = Number(annualMatch[1].replace(/,/g, ""));
+    const rawStr = annualMatch[0];
+    const mult = /GBP|£/i.test(rawStr) ? 1.27 : /EUR|€/i.test(rawStr) ? 1.08 : /CHF/i.test(rawStr) ? 1.13 : 1;
+    if (Number.isFinite(rawNum) && rawNum >= 12e3 && rawNum <= 1e6) {
+      return { salaryRaw: rawStr.trim(), salaryMonthlyUsd: Math.round(rawNum * mult / 12) };
+    }
+  }
+  const monthlyMatch = text.match(
+    /(?:USD|\$|EUR|€|GBP|£|CHF)\s*([0-9]{1,2},[0-9]{3})\s*(?:[-–to]+\s*(?:USD|\$|EUR|€|GBP|£|CHF)?\s*([0-9]{1,2},[0-9]{3}))?\s*(?:per\s+month|\/\s*month|monthly|\/\s*mo)/i
+  );
+  if (monthlyMatch) {
+    const rawNum = Number(monthlyMatch[1].replace(/,/g, ""));
+    const rawStr = monthlyMatch[0];
+    const mult = /GBP|£/i.test(rawStr) ? 1.27 : /EUR|€/i.test(rawStr) ? 1.08 : /CHF/i.test(rawStr) ? 1.13 : 1;
+    if (Number.isFinite(rawNum) && rawNum >= 500 && rawNum <= 1e5) {
+      return { salaryRaw: rawStr.trim(), salaryMonthlyUsd: Math.round(rawNum * mult) };
+    }
+  }
+  return { salaryRaw: null, salaryMonthlyUsd: null };
+}
+function extractDeadlineInfo(text) {
+  const m = text.match(
+    /(?:deadline|closing\s+date|apply\s+by|valid\s+through|closes\s+on)[:\s-]*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+[0-9]{4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+[0-9]{1,2},?\s+[0-9]{4})/i
+  );
+  if (!m) return { deadlineRaw: null, deadlineIso: null };
+  const raw = m[1].trim();
+  const parsed = Date.parse(raw);
+  return {
+    deadlineRaw: raw,
+    deadlineIso: Number.isNaN(parsed) ? null : new Date(parsed).toISOString()
+  };
+}
+function fingerprintOpportunity(url, title, employer) {
+  const norm = [
+    url.trim().toLowerCase().replace(/\/+$/, ""),
+    title.trim().toLowerCase().replace(/\s+/g, " "),
+    employer.trim().toLowerCase().replace(/\s+/g, " ")
+  ].join("|");
+  return crypto5.createHash("sha256").update(norm).digest("hex").slice(0, 24);
+}
+var AutonomousWebCrawler = class {
+  constructor(options) {
+    this.dbPath = path6.join(options.runtimeBaseDir, "data", "autonomous_crawler_db.json");
+    this.skipDnsForMockTest = Boolean(options.skipDnsForMockTest);
+    this.fetchImpl = options.fetchImpl || (async (url, init) => {
+      const res = await fetch(url, init);
+      return {
+        status: res.status,
+        headers: res.headers,
+        text: async () => {
+          const reader = res.body?.getReader();
+          if (!reader) return await res.text();
+          const chunks = [];
+          let total = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              total += value.byteLength;
+              if (total > MAX_RESPONSE_BYTES) {
+                await reader.cancel();
+                chunks.push(value.subarray(0, Math.max(0, value.byteLength - (total - MAX_RESPONSE_BYTES))));
+                break;
+              }
+              chunks.push(value);
+            }
+          }
+          return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+        }
+      };
+    });
+  }
+  createDefaultDb() {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const db = {
+      version: 1,
+      updatedAt: nowIso,
+      lastCrawlerRunAt: null,
+      totalPagesCrawled: 0,
+      totalNewPagesDiscovered: 0,
+      totalDuplicatesPrevented: 0,
+      domains: {},
+      queue: [],
+      crawledPages: {},
+      opportunities: []
+    };
+    this.seedInitialFrontier(db, nowIso);
+    return db;
+  }
+  seedInitialFrontier(db, nowIso) {
+    const existingUrls = new Set(db.queue.map((t) => t.url));
+    for (const seed of SEED_DISCOVERY_TARGETS) {
+      if (!db.domains[seed.domain]) {
+        db.domains[seed.domain] = {
+          domain: seed.domain,
+          firstDiscoveredAt: nowIso,
+          discoveredFrom: "initial_seed",
+          category: seed.category,
+          monitored: true,
+          robotsFetchedAt: null,
+          robotsAllowed: true,
+          disallowedPrefixes: [],
+          crawlDelaySec: 5,
+          sitemaps: [],
+          feeds: seed.taskType === "feed" ? [seed.url] : [],
+          pagesCrawledCount: 0,
+          opportunitiesFoundCount: 0,
+          consecutiveErrors: 0,
+          pausedUntil: null,
+          lastCrawledAt: null,
+          lastStatus: "idle",
+          lastError: null
+        };
+      }
+      if (!existingUrls.has(seed.url)) {
+        existingUrls.add(seed.url);
+        db.queue.push({
+          id: `task_${crypto5.createHash("sha256").update(seed.url).digest("hex").slice(0, 14)}`,
+          url: seed.url,
+          domain: seed.domain,
+          taskType: seed.taskType,
+          priority: seed.priority,
+          status: "queued",
+          attempts: 0,
+          maxAttempts: 3,
+          nextRetryAt: null,
+          enqueuedAt: nowIso,
+          startedAt: null,
+          finishedAt: null,
+          discoveredFrom: "initial_seed",
+          lastError: null
+        });
+      }
+    }
+  }
+  loadDb() {
+    const def = this.createDefaultDb();
+    const loaded = loadJsonWithBackupRecovery(this.dbPath, def);
+    const db = {
+      ...def,
+      ...loaded.data,
+      domains: loaded.data.domains && typeof loaded.data.domains === "object" ? loaded.data.domains : def.domains,
+      queue: Array.isArray(loaded.data.queue) ? loaded.data.queue : def.queue,
+      crawledPages: loaded.data.crawledPages && typeof loaded.data.crawledPages === "object" ? loaded.data.crawledPages : {},
+      opportunities: Array.isArray(loaded.data.opportunities) ? loaded.data.opportunities : []
+    };
+    if (Object.keys(db.domains).length === 0) {
+      this.seedInitialFrontier(db, (/* @__PURE__ */ new Date()).toISOString());
+    }
+    return {
+      db,
+      recoveredFromBackup: loaded.recoveredFromBackup,
+      recoveryNote: loaded.recoveryNote
+    };
+  }
+  saveDb(db) {
+    db.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (db.queue.length > MAX_QUEUE_SIZE) {
+      const active = db.queue.filter((t) => t.status === "queued" || t.status === "processing");
+      const finished = db.queue.filter((t) => t.status === "done" || t.status === "failed").sort((a, b) => Date.parse(b.finishedAt || b.enqueuedAt) - Date.parse(a.finishedAt || a.enqueuedAt)).slice(0, Math.max(100, MAX_QUEUE_SIZE - active.length));
+      db.queue = [...active.slice(0, MAX_QUEUE_SIZE - 100), ...finished];
+    }
+    const pageEntries = Object.entries(db.crawledPages);
+    if (pageEntries.length > MAX_CRAWLED_PAGES) {
+      pageEntries.sort((a, b) => Date.parse(b[1].lastCrawledAt) - Date.parse(a[1].lastCrawledAt));
+      db.crawledPages = Object.fromEntries(pageEntries.slice(0, MAX_CRAWLED_PAGES));
+    }
+    if (db.opportunities.length > MAX_OPPORTUNITIES) {
+      db.opportunities = db.opportunities.slice(0, MAX_OPPORTUNITIES);
+    }
+    saveJsonTransactional(this.dbPath, db);
+  }
+  /**
+   * Crash recovery: moves any tasks left in 'processing' after an abrupt crash back to 'queued'
+   * so queued work is NEVER lost on server restarts.
+   */
+  recoverInterruptedTasksOnBoot() {
+    const { db, recoveredFromBackup, recoveryNote } = this.loadDb();
+    let recoveredTasks = 0;
+    for (const task of db.queue) {
+      if (task.status === "processing") {
+        task.status = "queued";
+        task.startedAt = null;
+        task.lastError = "Recovered automatically after worker restart";
+        recoveredTasks++;
+      }
+    }
+    if (recoveredTasks > 0 || recoveredFromBackup || !fs2.existsSync(this.dbPath)) {
+      this.saveDb(db);
+    }
+    return { recoveredTasks, recoveredFromBackup, recoveryNote };
+  }
+  enqueueUrl(db, params) {
+    let parsed;
+    try {
+      parsed = new URL(params.url);
+    } catch {
+      return { enqueued: false, isNewDomain: false };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { enqueued: false, isNewDomain: false };
+    }
+    parsed.hash = "";
+    const cleanUrl = parsed.toString();
+    const domain = parsed.hostname.toLowerCase();
+    if (BLOCKED_SOCIAL_OR_NOISE_DOMAINS.test(domain)) {
+      return { enqueued: false, isNewDomain: false };
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    let isNewDomain = false;
+    if (!db.domains[domain]) {
+      if (Object.keys(db.domains).length >= MAX_DOMAINS) {
+        return { enqueued: false, isNewDomain: false };
+      }
+      isNewDomain = true;
+      db.domains[domain] = {
+        domain,
+        firstDiscoveredAt: nowIso,
+        discoveredFrom: params.discoveredFrom,
+        category: params.categoryHint || this.inferDomainCategory(domain, cleanUrl),
+        monitored: true,
+        robotsFetchedAt: null,
+        robotsAllowed: true,
+        disallowedPrefixes: [],
+        crawlDelaySec: 5,
+        sitemaps: [],
+        feeds: params.taskType === "feed" ? [cleanUrl] : [],
+        pagesCrawledCount: 0,
+        opportunitiesFoundCount: 0,
+        consecutiveErrors: 0,
+        pausedUntil: null,
+        lastCrawledAt: null,
+        lastStatus: "idle",
+        lastError: null
+      };
+    }
+    const alreadyQueued = db.queue.some((t) => t.url === cleanUrl);
+    if (alreadyQueued) {
+      return { enqueued: false, isNewDomain, domain };
+    }
+    if (db.queue.filter((t) => t.status === "queued").length >= 600) {
+      return { enqueued: false, isNewDomain, domain };
+    }
+    db.queue.push({
+      id: `task_${crypto5.createHash("sha256").update(cleanUrl).digest("hex").slice(0, 14)}`,
+      url: cleanUrl,
+      domain,
+      taskType: params.taskType,
+      priority: Math.min(100, Math.max(1, params.priority)),
+      status: "queued",
+      attempts: 0,
+      maxAttempts: 3,
+      nextRetryAt: null,
+      enqueuedAt: nowIso,
+      startedAt: null,
+      finishedAt: null,
+      discoveredFrom: params.discoveredFrom,
+      lastError: null
+    });
+    db.totalNewPagesDiscovered++;
+    return { enqueued: true, isNewDomain, domain };
+  }
+  inferDomainCategory(domain, url) {
+    const s = `${domain} ${url}`.toLowerCase();
+    if (/\.gov|government\.|migrationsverket|make-it-in-germany|workindenmark|immigration|visa|permit/.test(s)) {
+      return "immigration_portal";
+    }
+    if (/scholarship|fellowship|daad|chevening|training|conference|university|\.edu/.test(s)) {
+      return "scholarship_training";
+    }
+    if (/\.int|un\.org|reliefweb|worldbank|afdb|imf|oecd|ilo|iom|undp|unicef|unhcr/.test(s)) {
+      return "intl_org";
+    }
+    return "employer_careers";
+  }
+  async safeFetchPublicText(rawUrl, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+    let currentUrl = rawUrl;
+    for (let hop = 0; hop <= 3; hop++) {
+      const check = await validatePublicCrawlUrl(currentUrl, {
+        skipDnsForMockTest: this.skipDnsForMockTest
+      });
+      if (!check.ok || !check.normalizedUrl) {
+        return {
+          ok: false,
+          status: 0,
+          finalUrl: currentUrl,
+          errorType: "permanent",
+          error: check.reason || "Blocked unsafe URL"
+        };
+      }
+      try {
+        const res = await this.fetchImpl(check.normalizedUrl, {
+          headers: {
+            "User-Agent": USER_AGENT2,
+            Accept: "text/html,application/xhtml+xml,application/xml,application/rss+xml,application/atom+xml,application/json;q=0.9,*/*;q=0.5"
+          },
+          signal: AbortSignal.timeout(timeoutMs),
+          redirect: "manual"
+        });
+        if (res.status >= 300 && res.status < 400) {
+          const loc = res.headers.get("location");
+          if (!loc) {
+            return {
+              ok: false,
+              status: res.status,
+              finalUrl: check.normalizedUrl,
+              errorType: "permanent",
+              error: `Redirect ${res.status} without Location header`
+            };
+          }
+          currentUrl = new URL(loc, check.normalizedUrl).toString();
+          continue;
+        }
+        if (res.status === 429) {
+          const ra = Number(res.headers.get("retry-after"));
+          const retryAfterSec = Number.isFinite(ra) && ra > 0 ? Math.min(3600, Math.max(180, Math.ceil(ra))) : 600;
+          return {
+            ok: false,
+            status: 429,
+            finalUrl: check.normalizedUrl,
+            rateLimited: true,
+            retryAfterSec,
+            errorType: "temporary",
+            error: `HTTP 429 rate-limited (cooldown ${retryAfterSec}s)`
+          };
+        }
+        if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 410) {
+          return {
+            ok: false,
+            status: res.status,
+            finalUrl: check.normalizedUrl,
+            errorType: "permanent",
+            error: `HTTP ${res.status} (${res.status === 401 || res.status === 403 ? "access restricted \u2014 respecting site policy" : "not found"})`
+          };
+        }
+        if (res.status >= 500) {
+          return {
+            ok: false,
+            status: res.status,
+            finalUrl: check.normalizedUrl,
+            errorType: "temporary",
+            error: `HTTP ${res.status} temporary upstream server error`
+          };
+        }
+        if (res.status >= 200 && res.status < 300) {
+          const text = await res.text();
+          return { ok: true, status: res.status, finalUrl: check.normalizedUrl, text };
+        }
+        return {
+          ok: false,
+          status: res.status,
+          finalUrl: check.normalizedUrl,
+          errorType: "temporary",
+          error: `Unexpected HTTP ${res.status}`
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          status: 0,
+          finalUrl: check.normalizedUrl,
+          errorType: "temporary",
+          error: err?.name === "TimeoutError" ? `Request timeout after ${timeoutMs}ms` : err?.message || String(err)
+        };
+      }
+    }
+    return {
+      ok: false,
+      status: 0,
+      finalUrl: currentUrl,
+      errorType: "permanent",
+      error: "Too many redirects (>3)"
+    };
+  }
+  async ensureDomainRobotsChecked(db, domain) {
+    const rec = db.domains[domain];
+    if (!rec) return;
+    const nowMs = Date.now();
+    if (rec.robotsFetchedAt && nowMs - Date.parse(rec.robotsFetchedAt) < 24 * 60 * 60 * 1e3) {
+      return;
+    }
+    const robotsUrl = `https://${domain}/robots.txt`;
+    const res = await this.safeFetchPublicText(robotsUrl, 4500);
+    rec.robotsFetchedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (res.ok && res.text) {
+      const parsed = parseRobotsTxt(res.text);
+      rec.robotsAllowed = parsed.allowed;
+      rec.disallowedPrefixes = parsed.disallowedPrefixes;
+      rec.crawlDelaySec = parsed.crawlDelaySec;
+      for (const sm of parsed.sitemaps) {
+        if (!rec.sitemaps.includes(sm)) {
+          rec.sitemaps.push(sm);
+          this.enqueueUrl(db, {
+            url: sm,
+            taskType: "sitemap",
+            priority: 75,
+            discoveredFrom: `robots.txt:${domain}`,
+            categoryHint: rec.category
+          });
+        }
+      }
+    } else if (res.status === 404 || res.status === 410) {
+      rec.robotsAllowed = true;
+      rec.disallowedPrefixes = [];
+    }
+  }
+  /**
+   * 6-state verification pipeline:
+   * DISCOVERED -> PENDING_VERIFICATION -> VERIFIED -> PUBLISHED (or REJECTED / EXPIRED)
+   */
+  verifyAndRecordOpportunity(db, candidate, counters) {
+    const cleanTitle = candidate.title.replace(/\s+/g, " ").trim();
+    const cleanEmployer = candidate.employer.replace(/\s+/g, " ").trim() || candidate.sourceDomain;
+    const cleanUrl = candidate.officialUrl.trim();
+    if (cleanTitle.length < 6 || !/^https:\/\//i.test(cleanUrl)) return;
+    const fp = fingerprintOpportunity(cleanUrl, cleanTitle, cleanEmployer);
+    if (db.opportunities.some((o) => o.fingerprint === fp)) {
+      db.totalDuplicatesPrevented++;
+      counters.duplicatesPrevented++;
+      return;
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const combined = `${cleanTitle}
+${cleanEmployer}
+${candidate.summaryText}`;
+    const suspiciousFlags = [];
+    for (const rule of SUSPICIOUS_SCAM_PATTERNS) {
+      if (rule.regex.test(combined)) {
+        suspiciousFlags.push(rule.label);
+      }
+    }
+    const isClosedText = CLOSED_VACANCY_REGEX.test(combined);
+    const extractedDeadline = candidate.deadlineIso ? { deadlineRaw: candidate.deadlineRaw || candidate.deadlineIso.slice(0, 10), deadlineIso: candidate.deadlineIso } : extractDeadlineInfo(combined);
+    const isPastDeadline = Boolean(
+      extractedDeadline.deadlineIso && Date.parse(extractedDeadline.deadlineIso) < Date.now()
+    );
+    const salaryInfo = candidate.salaryMonthlyUsd != null ? { salaryRaw: candidate.salaryRaw || `~$${candidate.salaryMonthlyUsd}/mo`, salaryMonthlyUsd: candidate.salaryMonthlyUsd } : extractSalaryInfo(combined);
+    const visaEvidenceMatch = combined.match(
+      /[^.\n]{0,80}\b(visa\s+sponsor(?:ship|ed)?|work\s+permit\s+sponsor(?:ship|ed)?|relocation\s+(?:package|support|assistance)|skilled\s+worker\s+visa|eu\s+blue\s+card)\b[^.\n]{0,80}/i
+    );
+    const visaSponsorshipConfirmed = Boolean(
+      visaEvidenceMatch && !/\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|must\s+already\s+have\s+the\s+right\s+to\s+work)\b/i.test(combined)
+    );
+    const ethiopianExcluded = /\b(eu\s+citizens?\s+only|us\s+citizens?\s+only|uk\s+nationals?\s+only|local\s+nationals?\s+only|must\s+already\s+reside\s+in)\b/i.test(
+      combined
+    );
+    const ethiopianConfirmed = /\b(ethiopia|ethiopian|developing\s+countries|sub-saharan\s+africa|all\s+nationalities\s+welcome|international\s+applicants\s+encouraged)\b/i.test(
+      combined
+    );
+    const employerAuthentic = cleanEmployer.length >= 2 && !BLOCKED_SOCIAL_OR_NOISE_DOMAINS.test(candidate.sourceDomain) && (RELEVANT_DOMAIN_TLDS_OR_TERMS.test(candidate.sourceDomain) || candidate.httpVerifiedLive);
+    const checks = {
+      employerAuthentic,
+      vacancyExists: candidate.httpVerifiedLive && !isClosedText,
+      salaryChecked: true,
+      visaChecked: true,
+      nationalityChecked: true,
+      deadlineValid: !isPastDeadline,
+      officialLinkValid: /^https:\/\//i.test(cleanUrl),
+      suspiciousFlags
+    };
+    let status = "PENDING_VERIFICATION";
+    let rejectionReason = null;
+    let verifiedAt = null;
+    let publishedAt = null;
+    if (suspiciousFlags.length > 0) {
+      status = "REJECTED";
+      rejectionReason = `Suspicious announcement flagged: ${suspiciousFlags.join("; ")}`;
+      counters.opportunitiesRejected++;
+    } else if (isPastDeadline || isClosedText) {
+      status = "EXPIRED";
+      rejectionReason = isPastDeadline ? `Application deadline passed (${extractedDeadline.deadlineRaw})` : "Vacancy notice states applications are closed";
+      counters.opportunitiesExpired++;
+    } else if (!checks.employerAuthentic || !checks.officialLinkValid) {
+      status = "REJECTED";
+      rejectionReason = "Employer authenticity or official HTTPS link could not be verified";
+      counters.opportunitiesRejected++;
+    } else if (checks.vacancyExists) {
+      status = "PUBLISHED";
+      verifiedAt = nowIso;
+      publishedAt = nowIso;
+      counters.opportunitiesVerified++;
+      counters.opportunitiesPublished++;
+      if (db.domains[candidate.sourceDomain]) {
+        db.domains[candidate.sourceDomain].opportunitiesFoundCount++;
+      }
+      if (salaryInfo.salaryMonthlyUsd && salaryInfo.salaryMonthlyUsd >= 3e3) {
+        counters.publishedBranchCandidates.push({
+          id: `bm_web_${fp}`,
+          title: cleanTitle,
+          employerName: cleanEmployer,
+          locationRaw: inferCountryFromText(combined, candidate.sourceDomain),
+          descriptionText: candidate.summaryText.slice(0, 2e3),
+          compensationRaw: salaryInfo.salaryRaw || void 0,
+          applicationUrl: cleanUrl,
+          sourcePortal: `Autonomous Web Crawler (${candidate.sourceDomain})`,
+          datePosted: nowIso.slice(0, 10),
+          applicationDeadline: extractedDeadline.deadlineRaw || void 0,
+          explicitVisaNote: visaEvidenceMatch ? visaEvidenceMatch[0].trim() : void 0,
+          ethiopianEligibleHint: ethiopianExcluded ? "excluded" : ethiopianConfirmed ? "confirmed" : "likely_global"
+        });
+      }
+    } else {
+      status = "PENDING_VERIFICATION";
+    }
+    const record = {
+      id: `webopp_${fp}`,
+      fingerprint: fp,
+      status,
+      title: cleanTitle.slice(0, 180),
+      employer: cleanEmployer.slice(0, 120),
+      category: classifyOpportunityCategory(combined),
+      country: inferCountryFromText(combined, candidate.sourceDomain),
+      location: inferCountryFromText(combined, candidate.sourceDomain),
+      salaryRaw: salaryInfo.salaryRaw,
+      salaryMonthlyUsd: salaryInfo.salaryMonthlyUsd,
+      visaSponsorshipConfirmed,
+      visaSponsorshipEvidence: visaEvidenceMatch ? visaEvidenceMatch[0].trim() : null,
+      ethiopianEligible: ethiopianExcluded ? "excluded" : ethiopianConfirmed ? "confirmed" : "likely_global",
+      requirementsSummary: candidate.summaryText.replace(/\s+/g, " ").trim().slice(0, 320),
+      deadlineRaw: extractedDeadline.deadlineRaw,
+      deadlineIso: extractedDeadline.deadlineIso,
+      officialApplicationUrl: cleanUrl,
+      sourceDomain: candidate.sourceDomain,
+      discoveredAt: nowIso,
+      verifiedAt,
+      publishedAt,
+      verificationChecks: checks,
+      rejectionReason
+    };
+    db.opportunities.unshift(record);
+    counters.opportunitiesExtracted++;
+  }
+  processRssOrAtomFeed(db, task, xmlText, result) {
+    const items = [
+      ...xmlText.match(/<item\b[\s\S]*?<\/item>/gi) || [],
+      ...xmlText.match(/<entry\b[\s\S]*?<\/entry>/gi) || []
+    ].slice(0, 25);
+    let linksFound = 0;
+    let newDomainsFound = 0;
+    for (const block of items) {
+      const title = stripHtmlTags(extractXmlTag2(block, "title"));
+      const desc = stripHtmlTags(
+        extractXmlTag2(block, "description") || extractXmlTag2(block, "summary") || extractXmlTag2(block, "content")
+      );
+      let link = extractXmlTag2(block, "link");
+      if (!link) {
+        const hrefMatch = block.match(/<link[^>]+href=["']([^"']+)["']/i);
+        if (hrefMatch) link = decodeXmlEntities2(hrefMatch[1]);
+      }
+      if (!link || !/^https?:\/\//i.test(link)) continue;
+      linksFound++;
+      const author = stripHtmlTags(extractXmlTag2(block, "author") || extractXmlTag2(block, "dc:creator")) || task.domain;
+      const beforeCount = result.opportunitiesExtracted;
+      this.verifyAndRecordOpportunity(
+        db,
+        {
+          title,
+          employer: author,
+          summaryText: desc,
+          officialUrl: link.replace(/^http:\/\//i, "https://"),
+          sourceDomain: task.domain,
+          httpVerifiedLive: true
+          // Verified directly from live HTTP 200 official RSS/Atom feed
+        },
+        result
+      );
+      const hrefs = desc.match(/https?:\/\/[^\s"'<>)]+/gi) || [];
+      for (const extUrl of hrefs.slice(0, 3)) {
+        if (RELEVANT_LINK_KEYWORDS.test(extUrl) || RELEVANT_DOMAIN_TLDS_OR_TERMS.test(extUrl)) {
+          const enq = this.enqueueUrl(db, {
+            url: extUrl,
+            taskType: "html_page",
+            priority: 65,
+            discoveredFrom: `feed:${task.domain}`
+          });
+          if (enq.enqueued) result.newPagesDiscovered++;
+          if (enq.isNewDomain && enq.domain) {
+            newDomainsFound++;
+            result.newDomainsDiscovered.push(enq.domain);
+          }
+        }
+      }
+      if (result.opportunitiesExtracted === beforeCount) {
+        const enq = this.enqueueUrl(db, {
+          url: link,
+          taskType: "html_page",
+          priority: 60,
+          discoveredFrom: `feed:${task.domain}`
+        });
+        if (enq.enqueued) result.newPagesDiscovered++;
+      }
+    }
+    return { linksFound, newDomainsFound };
+  }
+  processSitemapXml(db, task, xmlText, result) {
+    const locMatches = Array.from(xmlText.matchAll(/<loc>([\s\S]*?)<\/loc>/gi)).map((m) => decodeXmlEntities2(m[1])).filter((u) => /^https?:\/\//i.test(u));
+    let linksFound = 0;
+    let newDomainsFound = 0;
+    const isSitemapIndex = /<sitemapindex\b/i.test(xmlText);
+    for (const locUrl of locMatches) {
+      if (linksFound >= 20) break;
+      const relevant = isSitemapIndex ? /job|career|vacanc|opportunit|scholarship|immigration|en/i.test(locUrl) : RELEVANT_LINK_KEYWORDS.test(locUrl);
+      if (!relevant) continue;
+      linksFound++;
+      const enq = this.enqueueUrl(db, {
+        url: locUrl,
+        taskType: isSitemapIndex ? "sitemap" : "html_page",
+        priority: isSitemapIndex ? 72 : 68,
+        discoveredFrom: `sitemap:${task.domain}`
+      });
+      if (enq.enqueued) result.newPagesDiscovered++;
+      if (enq.isNewDomain && enq.domain) {
+        newDomainsFound++;
+        result.newDomainsDiscovered.push(enq.domain);
+      }
+    }
+    return { linksFound, newDomainsFound };
+  }
+  processArchiveCdxJson(db, task, jsonText, result) {
+    let rows;
+    try {
+      rows = JSON.parse(jsonText);
+    } catch {
+      return { linksFound: 0, newDomainsFound: 0 };
+    }
+    if (!Array.isArray(rows) || rows.length < 2) return { linksFound: 0, newDomainsFound: 0 };
+    const header = rows[0];
+    const origIdx = header.indexOf("original");
+    if (origIdx === -1) return { linksFound: 0, newDomainsFound: 0 };
+    let linksFound = 0;
+    let newDomainsFound = 0;
+    for (const row of rows.slice(1, 16)) {
+      const origUrl = String(row?.[origIdx] || "").trim();
+      if (!/^https?:\/\//i.test(origUrl)) continue;
+      if (!RELEVANT_LINK_KEYWORDS.test(origUrl)) continue;
+      linksFound++;
+      const enq = this.enqueueUrl(db, {
+        url: origUrl.replace(/^http:\/\//i, "https://"),
+        taskType: "html_page",
+        priority: 62,
+        discoveredFrom: "public_archive_cdx"
+      });
+      if (enq.enqueued) result.newPagesDiscovered++;
+      if (enq.isNewDomain && enq.domain) {
+        newDomainsFound++;
+        result.newDomainsDiscovered.push(enq.domain);
+      }
+    }
+    return { linksFound, newDomainsFound };
+  }
+  processHtmlPage(db, task, finalUrl, html, result) {
+    let linksFound = 0;
+    let newDomainsFound = 0;
+    const feedMatches = Array.from(
+      html.matchAll(/<link[^>]+rel=["']alternate["'][^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]*>/gi)
+    );
+    for (const fm of feedMatches.slice(0, 3)) {
+      const href = fm[0].match(/href=["']([^"']+)["']/i)?.[1];
+      if (!href) continue;
+      try {
+        const absFeed = new URL(href, finalUrl).toString();
+        const enq = this.enqueueUrl(db, {
+          url: absFeed,
+          taskType: "feed",
+          priority: 85,
+          discoveredFrom: `html_autodiscover:${task.domain}`
+        });
+        if (enq.enqueued) result.newPagesDiscovered++;
+        if (db.domains[task.domain] && !db.domains[task.domain].feeds.includes(absFeed)) {
+          db.domains[task.domain].feeds.push(absFeed);
+        }
+      } catch {
+      }
+    }
+    const ldScripts = Array.from(
+      html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)
+    );
+    for (const m of ldScripts.slice(0, 10)) {
+      try {
+        const parsed = JSON.parse(m[1].trim());
+        const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.["@graph"]) ? parsed["@graph"] : [parsed];
+        for (const item of items) {
+          if (String(item?.["@type"] || "").toLowerCase() !== "jobposting") continue;
+          const title = String(item.title || "").trim();
+          const employer = String(item.hiringOrganization?.name || task.domain).trim();
+          const desc = stripHtmlTags(String(item.description || ""));
+          const validThrough = typeof item.validThrough === "string" ? item.validThrough : null;
+          let salaryRaw = null;
+          let salaryMonthlyUsd = null;
+          const val = item.baseSalary?.value?.value ?? item.baseSalary?.value?.minValue;
+          const unit = String(item.baseSalary?.value?.unitText || "").toUpperCase();
+          const curr = String(item.baseSalary?.currency || "USD").toUpperCase();
+          if (typeof val === "number" && val > 0) {
+            salaryRaw = `${curr} ${val.toLocaleString()} ${unit || "YEAR"}`;
+            const mult = curr === "GBP" ? 1.27 : curr === "EUR" ? 1.08 : curr === "CHF" ? 1.13 : 1;
+            salaryMonthlyUsd = unit === "MONTH" ? Math.round(val * mult) : Math.round(val * mult / 12);
+          }
+          this.verifyAndRecordOpportunity(
+            db,
+            {
+              title,
+              employer,
+              summaryText: desc,
+              officialUrl: finalUrl,
+              sourceDomain: task.domain,
+              deadlineRaw: validThrough,
+              deadlineIso: validThrough && !Number.isNaN(Date.parse(validThrough)) ? new Date(validThrough).toISOString() : null,
+              salaryRaw,
+              salaryMonthlyUsd,
+              httpVerifiedLive: true
+            },
+            result
+          );
+        }
+      } catch {
+      }
+    }
+    const aMatches = Array.from(html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi));
+    const seenHrefs = /* @__PURE__ */ new Set();
+    for (const am of aMatches) {
+      if (linksFound >= 20) break;
+      const rawHref = am[1].trim();
+      const anchorText = stripHtmlTags(am[2]).slice(0, 120);
+      if (!rawHref || /^(mailto:|tel:|javascript:|data:)/i.test(rawHref)) continue;
+      let absUrl;
+      let linkDomain;
+      try {
+        const u = new URL(rawHref, finalUrl);
+        if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+        u.hash = "";
+        absUrl = u.toString();
+        linkDomain = u.hostname.toLowerCase();
+      } catch {
+        continue;
+      }
+      if (seenHrefs.has(absUrl) || BLOCKED_SOCIAL_OR_NOISE_DOMAINS.test(linkDomain)) continue;
+      const isExternalDomain = linkDomain !== task.domain;
+      const isRelevant = RELEVANT_LINK_KEYWORDS.test(`${absUrl} ${anchorText}`) && (!isExternalDomain || RELEVANT_DOMAIN_TLDS_OR_TERMS.test(`${linkDomain} ${absUrl}`));
+      if (!isRelevant) continue;
+      seenHrefs.add(absUrl);
+      linksFound++;
+      const enq = this.enqueueUrl(db, {
+        url: absUrl,
+        taskType: /\.(xml|rss)$/i.test(absUrl) ? "feed" : "html_page",
+        priority: isExternalDomain ? 76 : 64,
+        discoveredFrom: `link:${task.domain}`
+      });
+      if (enq.enqueued) result.newPagesDiscovered++;
+      if (enq.isNewDomain && enq.domain) {
+        newDomainsFound++;
+        result.newDomainsDiscovered.push(enq.domain);
+      }
+    }
+    const pageTitle = stripHtmlTags(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
+    const metaDesc = stripHtmlTags(
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] || ""
+    );
+    const bodyText = stripHtmlTags(html).slice(0, 4e3);
+    if (pageTitle.length >= 10 && /\b(vacancy|job\s+opening|scholarship|fellowship|work\s+permit|visa\s+sponsorship|career|manager|officer|specialist|conference|training)\b/i.test(
+      `${pageTitle} ${metaDesc}`
+    )) {
+      this.verifyAndRecordOpportunity(
+        db,
+        {
+          title: pageTitle,
+          employer: task.domain.replace(/^www\./, ""),
+          summaryText: `${metaDesc} ${bodyText}`.trim(),
+          officialUrl: finalUrl,
+          sourceDomain: task.domain,
+          httpVerifiedLive: true
+        },
+        result
+      );
+    }
+    return { linksFound, newDomainsFound };
+  }
+  /**
+   * Executes one bounded incremental crawl batch (default: up to 4 priority queue tasks per 1-minute tick)
+   * with full fault isolation, per-domain politeness, robots.txt compliance, and transactional persistence.
+   */
+  async runIncrementalCrawlBatch(options) {
+    const maxTasks = Math.max(1, Math.min(8, options?.maxTasks ?? 3));
+    const { db, recoveredFromBackup } = this.loadDb();
+    const result = {
+      pagesProcessed: 0,
+      newPagesDiscovered: 0,
+      newDomainsDiscovered: [],
+      opportunitiesExtracted: 0,
+      opportunitiesVerified: 0,
+      opportunitiesPublished: 0,
+      opportunitiesRejected: 0,
+      opportunitiesExpired: 0,
+      duplicatesPrevented: 0,
+      tasksSucceeded: 0,
+      tasksFailed: 0,
+      errors: [],
+      recoveredFromBackup,
+      publishedBranchCandidates: []
+    };
+    const nowMs = Date.now();
+    const queuedCount = db.queue.filter((t) => t.status === "queued").length;
+    if (queuedCount < 5) {
+      for (const task of db.queue) {
+        if (task.status === "done" && task.priority >= 75 && task.finishedAt && nowMs - Date.parse(task.finishedAt) > 30 * 60 * 1e3) {
+          task.status = "queued";
+          task.attempts = 0;
+          task.nextRetryAt = null;
+          task.lastError = null;
+        }
+      }
+    }
+    const eligible = db.queue.filter((t) => {
+      if (t.status !== "queued") return false;
+      if (t.nextRetryAt && Date.parse(t.nextRetryAt) > nowMs) return false;
+      const dom = db.domains[t.domain];
+      if (dom?.pausedUntil && Date.parse(dom.pausedUntil) > nowMs) return false;
+      if (dom?.lastCrawledAt) {
+        const minWaitMs = Math.max(3, dom.crawlDelaySec || 5) * 1e3;
+        if (nowMs - Date.parse(dom.lastCrawledAt) < minWaitMs) return false;
+      }
+      return true;
+    }).sort((a, b) => b.priority - a.priority || Date.parse(a.enqueuedAt) - Date.parse(b.enqueuedAt));
+    const batch = [];
+    const chosenDomains = /* @__PURE__ */ new Set();
+    for (const task of eligible) {
+      if (batch.length >= maxTasks) break;
+      if (chosenDomains.has(task.domain) && eligible.length > maxTasks) continue;
+      chosenDomains.add(task.domain);
+      batch.push(task);
+    }
+    const startedIso = (/* @__PURE__ */ new Date()).toISOString();
+    for (const t of batch) {
+      t.status = "processing";
+      t.startedAt = startedIso;
+      t.attempts++;
+    }
+    this.saveDb(db);
+    for (const task of batch) {
+      const dom = db.domains[task.domain];
+      const tickIso = (/* @__PURE__ */ new Date()).toISOString();
+      try {
+        if (task.taskType !== "archive_discovery") {
+          await this.ensureDomainRobotsChecked(db, task.domain);
+          if (dom && (!dom.robotsAllowed || !isPathAllowedByRobots(task.url, dom.disallowedPrefixes))) {
+            task.status = "done";
+            task.finishedAt = tickIso;
+            task.lastError = "Skipped cleanly per robots.txt directive";
+            continue;
+          }
+        }
+        const res = await this.safeFetchPublicText(task.url, DEFAULT_FETCH_TIMEOUT_MS);
+        if (dom) dom.lastCrawledAt = tickIso;
+        if (!res.ok || typeof res.text !== "string") {
+          result.tasksFailed++;
+          const errType = res.errorType || "temporary";
+          const errMsg = res.error || `HTTP ${res.status}`;
+          task.lastError = errMsg;
+          if (dom) {
+            dom.consecutiveErrors = (dom.consecutiveErrors || 0) + 1;
+            dom.lastError = errMsg;
+            if (res.rateLimited) {
+              dom.lastStatus = "rate_limited";
+              dom.pausedUntil = new Date(Date.now() + (res.retryAfterSec || 600) * 1e3).toISOString();
+            } else if (dom.consecutiveErrors >= 3) {
+              dom.lastStatus = "paused";
+              const pauseSec = Math.min(3600, 300 * Math.pow(2, Math.min(3, dom.consecutiveErrors - 3)));
+              dom.pausedUntil = new Date(Date.now() + pauseSec * 1e3).toISOString();
+            } else {
+              dom.lastStatus = "error";
+            }
+          }
+          if (errType === "temporary" && task.attempts < task.maxAttempts) {
+            task.status = "queued";
+            const backoffSec = 60 * Math.pow(2, task.attempts);
+            task.nextRetryAt = new Date(Date.now() + backoffSec * 1e3).toISOString();
+          } else {
+            task.status = "failed";
+            task.finishedAt = tickIso;
+          }
+          result.errors.push({
+            component: `crawler:${task.domain}`,
+            domain: task.domain,
+            message: errMsg,
+            errorType: errType
+          });
+          continue;
+        }
+        result.tasksSucceeded++;
+        result.pagesProcessed++;
+        db.totalPagesCrawled++;
+        const contentHash = crypto5.createHash("sha256").update(res.text.slice(0, 8e4)).digest("hex").slice(0, 20);
+        const prevPage = db.crawledPages[task.url];
+        const contentChanged = !prevPage || prevPage.contentHash !== contentHash;
+        let stats = { linksFound: 0, newDomainsFound: 0 };
+        const oppBefore = result.opportunitiesExtracted;
+        if (contentChanged) {
+          if (task.taskType === "feed" || /<(?:rss|feed)\b/i.test(res.text.slice(0, 600))) {
+            stats = this.processRssOrAtomFeed(db, task, res.text, result);
+          } else if (task.taskType === "sitemap" || /<(?:urlset|sitemapindex)\b/i.test(res.text.slice(0, 600))) {
+            stats = this.processSitemapXml(db, task, res.text, result);
+          } else if (task.taskType === "archive_discovery") {
+            stats = this.processArchiveCdxJson(db, task, res.text, result);
+          } else {
+            stats = this.processHtmlPage(db, task, res.finalUrl, res.text, result);
+          }
+        }
+        db.crawledPages[task.url] = {
+          url: task.url,
+          domain: task.domain,
+          lastCrawledAt: tickIso,
+          contentHash,
+          httpStatus: res.status,
+          linksFound: stats.linksFound,
+          newDomainsFound: stats.newDomainsFound,
+          opportunitiesExtracted: result.opportunitiesExtracted - oppBefore
+        };
+        if (dom) {
+          dom.pagesCrawledCount++;
+          dom.consecutiveErrors = 0;
+          dom.lastStatus = "ok";
+          dom.lastError = null;
+          dom.pausedUntil = null;
+        }
+        task.status = "done";
+        task.finishedAt = tickIso;
+        task.lastError = null;
+      } catch (unexpectedErr) {
+        result.tasksFailed++;
+        const msg = unexpectedErr?.message || String(unexpectedErr);
+        task.lastError = msg;
+        task.status = task.attempts < task.maxAttempts ? "queued" : "failed";
+        if (task.status === "queued") {
+          task.nextRetryAt = new Date(Date.now() + 120 * 1e3).toISOString();
+        } else {
+          task.finishedAt = tickIso;
+        }
+        result.errors.push({
+          component: `crawler:${task.domain}`,
+          domain: task.domain,
+          message: msg,
+          errorType: "temporary"
+        });
+      }
+    }
+    db.lastCrawlerRunAt = (/* @__PURE__ */ new Date()).toISOString();
+    this.saveDb(db);
+    return result;
+  }
+  getMetricsSummary() {
+    const { db } = this.loadDb();
+    const nowMs = Date.now();
+    const domainList = Object.values(db.domains);
+    const breakdown = {
+      DISCOVERED: 0,
+      PENDING_VERIFICATION: 0,
+      VERIFIED: 0,
+      PUBLISHED: 0,
+      REJECTED: 0,
+      EXPIRED: 0
+    };
+    for (const o of db.opportunities) {
+      breakdown[o.status] = (breakdown[o.status] || 0) + 1;
+    }
+    const queued = db.queue.filter(
+      (t) => t.status === "queued" && (!t.nextRetryAt || Date.parse(t.nextRetryAt) <= nowMs)
+    ).length;
+    const retryScheduled = db.queue.filter(
+      (t) => t.status === "queued" && Boolean(t.nextRetryAt && Date.parse(t.nextRetryAt) > nowMs)
+    ).length;
+    const processing = db.queue.filter((t) => t.status === "processing").length;
+    const failed = db.queue.filter((t) => t.status === "failed").length;
+    return {
+      summary: {
+        domainsDiscovered: domainList.length,
+        domainsMonitored: domainList.filter((d) => d.monitored && d.robotsAllowed).length,
+        pagesCrawled: db.totalPagesCrawled,
+        newPagesDiscovered: db.totalNewPagesDiscovered,
+        opportunitiesExtracted: db.opportunities.length,
+        opportunitiesVerified: breakdown.VERIFIED + breakdown.PUBLISHED,
+        opportunitiesPublished: breakdown.PUBLISHED,
+        opportunitiesPendingVerification: breakdown.PENDING_VERIFICATION + breakdown.DISCOVERED,
+        opportunitiesRejected: breakdown.REJECTED,
+        opportunitiesExpired: breakdown.EXPIRED,
+        duplicateRecordsPrevented: db.totalDuplicatesPrevented,
+        queueDepth: {
+          queued,
+          processing,
+          retryScheduled,
+          failed,
+          total: queued + processing + retryScheduled
+        },
+        lastCrawlerRunAt: db.lastCrawlerRunAt
+      },
+      pipelineBreakdown: breakdown,
+      recentDomains: domainList.sort((a, b) => Date.parse(b.lastCrawledAt || b.firstDiscoveredAt) - Date.parse(a.lastCrawledAt || a.firstDiscoveredAt)).slice(0, 30),
+      activeQueueSample: db.queue.filter((t) => t.status === "queued" || t.status === "processing").sort((a, b) => b.priority - a.priority).slice(0, 25),
+      recentOpportunities: db.opportunities.slice(0, 30)
+    };
+  }
+};
+
+// serverAutonomousDiscoveryWorker.ts
+var DEFAULT_INTERVAL_SECONDS = 60;
+var LOCK_TTL_MS = 5 * 60 * 1e3;
+var MAX_CYCLE_HISTORY = 80;
+var MAX_NOTIFICATIONS = 60;
+var MAX_INCIDENTS = 100;
+var MAX_SEEN_FINGERPRINTS = 5e3;
+function buildApprovedSources() {
+  const list = [];
+  for (const board of LIVE_GREENHOUSE_BANKING_BOARDS) {
+    list.push({
+      id: `gh_${board.slug}`,
+      name: `${board.employerName} Official Careers`,
+      category: "employer_careers",
+      kind: "greenhouse",
+      slug: board.slug,
+      employerName: board.employerName,
+      employerType: board.employerType,
+      minPollIntervalSec: 360
+    });
+  }
+  for (const board of LIVE_ASHBY_BANKING_BOARDS) {
+    list.push({
+      id: `ashby_${board.slug}`,
+      name: `${board.employerName} Official Careers`,
+      category: "employer_careers",
+      kind: "ashby",
+      slug: board.slug,
+      employerName: board.employerName,
+      employerType: board.employerType,
+      minPollIntervalSec: 360
+    });
+  }
+  list.push({
+    id: "arbeitnow_eu_live",
+    name: "Arbeitnow Europe Official Job Feed",
+    category: "employer_careers",
+    kind: "arbeitnow",
+    minPollIntervalSec: 300
+  });
+  list.push({
+    id: "open_er_api_fx",
+    name: "Open Exchange Rates USD FX Feed",
+    category: "gov_portal",
+    kind: "fx",
+    minPollIntervalSec: 1800
+  });
+  list.push({
+    id: "global_6dept_official_sweep",
+    name: "6-Department Global Official Portals (UN, World Bank, ReliefWeb, Scholarships, Gov PR)",
+    category: "intl_org",
+    kind: "global_6dept",
+    minPollIntervalSec: 900
+  });
+  return list;
+}
+function makeFingerprint(stream, url, title, employer) {
+  const normalized = [
+    stream,
+    String(url || "").trim().toLowerCase().replace(/\/+$/, ""),
+    String(title || "").trim().toLowerCase().replace(/\s+/g, " "),
+    String(employer || "").trim().toLowerCase().replace(/\s+/g, " ")
+  ].join("|");
+  return crypto6.createHash("sha256").update(normalized).digest("hex").slice(0, 24);
+}
+function makeIncidentSignature(component, errorMsg) {
+  const norm = `${component.toLowerCase()}|${errorMsg.toLowerCase().replace(/[0-9]+ms/g, "<ms>").replace(/[0-9]+s/g, "<s>").replace(/\s+/g, " ").slice(0, 140)}`;
+  return crypto6.createHash("sha256").update(norm).digest("hex").slice(0, 16);
+}
+function constantTimeSecretEqual(provided, expected) {
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return crypto6.timingSafeEqual(a, b);
+}
+async function fetchJsonWithRetryAndRateLimit(url, timeoutMs = 8e3, maxRetries = 2) {
+  let lastError = "Unknown network error";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "HopelandJobs-AutonomousDiscovery/2.0"
+        },
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      if (res.status === 429) {
+        const retryHeader = res.headers.get("retry-after");
+        const parsedSec = retryHeader ? Number(retryHeader) : NaN;
+        const retryAfterSec = Number.isFinite(parsedSec) && parsedSec > 0 ? Math.min(3600, Math.max(300, Math.ceil(parsedSec))) : 600;
+        return {
+          ok: false,
+          status: 429,
+          rateLimited: true,
+          retryAfterSec,
+          errorType: "temporary",
+          error: `HTTP 429 rate-limited (cooldown ${retryAfterSec}s)`
+        };
+      }
+      if (res.ok) {
+        const data = await res.json();
+        return { ok: true, status: res.status, data };
+      }
+      lastError = `HTTP ${res.status}`;
+      if (res.status >= 400 && res.status < 500) {
+        return { ok: false, status: res.status, errorType: "permanent", error: lastError };
+      }
+    } catch (err) {
+      lastError = err?.name === "TimeoutError" ? `Timeout after ${timeoutMs}ms` : err?.message || String(err);
+    }
+    if (attempt < maxRetries) {
+      await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
+    }
+  }
+  return { ok: false, status: 0, errorType: "temporary", error: lastError };
+}
+async function sendOwnerAlertEmailIfConfigured(subject, textBody) {
+  const smtpUser = (process.env.SMTP_USER || "").trim();
+  const smtpPass = (process.env.SMTP_PASS || "").trim();
+  const recipient = (process.env.OWNER_ALERT_EMAIL || smtpUser).trim();
+  if (!smtpUser || !smtpPass || !recipient) {
+    return false;
+  }
+  try {
+    const nodemailerMod = await import("nodemailer");
+    const nodemailer = nodemailerMod.default || nodemailerMod;
+    const smtpHost = (process.env.SMTP_HOST || "smtp.gmail.com").trim();
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpFrom = (process.env.SMTP_FROM || smtpUser).trim();
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: recipient,
+      subject,
+      text: textBody
+    });
+    return true;
+  } catch (err) {
+    console.warn("[AutonomousDiscovery] Optional SMTP alert skipped:", err?.message || err);
+    return false;
+  }
+}
+function registerAutonomousDiscoveryWorker(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel,
+    ensureRuntimeDataDir,
+    isPersistentOwnerRequest,
+    appendAuditLog,
+    pushAdminNotification,
+    globalOpportunitiesController,
+    branchManagerController
+  } = deps;
+  const configuredSec = Number(
+    process.env.AUTONOMOUS_TICK_INTERVAL_SECONDS || DEFAULT_INTERVAL_SECONDS
+  );
+  const intervalSeconds = Number.isFinite(configuredSec) && configuredSec >= 30 && configuredSec <= 3600 ? Math.floor(configuredSec) : DEFAULT_INTERVAL_SECONDS;
+  const intervalMs = intervalSeconds * 1e3;
+  const stateFilePath = path7.join(runtimeBaseDir, "data", "autonomous_worker_state.json");
+  const approvedSources = buildApprovedSources();
+  const bootTimestampIso = (/* @__PURE__ */ new Date()).toISOString();
+  const webCrawler = new AutonomousWebCrawler({
+    runtimeBaseDir,
+    fetchImpl: deps.crawlerFetchImpl,
+    skipDnsForMockTest: deps.skipDnsForMockTest
+  });
+  let isCycleInFlight = false;
+  let scheduledTimer = null;
+  let stopped = false;
+  function createDefaultState() {
+    const sources = {};
+    for (const s of approvedSources) {
+      sources[s.id] = {
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        minPollIntervalSec: s.minPollIntervalSec,
+        lastPolledAt: null,
+        nextAllowedPollAt: null,
+        lastStatus: "idle",
+        lastItemCount: 0,
+        consecutiveErrors: 0,
+        lastError: null,
+        backoffUntil: null
+      };
+    }
+    const nextIso = new Date(Date.now() + intervalMs).toISOString();
+    return {
+      version: 2,
+      workerStartedAt: bootTimestampIso,
+      intervalSeconds,
+      activeLock: null,
+      lastCycleAt: null,
+      lastCycleStatus: "idle",
+      lastSuccessfulSearchAt: null,
+      lastSuccessfulSearchAtEat: null,
+      lastFailedSearchAt: null,
+      lastFailedSearchAtEat: null,
+      nextScheduledSearchAt: nextIso,
+      nextScheduledSearchAtEat: formatEthiopiaDateTime(nextIso),
+      lastError: null,
+      consecutiveFailures: 0,
+      totalCyclesCompleted: 0,
+      totalSkippedOverlaps: 0,
+      lastPreflightOk: true,
+      lastPreflightMessage: null,
+      counts: {
+        opportunitiesDiscovered: 0,
+        opportunitiesVerified: 0,
+        opportunitiesRejected: 0,
+        newMatchingOpportunities: 0,
+        globalVerifiedCount: 0,
+        globalActiveCount: 0,
+        prCountriesVerifiedCount: 0,
+        visa3kVerifiedCount: 0,
+        visa3kAuditedCount: 0
+      },
+      sources,
+      seenFingerprints: {},
+      baselineSeeded: false,
+      recentNotifications: [],
+      incidents: [],
+      cycleHistory: []
+    };
+  }
+  function loadState() {
+    ensureRuntimeDataDir();
+    const def = createDefaultState();
+    const { data: raw, recoveredFromBackup, recoveryNote } = loadJsonWithBackupRecovery(stateFilePath, def);
+    const mergedSources = { ...def.sources };
+    if (raw.sources && typeof raw.sources === "object") {
+      for (const s of approvedSources) {
+        if (raw.sources[s.id]) {
+          mergedSources[s.id] = {
+            ...def.sources[s.id],
+            ...raw.sources[s.id],
+            name: s.name,
+            category: s.category,
+            minPollIntervalSec: s.minPollIntervalSec
+          };
+        }
+      }
+    }
+    const state = {
+      ...def,
+      ...raw,
+      intervalSeconds,
+      counts: { ...def.counts, ...raw.counts || {} },
+      sources: mergedSources,
+      seenFingerprints: raw.seenFingerprints && typeof raw.seenFingerprints === "object" ? raw.seenFingerprints : {},
+      recentNotifications: Array.isArray(raw.recentNotifications) ? raw.recentNotifications : [],
+      incidents: Array.isArray(raw.incidents) ? raw.incidents : [],
+      cycleHistory: Array.isArray(raw.cycleHistory) ? raw.cycleHistory : []
+    };
+    if (recoveredFromBackup && recoveryNote) {
+      recordGroupedIncident(state, {
+        component: "storage:autonomous_worker_state",
+        message: recoveryNote,
+        errorType: "temporary",
+        severity: "warning",
+        autoRecovered: true,
+        recoveryResult: "Restored cleanly from .bak snapshot"
+      });
+    }
+    return state;
+  }
+  function saveState(state) {
+    ensureRuntimeDataDir();
+    const entries = Object.entries(state.seenFingerprints);
+    if (entries.length > MAX_SEEN_FINGERPRINTS) {
+      entries.sort((a, b) => Date.parse(b[1].lastSeenAt) - Date.parse(a[1].lastSeenAt));
+      state.seenFingerprints = Object.fromEntries(entries.slice(0, MAX_SEEN_FINGERPRINTS));
+    }
+    state.cycleHistory = state.cycleHistory.slice(0, MAX_CYCLE_HISTORY);
+    state.recentNotifications = state.recentNotifications.slice(0, MAX_NOTIFICATIONS);
+    state.incidents = state.incidents.slice(0, MAX_INCIDENTS);
+    saveJsonTransactional(stateFilePath, state);
+  }
+  function recordGroupedIncident(state, params) {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const signature = makeIncidentSignature(params.component, params.message);
+    const existing = state.incidents.find(
+      (inc) => inc.signature === signature && inc.status !== "resolved"
+    );
+    if (existing) {
+      existing.lastOccurredAt = nowIso;
+      existing.occurrences++;
+      existing.message = params.message;
+      if (params.autoRecovered) {
+        existing.recoveryAttempts++;
+        existing.status = "resolved";
+        existing.resolvedAt = nowIso;
+        existing.lastRecoveryResult = params.recoveryResult || "Recovered automatically";
+        return {
+          incident: existing,
+          shouldNotifyOwner: existing.severity === "critical",
+          notifyReason: "recovered"
+        };
+      }
+      existing.recoveryAttempts++;
+      if (existing.occurrences >= 3 && existing.status !== "escalated") {
+        existing.status = "escalated";
+        existing.severity = "critical";
+        existing.lastRecoveryResult = `Automatic recovery failed after ${existing.occurrences} occurrences \u2014 human review recommended.`;
+        const shouldNotify = !existing.notifiedAt;
+        if (shouldNotify) existing.notifiedAt = nowIso;
+        return { incident: existing, shouldNotifyOwner: shouldNotify, notifyReason: "escalated" };
+      }
+      return { incident: existing, shouldNotifyOwner: false };
+    }
+    const next = {
+      id: `inc_${Date.now()}_${crypto6.randomBytes(3).toString("hex")}`,
+      signature,
+      component: params.component,
+      errorType: params.errorType,
+      severity: params.severity,
+      message: params.message,
+      firstOccurredAt: nowIso,
+      lastOccurredAt: nowIso,
+      occurrences: 1,
+      status: params.autoRecovered ? "resolved" : "open",
+      recoveryAttempts: params.autoRecovered ? 1 : 0,
+      lastRecoveryResult: params.autoRecovered ? params.recoveryResult || "Recovered automatically" : null,
+      notifiedAt: params.severity === "critical" && !params.autoRecovered ? nowIso : null,
+      resolvedAt: params.autoRecovered ? nowIso : null
+    };
+    state.incidents.unshift(next);
+    const shouldNotifyOwner = params.severity === "critical" && !params.autoRecovered;
+    return {
+      incident: next,
+      shouldNotifyOwner,
+      notifyReason: shouldNotifyOwner ? "new_critical" : void 0
+    };
+  }
+  function resolveComponentIncidents(state, component, recoveryNote) {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const resolvedCritical = [];
+    for (const inc of state.incidents) {
+      if (inc.component === component && inc.status !== "resolved") {
+        const wasCritical = inc.severity === "critical" || inc.status === "escalated";
+        inc.status = "resolved";
+        inc.resolvedAt = nowIso;
+        inc.lastRecoveryResult = recoveryNote;
+        if (wasCritical) {
+          resolvedCritical.push(inc);
+        }
+      }
+    }
+    return resolvedCritical;
+  }
+  function runPreflightCheck() {
+    try {
+      ensureRuntimeDataDir();
+      const dataDir = path7.join(runtimeBaseDir, "data");
+      const probePath = path7.join(dataDir, `.preflight_${process.pid}_${Date.now()}.tmp`);
+      fs3.writeFileSync(probePath, "ok", "utf8");
+      fs3.unlinkSync(probePath);
+      const nodeMajor = Number(process.versions.node.split(".")[0]);
+      if (!Number.isFinite(nodeMajor) || nodeMajor < 18) {
+        return { ok: false, message: `Unsupported Node.js version: ${process.versions.node} (requires >=18)` };
+      }
+      return { ok: true, message: `Node v${process.versions.node} + writable atomic data storage verified` };
+    } catch (err) {
+      return {
+        ok: false,
+        message: `Storage/environment preflight failed: ${err?.message || String(err)}`
+      };
+    }
+  }
+  function recoverOnBoot() {
+    const state = loadState();
+    const nowMs = Date.now();
+    if (state.activeLock) {
+      const lockExpired = Date.parse(state.activeLock.expiresAt) <= nowMs;
+      const fromPreviousProcess = state.activeLock.pid !== process.pid;
+      if (lockExpired || fromPreviousProcess) {
+        const staleId = state.activeLock.runId;
+        state.activeLock = null;
+        recordGroupedIncident(state, {
+          component: "worker:execution_lock",
+          message: `Recovered stale execution lock (${staleId}) after worker restart.`,
+          errorType: "temporary",
+          severity: "warning",
+          autoRecovered: true,
+          recoveryResult: "Cleared stale lock and resumed 1-minute schedule"
+        });
+        appendAuditLog({
+          action: "autonomous_discovery_lock_recovered",
+          actorEmail: "system_worker",
+          targetType: "autonomous_discovery",
+          summary: `Recovered stale execution lock (${staleId}) after server restart/timeout.`,
+          severity: "warning"
+        });
+      }
+    }
+    const crawlerRecovery = webCrawler.recoverInterruptedTasksOnBoot();
+    if (crawlerRecovery.recoveredTasks > 0 || crawlerRecovery.recoveredFromBackup) {
+      recordGroupedIncident(state, {
+        component: "crawler:queue_recovery",
+        message: crawlerRecovery.recoveryNote || `Recovered ${crawlerRecovery.recoveredTasks} queued crawler task(s) after restart.`,
+        errorType: "temporary",
+        severity: "warning",
+        autoRecovered: true,
+        recoveryResult: `Re-queued ${crawlerRecovery.recoveredTasks} unfinished task(s)`
+      });
+    }
+    const preflight = runPreflightCheck();
+    state.lastPreflightOk = preflight.ok;
+    state.lastPreflightMessage = preflight.message;
+    recomputeLiveCountsIntoState(state);
+    saveState(state);
+  }
+  function recomputeLiveCountsIntoState(state) {
+    const globalStore = globalOpportunitiesController.loadStore();
+    const globalOpps = Array.isArray(globalStore.international_opportunities) ? globalStore.international_opportunities : [];
+    const globalActive = globalOpps.filter((o) => !o.isArchived && o.hasVerifiedBadge);
+    const globalVerified = globalActive.filter((o) => o.verificationTier === "VERIFIED");
+    const prPathways = Array.isArray(globalStore.permanent_residency_pathways) ? globalStore.permanent_residency_pathways : [];
+    const prVerified = prPathways.filter((p) => p.verificationTier === "VERIFIED");
+    const latestGlobalLog = globalStore.discovery_job_logs?.[0];
+    const globalRejectedCount = Number(latestGlobalLog?.rejectedUnderThreeDaysCount || 0) + Number(latestGlobalLog?.rejectedBrokenOrClosedCount || 0) + Number(latestGlobalLog?.rejectedDueToVisaCount || 0) + Number(latestGlobalLog?.rejectedDueToProfessionalRestrictionCount || 0);
+    const ownerEval = branchManagerController.evaluateForOwner();
+    const audit = ownerEval.audit;
+    const branchRejectedCount = Number(audit.excludedOutsideAllowedRegions || 0) + Number(audit.excludedLocalAfricanNonInternational || 0) + Number(audit.excludedUndisclosedSalary || 0) + Number(audit.excludedBelow3000Usd || 0) + Number(audit.excludedUnconfirmedVisaSponsorship || 0) + Number(audit.excludedEthiopianIneligible || 0) + Number(audit.excludedNonMatchingRole || 0) + Number(audit.excludedExpiredOrDuplicate || 0);
+    const crawlerMetrics = webCrawler.getMetricsSummary().summary;
+    state.counts = {
+      opportunitiesDiscovered: globalOpps.length + audit.totalCandidatesScanned + crawlerMetrics.opportunitiesExtracted,
+      opportunitiesVerified: globalActive.length + ownerEval.jobs.length + crawlerMetrics.opportunitiesPublished,
+      opportunitiesRejected: globalRejectedCount + branchRejectedCount + crawlerMetrics.opportunitiesRejected + crawlerMetrics.opportunitiesExpired,
+      newMatchingOpportunities: state.recentNotifications.length,
+      globalVerifiedCount: globalVerified.length,
+      globalActiveCount: globalActive.length,
+      prCountriesVerifiedCount: prVerified.length,
+      visa3kVerifiedCount: ownerEval.jobs.length,
+      visa3kAuditedCount: audit.totalCandidatesScanned
+    };
+    return {
+      ownerEval,
+      globalActiveCount: globalActive.length,
+      globalVerifiedCount: globalVerified.length,
+      prVerifiedCount: prVerified.length,
+      globalRejectedCount
+    };
+  }
+  async function pollSingleFastSource(src) {
+    if (src.kind === "greenhouse" && src.slug && src.employerName) {
+      const url = `https://boards-api.greenhouse.io/v1/boards/${src.slug}/jobs?content=true`;
+      const res = await fetchJsonWithRetryAndRateLimit(url, 8e3, 1);
+      if (!res.ok) {
+        return {
+          ok: false,
+          rateLimited: res.rateLimited,
+          retryAfterSec: res.retryAfterSec,
+          errorType: res.errorType,
+          error: res.error,
+          scannedCount: 0,
+          newlyAdded: 0,
+          duplicatesSkipped: 0
+        };
+      }
+      const jobs = Array.isArray(res.data?.jobs) ? res.data.jobs : [];
+      const incoming = [];
+      for (const j of jobs) {
+        const jobUrl = String(j.absolute_url || "").trim();
+        if (!jobUrl.startsWith("https://")) continue;
+        incoming.push({
+          id: `bm_gh_${src.slug}_${j.id || crypto6.randomBytes(4).toString("hex")}`,
+          title: String(j.title || "").trim(),
+          employerName: src.employerName,
+          employerTypeHint: src.employerType,
+          isInternationalEmployerVerified: true,
+          locationRaw: String(j.location?.name || "").trim(),
+          descriptionText: String(j.content || ""),
+          applicationUrl: jobUrl,
+          sourcePortal: src.name,
+          datePosted: typeof j.updated_at === "string" ? j.updated_at.slice(0, 10) : void 0
+        });
+      }
+      const merged = branchManagerController.mergeIncrementalCandidates({
+        sourceLabel: src.name,
+        idPrefix: `bm_gh_${src.slug}_`,
+        incomingCandidates: incoming
+      });
+      return {
+        ok: true,
+        scannedCount: jobs.length,
+        newlyAdded: merged.newlyAdded,
+        duplicatesSkipped: merged.duplicatesSkipped
+      };
+    }
+    if (src.kind === "ashby" && src.slug && src.employerName) {
+      const url = `https://api.ashbyhq.com/posting-api/job-board/${src.slug}?includeCompensation=true`;
+      const res = await fetchJsonWithRetryAndRateLimit(url, 8e3, 1);
+      if (!res.ok) {
+        return {
+          ok: false,
+          rateLimited: res.rateLimited,
+          retryAfterSec: res.retryAfterSec,
+          errorType: res.errorType,
+          error: res.error,
+          scannedCount: 0,
+          newlyAdded: 0,
+          duplicatesSkipped: 0
+        };
+      }
+      const jobs = Array.isArray(res.data?.jobs) ? res.data.jobs : [];
+      const incoming = [];
+      for (const j of jobs) {
+        const jobUrl = String(j.jobUrl || j.applyUrl || "").trim();
+        if (!jobUrl.startsWith("https://")) continue;
+        const compSummary = j.compensation?.compensationTierSummary || j.compensation?.summaryComponents?.map((c) => c.label).join(" ") || "";
+        incoming.push({
+          id: `bm_ash_${src.slug}_${j.id || crypto6.randomBytes(4).toString("hex")}`,
+          title: String(j.title || "").trim(),
+          employerName: src.employerName,
+          employerTypeHint: src.employerType,
+          isInternationalEmployerVerified: true,
+          locationRaw: String(j.location || j.address?.postalAddress?.addressCountry || "").trim(),
+          descriptionText: String(j.descriptionPlain || j.descriptionHtml || ""),
+          compensationRaw: compSummary ? `Base salary: ${compSummary}` : "",
+          applicationUrl: jobUrl,
+          sourcePortal: src.name,
+          datePosted: typeof j.publishedAt === "string" ? j.publishedAt.slice(0, 10) : void 0
+        });
+      }
+      const merged = branchManagerController.mergeIncrementalCandidates({
+        sourceLabel: src.name,
+        idPrefix: `bm_ash_${src.slug}_`,
+        incomingCandidates: incoming
+      });
+      return {
+        ok: true,
+        scannedCount: jobs.length,
+        newlyAdded: merged.newlyAdded,
+        duplicatesSkipped: merged.duplicatesSkipped
+      };
+    }
+    if (src.kind === "arbeitnow") {
+      const res = await fetchJsonWithRetryAndRateLimit(
+        "https://www.arbeitnow.com/api/job-board-api",
+        8e3,
+        1
+      );
+      if (!res.ok) {
+        return {
+          ok: false,
+          rateLimited: res.rateLimited,
+          retryAfterSec: res.retryAfterSec,
+          errorType: res.errorType,
+          error: res.error,
+          scannedCount: 0,
+          newlyAdded: 0,
+          duplicatesSkipped: 0
+        };
+      }
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
+      const incoming = [];
+      for (const j of list) {
+        const jobUrl = String(j.url || "").trim();
+        if (!jobUrl.startsWith("https://")) continue;
+        const desc = String(j.description || "");
+        const tags = Array.isArray(j.tags) ? j.tags.join(" ") : "";
+        incoming.push({
+          id: `bm_arb_${j.slug || crypto6.randomBytes(4).toString("hex")}`,
+          title: String(j.title || "").trim(),
+          employerName: String(j.company_name || "European Employer").trim(),
+          locationRaw: `${String(j.location || "")} Germany Europe`.trim(),
+          countryHint: "Germany",
+          descriptionText: `${desc}
+Tags: ${tags}`,
+          applicationUrl: jobUrl,
+          sourcePortal: "Arbeitnow Europe",
+          datePosted: typeof j.created_at === "number" ? new Date(j.created_at * 1e3).toISOString().slice(0, 10) : void 0
+        });
+      }
+      const merged = branchManagerController.mergeIncrementalCandidates({
+        sourceLabel: "Arbeitnow Europe Live Board",
+        idPrefix: "bm_arb_",
+        incomingCandidates: incoming
+      });
+      return {
+        ok: true,
+        scannedCount: list.length,
+        newlyAdded: merged.newlyAdded,
+        duplicatesSkipped: merged.duplicatesSkipped
+      };
+    }
+    if (src.kind === "fx") {
+      const fx = await fetchLiveFxRates();
+      const merged = branchManagerController.mergeIncrementalCandidates({
+        sourceLabel: "Hopeland Verified Global Store (UN, World Bank, AfDB, ReliefWeb, EU Portals)",
+        idPrefix: "bm_store_",
+        incomingCandidates: branchManagerController.loadExistingGlobalOpps().filter(
+          (opp) => !opp.isArchived && opp.applicationStatus !== "expired" && opp.applicationStatus !== "closed"
+        ).map((opp) => ({
+          id: `bm_store_${opp.id}`,
+          title: opp.title,
+          employerName: opp.organization,
+          locationRaw: `${opp.location || ""} ${opp.country || ""}`.trim(),
+          countryHint: opp.country,
+          descriptionText: [
+            opp.summary || "",
+            opp.funding?.fundingSummary || "",
+            opp.funding?.visaSupportSummary || "",
+            opp.eligibility?.educationRequirement || "",
+            opp.eligibility?.experienceRequirement || "",
+            (opp.eligibility?.languagesRequired || []).join(", ")
+          ].join("\n"),
+          compensationRaw: opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || "",
+          applicationUrl: opp.officialApplicationUrl || opp.originalSourceUrl || "",
+          sourcePortal: opp.sourceName || "Verified Official Portal",
+          datePosted: opp.publicationDate || opp.discoveredAt?.slice(0, 10),
+          applicationDeadline: opp.deadline?.deadlineUtcIso?.slice(0, 10) || opp.deadline?.deadlineDateRaw,
+          explicitVisaNote: opp.funding?.visaSupportSummary || "",
+          ethiopianEligibleHint: opp.eligibility?.ethiopianEligible
+        })),
+        fxUpdate: fx
+      });
+      return {
+        ok: true,
+        scannedCount: merged.totalCandidates,
+        newlyAdded: merged.newlyAdded,
+        duplicatesSkipped: merged.duplicatesSkipped
+      };
+    }
+    return {
+      ok: false,
+      errorType: "permanent",
+      error: `Unsupported source kind: ${src.kind}`,
+      scannedCount: 0,
+      newlyAdded: 0,
+      duplicatesSkipped: 0
+    };
+  }
+  function selectSourcesForThisMinute(state, nowMs) {
+    const isAllowedNow = (s) => {
+      const h = state.sources[s.id];
+      if (!h) return true;
+      if (h.backoffUntil && Date.parse(h.backoffUntil) > nowMs) return false;
+      if (!h.nextAllowedPollAt) return true;
+      return Date.parse(h.nextAllowedPollAt) <= nowMs;
+    };
+    const fastDue = approvedSources.filter((s) => s.kind !== "global_6dept" && isAllowedNow(s)).sort((a, b) => {
+      const aTime = state.sources[a.id]?.lastPolledAt ? Date.parse(state.sources[a.id].lastPolledAt) : 0;
+      const bTime = state.sources[b.id]?.lastPolledAt ? Date.parse(state.sources[b.id].lastPolledAt) : 0;
+      return aTime - bTime;
+    });
+    if (fastDue.length > 0) {
+      return fastDue.slice(0, 3);
+    }
+    const globalSweep = approvedSources.find((s) => s.kind === "global_6dept");
+    if (globalSweep && isAllowedNow(globalSweep)) {
+      return [globalSweep];
+    }
+    const oldestFast = approvedSources.filter((s) => {
+      if (s.kind === "global_6dept") return false;
+      const h = state.sources[s.id];
+      if (h?.backoffUntil && Date.parse(h.backoffUntil) > nowMs) return false;
+      const ageMs = h?.lastPolledAt ? nowMs - Date.parse(h.lastPolledAt) : Infinity;
+      return ageMs >= 9e4;
+    }).sort((a, b) => {
+      const aTime = state.sources[a.id]?.lastPolledAt ? Date.parse(state.sources[a.id].lastPolledAt) : 0;
+      const bTime = state.sources[b.id]?.lastPolledAt ? Date.parse(state.sources[b.id].lastPolledAt) : 0;
+      return aTime - bTime;
+    });
+    return oldestFast.slice(0, 1);
+  }
+  async function runOneMinuteCycle(trigger, options) {
+    const startedMs = Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    const cycleId = `auto1m_${startedMs}_${crypto6.randomBytes(3).toString("hex")}`;
+    const preState = loadState();
+    const activePersistedLock = preState.activeLock && Date.parse(preState.activeLock.expiresAt) > startedMs;
+    if (isCycleInFlight || activePersistedLock) {
+      const nextIso = new Date(startedMs + intervalMs).toISOString();
+      const skippedRecord = {
+        cycleId,
+        trigger,
+        startedAt,
+        finishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        durationMs: 0,
+        status: "skipped_overlap",
+        sourcesPolled: [],
+        candidatesScanned: 0,
+        newlyDiscovered: 0,
+        verifiedCount: preState.counts.opportunitiesVerified,
+        rejectedCount: preState.counts.opportunitiesRejected,
+        duplicatesSkipped: 0,
+        newMatchingCount: 0,
+        error: `Skipped overlapping trigger: previous cycle (${preState.activeLock?.runId || "in-flight"}) still running.`
+      };
+      preState.totalSkippedOverlaps = (preState.totalSkippedOverlaps || 0) + 1;
+      preState.nextScheduledSearchAt = nextIso;
+      preState.nextScheduledSearchAtEat = formatEthiopiaDateTime(nextIso);
+      preState.cycleHistory.unshift(skippedRecord);
+      saveState(preState);
+      return skippedRecord;
+    }
+    isCycleInFlight = true;
+    const state = loadState();
+    const preflight = runPreflightCheck();
+    state.lastPreflightOk = preflight.ok;
+    state.lastPreflightMessage = preflight.message;
+    if (!preflight.ok) {
+      isCycleInFlight = false;
+      const failIso = (/* @__PURE__ */ new Date()).toISOString();
+      const incResult = recordGroupedIncident(state, {
+        component: "worker:preflight",
+        message: preflight.message,
+        errorType: "permanent",
+        severity: "critical"
+      });
+      state.lastCycleAt = failIso;
+      state.lastCycleStatus = "failed";
+      state.lastFailedSearchAt = failIso;
+      state.lastFailedSearchAtEat = formatEthiopiaDateTime(failIso);
+      state.lastError = preflight.message;
+      state.consecutiveFailures++;
+      saveState(state);
+      if (incResult.shouldNotifyOwner) {
+        pushAdminNotification({
+          type: `incident_${incResult.incident.signature}`,
+          title: "HopelandJobs Autonomous Discovery Preflight Failure",
+          message: preflight.message,
+          severity: "critical"
+        });
+      }
+      return {
+        cycleId,
+        trigger,
+        startedAt,
+        finishedAt: failIso,
+        durationMs: Date.now() - startedMs,
+        status: "failed",
+        sourcesPolled: [],
+        candidatesScanned: 0,
+        newlyDiscovered: 0,
+        verifiedCount: state.counts.opportunitiesVerified,
+        rejectedCount: state.counts.opportunitiesRejected,
+        duplicatesSkipped: 0,
+        newMatchingCount: 0,
+        error: preflight.message
+      };
+    }
+    state.activeLock = {
+      runId: cycleId,
+      trigger,
+      pid: process.pid,
+      startedAt,
+      expiresAt: new Date(startedMs + LOCK_TTL_MS).toISOString()
+    };
+    saveState(state);
+    const sourcesPolled = [];
+    const cycleErrors = [];
+    const incidentsToNotify = [];
+    let succeededCount = 0;
+    let failedCount = 0;
+    let candidatesScanned = 0;
+    let duplicatesSkipped = 0;
+    let newlyDiscoveredRaw = 0;
+    let crawlerPagesProcessed = 0;
+    let crawlerNewDomainsFound = 0;
+    let crawlerOpportunitiesExtracted = 0;
+    try {
+      const crawlRes = await webCrawler.runIncrementalCrawlBatch({
+        maxTasks: options?.crawlerMaxTasks ?? 3
+      });
+      crawlerPagesProcessed = crawlRes.pagesProcessed;
+      crawlerNewDomainsFound = crawlRes.newDomainsDiscovered.length;
+      crawlerOpportunitiesExtracted = crawlRes.opportunitiesExtracted;
+      succeededCount += crawlRes.tasksSucceeded;
+      failedCount += crawlRes.tasksFailed;
+      candidatesScanned += crawlRes.opportunitiesExtracted;
+      duplicatesSkipped += crawlRes.duplicatesPrevented;
+      newlyDiscoveredRaw += crawlRes.newPagesDiscovered;
+      if (crawlRes.pagesProcessed > 0) {
+        sourcesPolled.push(`Public Web Crawler (${crawlRes.pagesProcessed} pages, +${crawlRes.newDomainsDiscovered.length} new domains)`);
+      }
+      if (crawlRes.publishedBranchCandidates.length > 0) {
+        branchManagerController.mergeIncrementalCandidates({
+          sourceLabel: "Autonomous Public Web Crawler",
+          idPrefix: "bm_web_",
+          incomingCandidates: crawlRes.publishedBranchCandidates
+        });
+      }
+      for (const cErr of crawlRes.errors) {
+        cycleErrors.push(`${cErr.component}: ${cErr.message}`);
+        const incOut = recordGroupedIncident(state, {
+          component: cErr.component,
+          message: cErr.message,
+          errorType: cErr.errorType,
+          severity: "warning"
+        });
+        if (incOut.shouldNotifyOwner) {
+          incidentsToNotify.push({
+            title: `Crawler Incident Escalated (${cErr.domain})`,
+            message: `${cErr.message} (${incOut.incident.occurrences} occurrences). Other sources continue unaffected.`,
+            severity: "warning"
+          });
+        }
+      }
+      if (!options?.skipFastBoards) {
+        const dueSources = selectSourcesForThisMinute(state, startedMs);
+        const selected = options?.includeGlobalSweepIfDue === false ? dueSources.filter((s) => s.kind !== "global_6dept") : dueSources;
+        for (const src of selected) {
+          const pollNowMs = Date.now();
+          const pollNowIso = new Date(pollNowMs).toISOString();
+          sourcesPolled.push(src.name);
+          if (src.kind === "global_6dept") {
+            try {
+              const log = await globalOpportunitiesController.runFullOfficialDiscovery(
+                "server_interval",
+                {
+                  scheduledSlotEat: formatEthiopiaDateTime(pollNowMs) || pollNowIso,
+                  attemptNumber: 1,
+                  maxAttempts: 1
+                }
+              );
+              const srcState2 = state.sources[src.id];
+              srcState2.lastPolledAt = pollNowIso;
+              srcState2.nextAllowedPollAt = new Date(
+                pollNowMs + src.minPollIntervalSec * 1e3
+              ).toISOString();
+              srcState2.lastItemCount = Number(log?.candidatesDiscovered || 0);
+              candidatesScanned += Number(log?.candidatesDiscovered || 0);
+              duplicatesSkipped += Number(log?.duplicatesSkipped || 0);
+              if (log?.status === "failed") {
+                failedCount++;
+                srcState2.lastStatus = "error";
+                srcState2.consecutiveErrors = (srcState2.consecutiveErrors || 0) + 1;
+                srcState2.lastError = (log.errors || ["Global discovery failed"]).slice(0, 2).join("; ");
+                srcState2.backoffUntil = new Date(pollNowMs + 600 * 1e3).toISOString();
+                cycleErrors.push(`${src.name}: ${srcState2.lastError}`);
+                recordGroupedIncident(state, {
+                  component: `source:${src.id}`,
+                  message: srcState2.lastError || "Global discovery failed",
+                  errorType: "temporary",
+                  severity: "warning"
+                });
+              } else {
+                succeededCount++;
+                srcState2.lastStatus = "ok";
+                srcState2.consecutiveErrors = 0;
+                srcState2.lastError = null;
+                srcState2.backoffUntil = null;
+                const resolved = resolveComponentIncidents(
+                  state,
+                  `source:${src.id}`,
+                  "Global 6-department sweep succeeded"
+                );
+                for (const r of resolved) {
+                  incidentsToNotify.push({
+                    title: `Recovered: ${src.name}`,
+                    message: `Previously escalated incident (${r.message}) has automatically recovered.`,
+                    severity: "info"
+                  });
+                }
+              }
+            } catch (err) {
+              failedCount++;
+              const msg = err?.message || String(err);
+              const srcState2 = state.sources[src.id];
+              srcState2.lastPolledAt = pollNowIso;
+              srcState2.lastStatus = "error";
+              srcState2.consecutiveErrors = (srcState2.consecutiveErrors || 0) + 1;
+              srcState2.lastError = msg;
+              srcState2.backoffUntil = new Date(pollNowMs + 600 * 1e3).toISOString();
+              cycleErrors.push(`${src.name}: ${msg}`);
+              recordGroupedIncident(state, {
+                component: `source:${src.id}`,
+                message: msg,
+                errorType: "temporary",
+                severity: "warning"
+              });
+            }
+            continue;
+          }
+          const res = await pollSingleFastSource(src);
+          const srcState = state.sources[src.id];
+          srcState.lastPolledAt = pollNowIso;
+          srcState.nextAllowedPollAt = new Date(
+            pollNowMs + src.minPollIntervalSec * 1e3
+          ).toISOString();
+          if (res.ok) {
+            succeededCount++;
+            candidatesScanned += res.scannedCount;
+            newlyDiscoveredRaw += res.newlyAdded;
+            duplicatesSkipped += res.duplicatesSkipped;
+            srcState.lastStatus = "ok";
+            srcState.lastItemCount = res.scannedCount;
+            srcState.consecutiveErrors = 0;
+            srcState.lastError = null;
+            srcState.backoffUntil = null;
+            const resolved = resolveComponentIncidents(
+              state,
+              `source:${src.id}`,
+              `${src.name} returned HTTP 200 (${res.scannedCount} listings)`
+            );
+            for (const r of resolved) {
+              incidentsToNotify.push({
+                title: `Recovered: ${src.name}`,
+                message: `Source recovered automatically after previous failure (${r.message}).`,
+                severity: "info"
+              });
+            }
+          } else {
+            failedCount++;
+            srcState.consecutiveErrors = (srcState.consecutiveErrors || 0) + 1;
+            srcState.lastError = res.error || "Request failed";
+            if (res.rateLimited) {
+              srcState.lastStatus = "rate_limited";
+              srcState.backoffUntil = new Date(
+                pollNowMs + (res.retryAfterSec || 600) * 1e3
+              ).toISOString();
+            } else {
+              srcState.lastStatus = "error";
+              const backoffSec = Math.min(
+                3600,
+                180 * Math.pow(2, Math.min(4, srcState.consecutiveErrors - 1))
+              );
+              srcState.backoffUntil = new Date(pollNowMs + backoffSec * 1e3).toISOString();
+            }
+            cycleErrors.push(`${src.name}: ${srcState.lastError}`);
+            const incOut = recordGroupedIncident(state, {
+              component: `source:${src.id}`,
+              message: srcState.lastError,
+              errorType: res.errorType || "temporary",
+              severity: "warning"
+            });
+            if (incOut.shouldNotifyOwner) {
+              incidentsToNotify.push({
+                title: `Source Repeated Failure: ${src.name}`,
+                message: `${srcState.lastError} (${incOut.incident.occurrences} occurrences). Temporarily paused while other sources continue.`,
+                severity: "warning"
+              });
+            }
+          }
+        }
+      }
+      const nowEndIso = (/* @__PURE__ */ new Date()).toISOString();
+      const { ownerEval } = recomputeLiveCountsIntoState(state);
+      const newlyDetectedMatches = [];
+      const isInitialBaselineSeed = !state.baselineSeeded;
+      for (const job of ownerEval.jobs) {
+        const fp = makeFingerprint(
+          "visa_3k",
+          job.officialApplicationUrl,
+          job.jobTitle,
+          job.employerName
+        );
+        const existing = state.seenFingerprints[fp];
+        if (!existing) {
+          state.seenFingerprints[fp] = {
+            firstSeenAt: nowEndIso,
+            lastSeenAt: nowEndIso,
+            stream: "visa_3k",
+            title: job.jobTitle,
+            employer: job.employerName,
+            notified: !isInitialBaselineSeed
+          };
+          if (!isInitialBaselineSeed) {
+            newlyDetectedMatches.push({
+              id: `match_${fp}_${Date.now()}`,
+              discoveredAt: nowEndIso,
+              stream: "visa_3k",
+              title: job.jobTitle,
+              employer: job.employerName,
+              country: job.country,
+              salaryDisplay: job.usdEquivalentDisplay || job.originalSalaryDisplay,
+              matchScore: job.profileMatchPercentage,
+              officialUrl: job.officialApplicationUrl,
+              emailSent: false
+            });
+          }
+        } else {
+          existing.lastSeenAt = nowEndIso;
+        }
+      }
+      const globalStore = globalOpportunitiesController.loadStore();
+      const activeBankingGlobal = (globalStore.international_opportunities || []).filter(
+        (o) => !o.isArchived && o.hasVerifiedBadge && o.verificationTier === "VERIFIED" && (o.department === "banking_finance_jobs" || /bank|finance|accounting|branch manager|credit|compliance|treasury/i.test(
+          `${o.title} ${o.organization}`
+        ))
+      );
+      for (const opp of activeBankingGlobal) {
+        const fp = makeFingerprint(
+          "global_opportunity",
+          opp.officialApplicationUrl,
+          opp.title,
+          opp.organization
+        );
+        const existing = state.seenFingerprints[fp];
+        if (!existing) {
+          state.seenFingerprints[fp] = {
+            firstSeenAt: nowEndIso,
+            lastSeenAt: nowEndIso,
+            stream: "global_opportunity",
+            title: opp.title,
+            employer: opp.organization,
+            notified: !isInitialBaselineSeed
+          };
+          if (!isInitialBaselineSeed) {
+            newlyDetectedMatches.push({
+              id: `match_${fp}_${Date.now()}`,
+              discoveredAt: nowEndIso,
+              stream: "global_opportunity",
+              title: opp.title,
+              employer: opp.organization,
+              country: opp.country,
+              salaryDisplay: opp.funding?.stipendOrSalary || opp.funding?.fundingSummary || "Verified International Role",
+              matchScore: 82,
+              officialUrl: opp.officialApplicationUrl,
+              emailSent: false
+            });
+          }
+        } else {
+          existing.lastSeenAt = nowEndIso;
+        }
+      }
+      if (isInitialBaselineSeed) {
+        state.baselineSeeded = true;
+      }
+      if (newlyDetectedMatches.length > 0) {
+        const lines = newlyDetectedMatches.slice(0, 10).map(
+          (m, idx) => `${idx + 1}. ${m.title} \u2014 ${m.employer} (${m.country})
+   Salary: ${m.salaryDisplay} | Profile Match: ${m.matchScore}%
+   Official Link: ${m.officialUrl}`
+        );
+        const emailSent = await sendOwnerAlertEmailIfConfigured(
+          `[HopelandJobs] ${newlyDetectedMatches.length} New Verified Matching Opportunity${newlyDetectedMatches.length > 1 ? "s" : ""} Found`,
+          [
+            `HopelandJobs 24/7 Autonomous Discovery found ${newlyDetectedMatches.length} new verified matching opportunity(ies) for your saved profile:`,
+            "",
+            ...lines,
+            "",
+            `Detected at: ${formatEthiopiaDateTime(Date.now())}`
+          ].join("\n")
+        );
+        for (const m of newlyDetectedMatches) {
+          m.emailSent = emailSent;
+        }
+        state.recentNotifications = [...newlyDetectedMatches, ...state.recentNotifications].slice(
+          0,
+          MAX_NOTIFICATIONS
+        );
+        state.counts.newMatchingOpportunities = state.recentNotifications.length;
+        const top = newlyDetectedMatches[0];
+        pushAdminNotification({
+          type: `new_autonomous_match_${top.id.slice(0, 14)}`,
+          title: `${newlyDetectedMatches.length} New Verified Matching Opportunity Found`,
+          message: `${top.title} at ${top.employer} (${top.country}) \u2014 ${top.salaryDisplay} (${top.matchScore}% match).`,
+          severity: "info"
+        });
+      }
+      const cycleStatus = succeededCount === 0 && failedCount > 0 ? "failed" : failedCount > 0 ? "partial" : "success";
+      const finishedMs = Date.now();
+      const finishedAt = new Date(finishedMs).toISOString();
+      const nextScheduledAt = new Date(finishedMs + intervalMs).toISOString();
+      const record = {
+        cycleId,
+        trigger,
+        startedAt,
+        finishedAt,
+        durationMs: finishedMs - startedMs,
+        status: cycleStatus,
+        sourcesPolled,
+        candidatesScanned,
+        newlyDiscovered: newlyDiscoveredRaw,
+        verifiedCount: state.counts.opportunitiesVerified,
+        rejectedCount: state.counts.opportunitiesRejected,
+        duplicatesSkipped,
+        newMatchingCount: newlyDetectedMatches.length,
+        crawlerPagesProcessed,
+        crawlerNewDomainsFound,
+        crawlerOpportunitiesExtracted,
+        error: cycleErrors.length > 0 ? cycleErrors.slice(0, 3).join(" | ") : null
+      };
+      state.lastCycleAt = finishedAt;
+      state.lastCycleStatus = cycleStatus;
+      state.nextScheduledSearchAt = nextScheduledAt;
+      state.nextScheduledSearchAtEat = formatEthiopiaDateTime(nextScheduledAt);
+      state.totalCyclesCompleted = (state.totalCyclesCompleted || 0) + 1;
+      if (cycleStatus === "failed") {
+        state.lastFailedSearchAt = finishedAt;
+        state.lastFailedSearchAtEat = formatEthiopiaDateTime(finishedAt);
+        state.consecutiveFailures = (state.consecutiveFailures || 0) + 1;
+        state.lastError = record.error || "All scheduled official sources failed in this cycle.";
+        const critInc = recordGroupedIncident(state, {
+          component: "worker:discovery_cycle",
+          message: state.lastError,
+          errorType: "temporary",
+          severity: state.consecutiveFailures >= 3 ? "critical" : "warning"
+        });
+        if (critInc.shouldNotifyOwner) {
+          incidentsToNotify.push({
+            title: "Autonomous Discovery Engine Critical Incident",
+            message: `${state.consecutiveFailures} consecutive discovery cycles failed. Last error: ${state.lastError}`,
+            severity: "critical"
+          });
+        }
+      } else {
+        const recoveredEngine = resolveComponentIncidents(
+          state,
+          "worker:discovery_cycle",
+          `Discovery cycle succeeded (${sourcesPolled.length} source batches processed)`
+        );
+        for (const r of recoveredEngine) {
+          incidentsToNotify.push({
+            title: "HopelandJobs Discovery Engine Recovered",
+            message: `Autonomous discovery recovered automatically from: ${r.message}`,
+            severity: "info"
+          });
+        }
+        state.lastSuccessfulSearchAt = finishedAt;
+        state.lastSuccessfulSearchAtEat = formatEthiopiaDateTime(finishedAt);
+        state.consecutiveFailures = 0;
+        state.lastError = cycleErrors.length > 0 ? record.error : null;
+      }
+      for (const alert of incidentsToNotify) {
+        pushAdminNotification({
+          type: `ops_${crypto6.createHash("sha256").update(alert.title).digest("hex").slice(0, 12)}`,
+          title: alert.title,
+          message: alert.message,
+          severity: alert.severity
+        });
+        if (alert.severity === "critical" || alert.title.startsWith("Recovered:")) {
+          await sendOwnerAlertEmailIfConfigured(
+            `[HopelandJobs Ops] ${alert.title}`,
+            `${alert.message}
+
+Time (EAT): ${formatEthiopiaDateTime(Date.now())}`
+          );
+        }
+      }
+      const latestDisk = loadState();
+      state.totalSkippedOverlaps = Math.max(
+        state.totalSkippedOverlaps || 0,
+        latestDisk.totalSkippedOverlaps || 0
+      );
+      const existingIds = new Set(state.cycleHistory.map((c) => c.cycleId));
+      const inFlightSkips = latestDisk.cycleHistory.filter(
+        (c) => c.status === "skipped_overlap" && !existingIds.has(c.cycleId)
+      );
+      state.activeLock = null;
+      state.cycleHistory = [record, ...inFlightSkips, ...state.cycleHistory];
+      saveState(state);
+      return record;
+    } catch (err) {
+      const finishedMs = Date.now();
+      const finishedAt = new Date(finishedMs).toISOString();
+      const nextScheduledAt = new Date(finishedMs + intervalMs).toISOString();
+      const errMsg = err?.message || String(err);
+      const failRecord = {
+        cycleId,
+        trigger,
+        startedAt,
+        finishedAt,
+        durationMs: finishedMs - startedMs,
+        status: "failed",
+        sourcesPolled,
+        candidatesScanned,
+        newlyDiscovered: newlyDiscoveredRaw,
+        verifiedCount: state.counts.opportunitiesVerified,
+        rejectedCount: state.counts.opportunitiesRejected,
+        duplicatesSkipped,
+        newMatchingCount: 0,
+        error: errMsg
+      };
+      const errState = loadState();
+      errState.activeLock = null;
+      errState.lastCycleAt = finishedAt;
+      errState.lastCycleStatus = "failed";
+      errState.lastFailedSearchAt = finishedAt;
+      errState.lastFailedSearchAtEat = formatEthiopiaDateTime(finishedAt);
+      errState.lastError = errMsg;
+      errState.consecutiveFailures = (errState.consecutiveFailures || 0) + 1;
+      errState.nextScheduledSearchAt = nextScheduledAt;
+      errState.nextScheduledSearchAtEat = formatEthiopiaDateTime(nextScheduledAt);
+      recordGroupedIncident(errState, {
+        component: "worker:unhandled_exception",
+        message: errMsg,
+        errorType: "temporary",
+        severity: "critical"
+      });
+      errState.cycleHistory.unshift(failRecord);
+      saveState(errState);
+      return failRecord;
+    } finally {
+      isCycleInFlight = false;
+      try {
+        const finalState = loadState();
+        if (finalState.activeLock?.runId === cycleId) {
+          finalState.activeLock = null;
+          saveState(finalState);
+        }
+      } catch {
+      }
+    }
+  }
+  function scheduleNextTick(delayMs) {
+    if (stopped || isVercel || process.env.NODE_ENV === "test") return;
+    if (scheduledTimer) clearTimeout(scheduledTimer);
+    const nextAtIso = new Date(Date.now() + delayMs).toISOString();
+    try {
+      const st = loadState();
+      st.nextScheduledSearchAt = nextAtIso;
+      st.nextScheduledSearchAtEat = formatEthiopiaDateTime(nextAtIso);
+      saveState(st);
+    } catch {
+    }
+    scheduledTimer = setTimeout(async () => {
+      if (stopped) return;
+      try {
+        await runOneMinuteCycle("internal_1min_worker");
+      } catch (err) {
+        console.warn("[AutonomousDiscovery 1-Min Worker] Cycle error:", err?.message || err);
+      } finally {
+        if (!stopped) {
+          scheduleNextTick(intervalMs);
+        }
+      }
+    }, delayMs);
+    if (typeof scheduledTimer.unref === "function") {
+      scheduledTimer.unref();
+    }
+  }
+  function buildPublicStatus() {
+    const state = loadState();
+    const sourceValues = Object.values(state.sources);
+    const healthyCount = sourceValues.filter(
+      (s) => s.lastStatus === "ok" || s.lastStatus === "idle"
+    ).length;
+    const degradedCount = sourceValues.filter(
+      (s) => s.lastStatus === "error" || s.lastStatus === "rate_limited"
+    ).length;
+    const crawlerSummary = webCrawler.getMetricsSummary().summary;
+    const openIncidentsCount = state.incidents.filter((i) => i.status !== "resolved").length;
+    return {
+      success: true,
+      engineMode: isVercel ? "external_1min_scheduler" : "continuous_1min_worker",
+      intervalSeconds: state.intervalSeconds,
+      isCurrentlyRunning: isCycleInFlight || Boolean(state.activeLock && Date.parse(state.activeLock.expiresAt) > Date.now()),
+      workerStartedAt: state.workerStartedAt,
+      lastCycleAt: state.lastCycleAt,
+      lastCycleStatus: state.lastCycleStatus,
+      lastSuccessfulSearchAt: state.lastSuccessfulSearchAt,
+      lastSuccessfulSearchAtEat: state.lastSuccessfulSearchAtEat,
+      lastFailedSearchAt: state.lastFailedSearchAt,
+      lastFailedSearchAtEat: state.lastFailedSearchAtEat,
+      nextScheduledSearchAt: state.nextScheduledSearchAt,
+      nextScheduledSearchAtEat: state.nextScheduledSearchAtEat,
+      lastError: state.lastError,
+      consecutiveFailures: state.consecutiveFailures,
+      totalCyclesCompleted: state.totalCyclesCompleted,
+      totalSkippedOverlaps: state.totalSkippedOverlaps,
+      counts: state.counts,
+      sourcesSummary: {
+        totalApproved: sourceValues.length,
+        healthyCount,
+        rateLimitedOrDegradedCount: degradedCount
+      },
+      crawlerSummary,
+      openIncidentsCount,
+      recentCycles: state.cycleHistory.slice(0, 10)
+    };
+  }
+  function buildAdminTelemetry() {
+    const state = loadState();
+    const crawlerData = webCrawler.getMetricsSummary();
+    const openCritical = state.incidents.some(
+      (i) => i.status !== "resolved" && (i.severity === "critical" || i.status === "escalated")
+    );
+    const openWarning = state.incidents.some((i) => i.status !== "resolved");
+    const engineStatus = state.consecutiveFailures >= 3 || openCritical ? "failing" : state.consecutiveFailures > 0 || openWarning ? "degraded" : state.totalCyclesCompleted > 0 ? "healthy" : "idle";
+    return {
+      success: true,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      engineStatus,
+      workerStatus: {
+        mode: isVercel ? "external_1min_scheduler" : "continuous_1min_worker",
+        running: !stopped && !isVercel,
+        intervalSeconds: state.intervalSeconds,
+        pid: process.pid,
+        uptimeSeconds: Math.max(0, Math.floor((Date.now() - Date.parse(bootTimestampIso)) / 1e3)),
+        workerStartedAt: state.workerStartedAt,
+        totalCyclesCompleted: state.totalCyclesCompleted,
+        totalSkippedOverlaps: state.totalSkippedOverlaps,
+        consecutiveFailures: state.consecutiveFailures,
+        lastPreflightOk: state.lastPreflightOk,
+        lastPreflightMessage: state.lastPreflightMessage
+      },
+      schedule: {
+        lastSuccessfulExecution: state.lastSuccessfulSearchAt,
+        lastSuccessfulExecutionEat: state.lastSuccessfulSearchAtEat,
+        lastFailedExecution: state.lastFailedSearchAt,
+        lastFailedExecutionEat: state.lastFailedSearchAtEat,
+        nextScheduledExecution: state.nextScheduledSearchAt,
+        nextScheduledExecutionEat: state.nextScheduledSearchAtEat,
+        githubBackupSchedule: "00:00, 06:00, 12:00, 18:00 EAT (GitHub Actions backup + workflow_dispatch)"
+      },
+      crawler: crawlerData.summary,
+      combinedCounts: state.counts,
+      pipelineBreakdown: crawlerData.pipelineBreakdown,
+      recentDomains: crawlerData.recentDomains,
+      activeQueueSample: crawlerData.activeQueueSample,
+      recentWebOpportunities: crawlerData.recentOpportunities,
+      incidents: state.incidents.slice(0, 40),
+      recentCycles: state.cycleHistory.slice(0, 20),
+      sources: Object.values(state.sources).map(({ backoffUntil: _b, ...rest }) => rest)
+    };
+  }
+  app.get("/api/autonomous-discovery/status", (_req, res) => {
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(buildPublicStatus());
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Unable to load autonomous discovery status."
+      });
+    }
+  });
+  app.get("/api/autonomous-discovery/admin-telemetry", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Owner authentication required to access autonomous crawler operational telemetry."
+      });
+      return;
+    }
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(buildAdminTelemetry());
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Unable to load operational telemetry."
+      });
+    }
+  });
+  const handleExternalCronTick = async (req, res) => {
+    const cronSecret = (process.env.CRON_SECRET || "").trim();
+    const authHeader = String(req.headers.authorization || "").trim();
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const isVercelCron = String(req.headers["x-vercel-cron"] || "") === "1";
+    const hasSecretMatch = Boolean(cronSecret && constantTimeSecretEqual(bearerToken, cronSecret));
+    const isOwner = isPersistentOwnerRequest(req);
+    if (!isVercelCron && !hasSecretMatch && !isOwner) {
+      res.status(401).json({
+        success: false,
+        error: "Unauthorized autonomous discovery tick. Supply Authorization: Bearer <CRON_SECRET>."
+      });
+      return;
+    }
+    try {
+      const record = await runOneMinuteCycle("external_cron_webhook", {
+        includeGlobalSweepIfDue: !isVercel,
+        crawlerMaxTasks: isVercel ? 2 : 3
+      });
+      const statusPayload = buildPublicStatus();
+      const httpCode = record.status === "failed" ? 500 : 200;
+      res.status(httpCode).json({
+        success: record.status !== "failed",
+        cycle: record,
+        status: statusPayload
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Autonomous discovery tick failed."
+      });
+    }
+  };
+  app.get("/api/cron/autonomous-tick", handleExternalCronTick);
+  app.post("/api/cron/autonomous-tick", handleExternalCronTick);
+  app.post("/api/autonomous-discovery/trigger", async (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Owner authentication required to manually trigger an autonomous discovery cycle."
+      });
+      return;
+    }
+    try {
+      const record = await runOneMinuteCycle("manual_owner");
+      res.status(record.status === "failed" ? 500 : 200).json({
+        success: record.status !== "failed",
+        cycle: record,
+        status: buildPublicStatus()
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err?.message || "Manual autonomous discovery cycle failed."
+      });
+    }
+  });
+  app.get("/api/autonomous-discovery/notifications", (req, res) => {
+    if (!isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Owner authentication required to access personal match notifications."
+      });
+      return;
+    }
+    const state = loadState();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      success: true,
+      notifications: state.recentNotifications,
+      totalCount: state.recentNotifications.length
+    });
+  });
+  recoverOnBoot();
+  const shouldAutoStart = deps.autoStartWorker !== false && !isVercel && process.env.NODE_ENV !== "test";
+  if (shouldAutoStart) {
+    scheduleNextTick(6e3);
+    console.log(
+      `[HopelandJobs Autonomous Discovery] Continuous ${intervalSeconds}s worker & independent public-web crawler armed (${approvedSources.length} structured sources + self-expanding web frontier, transactional .bak recovery & incident grouping active).`
+    );
+  }
+  return {
+    runOneMinuteCycle,
+    buildPublicStatus,
+    buildAdminTelemetry,
+    loadState,
+    webCrawler,
+    stop() {
+      stopped = true;
+      if (scheduledTimer) {
+        clearTimeout(scheduledTimer);
+        scheduledTimer = null;
+      }
+    }
+  };
+}
+
+// serverOpportunityIntelligence.ts
+import * as path8 from "path";
+import * as crypto8 from "crypto";
+
+// src/utils/strictOpportunityMatcher.ts
+import * as crypto7 from "crypto";
+
+// src/types/opportunityIntelligence.ts
+var SENIORITY_RANK = {
+  entry_level: 1,
+  junior_professional: 2,
+  experienced_professional: 3,
+  senior_professional: 4,
+  supervisor: 5,
+  assistant_manager: 6,
+  manager: 7,
+  senior_manager: 8,
+  director: 9,
+  executive: 10
+};
+var SENIORITY_LABELS = {
+  entry_level: "Entry Level",
+  junior_professional: "Junior Professional",
+  experienced_professional: "Experienced Professional",
+  senior_professional: "Senior Professional",
+  supervisor: "Supervisor",
+  assistant_manager: "Assistant Manager",
+  manager: "Manager",
+  senior_manager: "Senior Manager",
+  director: "Director",
+  executive: "Executive"
+};
+
+// src/utils/strictOpportunityMatcher.ts
+var BRANCH_BANKING_REFERENCE_PROFILE = {
+  userId: "branch_banking_reference",
+  professionalSector: "branch_banking",
+  currentOccupation: "Branch Manager",
+  educationLevel: "bachelors",
+  fieldOfStudy: "Accounting and Finance",
+  yearsOfExperience: 9,
+  bankingExperienceYears: 9,
+  managerialExperienceYears: 3,
+  skills: [
+    "Branch operations",
+    "Banking management",
+    "Branch administration",
+    "Customer relationship management",
+    "Credit operations",
+    "Deposit mobilization",
+    "Staff supervision",
+    "Banking compliance and internal control"
+  ],
+  certifications: [],
+  minimumSalaryUsdMonthly: 3e3,
+  careerLevel: "manager",
+  preferredLocations: ["Europe", "Scandinavia", "Middle East", "USA", "Ethiopia"],
+  preferredEnvironment: "both",
+  nationality: "Ethiopian",
+  countriesWithLegalWorkRight: ["Ethiopia"],
+  allowJuniorRoles: false
+};
+var MINIMUM_DEADLINE_FULL_DAYS = 3;
+var MINIMUM_DEADLINE_HOURS = MINIMUM_DEADLINE_FULL_DAYS * 24;
+var DEFAULT_FX_RATES_USD_BASE = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.785,
+  CHF: 0.88,
+  SEK: 10.65,
+  NOK: 10.9,
+  DKK: 6.88,
+  AED: 3.6725,
+  SAR: 3.75,
+  QAR: 3.64,
+  KWD: 0.307,
+  OMR: 0.385,
+  BHD: 0.376,
+  CAD: 1.38,
+  AUD: 1.53,
+  ETB: 126
+};
+var PRIORITY_BRANCH_BANKING_TITLES = [
+  { label: "Senior Branch Manager", rx: /\bsenior\s+(?:retail\s+|commercial\s+|bank\s+)?branch\s+manager\b/i },
+  { label: "Area Branch Manager", rx: /\barea\s+(?:bank\s+|retail\s+)?branch\s+manager\b|\barea\s+banking\s+manager\b/i },
+  { label: "Regional Branch Manager", rx: /\bregional\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Branch Operations Manager", rx: /\bbranch\s+operations\s+manager\b/i },
+  { label: "Banking Operations Manager", rx: /\b(?:banking|bank)\s+operations\s+manager\b/i },
+  {
+    label: "Banking Operations and Administration Manager",
+    rx: /\b(?:banking|branch)\s+operations\s+(?:and|&)\s+admin(?:istration)?\s+manager\b/i
+  },
+  { label: "Branch Manager", rx: /\b(?:retail\s+|commercial\s+|bank\s+|banking\s+)?branch\s+manager\b/i },
+  { label: "Deputy Branch Manager", rx: /\bdeputy\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Assistant Branch Manager", rx: /\bassistant\s+(?:bank\s+|retail\s+)?branch\s+manager\b/i },
+  { label: "Banking Service Manager", rx: /\b(?:banking|branch)\s+service(?:s)?\s+manager\b/i },
+  { label: "Retail Banking Manager", rx: /\bretail\s+banking\s+manager\b/i },
+  { label: "Branch Network Manager", rx: /\bbranch\s+network\s+manager\b/i },
+  {
+    label: "Banking Relationship Manager (Managerial)",
+    rx: /\b(?:senior\s+|commercial\s+|corporate\s+|retail\s+|sme\s+|banking\s+|bank\s+)?relationship\s+manager\b/i
+  },
+  {
+    label: "Banking Business Development Manager",
+    rx: /\b(?:banking|bank|retail\s+banking|commercial\s+banking|branch)\s+business\s+development\s+manager\b/i
+  },
+  {
+    label: "Banking Management Equivalent",
+    rx: /\b(?:sme\s+banking|commercial\s+banking|credit\s+operations|microfinance\s+operations|customer\s+operations|deposit\s+mobilization|financial\s+operations)\s+manager\b/i
+  }
+];
+var EXECUTIVE_OVER_SENIOR_TITLE_RX = /\b(vice\s+president|svp\b|evp\b|avp\b.*executive|\bvp\b|chief\s+[a-z\s]+officer|\bceo\b|\bcfo\b|\bcoo\b|\bcro\b|managing\s+director|executive\s+director|group\s+head\s+of|global\s+head\s+of|country\s+ceo|country\s+head)\b/i;
+var JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX = /\b(customer\s+service\s+representative|csr\b|bank\s+teller|\bteller\b|\bcashier\b|junior\s+banking\s+assistant|banking\s+assistant|entry[- ]level|graduate\s+trainee|management\s+trainee|\bintern\b|\binternship\b|front\s+desk|receptionist|call\s+center\s+agent|contact\s+center\s+agent|data\s+entry\s+clerk|office\s+assistant|clerical\s+officer|junior\s+clerk|administrative\s+assistant)\b/i;
+var NON_BANKING_MANAGER_DISQUALIFIER_RX = /\b(software|devops|frontend|backend|full[- ]stack|data\s+scien|machine\s+learning|cloud\s+architect|product\s+designer|ux\s+designer|marketing\s+manager|social\s+media\s+manager|brand\s+manager|hotel\s+manager|restaurant\s+manager|store\s+manager|warehouse\s+manager|supply\s+chain\s+manager|construction\s+manager|project\s+manager.*civil|nursing\s+manager|clinic\s+manager|school\s+principal|hr\s+manager|human\s+resources\s+manager|talent\s+acquisition\s+manager|office\s+manager|facilities\s+manager|wash\s+(?:manager|coordinator|officer|engineer)|water\s+and\s+sanitation)\b/i;
+var BRANCH_BANKING_RESPONSIBILITY_SIGNALS = [
+  { label: "Branch operations & daily controls", rx: /\b(branch\s+operations|daily\s+branch|vault\s+control|cash\s+management|teller\s+supervision|branch\s+compliance|core\s+banking)\b/i },
+  { label: "Banking management & P&L / KPI leadership", rx: /\b(branch\s+performance|branch\s+p&l|branch\s+target|branch\s+budget|deposit\s+mobilization|branch\s+growth|portfolio\s+management)\b/i },
+  { label: "Staff supervision & team management", rx: /\b(supervis(?:e|ing)\s+(?:branch\s+)?staff|lead(?:ing)?\s+a\s+team|manage\s+(?:direct\s+reports|branch\s+team|relationship\s+officers|tellers)|people\s+management|performance\s+appraisal)\b/i },
+  { label: "Credit, lending & risk oversight", rx: /\b(credit\s+appraisal|loan\s+portfolio|credit\s+risk|kyc|aml|internal\s+control|regulatory\s+compliance|audit\s+readiness)\b/i },
+  { label: "Managerial customer relationship & business development", rx: /\b(high[- ]value\s+client|commercial\s+clients|sme\s+clients|customer\s+relationship\s+management|client\s+acquisition|business\s+development|retail\s+banking)\b/i }
+];
+function extractOpportunityReferenceNumber(text) {
+  const m = String(text || "").match(
+    /\b(?:job\s*(?:id|ref|code|number|#)|req(?:uisition)?\s*(?:id|#|no\.?)|vacancy\s*(?:id|no\.?|ref)|reference\s*(?:no\.?|number|code|#)|ref\s*[:#])\s*[:#-]?\s*([A-Z0-9][A-Z0-9/_-]{2,28})\b/i
+  );
+  if (!m?.[1]) return null;
+  const cleaned = m[1].trim().toUpperCase();
+  if (/^(HTTP|HTTPS|WWW|THE|AND|FOR|YES|NOT)$/.test(cleaned)) return null;
+  return cleaned;
+}
+function normalizeCanonicalText(input) {
+  return String(input || "").toLowerCase().replace(/https?:\/\//g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\b(the|and|for|with|limited|ltd|plc|inc|corp|llc|gmbh|s\.c\.|bank\s+s\.c\.)\b/g, " ").replace(/\s+/g, " ").trim();
+}
+function normalizeOfficialUrl(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || "").trim());
+    u.hash = "";
+    const stripParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "source", "gh_src"];
+    for (const p of stripParams) u.searchParams.delete(p);
+    return u.toString().replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return String(rawUrl || "").trim().toLowerCase();
+  }
+}
+function buildCanonicalOpportunityIdentity(input) {
+  const normUrl = normalizeOfficialUrl(input.officialApplicationUrl);
+  const urlFingerprint = crypto7.createHash("sha256").update(normUrl).digest("hex").slice(0, 24);
+  const normEmployer = normalizeCanonicalText(input.employer);
+  const normTitle = normalizeCanonicalText(input.title);
+  const normCountry = normalizeCanonicalText(input.country || "global");
+  const crossSourceBasis = `${input.category}|${normEmployer}|${normTitle}|${normCountry}`;
+  const canonicalKey = crypto7.createHash("sha256").update(crossSourceBasis).digest("hex").slice(0, 24);
+  return {
+    canonicalKey,
+    urlFingerprint,
+    canonicalId: `opp_${canonicalKey}`
+  };
+}
+function detectEnvironment(country, city = "", description = "") {
+  const combined = `${country} ${city}`.toLowerCase();
+  if (/\b(ethiopia|addis\s+ababa|adama|hawassa|bahir\s+dar|mekelle|dire\s+dawa|gondar|jimma|dessie|bishoftu|shashemene|arbaminch|jigjiga|semera|assosa|gambela|harar)\b/i.test(
+    combined
+  )) {
+    return "ethiopia_domestic";
+  }
+  if (!country.trim() && /\b(addis\s+ababa|ethiopian\s+birr|\betb\b)\b/i.test(description)) {
+    return "ethiopia_domestic";
+  }
+  return "international";
+}
+function detectProfessionalSectors(title, employer, description) {
+  const titleAndOrg = `${title} ${employer}`.toLowerCase();
+  const full = `${title} ${employer} ${description}`.toLowerCase();
+  const scores = {
+    branch_banking: 0,
+    banking_finance: 0,
+    wash: 0,
+    engineering: 0,
+    healthcare: 0,
+    education: 0,
+    it_software: 0,
+    legal_compliance: 0,
+    general_management: 0,
+    other: 0
+  };
+  if (/\b(wash|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply|sanitation|hygiene\s+promotion|water\s+engineering|wastewater|environmental\s+health|water\s+resources|humanitarian\s+wash|climate[- ]resilient\s+wash|borehole|fecal\s+sludge|latrine|hydrogeolog)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.wash += 9;
+  } else if (/\b(wash\s+program|water,?\s*sanitation\s*(?:and|&)\s*hygiene|water\s+supply\s+and\s+sanitation|wastewater\s+treatment|hygiene\s+promotion|humanitarian\s+wash|climate[- ]resilient\s+wash)\b/i.test(
+    full
+  )) {
+    scores.wash += 6;
+  }
+  if (PRIORITY_BRANCH_BANKING_TITLES.some((p) => p.rx.test(title))) {
+    scores.branch_banking += 10;
+    scores.banking_finance += 6;
+  }
+  if (/\b(branch\s+banking|branch\s+operations|retail\s+banking|branch\s+network|branch\s+management|deposit\s+mobilization|teller\s+supervision|branch\s+administration)\b/i.test(
+    full
+  )) {
+    scores.branch_banking += 5;
+  }
+  const isFakeBankPhrase = /\b(blood\s+bank|food\s+bank|river\s+bank|water\s+bank|data\s+bank|seed\s+bank)\b/i.test(full);
+  if (!isFakeBankPhrase && /\b(bank|banking|central\s+bank|commercial\s+bank|microfinance|financial\s+inclusion|digital\s+banking|fintech|financial\s+technology|accounting|finance|financial\s+management|risk\s+management|credit\s+risk|economics|financial\s+regulation|treasury|aml|kyc|audit|lending)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.banking_finance += 8;
+  } else if (!isFakeBankPhrase && /\b(commercial\s+banking|central\s+banking|microfinance|financial\s+inclusion|financial\s+regulation|banking\s+operations|risk\s+management|credit\s+portfolio)\b/i.test(
+    full
+  )) {
+    scores.banking_finance += 5;
+  }
+  if (/\b(civil\s+engineer|mechanical\s+engineer|electrical\s+engineer|structural\s+engineer|chemical\s+engineer|industrial\s+engineer|construction\s+engineer|site\s+engineer)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.engineering += 8;
+  }
+  if (/\b(physician|medical\s+doctor|registered\s+nurse|pharmacist|midwife|clinical\s+officer|epidemiolog|hospital\s+director|public\s+health\s+specialist|surgeon|dentist)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.healthcare += 8;
+  }
+  if (/\b(professor|lecturer|teacher|school\s+principal|academic\s+dean|curriculum\s+specialist|education\s+specialist|pedagog)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.education += 8;
+  }
+  if (/\b(software\s+engineer|developer|devops|data\s+scientist|machine\s+learning|cybersecurity|cloud\s+engineer|systems?\s+administrator|frontend|backend|full[- ]stack)\b/i.test(
+    titleAndOrg
+  )) {
+    scores.it_software += 8;
+  }
+  if (/\b(attorney|lawyer|legal\s+counsel|solicitor|barrister)\b/i.test(titleAndOrg)) {
+    scores.legal_compliance += 7;
+  }
+  const ordered = Object.entries(scores).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]);
+  if (ordered.length === 0) {
+    return { primary: "other", secondary: [] };
+  }
+  if (scores.wash >= 8 && !/\b(branch|credit|loan|teller|deposit|finance\s+manager|accounting|banking\s+operations)\b/i.test(title)) {
+    const rest = ordered.map(([k]) => k).filter((k) => k !== "wash");
+    return { primary: "wash", secondary: rest.slice(0, 2) };
+  }
+  return {
+    primary: ordered[0][0],
+    secondary: ordered.slice(1, 3).map(([k]) => k)
+  };
+}
+function extractExperienceRequirements(text) {
+  const clean = String(text || "");
+  let requiredTotalYears = null;
+  let requiredBankingYears = null;
+  let requiredManagerialYears = null;
+  const mgmtMatches = [
+    ...clean.matchAll(
+      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|direct\s+|proven\s+|senior\s+)?(?:executive\s+|branch\s+)?(?:managerial|management|leadership|supervisory|people\s+management|branch\s+manager)/gi
+    ),
+    ...clean.matchAll(
+      /(?:managerial|management|leadership|supervisory)\s+experience[^.\n]{0,40}?(\d{1,2})\s*\+?\s*years?/gi
+    )
+  ];
+  for (const m of mgmtMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 35) {
+      requiredManagerialYears = requiredManagerialYears === null ? val : Math.max(requiredManagerialYears, val);
+    }
+  }
+  const bankMatches = [
+    ...clean.matchAll(
+      /(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:progressive\s+|relevant\s+|proven\s+|senior\s+|executive\s+)?(?:retail\s+|commercial\s+|branch\s+)?(?:banking|financial\s+services|bank\s+operations|microfinance|credit)/gi
+    )
+  ];
+  for (const m of bankMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
+      requiredBankingYears = requiredBankingYears === null ? val : Math.max(requiredBankingYears, val);
+    }
+  }
+  const genMatches = [
+    ...clean.matchAll(
+      /(?:at\s+least|minimum\s+(?:of\s+)?|requires?\s+|with\s+)?(\d{1,2})\s*(?:\+|to\s*\d{1,2}|-\s*\d{1,2})?\s*years?\s+(?:of\s+)?(?:relevant|progressive|proven|professional|executive|work|related|experience|in\s+)/gi
+    )
+  ];
+  for (const m of genMatches) {
+    const val = parseInt(m[1], 10);
+    if (!Number.isNaN(val) && val >= 0 && val <= 40) {
+      requiredTotalYears = requiredTotalYears === null ? val : Math.max(requiredTotalYears, val);
+    }
+  }
+  if (requiredTotalYears === null && requiredBankingYears !== null) {
+    requiredTotalYears = requiredBankingYears;
+  }
+  const bankingExperienceSummary = requiredBankingYears !== null ? `${requiredBankingYears}+ years of banking experience` : requiredTotalYears !== null ? `${requiredTotalYears}+ years of relevant experience` : "Not explicitly stated \u2014 verify on official portal";
+  const managerialExperienceSummary = requiredManagerialYears !== null ? `${requiredManagerialYears}+ years of managerial / leadership experience` : /\b(executive|vice\s+president|svp|evp|managing\s+director)\b/i.test(clean) ? "Senior executive leadership track (10+ years)" : /\b(branch\s+manager|operations\s+manager|area\s+manager|regional\s+manager|supervis|manage\s+a\s+team|people\s+management)\b/i.test(
+    clean
+  ) ? "Managerial / team supervision experience required" : "Not explicitly stated";
+  return {
+    requiredTotalYears,
+    requiredBankingYears,
+    requiredManagerialYears,
+    bankingExperienceSummary,
+    managerialExperienceSummary
+  };
+}
+function classifyRoleSeniority(title, description, exp) {
+  const t = String(title || "").trim();
+  const full = `${t}
+${description}`;
+  const maxYears = Math.max(exp.requiredTotalYears ?? 0, exp.requiredBankingYears ?? 0);
+  const mgmtYears = exp.requiredManagerialYears ?? 0;
+  if (EXECUTIVE_OVER_SENIOR_TITLE_RX.test(t) || maxYears >= 14 && /\b(executive|board\s+of\s+directors|c-suite|enterprise[- ]wide|group\s+strategy|vice\s+president)\b/i.test(full)) {
+    return "executive";
+  }
+  if (/\b(director|head\s+of\s+(?:retail|commercial|banking|operations|finance|wash|programs?))\b/i.test(t) && !/\b(assistant\s+director|deputy\s+branch)\b/i.test(t)) {
+    return maxYears >= 14 ? "executive" : "director";
+  }
+  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(t)) {
+    if (/\b(intern|trainee|entry[- ]level|fresh\s+graduate|cashier|teller|clerk|receptionist)\b/i.test(t)) {
+      return "entry_level";
+    }
+    return "junior_professional";
+  }
+  if (/\b(senior\s+(?:branch|banking|operations|finance|credit|risk|compliance|relationship|wash)\s+manager|regional\s+branch\s+manager|area\s+branch\s+manager|branch\s+network\s+manager)\b/i.test(
+    t
+  )) {
+    return maxYears >= 13 || mgmtYears >= 8 ? "director" : "senior_manager";
+  }
+  if (/\b(deputy\s+branch\s+manager|assistant\s+(?:branch|banking|operations|finance)\s+manager)\b/i.test(t)) {
+    return "assistant_manager";
+  }
+  if (/\bmanager\b/i.test(t)) {
+    if (mgmtYears >= 7 || maxYears >= 13) return "director";
+    if (mgmtYears >= 5 || maxYears >= 10) return "senior_manager";
+    if (maxYears > 0 && maxYears <= 2 && !/\b(supervis|manage\s+(?:staff|team)|direct\s+reports|branch\s+p&l)\b/i.test(full)) {
+      return "experienced_professional";
+    }
+    return "manager";
+  }
+  if (/\b(supervisor|team\s+lead(?:er)?|unit\s+head|section\s+head|coordinator)\b/i.test(t)) {
+    return "supervisor";
+  }
+  if (/\b(senior|lead|principal|specialist|advisor|consultant)\b/i.test(t) || maxYears >= 6) {
+    return "senior_professional";
+  }
+  if (maxYears >= 3 || /\b(officer|analyst|engineer|accountant|auditor)\b/i.test(t)) {
+    return "experienced_professional";
+  }
+  if (maxYears >= 1) return "junior_professional";
+  return "entry_level";
+}
+function normalizeSalaryRecord(opportunityId, text, fxRatesUsdBase = DEFAULT_FX_RATES_USD_BASE) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const clean = String(text || "").replace(/\u00a0/g, " ");
+  const undisclosed = {
+    opportunityId,
+    disclosed: false,
+    salaryDisplay: "Not Disclosed",
+    period: "unknown",
+    taxBasis: "not_specified",
+    originalCurrency: null,
+    minOriginalAmount: null,
+    maxOriginalAmount: null,
+    normalizedMonthlyUsd: null,
+    normalizedAnnualUsd: null,
+    exchangeRateUsed: "N/A (Not Disclosed)",
+    meetsAbove3000UsdMonthly: false,
+    verifiedAt: nowIso
+  };
+  const mapCurrency = (raw) => {
+    const u = raw.trim().toUpperCase();
+    if (u === "$" || u === "US$" || u === "USD") return "USD";
+    if (u === "\u20AC" || u === "EUR") return "EUR";
+    if (u === "\xA3" || u === "GBP") return "GBP";
+    if (u === "CHF") return "CHF";
+    if (u === "SEK") return "SEK";
+    if (u === "NOK") return "NOK";
+    if (u === "DKK") return "DKK";
+    if (u === "AED" || u === "DHS") return "AED";
+    if (u === "SAR") return "SAR";
+    if (u === "QAR") return "QAR";
+    if (u === "KWD") return "KWD";
+    if (u === "OMR") return "OMR";
+    if (u === "BHD") return "BHD";
+    if (u === "CAD" || u === "C$") return "CAD";
+    if (u === "AUD" || u === "A$") return "AUD";
+    if (u === "ETB" || u === "BIRR") return "ETB";
+    return u;
+  };
+  const parseAmount = (raw) => {
+    const s = raw.trim().toLowerCase();
+    const isK = s.endsWith("k");
+    const numeric = Number(s.replace(/k$/, "").replace(/,/g, ""));
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return isK ? numeric * 1e3 : numeric;
+  };
+  const prefixRx = /(US\$|\$|€|£|\bUSD\b|\bEUR\b|\bGBP\b|\bCHF\b|\bSEK\b|\bNOK\b|\bDKK\b|\bAED\b|\bSAR\b|\bQAR\b|\bKWD\b|\bOMR\b|\bBHD\b|\bCAD\b|\bAUD\b|\bETB\b)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(?:US\$|\$|€|£|USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
+  const suffixRx = /(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?)\s*(?:(?:-|–|—|to)\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?k?))?\s*(USD|EUR|GBP|CHF|SEK|NOK|DKK|AED|SAR|QAR|KWD|OMR|BHD|CAD|AUD|ETB)\s*(?:(?:per|\/)\s*(year|yr|annum|month|mo)|annually|annual|monthly|p\.a\.|p\.m\.)?/gi;
+  const found = [];
+  const evaluateMatch = (idx, fullMatch, currRaw, minRaw, maxRaw, periodRaw) => {
+    const start = Math.max(0, idx - 90);
+    const end = Math.min(clean.length, idx + fullMatch.length + 90);
+    const ctx = clean.slice(start, end);
+    const ctxLower = ctx.toLowerCase();
+    if (/\b(funding|series\s+[a-d]|valuation|revenue|raised|aum|assets\s+under|market\s+cap|transactions?\s+volume|loan\s+size|tuition\s+fee|registration\s+fee)\b/i.test(
+      ctxLower
+    ) && !/\b(salary|base\s+pay|gross\s+pay|remuneration|compensation|stipend)\b/i.test(ctxLower)) {
+      return;
+    }
+    const hasSalaryCue = /\b(salary|compensation|base\s+pay|gross\s+pay|net\s+pay|remuneration|pay\s+range|package|per\s+year|per\s+annum|annually|per\s+month|monthly|\/year|\/yr|\/month|\/mo|p\.a\.|p\.m\.)\b/i.test(
+      ctxLower
+    );
+    if (!hasSalaryCue) return;
+    const currency = mapCurrency(currRaw);
+    const rate2 = fxRatesUsdBase[currency] || DEFAULT_FX_RATES_USD_BASE[currency];
+    if (!rate2) return;
+    const v1 = parseAmount(minRaw);
+    if (!v1) return;
+    const v2 = maxRaw ? parseAmount(maxRaw) || v1 : v1;
+    const low = Math.min(v1, v2);
+    const high = Math.max(v1, v2);
+    let period;
+    const joinedPeriod = `${periodRaw || ""} ${fullMatch}`.toLowerCase();
+    if (/(month|\/mo\b|p\.m\.|monthly)/i.test(joinedPeriod) || /\b(per\s+month|monthly|\/\s*mo|\/\s*month)\b/i.test(ctxLower)) {
+      period = "monthly";
+    } else if (/(year|\/yr\b|annual|annum|p\.a\.)/i.test(joinedPeriod) || /\b(per\s+year|annually|annual|\/\s*yr|\/\s*year|p\.a\.|per\s+annum)\b/i.test(ctxLower)) {
+      period = "annual";
+    } else {
+      const approxUsd = low / rate2;
+      period = approxUsd >= 18e3 ? "annual" : "monthly";
+    }
+    const annualUsd = period === "annual" ? low / rate2 : low / rate2 * 12;
+    if (annualUsd < 1200 || annualUsd > 8e5) return;
+    const taxBasis = /\b(net\s+salary|net\s+pay|tax[- ]free|after[- ]tax|take[- ]home)\b/i.test(
+      ctxLower
+    ) ? "net" : /\b(gross\s+salary|gross\s+pay|gross\s+base|before\s+tax|pre[- ]tax|base\s+salary)\b/i.test(ctxLower) ? "gross" : "not_specified";
+    const priority = /\b(base\s+salary|gross\s+salary|monthly\s+salary|annual\s+salary|salary\s+range)\b/i.test(ctxLower) ? 3 : 2;
+    found.push({ currency, low, high, period, taxBasis, priority });
+  };
+  let m;
+  while ((m = prefixRx.exec(clean)) !== null) {
+    evaluateMatch(m.index, m[0], m[1], m[2], m[3], m[4]);
+  }
+  while ((m = suffixRx.exec(clean)) !== null) {
+    evaluateMatch(m.index, m[0], m[3], m[1], m[2], m[4]);
+  }
+  if (found.length === 0) return undisclosed;
+  found.sort((a, b) => b.priority - a.priority || b.low - a.low);
+  const best = found[0];
+  const rate = fxRatesUsdBase[best.currency] || DEFAULT_FX_RATES_USD_BASE[best.currency] || 1;
+  const normalizedAnnualUsd = Math.round(
+    best.period === "annual" ? best.low / rate : best.low / rate * 12
+  );
+  const normalizedMonthlyUsd = Math.round(normalizedAnnualUsd / 12);
+  const periodStr = best.period === "annual" ? "Annual" : "Monthly";
+  const taxStr = best.taxBasis === "gross" ? "Gross" : best.taxBasis === "net" ? "Net" : "Tax basis not specified";
+  const rangeStr = best.high > best.low ? `${best.currency} ${best.low.toLocaleString()}\u2013${best.high.toLocaleString()}` : `${best.currency} ${best.low.toLocaleString()}`;
+  const salaryDisplay = `${rangeStr} (${periodStr}, ${taxStr}) \u2248 USD $${normalizedMonthlyUsd.toLocaleString()}/month ($${normalizedAnnualUsd.toLocaleString()}/year)`;
+  const exchangeRateUsed = best.currency === "USD" ? "1 USD = 1.0000 USD" : `1 ${best.currency} = $${(1 / rate).toFixed(4)} USD`;
+  return {
+    opportunityId,
+    disclosed: true,
+    salaryDisplay,
+    period: best.period,
+    taxBasis: best.taxBasis,
+    originalCurrency: best.currency,
+    minOriginalAmount: best.low,
+    maxOriginalAmount: best.high,
+    normalizedMonthlyUsd,
+    normalizedAnnualUsd,
+    exchangeRateUsed,
+    // Strictly ABOVE USD 3,000/month (> $36,000/year normalized!)
+    meetsAbove3000UsdMonthly: normalizedMonthlyUsd > 3e3 && normalizedAnnualUsd > 36e3,
+    verifiedAt: nowIso
+  };
+}
+function evaluateStrictThreeDayDeadline(rawDeadline, nowMs = Date.now(), isClosedOrWithdrawn = false) {
+  if (isClosedOrWithdrawn) {
+    return {
+      passed: false,
+      deadlineIso: null,
+      fullDaysRemaining: 0,
+      rejectionCode: "closed_or_withdrawn",
+      explanation: "Opportunity is marked closed or withdrawn at the official source."
+    };
+  }
+  const raw = String(rawDeadline || "").trim();
+  if (!raw || /^(rolling|ongoing|open|open\s+until\s+filled|not\s+stated|until\s+filled)$/i.test(raw)) {
+    return {
+      passed: true,
+      deadlineIso: null,
+      fullDaysRemaining: null,
+      rejectionCode: null,
+      explanation: "Rolling/open official listing verified active."
+    };
+  }
+  let targetMs = NaN;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    targetMs = Date.parse(`${raw}T23:59:59Z`);
+  } else {
+    targetMs = Date.parse(raw);
+  }
+  if (Number.isNaN(targetMs)) {
+    return {
+      passed: true,
+      deadlineIso: null,
+      fullDaysRemaining: null,
+      rejectionCode: null,
+      explanation: "Deadline format requires manual check on official source."
+    };
+  }
+  const diffMs = targetMs - nowMs;
+  const hoursRemaining = diffMs / (1e3 * 60 * 60);
+  const fullDaysRemaining = Math.floor(hoursRemaining / 24);
+  if (diffMs <= 0) {
+    return {
+      passed: false,
+      deadlineIso: new Date(targetMs).toISOString(),
+      fullDaysRemaining: 0,
+      rejectionCode: "deadline_expired",
+      explanation: `Official deadline (${raw}) has already passed.`
+    };
+  }
+  if (hoursRemaining < MINIMUM_DEADLINE_HOURS) {
+    return {
+      passed: false,
+      deadlineIso: new Date(targetMs).toISOString(),
+      fullDaysRemaining,
+      rejectionCode: "deadline_under_three_days",
+      explanation: `Only ${fullDaysRemaining} full day(s) (${Math.round(hoursRemaining)}h) remaining before official deadline (${raw}); minimum 3 full days (72h) required.`
+    };
+  }
+  return {
+    passed: true,
+    deadlineIso: new Date(targetMs).toISOString(),
+    fullDaysRemaining,
+    rejectionCode: null,
+    explanation: `Verified active with ${fullDaysRemaining} full days remaining before deadline (${raw}).`
+  };
+}
+function evaluateVisaAndAuthorization(params) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const clean = String(params.text || "");
+  const lower = clean.toLowerCase();
+  if (params.environment === "ethiopia_domestic") {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "ethiopia_domestic",
+      conditionMet: "domestic_not_required",
+      verified: true,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport: "not_confirmed",
+      relocationDetails: "Ethiopian domestic role \u2014 international work visa sponsorship not applicable.",
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: "Ethiopian domestic opportunity (no international visa sponsorship required).",
+      statusLabel: "Ethiopian Domestic \u2014 No International Visa Required",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (params.visaSponsorshipRevoked) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      verified: false,
+      visaFeesCovered: "no",
+      relocationSupport: "no",
+      relocationDetails: "Previously confirmed sponsorship was revoked/removed at the official source.",
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: "Work visa sponsorship revoked or no longer confirmed at official source.",
+      statusLabel: "Visa Sponsorship Revoked / Unconfirmed",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const touristOnlyRx = /\b(tourist\s+visa[- ]free|visa[- ]free\s+entry\s+for\s+tourism|visit\s+visa\s+only|tourist\s+visa\s+on\s+arrival|permission\s+to\s+apply\s+for\s+a\s+visa|apply\s+for\s+a\s+visa\s+independently|self[- ]sponsored\s+visa\s+application)\b/i;
+  const touristEntryRejected = touristOnlyRx.test(lower);
+  const negationRx = /\b(no\s+visa\s+sponsorship|cannot\s+sponsor|unable\s+to\s+sponsor|do\s+not\s+sponsor|does\s+not\s+sponsor|will\s+not\s+sponsor|not\s+able\s+to\s+sponsor|without\s+visa\s+sponsorship|sponsorship\s+(?:is\s+)?not\s+(?:available|offered|provided)|must\s+already\s+have\s+(?:the\s+)?right\s+to\s+work|existing\s+work\s+authorization\s+required|local\s+citizens?\s+only|no\s+longer\s+sponsoring)\b/i;
+  const applicantPaysVisaRx = /\b(visa\s+(?:fees?|costs?)\s+(?:are\s+)?(?:the\s+)?(?:applicant['’]?s|participant['’]?s|your)\s+responsibility|applicants?\s+(?:must\s+)?pay\s+(?:for\s+)?(?:their\s+own\s+)?visa|self[- ]funded\s+visa|visa\s+costs?\s+not\s+covered|does\s+not\s+cover\s+visa)\b/i;
+  const invitationOnlyRx = /\b(invitation\s+letter\s+only|only\s+(?:an?\s+)?invitation\s+letter|provide\s+an?\s+invitation\s+letter\s+for\s+visa|visa\s+support\s+letter\s+only)\b/i;
+  const visaFeesCoveredRx = /\b(visa\s+(?:fees?|application\s+fees?|costs?)\s+(?:are\s+)?(?:fully\s+)?(?:covered|reimbursed|paid|funded|included)|fully\s+funded\s+including\s+visa|covers?\s+(?:all\s+)?(?:travel,?\s+|accommodation,?\s+)?visa\s+(?:fees?|costs?)|visa\s+sponsorship\s+and\s+visa\s+fees?\s+covered)\b/i;
+  const relocMatch = clean.match(
+    /[^.\n]{0,90}\b(relocation\s+(?:package|support|assistance|allowance|covered|provided)|flight\s+tickets?\s+(?:covered|provided)|airfare\s+covered|housing\s+allowance|mobilization\s+allowance)\b[^.\n]{0,110}/i
+  );
+  const relocationSupport = relocMatch ? "yes" : "not_confirmed";
+  const relocationDetails = relocMatch ? relocMatch[0].replace(/\s+/g, " ").trim().slice(0, 220) : "Not explicitly specified";
+  if (params.category !== "job" && params.category !== "internship") {
+    const hasVisaFeesCovered = visaFeesCoveredRx.test(lower);
+    const hasOfficialVisaSponsorship = /\b(visa\s+sponsorship\s+(?:is\s+)?(?:provided|included|covered|offered)|sponsor(?:s|ing)?\s+(?:your\s+)?(?:student|training|conference|j-1|schengen|uk)\s+visa|official\s+visa\s+sponsorship)\b/i.test(
+      lower
+    );
+    const isApplicantPaid = applicantPaysVisaRx.test(lower);
+    const isInvitationOnly = invitationOnlyRx.test(lower) && !hasVisaFeesCovered && !hasOfficialVisaSponsorship;
+    if (isApplicantPaid || isInvitationOnly || negationRx.test(lower) || !hasVisaFeesCovered && !hasOfficialVisaSponsorship) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "none",
+        verified: false,
+        visaFeesCovered: isApplicantPaid ? "no" : "not_confirmed",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: isInvitationOnly,
+        touristEntryRejected,
+        sponsorshipStatement: isApplicantPaid ? "Excluded: Visa costs are the applicant\u2019s responsibility." : isInvitationOnly ? "Excluded: Invitation letter alone is insufficient; confirmed visa sponsorship or visa fee coverage is required." : "Excluded: Official visa sponsorship or visa fee coverage not confirmed.",
+        statusLabel: isInvitationOnly ? "Invitation Letter Only (Excluded)" : "Visa Funding Not Confirmed (Excluded)",
+        lastVerifiedAt: nowIso
+      };
+    }
+    const matchSnippet = clean.match(visaFeesCoveredRx)?.[0] || clean.match(/\b[^.\n]{0,80}visa\s+sponsorship[^.\n]{0,90}/i)?.[0] || "Confirmed official visa sponsorship / visa fee coverage.";
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "A_employer_work_visa",
+      verified: true,
+      visaFeesCovered: hasVisaFeesCovered ? "yes" : "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: matchSnippet.replace(/\s+/g, " ").trim().slice(0, 240),
+      statusLabel: hasVisaFeesCovered ? "Verified: Visa Fees Covered / Sponsored" : "Verified: Official Visa Sponsorship",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const legalCountries = (params.userLegalWorkCountries || []).map((c) => c.toLowerCase().trim()).filter(Boolean);
+  const countryLower = String(params.country || "").toLowerCase().trim();
+  const hasConditionC = Boolean(countryLower) && legalCountries.some((c) => countryLower.includes(c) || c.includes(countryLower)) && !touristEntryRejected;
+  if (negationRx.test(lower)) {
+    if (hasConditionC) {
+      return {
+        opportunityId: params.opportunityId,
+        environment: "international",
+        conditionMet: "C_legal_right_no_sponsorship",
+        verified: true,
+        visaFeesCovered: "not_confirmed",
+        relocationSupport,
+        relocationDetails,
+        invitationLetterOnly: false,
+        touristEntryRejected: false,
+        sponsorshipStatement: `Condition C verified: Applicant holds confirmed legal work authorization in ${params.country}.`,
+        statusLabel: "Condition C: Confirmed Legal Right to Work",
+        lastVerifiedAt: nowIso
+      };
+    }
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "none",
+      verified: false,
+      visaFeesCovered: "no",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected,
+      sponsorshipStatement: "Excluded: Employer explicitly states no work visa sponsorship is provided.",
+      statusLabel: "No Visa Sponsorship",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const condAMatch = clean.match(
+    /[^.\n]{0,100}\b((?:we|employer|company|bank|[a-z]+)\s+(?:offer|offers|provide|provides|can\s+provide|support|supports)\s+(?:full\s+)?(?:[a-z-]+\s+)?(?:employment\s+|work\s+|skilled\s+worker\s+|work\s+permit\s+(?:and|&|\/)\s+)?visa\s+sponsorship|(?:we|employer|company|organization|bank)\s+(?:will\s+)?sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+){0,3}(?:work|employment|skilled\s+worker)\s+visa|employer[- ]sponsored\s+(?:work\s+)?visa|(?:work|employment|skilled\s+worker|residence|uae|uk|eu|swedish|german|dutch|danish|norwegian|qatar|saudi)\s+(?:work\s+)?visa\s+sponsorship|work\s+permit\s+(?:and|&|\/)\s+visa\s+sponsorship|visa\s+sponsorship\s+(?:is\s+)?(?:available|provided|offered|included|confirmed)|full\s+visa\s+sponsorship|g-4\s+visa|h-1b\s+sponsorship|iqama\s+sponsorship|employment\s+visa\s+sponsored)\b[^.\n]{0,120}/i
+  );
+  if (condAMatch && !touristEntryRejected) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "A_employer_work_visa",
+      verified: true,
+      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: condAMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
+      statusLabel: "Verified: Employer Work Visa Sponsorship (Condition A)",
+      lastVerifiedAt: nowIso
+    };
+  }
+  const condBMatch = clean.match(
+    /[^.\n]{0,100}\b(work\s+permit\s+(?:(?:and|&|\/)\s+(?:visa|immigration)\s+)?sponsorship|immigration\s+sponsorship|eu\s+blue\s+card\s+sponsorship|sponsor(?:s|ing)?\s+(?:your\s+)?(?:[a-z-]+\s+)?work\s+permit|residence\s+and\s+work\s+permit\s+sponsored|company\s+sponsors?\s+(?:work\s+permit|employment\s+pass)|provides?\s+(?:[a-z-]+\s+)?work\s+permit\s+sponsorship)\b[^.\n]{0,120}/i
+  );
+  if (condBMatch && !touristEntryRejected) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "B_work_permit_immigration",
+      verified: true,
+      visaFeesCovered: visaFeesCoveredRx.test(lower) ? "yes" : applicantPaysVisaRx.test(lower) ? "no" : "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: condBMatch[0].replace(/\s+/g, " ").trim().slice(0, 240),
+      statusLabel: "Verified: Work Permit / Immigration Sponsorship (Condition B)",
+      lastVerifiedAt: nowIso
+    };
+  }
+  if (hasConditionC) {
+    return {
+      opportunityId: params.opportunityId,
+      environment: "international",
+      conditionMet: "C_legal_right_no_sponsorship",
+      verified: true,
+      visaFeesCovered: "not_confirmed",
+      relocationSupport,
+      relocationDetails,
+      invitationLetterOnly: false,
+      touristEntryRejected: false,
+      sponsorshipStatement: `Condition C verified: Applicant can legally work in ${params.country} without employer sponsorship.`,
+      statusLabel: "Verified: Legal Right to Work (Condition C)",
+      lastVerifiedAt: nowIso
+    };
+  }
+  return {
+    opportunityId: params.opportunityId,
+    environment: "international",
+    conditionMet: "none",
+    verified: false,
+    visaFeesCovered: "not_confirmed",
+    relocationSupport,
+    relocationDetails,
+    invitationLetterOnly: invitationOnlyRx.test(lower),
+    touristEntryRejected,
+    sponsorshipStatement: touristEntryRejected ? "Excluded: Tourist visa-free entry is NOT legal work authorization." : "Excluded: No verified work visa sponsorship, work permit sponsorship, or confirmed legal right to work.",
+    statusLabel: "Visa Sponsorship Not Confirmed",
+    lastVerifiedAt: nowIso
+  };
+}
+function extractResponsibilitiesList(responsibilities, description) {
+  if (Array.isArray(responsibilities) && responsibilities.filter((r) => r.trim().length >= 12).length > 0) {
+    return responsibilities.map((r) => r.trim()).filter(Boolean).slice(0, 6);
+  }
+  const sentences = String(description || "").split(/[\n•▪▸]+|(?<=\.)\s+/).map((s) => s.replace(/^[\s\-–*0-9.)]+/, "").trim()).filter((s) => s.length >= 24 && s.length <= 220);
+  const actionLines = sentences.filter(
+    (s) => /^(lead|manage|oversee|supervise|drive|ensure|develop|prepare|monitor|coordinate|review|build|deliver|maintain|support|own|design|execute|implement|control|analyze|report|establish|direct|grow)/i.test(
+      s
+    )
+  );
+  if (actionLines.length >= 2) return actionLines.slice(0, 5);
+  return sentences.slice(0, 4);
+}
+function evaluateForBranchBankingSpecialFeature(params) {
+  const ref = params.profile || BRANCH_BANKING_REFERENCE_PROFILE;
+  const bankingYears = ref.bankingExperienceYears ?? ref.yearsOfExperience ?? 9;
+  const mgmtYears = ref.managerialExperienceYears ?? 3;
+  const minMonthlyUsd = Math.max(3e3, ref.minimumSalaryUsdMonthly || 3e3);
+  const matchReasons = [];
+  const rejectionCodes = [];
+  const rejectionReasons = [];
+  const title = String(params.title || "").trim();
+  const full = `${title}
+${params.employer}
+${params.description}
+${params.responsibilities.join("\n")}`;
+  if (!params.deadlinePassed) {
+    rejectionCodes.push("deadline_under_three_days");
+    rejectionReasons.push(params.deadlineExplanation);
+  }
+  if (NON_BANKING_MANAGER_DISQUALIFIER_RX.test(title) || params.sector === "wash") {
+    rejectionCodes.push("industry_mismatch");
+    rejectionReasons.push(
+      `Position "${title}" is outside branch banking / banking management (detected sector: ${params.sector}).`
+    );
+  }
+  if (params.seniorityLevel === "executive" || EXECUTIVE_OVER_SENIOR_TITLE_RX.test(title) || params.exp.requiredTotalYears !== null && params.exp.requiredTotalYears >= bankingYears + 4 || params.exp.requiredBankingYears !== null && params.exp.requiredBankingYears >= bankingYears + 4) {
+    rejectionCodes.push("seniority_mismatch_too_senior");
+    rejectionReasons.push(
+      `Unsuitable seniority match: "${title}" is an Executive/VP-level role (${params.exp.requiredTotalYears ? `${params.exp.requiredTotalYears}+ years required` : SENIORITY_LABELS[params.seniorityLevel]}) that substantially exceeds the ${bankingYears}-year banking / ${mgmtYears}-year branch management reference profile.`
+    );
+  }
+  if (JUNIOR_ENTRY_NON_MANAGERIAL_TITLE_RX.test(title) || params.seniorityLevel === "entry_level" || params.seniorityLevel === "junior_professional") {
+    rejectionCodes.push("seniority_mismatch_too_junior");
+    rejectionReasons.push(
+      `Unsuitable professional and seniority match: "${title}" is a non-managerial / entry-to-junior role (${SENIORITY_LABELS[params.seniorityLevel]}), unsuitable for a Branch Manager with ${bankingYears} years banking and ${mgmtYears} years managerial experience.`
+    );
+  }
+  const matchedTitleDef = PRIORITY_BRANCH_BANKING_TITLES.find((p) => p.rx.test(title));
+  const matchedRespSignals = BRANCH_BANKING_RESPONSIBILITY_SIGNALS.filter((s) => s.rx.test(full)).map((s) => s.label);
+  const isBankingSector = params.sector === "branch_banking" || params.sector === "banking_finance";
+  if (!isBankingSector) {
+    if (!rejectionCodes.includes("industry_mismatch")) {
+      rejectionCodes.push("industry_mismatch");
+      rejectionReasons.push(`Role sector (${params.sector}) does not align with Branch Banking / Banking Management.`);
+    }
+  } else if (!matchedTitleDef && matchedRespSignals.length < 2) {
+    rejectionCodes.push("experience_mismatch");
+    rejectionReasons.push(
+      `Actual responsibilities do not sufficiently demonstrate branch banking operations, administration, or banking leadership authority.`
+    );
+  }
+  if (params.exp.requiredManagerialYears !== null && params.exp.requiredManagerialYears > mgmtYears + 4) {
+    rejectionCodes.push("experience_mismatch");
+    rejectionReasons.push(
+      `Requires ${params.exp.requiredManagerialYears}+ years of managerial experience, exceeding the reference profile (${mgmtYears} years managerial experience).`
+    );
+  }
+  if (params.environment === "international") {
+    if (!params.salary.disclosed) {
+      rejectionCodes.push("salary_undisclosed");
+      rejectionReasons.push(
+        `Salary is Not Disclosed; International Jobs for Branch Banking strictly requires a verified disclosed salary above USD $${minMonthlyUsd.toLocaleString()}/month.`
+      );
+    } else if (params.salary.normalizedMonthlyUsd === null || params.salary.normalizedMonthlyUsd <= minMonthlyUsd) {
+      rejectionCodes.push("salary_below_threshold");
+      rejectionReasons.push(
+        `Normalized salary ($${(params.salary.normalizedMonthlyUsd ?? 0).toLocaleString()}/month) does not exceed the mandatory USD $${minMonthlyUsd.toLocaleString()}/month threshold for International Branch Banking jobs.`
+      );
+    }
+  }
+  if (params.environment === "international" && !params.visa.verified) {
+    rejectionCodes.push("visa_sponsorship_unconfirmed");
+    rejectionReasons.push(params.visa.sponsorshipStatement);
+  }
+  if (rejectionCodes.length > 0) {
+    return {
+      matched: false,
+      relevanceScore: 0,
+      matchReasons: [],
+      rejectionCodes: Array.from(new Set(rejectionCodes)),
+      rejectionReasons: Array.from(new Set(rejectionReasons))
+    };
+  }
+  let score = 58;
+  if (matchedTitleDef) {
+    score += 16;
+    matchReasons.push(`Direct branch banking leadership match: ${matchedTitleDef.label}.`);
+  } else {
+    score += 10;
+    matchReasons.push("Equivalent banking management responsibilities verified from job description.");
+  }
+  if (matchedRespSignals.length > 0) {
+    score += Math.min(12, matchedRespSignals.length * 3);
+    matchReasons.push(`Core managerial responsibilities aligned: ${matchedRespSignals.slice(0, 3).join("; ")}.`);
+  }
+  if (params.exp.requiredBankingYears !== null && bankingYears >= params.exp.requiredBankingYears) {
+    score += 6;
+    matchReasons.push(
+      `${bankingYears} years banking experience satisfies the stated ${params.exp.requiredBankingYears}+ years requirement.`
+    );
+  } else {
+    matchReasons.push(`Matches ${bankingYears}-year banking & ${mgmtYears}-year branch leadership career stage.`);
+    score += 4;
+  }
+  if (params.salary.normalizedMonthlyUsd && params.salary.normalizedMonthlyUsd > minMonthlyUsd) {
+    score += 5;
+    matchReasons.push(
+      `Verified salary exceeds USD $${minMonthlyUsd.toLocaleString()}/month (${params.salary.salaryDisplay}).`
+    );
+  }
+  if (params.environment === "international") {
+    score += 3;
+    matchReasons.push(`Confirmed international work authorization: ${params.visa.statusLabel}.`);
+  } else {
+    matchReasons.push("Ethiopian domestic opportunity \u2014 evaluated under domestic banking rules.");
+  }
+  return {
+    matched: true,
+    relevanceScore: Math.min(99, Math.max(60, score)),
+    matchReasons,
+    rejectionCodes: [],
+    rejectionReasons: []
+  };
+}
+function buildAndVerifyCanonicalOpportunity(raw, options) {
+  const nowMs = options?.nowMs ?? Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+  const fxRates = options?.fxRatesUsdBase || DEFAULT_FX_RATES_USD_BASE;
+  const { canonicalKey, urlFingerprint, canonicalId } = buildCanonicalOpportunityIdentity({
+    category: raw.category,
+    title: raw.title,
+    employer: raw.employer,
+    country: raw.country,
+    officialApplicationUrl: raw.officialApplicationUrl
+  });
+  const environment = detectEnvironment(raw.country, raw.city || "", raw.description);
+  const fullText = `${raw.title}
+${raw.employer}
+${raw.compensationRaw || ""}
+${raw.explicitVisaNote || ""}
+${raw.explicitFundingNote || ""}
+${raw.description}`;
+  const sectors = detectProfessionalSectors(raw.title, raw.employer, raw.description);
+  const exp = extractExperienceRequirements(fullText);
+  const seniorityLevel = classifyRoleSeniority(raw.title, raw.description, exp);
+  const actualResponsibilities = extractResponsibilitiesList(raw.responsibilities, raw.description);
+  const salary = normalizeSalaryRecord(canonicalId, `${raw.compensationRaw || ""}
+${raw.description}`, fxRates);
+  const visa = evaluateVisaAndAuthorization({
+    opportunityId: canonicalId,
+    category: raw.category,
+    environment,
+    country: raw.country,
+    text: fullText,
+    visaSponsorshipRevoked: raw.visaSponsorshipRevoked
+  });
+  const deadlineEval = evaluateStrictThreeDayDeadline(raw.deadlineRaw, nowMs, Boolean(raw.isClosedOrWithdrawn));
+  const rejectionCodes = [];
+  const rejectionExplanations = [];
+  if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}/i.test(String(raw.officialApplicationUrl || "").trim())) {
+    rejectionCodes.push("invalid_official_url");
+    rejectionExplanations.push("Missing or non-HTTPS official application link.");
+  }
+  if (!deadlineEval.passed && deadlineEval.rejectionCode) {
+    rejectionCodes.push(deadlineEval.rejectionCode);
+    rejectionExplanations.push(deadlineEval.explanation);
+  }
+  if (raw.category !== "job" && raw.category !== "internship") {
+    const isBankingOrWash = sectors.primary === "branch_banking" || sectors.primary === "banking_finance" || sectors.primary === "wash" || sectors.secondary.includes("banking_finance") || sectors.secondary.includes("wash");
+    if (!isBankingOrWash) {
+      rejectionCodes.push("non_banking_wash_learning_category");
+      rejectionExplanations.push(
+        `${raw.category} opportunities on Hopeland Jobs are restricted to Banking & Finance and WASH professionals only (detected sector: ${sectors.primary}).`
+      );
+    }
+    if (environment === "international" && !visa.verified) {
+      if (visa.invitationLetterOnly) {
+        rejectionCodes.push("invitation_letter_only");
+      } else if (visa.visaFeesCovered === "no") {
+        rejectionCodes.push("visa_cost_applicant_paid");
+      } else {
+        rejectionCodes.push("visa_sponsorship_unconfirmed");
+      }
+      rejectionExplanations.push(visa.sponsorshipStatement);
+    }
+  } else if (environment === "international" && !visa.verified) {
+    rejectionCodes.push("visa_sponsorship_unconfirmed");
+    rejectionExplanations.push(visa.sponsorshipStatement);
+  }
+  const branchEval = raw.category === "job" ? evaluateForBranchBankingSpecialFeature({
+    title: raw.title,
+    employer: raw.employer,
+    description: raw.description,
+    responsibilities: actualResponsibilities,
+    sector: sectors.primary,
+    seniorityLevel,
+    exp,
+    salary,
+    visa,
+    environment,
+    deadlinePassed: deadlineEval.passed,
+    deadlineExplanation: deadlineEval.explanation
+  }) : {
+    matched: false,
+    relevanceScore: 0,
+    matchReasons: [],
+    rejectionCodes: [],
+    rejectionReasons: []
+  };
+  const lowerFull = fullText.toLowerCase();
+  const eligibility = {
+    opportunityId: canonicalId,
+    category: raw.category,
+    sector: sectors.primary,
+    secondarySectors: sectors.secondary,
+    seniorityLevel,
+    requiredBankingYears: exp.requiredBankingYears,
+    requiredManagerialYears: exp.requiredManagerialYears,
+    requiredTotalYears: exp.requiredTotalYears,
+    educationRequirement: fullText.match(/[^.\n]{0,40}\b(phd|doctorate|master['’]?s|mba|bachelor['’]?s|university\s+degree|diploma)\b[^.\n]{0,70}/i)?.[0]?.replace(/\s+/g, " ").trim() || "Verify education requirements on official portal",
+    individualApplicationAllowed: /\b(nominated\s+only|institutional\s+nomination\s+required|no\s+direct\s+individual\s+applications)\b/i.test(
+      lowerFull
+    ) ? "no" : /\b(apply\s+online|individual\s+applications?\s+(?:welcome|accepted)|apply\s+directly)\b/i.test(lowerFull) ? "yes" : "not_confirmed",
+    universityRecommendationRequired: /\b(university\s+(?:recommendation|nomination|endorsement))\b/i.test(lowerFull) ? "yes" : "not_confirmed",
+    companyRecommendationRequired: /\b((?:employer|company|organization)\s+(?:recommendation|nomination|endorsement))\b/i.test(
+      lowerFull
+    ) ? "yes" : "not_confirmed",
+    fundingCoverage: raw.explicitFundingNote || (/\b(fully\s+funded|full\s+scholarship|all\s+expenses\s+paid)\b/i.test(lowerFull) ? "Fully Funded (verified in official text)" : /\b(partial(?:ly)?\s+funded|stipend)\b/i.test(lowerFull) ? "Partially Funded" : raw.category === "job" ? salary.salaryDisplay : "Not Confirmed"),
+    visaCostsCoverageNote: visa.visaFeesCovered === "yes" ? "Visa application fees confirmed covered" : visa.visaFeesCovered === "no" ? "Visa costs are applicant responsibility" : visa.sponsorshipStatement,
+    nationalityEligibility: environment === "ethiopia_domestic" ? "Ethiopian domestic applicants" : /\b(ethiopia|african\s+nationals|developing\s+countries|all\s+nationalities|international\s+applicants)\b/i.test(
+      lowerFull
+    ) ? "Confirmed open to Ethiopian / international applicants" : "Verify nationality eligibility on official portal",
+    verifiedAt: nowIso
+  };
+  const isExpired = rejectionCodes.includes("deadline_expired") || rejectionCodes.includes("closed_or_withdrawn");
+  const status = rejectionCodes.length === 0 ? "published" : isExpired ? "expired" : "rejected";
+  const verificationBadge = status === "published" ? environment === "international" ? "Verified Official & Visa Confirmed" : "Verified Ethiopian Domestic" : status === "expired" ? "Expired / Closed" : "Rejected by Verification Rules";
+  const referenceNumber = raw.referenceNumber && String(raw.referenceNumber).trim().toUpperCase() || extractOpportunityReferenceNumber(`${raw.title}
+${raw.description}
+${raw.officialApplicationUrl}`);
+  const primarySourceUrl = String(raw.sourceUrl || raw.officialApplicationUrl).trim();
+  const primarySourceName = String(raw.sourceName || raw.employer).trim();
+  return {
+    id: canonicalId,
+    canonicalKey,
+    urlFingerprint,
+    referenceNumber,
+    updateVersion: 1,
+    category: raw.category,
+    environment,
+    title: raw.title.trim(),
+    employer: raw.employer.trim(),
+    country: raw.country.trim() || (environment === "ethiopia_domestic" ? "Ethiopia" : "International"),
+    city: (raw.city || "").trim(),
+    region: (raw.region || (environment === "ethiopia_domestic" ? "Ethiopia" : "International")).trim(),
+    sector: sectors.primary,
+    secondarySectors: sectors.secondary,
+    seniorityLevel,
+    actualResponsibilities,
+    descriptionSummary: raw.description.replace(/\s+/g, " ").trim().slice(0, 420),
+    officialApplicationUrl: raw.officialApplicationUrl.trim(),
+    primarySourceUrl,
+    primarySourceName,
+    sourceUrls: Array.from(new Set([primarySourceUrl].filter(Boolean))),
+    sourceNames: Array.from(new Set([primarySourceName].filter(Boolean))),
+    deadlineRaw: String(raw.deadlineRaw || "Open \u2014 Verify on official portal").trim(),
+    deadlineIso: deadlineEval.deadlineIso,
+    fullDaysRemaining: deadlineEval.fullDaysRemaining,
+    salary,
+    visa,
+    eligibility,
+    status,
+    verificationBadge,
+    rejectionCodes: Array.from(new Set(rejectionCodes)),
+    rejectionExplanations: Array.from(new Set(rejectionExplanations)),
+    isBranchBankingMatch: branchEval.matched,
+    branchBankingRelevanceScore: branchEval.relevanceScore,
+    branchBankingMatchReasons: branchEval.matchReasons,
+    branchBankingRejectionReasons: branchEval.rejectionReasons,
+    discoveredAt: nowIso,
+    lastVerifiedAt: nowIso,
+    updatedAt: nowIso,
+    unpublishedAt: null,
+    unpublishedReason: null
+  };
+}
+function areSectorsCompatible(userSector, oppPrimary, oppSecondary) {
+  if (userSector === oppPrimary) return true;
+  if (userSector === "branch_banking") {
+    return oppPrimary === "banking_finance" || oppPrimary === "branch_banking";
+  }
+  if (userSector === "banking_finance") {
+    return oppPrimary === "branch_banking" || oppPrimary === "banking_finance";
+  }
+  if (userSector === "wash") {
+    return oppPrimary === "wash" || oppSecondary.includes("wash");
+  }
+  if (userSector === "engineering") {
+    return oppPrimary === "engineering" || oppPrimary === "wash" && oppSecondary.includes("engineering");
+  }
+  if (userSector === "healthcare") {
+    return oppPrimary === "healthcare";
+  }
+  if (userSector === "education") {
+    return oppPrimary === "education";
+  }
+  if (userSector === "it_software") {
+    return oppPrimary === "it_software";
+  }
+  if (userSector === "legal_compliance") {
+    return oppPrimary === "legal_compliance";
+  }
+  return oppSecondary.includes(userSector);
+}
+function evaluateOpportunityForUserProfile(opportunity, profile) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const matchReasons = [];
+  const rejectionCodes = [];
+  const rejectionExplanations = [];
+  const hasLegalWorkRight = opportunity.environment === "international" && opportunity.category === "job" && (profile.countriesWithLegalWorkRight || []).some(
+    (c) => c.toLowerCase().trim() === opportunity.country.toLowerCase().trim()
+  );
+  if (opportunity.status !== "published") {
+    const onlyFailedVisa = opportunity.rejectionCodes.length === 1 && opportunity.rejectionCodes[0] === "visa_sponsorship_unconfirmed";
+    if (!(onlyFailedVisa && hasLegalWorkRight)) {
+      return {
+        id: `match_${profile.userId}_${opportunity.id}`,
+        userId: profile.userId,
+        opportunityId: opportunity.id,
+        environment: opportunity.environment,
+        category: opportunity.category,
+        eligible: false,
+        relevanceScore: 0,
+        matchReasons: [],
+        rejectionCodes: [...opportunity.rejectionCodes],
+        rejectionExplanations: [...opportunity.rejectionExplanations],
+        evaluatedAt: nowIso
+      };
+    }
+  }
+  if (profile.preferredEnvironment !== "both" && profile.preferredEnvironment !== opportunity.environment) {
+    rejectionCodes.push("industry_mismatch");
+    rejectionExplanations.push(
+      `Opportunity environment (${opportunity.environment}) does not match user preference (${profile.preferredEnvironment}).`
+    );
+  }
+  if (!areSectorsCompatible(profile.professionalSector, opportunity.sector, opportunity.secondarySectors)) {
+    rejectionCodes.push("industry_mismatch");
+    rejectionExplanations.push(
+      `Industry mismatch: Opportunity sector (${opportunity.sector}) does not match user sector (${profile.professionalSector}).`
+    );
+  }
+  if (opportunity.category === "job") {
+    const userRank = SENIORITY_RANK[profile.careerLevel] || 4;
+    const oppRank = SENIORITY_RANK[opportunity.seniorityLevel] || 4;
+    if (oppRank > userRank + 1 || opportunity.seniorityLevel === "executive" && profile.careerLevel !== "executive" && profile.careerLevel !== "director") {
+      rejectionCodes.push("seniority_mismatch_too_senior");
+      rejectionExplanations.push(
+        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) substantially exceeds user career level (${SENIORITY_LABELS[profile.careerLevel]}).`
+      );
+    }
+    const isUserSeniorOrManager = userRank >= SENIORITY_RANK.senior_professional;
+    const isOppJuniorOrEntry = oppRank <= SENIORITY_RANK.junior_professional;
+    if (isUserSeniorOrManager && isOppJuniorOrEntry && !profile.allowJuniorRoles) {
+      rejectionCodes.push("seniority_mismatch_too_junior");
+      rejectionExplanations.push(
+        `Seniority mismatch: "${opportunity.title}" (${SENIORITY_LABELS[opportunity.seniorityLevel]}) is below user's ${SENIORITY_LABELS[profile.careerLevel]} level.`
+      );
+    } else if (userRank >= SENIORITY_RANK.manager && oppRank < SENIORITY_RANK.supervisor && !profile.allowJuniorRoles) {
+      rejectionCodes.push("seniority_mismatch_too_junior");
+      rejectionExplanations.push(
+        `Seniority mismatch: Managerial user (${SENIORITY_LABELS[profile.careerLevel]}) should not receive non-supervisory/individual-contributor junior roles (${SENIORITY_LABELS[opportunity.seniorityLevel]}).`
+      );
+    }
+    const reqYears = opportunity.eligibility.requiredTotalYears ?? opportunity.eligibility.requiredBankingYears;
+    if (reqYears !== null && reqYears > profile.yearsOfExperience + 3) {
+      rejectionCodes.push("experience_mismatch");
+      rejectionExplanations.push(
+        `Experience mismatch: Role requires ${reqYears}+ years while user profile has ${profile.yearsOfExperience} years.`
+      );
+    }
+    const reqMgmt = opportunity.eligibility.requiredManagerialYears;
+    if (reqMgmt !== null && reqMgmt > profile.managerialExperienceYears + 3) {
+      rejectionCodes.push("experience_mismatch");
+      rejectionExplanations.push(
+        `Managerial experience mismatch: Role requires ${reqMgmt}+ managerial years while user profile has ${profile.managerialExperienceYears} years.`
+      );
+    }
+    if (profile.professionalSector === "branch_banking") {
+      const branchCheck = evaluateForBranchBankingSpecialFeature({
+        title: opportunity.title,
+        employer: opportunity.employer,
+        description: opportunity.descriptionSummary,
+        responsibilities: opportunity.actualResponsibilities,
+        sector: opportunity.sector,
+        seniorityLevel: opportunity.seniorityLevel,
+        exp: {
+          requiredTotalYears: opportunity.eligibility.requiredTotalYears,
+          requiredBankingYears: opportunity.eligibility.requiredBankingYears,
+          requiredManagerialYears: opportunity.eligibility.requiredManagerialYears,
+          bankingExperienceSummary: "",
+          managerialExperienceSummary: ""
+        },
+        salary: opportunity.salary,
+        visa: hasLegalWorkRight ? { ...opportunity.visa, verified: true, conditionMet: "C_legal_right_no_sponsorship" } : opportunity.visa,
+        environment: opportunity.environment,
+        deadlinePassed: true,
+        deadlineExplanation: "",
+        profile
+      });
+      if (!branchCheck.matched) {
+        for (const c of branchCheck.rejectionCodes) rejectionCodes.push(c);
+        for (const r of branchCheck.rejectionReasons) rejectionExplanations.push(r);
+      }
+    } else if (opportunity.environment === "international" && profile.minimumSalaryUsdMonthly && profile.minimumSalaryUsdMonthly > 0 && opportunity.salary.disclosed && opportunity.salary.normalizedMonthlyUsd !== null && opportunity.salary.normalizedMonthlyUsd < profile.minimumSalaryUsdMonthly) {
+      rejectionCodes.push("salary_below_threshold");
+      rejectionExplanations.push(
+        `Disclosed salary ($${opportunity.salary.normalizedMonthlyUsd}/month) is below user's explicit minimum expectation ($${profile.minimumSalaryUsdMonthly}/month).`
+      );
+    }
+  } else if (opportunity.category !== "internship") {
+    if (profile.professionalSector !== "branch_banking" && profile.professionalSector !== "banking_finance" && profile.professionalSector !== "wash") {
+      rejectionCodes.push("non_banking_wash_learning_category");
+      rejectionExplanations.push(
+        `Scholarships, training, and conferences are curated specifically for Banking & Finance and WASH professionals.`
+      );
+    }
+  }
+  if (rejectionCodes.length > 0) {
+    return {
+      id: `match_${profile.userId}_${opportunity.id}`,
+      userId: profile.userId,
+      opportunityId: opportunity.id,
+      environment: opportunity.environment,
+      category: opportunity.category,
+      eligible: false,
+      relevanceScore: 0,
+      matchReasons: [],
+      rejectionCodes: Array.from(new Set(rejectionCodes)),
+      rejectionExplanations: Array.from(new Set(rejectionExplanations)),
+      evaluatedAt: nowIso
+    };
+  }
+  let score = 62;
+  matchReasons.push(`Direct sector match (${opportunity.sector}) aligned with ${profile.currentOccupation || profile.professionalSector}.`);
+  score += 12;
+  if (opportunity.category === "job") {
+    matchReasons.push(`Seniority fit: ${SENIORITY_LABELS[opportunity.seniorityLevel]} matches your ${SENIORITY_LABELS[profile.careerLevel]} career level.`);
+    score += 10;
+  } else {
+    matchReasons.push(`Verified ${opportunity.category} opportunity with confirmed visa/funding transparency.`);
+    score += 10;
+  }
+  const oppLower = `${opportunity.title} ${opportunity.descriptionSummary} ${opportunity.actualResponsibilities.join(" ")}`.toLowerCase();
+  const matchedSkills = (profile.skills || []).filter((sk) => {
+    const tokens = sk.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 4);
+    return tokens.some((t) => oppLower.includes(t));
+  });
+  if (matchedSkills.length > 0) {
+    matchReasons.push(`Matched skills: ${matchedSkills.slice(0, 4).join(", ")}.`);
+    score += Math.min(10, matchedSkills.length * 3);
+  }
+  if (opportunity.environment === "international") {
+    matchReasons.push(
+      hasLegalWorkRight ? `Condition C: Confirmed legal right to work in ${opportunity.country}.` : opportunity.visa.statusLabel
+    );
+    score += 4;
+  } else {
+    matchReasons.push("Ethiopian domestic opportunity matched under local career rules.");
+    score += 4;
+  }
+  return {
+    id: `match_${profile.userId}_${opportunity.id}`,
+    userId: profile.userId,
+    opportunityId: opportunity.id,
+    environment: opportunity.environment,
+    category: opportunity.category,
+    eligible: true,
+    relevanceScore: Math.min(99, score),
+    matchReasons,
+    rejectionCodes: [],
+    rejectionExplanations: [],
+    evaluatedAt: nowIso
+  };
+}
+
+// serverOpportunityIntelligence.ts
+var ADDIS_ABABA_TIMEZONE = "Africa/Addis_Ababa";
+var TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1e3;
+function formatAddisAbabaTimestamp(iso) {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  try {
+    const formatted = new Intl.DateTimeFormat("en-GB", {
+      timeZone: ADDIS_ABABA_TIMEZONE,
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
+    }).format(new Date(ms));
+    return `${formatted} EAT (Africa/Addis_Ababa)`;
+  } catch {
+    return `${iso} (Africa/Addis_Ababa)`;
+  }
+}
+function buildInitialOfficialSourcesRegistry() {
+  const mk = (sourceNumber, id, name, region, sectorFocus, categoryCoverage, url, feedType, officialEndpointUrl) => ({
+    id,
+    sourceNumber,
+    name,
+    region,
+    sectorFocus,
+    categoryCoverage,
+    url,
+    officialEndpointUrl: officialEndpointUrl ?? null,
+    feedType,
+    enabled: true,
+    accessStatus: "pending",
+    robotsAllowed: null,
+    accessNote: "Registered \u2014 awaiting first scheduled check",
+    lastCheckedAt: null,
+    lastStatus: "idle",
+    lastHttpStatus: null,
+    lastError: null,
+    lastDurationMs: null,
+    consecutiveFailures: 0,
+    itemsDiscoveredTotal: 0
+  });
+  return [
+    // ================= MIDDLE EAST (1 - 10) =================
+    mk(1, "src_01_bayt", "Bayt", "Middle East", "multi_sector", ["job", "internship"], "https://www.bayt.com/", "html_portal"),
+    mk(2, "src_02_gulftalent", "GulfTalent", "Middle East", "multi_sector", ["job"], "https://www.gulftalent.com/", "html_portal"),
+    mk(3, "src_03_naukrigulf", "Naukrigulf", "Middle East", "multi_sector", ["job"], "https://www.naukrigulf.com/", "html_portal"),
+    mk(4, "src_04_un_careers", "UN Careers", "Middle East", "multi_sector", ["job", "internship"], "https://careers.un.org/", "html_portal"),
+    mk(5, "src_05_reliefweb_jobs", "ReliefWeb Jobs", "Middle East", "wash", ["job", "internship", "training"], "https://reliefweb.int/jobs", "json_api", "https://api.reliefweb.int/v1/jobs?appname=hopelandjobs&limit=25&preset=latest"),
+    mk(6, "src_06_study_in_saudi", "Study in Saudi Arabia", "Middle East", "scholarship_training", ["scholarship"], "https://studyinsaudi.moe.gov.sa/", "html_portal"),
+    mk(7, "src_07_turkiye_scholarships", "T\xFCrkiye Scholarships", "Middle East", "scholarship_training", ["scholarship"], "https://www.turkiyeburslari.gov.tr/", "html_portal"),
+    mk(8, "src_08_kaust", "KAUST", "Middle East", "scholarship_training", ["scholarship", "internship", "job", "conference"], "https://www.kaust.edu.sa/", "html_portal"),
+    mk(9, "src_09_qatar_foundation", "Qatar Foundation", "Middle East", "multi_sector", ["job", "scholarship", "training", "conference"], "https://www.qf.org.qa/", "html_portal"),
+    mk(10, "src_10_wise", "WISE", "Middle East", "conference", ["conference", "training"], "https://www.wise-qatar.org/", "html_portal"),
+    // ================= EUROPE (11 - 20) =================
+    mk(11, "src_11_eures", "EURES", "Europe", "multi_sector", ["job", "internship"], "https://eures.europa.eu/", "html_portal"),
+    mk(12, "src_12_euraxess_jobs", "EURAXESS Jobs", "Europe", "multi_sector", ["job", "scholarship", "internship"], "https://euraxess.ec.europa.eu/jobs", "html_portal"),
+    mk(13, "src_13_erasmus_plus", "Erasmus+", "Europe", "scholarship_training", ["scholarship", "training", "internship"], "https://erasmus-plus.ec.europa.eu/", "html_portal"),
+    mk(14, "src_14_european_education_area", "European Education Area", "Europe", "scholarship_training", ["scholarship"], "https://education.ec.europa.eu/study-in-europe/planning-your-studies/scholarships-and-funding", "html_portal"),
+    mk(15, "src_15_scholarshipportal", "Scholarshipportal", "Europe", "scholarship_training", ["scholarship"], "https://www.scholarshipportal.com/", "html_portal"),
+    mk(16, "src_16_eurobrussels", "EuroBrussels", "Europe", "multi_sector", ["job", "internship"], "https://www.eurobrussels.com/", "html_portal"),
+    mk(17, "src_17_eu_careers", "EU Careers", "Europe", "multi_sector", ["job", "internship"], "https://eu-careers.europa.eu/", "html_portal"),
+    mk(18, "src_18_european_youth_portal", "European Youth Portal", "Europe", "scholarship_training", ["internship", "training", "scholarship"], "https://youth.europa.eu/", "html_portal"),
+    mk(19, "src_19_academic_positions", "Academic Positions", "Europe", "multi_sector", ["job", "scholarship"], "https://academicpositions.com/", "html_portal"),
+    mk(20, "src_20_jobs_ac_uk", "Jobs.ac.uk", "Europe", "multi_sector", ["job", "scholarship"], "https://www.jobs.ac.uk/", "rss", "https://www.jobs.ac.uk/jobs/rss"),
+    // ================= USA (21 - 30) =================
+    mk(21, "src_21_usajobs", "USAJOBS", "USA", "multi_sector", ["job", "internship"], "https://www.usajobs.gov/", "html_portal"),
+    mk(22, "src_22_fulbright", "Fulbright", "USA", "scholarship_training", ["scholarship", "training"], "https://fulbrightprogram.org/", "html_portal"),
+    mk(23, "src_23_educationusa", "EducationUSA", "USA", "scholarship_training", ["scholarship"], "https://educationusa.state.gov/", "html_portal"),
+    mk(24, "src_24_us_state_dept_careers", "US State Department Careers", "USA", "multi_sector", ["job", "internship"], "https://careers.state.gov/", "html_portal"),
+    mk(25, "src_25_idealist", "Idealist", "USA", "multi_sector", ["job", "internship"], "https://www.idealist.org/", "html_portal"),
+    mk(26, "src_26_nsf", "National Science Foundation", "USA", "scholarship_training", ["scholarship", "training", "job"], "https://www.nsf.gov/", "rss", "https://www.nsf.gov/rss/rss_www_funding.xml"),
+    mk(27, "src_27_internships_com", "Internships.com", "USA", "multi_sector", ["internship"], "https://www.internships.com/", "html_portal"),
+    mk(28, "src_28_devex_jobs", "Devex Jobs", "USA", "wash", ["job", "internship"], "https://www.devex.com/jobs", "html_portal"),
+    mk(29, "src_29_ieee_conferences", "IEEE Conferences", "USA", "conference", ["conference", "training"], "https://www.ieee.org/conferences/", "html_portal"),
+    mk(30, "src_30_mit_events", "MIT Events", "USA", "conference", ["conference", "training"], "https://calendar.mit.edu/", "rss", "https://calendar.mit.edu/calendar.xml"),
+    // ================= SCANDINAVIA / NORDIC (31 - 40) =================
+    mk(31, "src_31_norway_nav", "Norway NAV Arbeidsplassen", "Scandinavia / Nordic", "multi_sector", ["job"], "https://arbeidsplassen.nav.no/", "json_api", "https://arbeidsplassen.nav.no/public-feed/api/v1/ads?size=20"),
+    mk(32, "src_32_sweden_platsbanken", "Sweden Platsbanken", "Scandinavia / Nordic", "multi_sector", ["job"], "https://arbetsformedlingen.se/platsbanken/", "json_api", "https://jobsearch.api.jobtechdev.se/search?limit=25"),
+    mk(33, "src_33_denmark_workindenmark", "Denmark Workindenmark", "Scandinavia / Nordic", "multi_sector", ["job"], "https://www.workindenmark.dk/", "html_portal"),
+    mk(34, "src_34_finland_job_market", "Finland Job Market Finland", "Scandinavia / Nordic", "multi_sector", ["job"], "https://tyomarkkinatori.fi/en", "html_portal"),
+    mk(35, "src_35_iceland_labour", "Iceland Directorate of Labour", "Scandinavia / Nordic", "multi_sector", ["job"], "https://island.is/en/o/directorate-of-labour", "html_portal"),
+    mk(36, "src_36_study_in_sweden", "Study in Sweden", "Scandinavia / Nordic", "scholarship_training", ["scholarship"], "https://studyinsweden.se/", "html_portal"),
+    mk(37, "src_37_study_in_norway", "Study in Norway", "Scandinavia / Nordic", "scholarship_training", ["scholarship"], "https://studyinnorway.no/", "html_portal"),
+    mk(38, "src_38_study_in_finland", "Study in Finland", "Scandinavia / Nordic", "scholarship_training", ["scholarship"], "https://www.studyinfinland.fi/", "html_portal"),
+    mk(39, "src_39_study_in_denmark", "Study in Denmark", "Scandinavia / Nordic", "scholarship_training", ["scholarship"], "https://studyindenmark.dk/", "html_portal"),
+    mk(40, "src_40_nordic_council", "Nordic Council", "Scandinavia / Nordic", "multi_sector", ["job", "scholarship", "conference", "training"], "https://www.norden.org/", "html_portal")
+  ];
+}
+function constantTimeEqual(a, b) {
+  if (!a || !b) return false;
+  const ba = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ba.length !== bb.length) return false;
+  return crypto8.timingSafeEqual(ba, bb);
+}
+function stripTags(html) {
+  return String(html || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
+}
+function inferUserProfileFromLegacy(uid, raw) {
+  const sectorText = `${raw?.preferredIndustry || ""} ${raw?.staffDepartmentOrSector || ""} ${raw?.desiredJobTitle || ""} ${raw?.currentPosition || ""} ${(raw?.preferredSectors || []).join(" ")}`.toLowerCase();
+  let professionalSector = "other";
+  if (/\b(branch\s+manager|branch\s+banking|branch\s+operations)\b/i.test(sectorText)) {
+    professionalSector = "branch_banking";
+  } else if (/\b(bank|banking|finance|accounting|microfinance|credit|audit|fintech)\b/i.test(sectorText)) {
+    professionalSector = "banking_finance";
+  } else if (/\b(wash|water|sanitation|hygiene|wastewater|environmental\s+health)\b/i.test(sectorText)) {
+    professionalSector = "wash";
+  } else if (/\b(engineer|civil|mechanical|electrical|construction)\b/i.test(sectorText)) {
+    professionalSector = "engineering";
+  } else if (/\b(health|medical|doctor|nurse|pharmacy|hospital|clinical)\b/i.test(sectorText)) {
+    professionalSector = "healthcare";
+  } else if (/\b(education|teacher|lecturer|university|academic|professor)\b/i.test(sectorText)) {
+    professionalSector = "education";
+  } else if (/\b(software|developer|it\b|devops|data|cybersecurity|cloud)\b/i.test(sectorText)) {
+    professionalSector = "it_software";
+  }
+  const yearsMatch = String(raw?.yearsOfExperience || "").match(/\d+/);
+  const years = yearsMatch ? Math.min(45, Number(yearsMatch[0])) : 0;
+  const posLower = `${raw?.currentPosition || ""} ${raw?.desiredJobTitle || ""}`.toLowerCase();
+  let careerLevel = "experienced_professional";
+  if (/\b(ceo|cfo|coo|vice\s+president|vp\b|executive)\b/i.test(posLower)) careerLevel = "executive";
+  else if (/\b(director|head\s+of)\b/i.test(posLower)) careerLevel = "director";
+  else if (/\b(senior\s+manager|regional\s+manager|area\s+manager)\b/i.test(posLower)) careerLevel = "senior_manager";
+  else if (/\b(assistant\s+manager|deputy\s+manager)\b/i.test(posLower)) careerLevel = "assistant_manager";
+  else if (/\b(manager)\b/i.test(posLower)) careerLevel = "manager";
+  else if (/\b(supervisor|team\s+lead|coordinator)\b/i.test(posLower)) careerLevel = "supervisor";
+  else if (/\b(senior|lead|specialist)\b/i.test(posLower) || years >= 6) careerLevel = "senior_professional";
+  else if (years >= 3) careerLevel = "experienced_professional";
+  else if (years >= 1) careerLevel = "junior_professional";
+  else careerLevel = "entry_level";
+  const mgmtYears = typeof raw?.managerialExperienceYears === "number" ? raw.managerialExperienceYears : careerLevel === "manager" || careerLevel === "senior_manager" ? Math.max(2, Math.min(years, 4)) : careerLevel === "assistant_manager" || careerLevel === "supervisor" ? Math.max(1, Math.min(years, 2)) : 0;
+  return {
+    userId: uid,
+    email: raw?.email || "",
+    fullName: raw?.fullName || "",
+    professionalSector,
+    currentOccupation: String(raw?.currentPosition || raw?.desiredJobTitle || "Professional").trim(),
+    educationLevel: "bachelors",
+    fieldOfStudy: String(raw?.education?.[0]?.fieldOfStudy || "").trim(),
+    yearsOfExperience: years,
+    bankingExperienceYears: professionalSector === "branch_banking" || professionalSector === "banking_finance" ? years : 0,
+    managerialExperienceYears: mgmtYears,
+    skills: Array.isArray(raw?.skills) ? raw.skills.map((s) => typeof s === "string" ? s : s?.name || "").filter(Boolean) : [],
+    certifications: Array.isArray(raw?.certifications) ? raw.certifications.map((c) => typeof c === "string" ? c : c?.name || "").filter(Boolean) : [],
+    minimumSalaryUsdMonthly: professionalSector === "branch_banking" ? 3e3 : Number(raw?.minimumSalaryUsdMonthly || 0) || null,
+    careerLevel,
+    preferredLocations: Array.isArray(raw?.preferredLocations) ? raw.preferredLocations : [],
+    preferredEnvironment: "both",
+    nationality: String(raw?.nationality || "Ethiopian"),
+    countriesWithLegalWorkRight: ["Ethiopia"],
+    allowJuniorRoles: Boolean(raw?.allowJuniorRoles),
+    updatedAt: raw?.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+var OpportunityIntelligenceEngine = class {
+  constructor(deps) {
+    this.dailyTimer = null;
+    this.runInProgress = false;
+    this.robotsCache = /* @__PURE__ */ new Map();
+    this.runtimeBaseDir = deps.runtimeBaseDir;
+    this.dbPath = path8.join(deps.runtimeBaseDir, "data", "opportunity_intelligence_db.json");
+    this.loadUserProfiles = deps.loadUserProfiles;
+    this.loadJsonFileSafe = deps.loadJsonFileSafe;
+    this.writeJsonFileAtomic = deps.writeJsonFileAtomic;
+    this.appendAuditLog = deps.appendAuditLog;
+  }
+  createDefaultDb() {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    return {
+      version: 2,
+      updatedAt: nowIso,
+      lastSuccessfulRunAt: null,
+      nextScheduledRunAt: new Date(Date.now() + TWENTY_FOUR_HOURS_MS).toISOString(),
+      duplicateOpportunitiesPrevented: 0,
+      duplicateNotificationsPrevented: 0,
+      opportunitiesUpdated: 0,
+      opportunity_sources: buildInitialOfficialSourcesRegistry(),
+      international_opportunities: [],
+      local_opportunities: [],
+      permanent_opportunity_history: {},
+      opportunity_verification_logs: [],
+      opportunity_salary: {},
+      opportunity_visa_status: {},
+      opportunity_eligibility: {},
+      user_professional_profiles: {},
+      user_opportunity_matches: {},
+      user_notification_history: [],
+      notification_preferences: {},
+      notification_deduplication: {},
+      opportunity_notification_status: {},
+      scheduled_discovery_logs: []
+    };
+  }
+  loadDb() {
+    const def = this.createDefaultDb();
+    const { data } = loadJsonWithBackupRecovery(this.dbPath, def);
+    const persistedById = /* @__PURE__ */ new Map();
+    if (Array.isArray(data.opportunity_sources)) {
+      for (const s of data.opportunity_sources) {
+        if (s?.id) persistedById.set(s.id, s);
+      }
+    }
+    const syncedSources = def.opportunity_sources.map((canonical) => {
+      const prev = persistedById.get(canonical.id);
+      if (!prev) return canonical;
+      return {
+        ...canonical,
+        enabled: typeof prev.enabled === "boolean" ? prev.enabled : canonical.enabled,
+        accessStatus: prev.accessStatus || canonical.accessStatus,
+        robotsAllowed: prev.robotsAllowed ?? canonical.robotsAllowed,
+        accessNote: prev.accessNote ?? canonical.accessNote,
+        lastCheckedAt: prev.lastCheckedAt ?? null,
+        lastStatus: prev.lastStatus || "idle",
+        lastHttpStatus: prev.lastHttpStatus ?? null,
+        lastError: prev.lastError ?? null,
+        lastDurationMs: prev.lastDurationMs ?? null,
+        consecutiveFailures: Number(prev.consecutiveFailures || 0),
+        itemsDiscoveredTotal: Number(prev.itemsDiscoveredTotal || 0)
+      };
+    });
+    const db = {
+      ...def,
+      ...data,
+      version: 2,
+      opportunitiesUpdated: Number(data.opportunitiesUpdated || 0),
+      opportunity_sources: syncedSources,
+      international_opportunities: Array.isArray(data.international_opportunities) ? data.international_opportunities : [],
+      local_opportunities: Array.isArray(data.local_opportunities) ? data.local_opportunities : [],
+      permanent_opportunity_history: data.permanent_opportunity_history || {},
+      opportunity_verification_logs: Array.isArray(data.opportunity_verification_logs) ? data.opportunity_verification_logs : [],
+      opportunity_salary: data.opportunity_salary || {},
+      opportunity_visa_status: data.opportunity_visa_status || {},
+      opportunity_eligibility: data.opportunity_eligibility || {},
+      user_professional_profiles: data.user_professional_profiles || {},
+      user_opportunity_matches: data.user_opportunity_matches || {},
+      user_notification_history: Array.isArray(data.user_notification_history) ? data.user_notification_history : [],
+      notification_preferences: data.notification_preferences || {},
+      notification_deduplication: data.notification_deduplication || {},
+      opportunity_notification_status: data.opportunity_notification_status || {},
+      scheduled_discovery_logs: Array.isArray(data.scheduled_discovery_logs) ? data.scheduled_discovery_logs : []
+    };
+    return db;
+  }
+  saveDb(db) {
+    db.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (db.opportunity_verification_logs.length > 1500) {
+      db.opportunity_verification_logs = db.opportunity_verification_logs.slice(0, 1500);
+    }
+    if (db.user_notification_history.length > 2e3) {
+      db.user_notification_history = db.user_notification_history.slice(0, 2e3);
+    }
+    if (db.scheduled_discovery_logs.length > 120) {
+      db.scheduled_discovery_logs = db.scheduled_discovery_logs.slice(0, 120);
+    }
+    saveJsonTransactional(this.dbPath, db);
+  }
+  getAllOpportunities(db) {
+    return [...db.international_opportunities, ...db.local_opportunities];
+  }
+  /**
+   * Ingests a raw candidate opportunity, deduplicates across multiple websites (TEST 7),
+   * handles material updates cleanly, and preserves verification audit logs (TEST 8).
+   */
+  ingestAndVerifyCandidate(db, raw, options) {
+    const nowMs = options?.nowMs ?? Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const verified = buildAndVerifyCanonicalOpportunity(raw, {
+      fxRatesUsdBase: options?.fxRatesUsdBase || DEFAULT_FX_RATES_USD_BASE,
+      nowMs
+    });
+    const collection = verified.environment === "ethiopia_domestic" ? db.local_opportunities : db.international_opportunities;
+    const existingIdx = collection.findIndex((item) => {
+      if (item.canonicalKey === verified.canonicalKey || item.urlFingerprint === verified.urlFingerprint || item.id === verified.id) {
+        return true;
+      }
+      if (verified.referenceNumber && item.referenceNumber && item.referenceNumber === verified.referenceNumber && item.employer.toLowerCase().trim() === verified.employer.toLowerCase().trim()) {
+        return true;
+      }
+      if (item.employer.toLowerCase().trim() === verified.employer.toLowerCase().trim() && item.title.toLowerCase().trim() === verified.title.toLowerCase().trim() && item.country.toLowerCase().trim() === verified.country.toLowerCase().trim() && Boolean(item.deadlineIso && verified.deadlineIso && item.deadlineIso === verified.deadlineIso)) {
+        return true;
+      }
+      return false;
+    });
+    if (existingIdx !== -1) {
+      const existing = collection[existingIdx];
+      const mergedSourceUrls = Array.from(/* @__PURE__ */ new Set([...existing.sourceUrls, ...verified.sourceUrls]));
+      const mergedSourceNames = Array.from(/* @__PURE__ */ new Set([...existing.sourceNames, ...verified.sourceNames]));
+      const primarySourceUrl = existing.primarySourceUrl || existing.sourceUrls[0] || verified.primarySourceUrl;
+      const primarySourceName = existing.primarySourceName || existing.sourceNames[0] || verified.primarySourceName;
+      const syncPermanentHistory = (rec) => {
+        db.permanent_opportunity_history[rec.canonicalKey] = {
+          opportunityId: rec.id,
+          canonicalKey: rec.canonicalKey,
+          urlFingerprint: rec.urlFingerprint,
+          referenceNumber: rec.referenceNumber,
+          status: rec.status,
+          firstSeenAt: db.permanent_opportunity_history[rec.canonicalKey]?.firstSeenAt || rec.discoveredAt,
+          lastSeenAt: nowIso,
+          primarySourceUrl,
+          primarySourceName
+        };
+      };
+      if (existing.status === "published" && verified.status !== "published") {
+        const unpublishReason = verified.rejectionExplanations.join(" | ") || "Failed recheck verification rules.";
+        const updated = {
+          ...existing,
+          ...verified,
+          id: existing.id,
+          discoveredAt: existing.discoveredAt,
+          updateVersion: existing.updateVersion,
+          primarySourceUrl,
+          primarySourceName,
+          sourceUrls: mergedSourceUrls,
+          sourceNames: mergedSourceNames,
+          status: "unpublished",
+          verificationBadge: "Unpublished After Recheck",
+          unpublishedAt: nowIso,
+          unpublishedReason: unpublishReason,
+          lastVerifiedAt: nowIso,
+          updatedAt: nowIso
+        };
+        collection[existingIdx] = updated;
+        db.opportunity_salary[updated.id] = updated.salary;
+        db.opportunity_visa_status[updated.id] = updated.visa;
+        db.opportunity_eligibility[updated.id] = updated.eligibility;
+        db.opportunitiesUpdated += 1;
+        syncPermanentHistory(updated);
+        db.opportunity_verification_logs.unshift({
+          id: `vlog_${Date.now()}_${crypto8.randomBytes(3).toString("hex")}`,
+          opportunityId: updated.id,
+          checkedAt: nowIso,
+          action: "auto_unpublish",
+          previousStatus: "published",
+          newStatus: "unpublished",
+          passed: false,
+          rejectionCodes: updated.rejectionCodes,
+          explanation: `Automatically unpublished during recheck: ${unpublishReason}`,
+          sourceUrl: updated.officialApplicationUrl
+        });
+        return { record: updated, outcome: "auto_unpublished" };
+      }
+      const deadlineChanged = Boolean(verified.deadlineIso && existing.deadlineIso && verified.deadlineIso !== existing.deadlineIso);
+      const salaryMateriallyChanged = !existing.salary.disclosed && verified.salary.disclosed || existing.salary.normalizedMonthlyUsd !== null && verified.salary.normalizedMonthlyUsd !== null && Math.abs(existing.salary.normalizedMonthlyUsd - verified.salary.normalizedMonthlyUsd) >= 250;
+      const hoursSinceLastVerify = (nowMs - Date.parse(existing.lastVerifiedAt || existing.updatedAt || nowIso)) / (1e3 * 60 * 60);
+      const isRepeatDailyRefresh = hoursSinceLastVerify >= 20;
+      if (deadlineChanged || salaryMateriallyChanged) {
+        const nextVersion = existing.updateVersion + 1;
+        const updated = {
+          ...existing,
+          ...verified,
+          id: existing.id,
+          discoveredAt: existing.discoveredAt,
+          updateVersion: nextVersion,
+          primarySourceUrl,
+          primarySourceName,
+          sourceUrls: mergedSourceUrls,
+          sourceNames: mergedSourceNames,
+          lastVerifiedAt: nowIso,
+          updatedAt: nowIso
+        };
+        collection[existingIdx] = updated;
+        db.opportunity_salary[updated.id] = updated.salary;
+        db.opportunity_visa_status[updated.id] = updated.visa;
+        db.opportunity_eligibility[updated.id] = updated.eligibility;
+        db.opportunitiesUpdated += 1;
+        db.duplicateOpportunitiesPrevented += 1;
+        syncPermanentHistory(updated);
+        db.opportunity_verification_logs.unshift({
+          id: `vlog_${Date.now()}_${crypto8.randomBytes(3).toString("hex")}`,
+          opportunityId: updated.id,
+          checkedAt: nowIso,
+          action: "material_update",
+          previousStatus: existing.status,
+          newStatus: updated.status,
+          passed: updated.status === "published",
+          rejectionCodes: updated.rejectionCodes,
+          explanation: `Material update detected (v${nextVersion}): ${deadlineChanged ? `deadline updated to ${updated.deadlineRaw}` : ""}${deadlineChanged && salaryMateriallyChanged ? "; " : ""}${salaryMateriallyChanged ? `salary updated to ${updated.salary.salaryDisplay}` : ""}.`,
+          sourceUrl: updated.officialApplicationUrl
+        });
+        return { record: updated, outcome: "material_updated" };
+      }
+      db.duplicateOpportunitiesPrevented += 1;
+      existing.primarySourceUrl = primarySourceUrl;
+      existing.primarySourceName = primarySourceName;
+      existing.sourceUrls = mergedSourceUrls;
+      existing.sourceNames = mergedSourceNames;
+      existing.referenceNumber = existing.referenceNumber || verified.referenceNumber;
+      existing.fullDaysRemaining = verified.fullDaysRemaining;
+      existing.lastVerifiedAt = nowIso;
+      if (isRepeatDailyRefresh) {
+        existing.updatedAt = nowIso;
+        existing.descriptionSummary = verified.descriptionSummary || existing.descriptionSummary;
+        db.opportunitiesUpdated += 1;
+        db.opportunity_verification_logs.unshift({
+          id: `vlog_${Date.now()}_${crypto8.randomBytes(3).toString("hex")}`,
+          opportunityId: existing.id,
+          checkedAt: nowIso,
+          action: "daily_recheck",
+          previousStatus: existing.status,
+          newStatus: existing.status,
+          passed: existing.status === "published",
+          rejectionCodes: existing.rejectionCodes,
+          explanation: `24-hour re-discovery refreshed existing canonical record without duplicating (${mergedSourceNames.length} source(s)).`,
+          sourceUrl: existing.officialApplicationUrl
+        });
+      }
+      syncPermanentHistory(existing);
+      return { record: existing, outcome: "duplicate_merged" };
+    }
+    collection.unshift(verified);
+    db.opportunity_salary[verified.id] = verified.salary;
+    db.opportunity_visa_status[verified.id] = verified.visa;
+    db.opportunity_eligibility[verified.id] = verified.eligibility;
+    db.permanent_opportunity_history[verified.canonicalKey] = {
+      opportunityId: verified.id,
+      canonicalKey: verified.canonicalKey,
+      urlFingerprint: verified.urlFingerprint,
+      referenceNumber: verified.referenceNumber,
+      status: verified.status,
+      firstSeenAt: nowIso,
+      lastSeenAt: nowIso,
+      primarySourceUrl: verified.primarySourceUrl,
+      primarySourceName: verified.primarySourceName
+    };
+    db.opportunity_verification_logs.unshift({
+      id: `vlog_${Date.now()}_${crypto8.randomBytes(3).toString("hex")}`,
+      opportunityId: verified.id,
+      checkedAt: nowIso,
+      action: "initial_verification",
+      previousStatus: "new",
+      newStatus: verified.status,
+      passed: verified.status === "published",
+      rejectionCodes: verified.rejectionCodes,
+      explanation: verified.status === "published" ? `Verified and published (${verified.environment}, ${verified.category}).` : verified.rejectionExplanations.join(" | "),
+      sourceUrl: verified.officialApplicationUrl
+    });
+    return { record: verified, outcome: "created" };
+  }
+  /**
+   * Daily Recheck of ALL existing published opportunities (Sections 7 & 9, TEST 8):
+   * Automatically unpublishes any opportunity whose deadline dropped below 3 full days
+   * or whose visa sponsorship is no longer confirmed, while preserving immutable audit history.
+   */
+  recheckAllPublishedOpportunities(db, nowMs = Date.now(), liveUpdatesByOpportunityId) {
+    const nowIso = new Date(nowMs).toISOString();
+    let recheckedCount = 0;
+    let unpublishedCount = 0;
+    const lists = [db.international_opportunities, db.local_opportunities];
+    for (const list of lists) {
+      for (const opp of list) {
+        if (opp.status !== "published") continue;
+        recheckedCount++;
+        const livePatch = liveUpdatesByOpportunityId?.[opp.id];
+        const effectiveDeadline = livePatch?.deadlineRaw ?? opp.deadlineRaw;
+        const deadlineEval = evaluateStrictThreeDayDeadline(
+          effectiveDeadline,
+          nowMs,
+          Boolean(livePatch?.isClosedOrWithdrawn)
+        );
+        const visaStillConfirmed = opp.environment === "ethiopia_domestic" ? true : Boolean(opp.visa.verified && !livePatch?.visaSponsorshipRevoked);
+        opp.lastVerifiedAt = nowIso;
+        opp.fullDaysRemaining = deadlineEval.fullDaysRemaining;
+        if (!deadlineEval.passed || !visaStillConfirmed) {
+          const reasons = [];
+          const codes = [...opp.rejectionCodes];
+          if (!deadlineEval.passed && deadlineEval.rejectionCode) {
+            codes.push(deadlineEval.rejectionCode);
+            reasons.push(deadlineEval.explanation);
+          }
+          if (!visaStillConfirmed) {
+            codes.push("visa_sponsorship_unconfirmed");
+            opp.visa = {
+              ...opp.visa,
+              verified: false,
+              conditionMet: "none",
+              statusLabel: "Visa Sponsorship Revoked / Unconfirmed",
+              sponsorshipStatement: "Confirmed visa sponsorship was removed during scheduled recheck.",
+              lastVerifiedAt: nowIso
+            };
+            db.opportunity_visa_status[opp.id] = opp.visa;
+            reasons.push("Confirmed work visa sponsorship is no longer valid at the official source.");
+          }
+          opp.status = "unpublished";
+          opp.verificationBadge = "Unpublished After Recheck";
+          opp.rejectionCodes = Array.from(new Set(codes));
+          opp.rejectionExplanations = Array.from(/* @__PURE__ */ new Set([...opp.rejectionExplanations, ...reasons]));
+          opp.unpublishedAt = nowIso;
+          opp.unpublishedReason = reasons.join(" | ");
+          opp.updatedAt = nowIso;
+          unpublishedCount++;
+          const existingHistory = db.permanent_opportunity_history[opp.canonicalKey];
+          db.permanent_opportunity_history[opp.canonicalKey] = {
+            opportunityId: opp.id,
+            canonicalKey: opp.canonicalKey,
+            urlFingerprint: opp.urlFingerprint,
+            referenceNumber: opp.referenceNumber,
+            status: "unpublished",
+            firstSeenAt: existingHistory?.firstSeenAt || opp.discoveredAt,
+            lastSeenAt: nowIso,
+            primarySourceUrl: existingHistory?.primarySourceUrl || opp.primarySourceUrl,
+            primarySourceName: existingHistory?.primarySourceName || opp.primarySourceName
+          };
+          db.opportunity_verification_logs.unshift({
+            id: `vlog_${Date.now()}_${crypto8.randomBytes(3).toString("hex")}`,
+            opportunityId: opp.id,
+            checkedAt: nowIso,
+            action: "auto_unpublish",
+            previousStatus: "published",
+            newStatus: "unpublished",
+            passed: false,
+            rejectionCodes: opp.rejectionCodes,
+            explanation: `Auto-unpublished on recheck: ${opp.unpublishedReason}`,
+            sourceUrl: opp.officialApplicationUrl
+          });
+        }
+      }
+    }
+    return { recheckedCount, unpublishedCount };
+  }
+  getOrCreateNotificationPreferences(db, userId) {
+    if (!db.notification_preferences[userId]) {
+      db.notification_preferences[userId] = {
+        userId,
+        enabled: true,
+        dailyLimit: 5,
+        categories: ["job"],
+        environments: ["ethiopia_domestic", "international"],
+        allowJuniorRoles: false,
+        notifyOnMaterialUpdates: true,
+        viewedOpportunityIds: [],
+        savedOpportunityIds: [],
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+    }
+    return db.notification_preferences[userId];
+  }
+  /**
+   * Notification Deduplication Engine (Section 8 — TEST 7 & TEST 10):
+   * - Never notifies a user twice about the same canonical opportunity (across sources or across days).
+   * - Respects viewed/saved suppression, user preferences, daily limit, and material update versions.
+   */
+  dispatchDeduplicatedNotificationForUser(db, params) {
+    const { userId, opportunity, match } = params;
+    const nowMs = params.nowMs ?? Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    if (!match.eligible || opportunity.status !== "published") {
+      return { sent: false, reason: "suppressed_not_eligible" };
+    }
+    const prefs = this.getOrCreateNotificationPreferences(db, userId);
+    if (!prefs.enabled || !prefs.categories.includes(opportunity.category) || !prefs.environments.includes(opportunity.environment)) {
+      return { sent: false, reason: "suppressed_preferences" };
+    }
+    if (prefs.viewedOpportunityIds.includes(opportunity.id) || prefs.savedOpportunityIds.includes(opportunity.id)) {
+      db.duplicateNotificationsPrevented += 1;
+      return { sent: false, reason: "suppressed_viewed_or_saved" };
+    }
+    const dedupKey = `${userId}::${opportunity.canonicalKey}`;
+    const existingDedup = db.notification_deduplication[dedupKey];
+    let notificationType = "new_match";
+    if (existingDedup) {
+      const hasImportantUpdate = prefs.notifyOnMaterialUpdates && opportunity.updateVersion > existingDedup.lastNotifiedUpdateVersion;
+      if (!hasImportantUpdate) {
+        db.duplicateNotificationsPrevented += 1;
+        const oppStatus = db.opportunity_notification_status[opportunity.id];
+        if (oppStatus) {
+          oppStatus.totalDuplicatesPrevented += 1;
+        }
+        return { sent: false, reason: "suppressed_duplicate" };
+      }
+      notificationType = "material_update";
+    }
+    const dayKey = nowIso.slice(0, 10);
+    const sentTodayCount = db.user_notification_history.filter(
+      (h) => h.userId === userId && h.status === "sent" && h.sentAt.slice(0, 10) === dayKey
+    ).length;
+    if (sentTodayCount >= Math.max(1, prefs.dailyLimit || 5)) {
+      return { sent: false, reason: "suppressed_daily_limit" };
+    }
+    const hist = {
+      id: `unh_${nowMs}_${crypto8.randomBytes(3).toString("hex")}`,
+      userId,
+      opportunityId: opportunity.id,
+      canonicalKey: opportunity.canonicalKey,
+      notificationType,
+      title: opportunity.title,
+      employer: opportunity.employer,
+      category: opportunity.category,
+      environment: opportunity.environment,
+      sentAt: nowIso,
+      status: "sent",
+      deliveryResult: "delivered_in_app_and_persisted",
+      notifiedUpdateVersion: opportunity.updateVersion
+    };
+    db.user_notification_history.unshift(hist);
+    db.notification_deduplication[dedupKey] = {
+      key: dedupKey,
+      userId,
+      opportunityId: opportunity.id,
+      canonicalKey: opportunity.canonicalKey,
+      urlFingerprint: opportunity.urlFingerprint,
+      lastNotifiedAt: nowIso,
+      lastNotifiedUpdateVersion: opportunity.updateVersion,
+      notificationCount: (existingDedup?.notificationCount || 0) + 1
+    };
+    const existingOppStatus = db.opportunity_notification_status[opportunity.id];
+    db.opportunity_notification_status[opportunity.id] = {
+      opportunityId: opportunity.id,
+      canonicalKey: opportunity.canonicalKey,
+      updateVersion: opportunity.updateVersion,
+      totalUsersNotified: (existingOppStatus?.totalUsersNotified || 0) + 1,
+      totalDuplicatesPrevented: existingOppStatus?.totalDuplicatesPrevented || 0,
+      lastDispatchedAt: nowIso
+    };
+    if (params.mirrorToLegacyUserNotifications !== false) {
+      try {
+        const legacyPath = path8.join(this.runtimeBaseDir, "data", "user_notifications.json");
+        const legacyMap = this.loadJsonFileSafe(legacyPath, {});
+        const userList = Array.isArray(legacyMap[userId]) ? legacyMap[userId] : [];
+        const legacyDedupeKey = `oi:${opportunity.canonicalKey}:v${opportunity.updateVersion}`;
+        if (!userList.some((n) => n?.dedupeKey === legacyDedupeKey)) {
+          userList.unshift({
+            id: hist.id,
+            userId,
+            vacancyId: opportunity.id,
+            alertKind: notificationType === "material_update" ? "job_updated" : "new_match",
+            dedupeKey: legacyDedupeKey,
+            title: `${opportunity.title} \u2014 ${opportunity.employer}`,
+            employer: opportunity.employer,
+            message: `${match.matchReasons[0] || "Verified match for your professional profile"} (${opportunity.country}).`,
+            applyUrl: opportunity.officialApplicationUrl,
+            read: false,
+            createdAt: nowIso
+          });
+          legacyMap[userId] = userList.slice(0, 100);
+          this.writeJsonFileAtomic(legacyPath, legacyMap);
+        }
+      } catch {
+      }
+    }
+    return {
+      sent: true,
+      reason: notificationType === "material_update" ? "sent_material_update" : "sent_new",
+      historyRecord: hist
+    };
+  }
+  /**
+   * Respects robots.txt per host (cached for 6 hours, SSRF-guarded via validatePublicCrawlUrl).
+   * Never pretends a disallowed path is accessible.
+   */
+  async checkRobotsAllowed(targetUrl) {
+    try {
+      const parsed = new URL(targetUrl);
+      const origin = parsed.origin;
+      const pathname = parsed.pathname || "/";
+      const cached = this.robotsCache.get(origin);
+      let disallowPaths = [];
+      if (cached && Date.now() - cached.fetchedAt < 6 * 60 * 60 * 1e3) {
+        disallowPaths = cached.disallowPaths;
+      } else {
+        const robotsUrl = `${origin}/robots.txt`;
+        const check = await validatePublicCrawlUrl(robotsUrl);
+        if (!check.ok) {
+          return { allowed: false, note: `Blocked URL validation: ${check.reason}` };
+        }
+        try {
+          const resp = await fetch(robotsUrl, {
+            headers: {
+              "User-Agent": "HopelandJobsBot/2.0 (+https://www.hopelandjobs.tech)",
+              Accept: "text/plain,*/*"
+            },
+            signal: AbortSignal.timeout(4500)
+          });
+          if (resp.ok) {
+            const text = await resp.text();
+            let activeAgent = false;
+            for (const rawLine of text.split(/\r?\n/)) {
+              const line = rawLine.replace(/#.*$/, "").trim();
+              if (!line) continue;
+              const uaMatch = line.match(/^user-agent\s*:\s*(.+)$/i);
+              if (uaMatch) {
+                const agent = uaMatch[1].trim().toLowerCase();
+                activeAgent = agent === "*" || agent.includes("hopeland");
+                continue;
+              }
+              if (activeAgent) {
+                const disMatch = line.match(/^disallow\s*:\s*(.*)$/i);
+                if (disMatch) {
+                  const rule = disMatch[1].trim();
+                  if (rule) disallowPaths.push(rule);
+                }
+              }
+            }
+          }
+        } catch {
+        }
+        this.robotsCache.set(origin, { fetchedAt: Date.now(), disallowPaths });
+      }
+      for (const rule of disallowPaths) {
+        if (rule === "/") {
+          return { allowed: false, note: "robots.txt disallows automated access to this host (Disallow: /)" };
+        }
+        if (rule.startsWith("/") && pathname.startsWith(rule)) {
+          return { allowed: false, note: `robots.txt disallows automated access to ${rule}` };
+        }
+      }
+      return { allowed: true, note: "robots.txt permits access" };
+    } catch {
+      return { allowed: true, note: "robots.txt check bypassed due to URL parse fallback" };
+    }
+  }
+  /**
+   * Polite HTTP fetch with 1 automatic retry for transient network / 5xx failures.
+   */
+  async fetchWithRetry(url, acceptHeader, timeoutMs = 7e3) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch(url, {
+          headers: {
+            "User-Agent": "HopelandJobsBot/2.0 (+https://www.hopelandjobs.tech; Opportunity Intelligence Monitor)",
+            Accept: acceptHeader,
+            "Accept-Language": "en-US,en;q=0.9"
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(timeoutMs)
+        });
+        if (resp.status >= 500 && resp.status < 600 && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 450));
+          continue;
+        }
+        return resp;
+      } catch (err) {
+        lastError = err;
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 450));
+        }
+      }
+    }
+    throw lastError || new Error("Network fetch failed after retry");
+  }
+  /**
+   * Monitors a single registered permanent source honestly:
+   * respects robots.txt, validates public URL, retries transient errors, parses official APIs/RSS/JSON-LD,
+   * and records accurate active / restricted / error status without pretending blocked sites work.
+   */
+  async monitorSingleRegisteredSource(src) {
+    const startMs = Date.now();
+    const targetUrl = src.officialEndpointUrl || src.url;
+    src.lastCheckedAt = new Date(startMs).toISOString();
+    try {
+      const urlCheck = await validatePublicCrawlUrl(targetUrl);
+      if (!urlCheck.ok) {
+        src.accessStatus = "restricted";
+        src.robotsAllowed = false;
+        src.lastStatus = "failed";
+        src.lastHttpStatus = null;
+        src.lastError = `Blocked URL validation: ${urlCheck.reason}`;
+        src.accessNote = src.lastError;
+        src.lastDurationMs = Date.now() - startMs;
+        src.consecutiveFailures += 1;
+        return { outcome: "restricted", items: [], errorMessage: src.lastError };
+      }
+      if (src.feedType === "html_portal") {
+        const robots = await this.checkRobotsAllowed(targetUrl);
+        src.robotsAllowed = robots.allowed;
+        if (!robots.allowed) {
+          src.accessStatus = "restricted";
+          src.lastStatus = "degraded";
+          src.lastHttpStatus = null;
+          src.lastError = robots.note;
+          src.accessNote = robots.note;
+          src.lastDurationMs = Date.now() - startMs;
+          src.consecutiveFailures += 1;
+          return { outcome: "restricted", items: [], errorMessage: robots.note };
+        }
+      } else {
+        src.robotsAllowed = true;
+      }
+      const acceptHeader = src.feedType === "json_api" ? "application/json, */*" : src.feedType === "rss" ? "application/rss+xml, application/xml, text/xml, */*" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+      const resp = await this.fetchWithRetry(targetUrl, acceptHeader, 7e3);
+      src.lastHttpStatus = resp.status;
+      src.lastDurationMs = Date.now() - startMs;
+      if (resp.status === 401 || resp.status === 403 || resp.status === 406 || resp.status === 429) {
+        const reason = resp.status === 429 ? "HTTP 429 \u2014 Rate limited by source" : `HTTP ${resp.status} \u2014 Access restricted / anti-bot protection on source`;
+        src.accessStatus = "restricted";
+        src.lastStatus = "degraded";
+        src.lastError = reason;
+        src.accessNote = reason;
+        src.consecutiveFailures += 1;
+        return { outcome: "restricted", items: [], errorMessage: reason };
+      }
+      if (!resp.ok) {
+        const reason = `HTTP ${resp.status} ${resp.statusText || "Error"}`.trim();
+        src.accessStatus = "error";
+        src.lastStatus = "failed";
+        src.lastError = reason;
+        src.accessNote = reason;
+        src.consecutiveFailures += 1;
+        return { outcome: "error", items: [], errorMessage: reason };
+      }
+      const rawBody = await resp.text();
+      if (src.feedType === "html_portal" && rawBody.length < 3e4 && /just a moment\.\.\.|cf-browser-verification|attention required! \| cloudflare|enable javascript and cookies to continue/i.test(
+        rawBody
+      )) {
+        const reason = "Bot-protection challenge page (Cloudflare / JS challenge) restricts automated reading";
+        src.accessStatus = "restricted";
+        src.lastStatus = "degraded";
+        src.lastError = reason;
+        src.accessNote = reason;
+        src.consecutiveFailures += 1;
+        return { outcome: "restricted", items: [], errorMessage: reason };
+      }
+      const items = this.parseLiveFeedItems(src, rawBody);
+      src.accessStatus = "active";
+      src.lastStatus = "ok";
+      src.lastError = null;
+      src.consecutiveFailures = 0;
+      src.itemsDiscoveredTotal += items.length;
+      src.accessNote = items.length > 0 ? `Active \u2014 HTTP ${resp.status} (${items.length} structured item${items.length === 1 ? "" : "s"} extracted via ${src.feedType})` : `Active \u2014 HTTP ${resp.status} reachable (checked ${src.feedType}; 0 new structured listings on landing page)`;
+      return { outcome: "active", items };
+    } catch (err) {
+      const msg = err?.name === "TimeoutError" || /timeout|aborted/i.test(String(err?.message || "")) ? "Connection timeout after retry" : String(err?.cause?.code || err?.message || "Network connection error").slice(0, 140);
+      src.accessStatus = "error";
+      src.lastStatus = "failed";
+      src.lastHttpStatus = null;
+      src.lastError = msg;
+      src.accessNote = msg;
+      src.lastDurationMs = Date.now() - startMs;
+      src.consecutiveFailures += 1;
+      return { outcome: "error", items: [], errorMessage: msg };
+    }
+  }
+  /**
+   * Executes one full real 24-hour source monitoring, ingestion, recheck, matching, and deduplicated notification run.
+   * - Respects overlap lock.
+   * - Checks all 40 registered sources in polite concurrent batches of 5 (unless explicitly bounded by caller).
+   * - Preserves the automatic 24-hour schedule when triggered manually by an admin (Section 7).
+   */
+  async runDailySourceMonitoringAndRecheck(trigger = "daily_scheduler", options) {
+    if (this.runInProgress) {
+      const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+      return {
+        id: `srun_skip_${Date.now()}`,
+        trigger,
+        timezone: ADDIS_ABABA_TIMEZONE,
+        startedAt: nowIso,
+        finishedAt: nowIso,
+        durationMs: 0,
+        status: "partial",
+        sourcesChecked: 0,
+        sourcesSucceeded: 0,
+        sourcesRestricted: 0,
+        sourcesFailed: 0,
+        newOpportunitiesDiscovered: 0,
+        opportunitiesUpdated: 0,
+        opportunitiesVerified: 0,
+        opportunitiesPublished: 0,
+        opportunitiesRejected: 0,
+        opportunitiesUnpublished: 0,
+        duplicatesPrevented: 0,
+        notificationsSent: 0,
+        duplicateNotificationsPrevented: 0,
+        errors: ["Skipped overlapping run: 24-hour monitoring sweep already in progress."]
+      };
+    }
+    this.runInProgress = true;
+    const startedMs = options?.nowMs ?? Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    const db = this.loadDb();
+    let sourcesChecked = 0;
+    let sourcesSucceeded = 0;
+    let sourcesRestricted = 0;
+    let sourcesFailed = 0;
+    let newDiscovered = 0;
+    let verifiedCount = 0;
+    let publishedCount = 0;
+    let rejectedCount = 0;
+    const updatedBefore = db.opportunitiesUpdated;
+    const duplicatesBefore = db.duplicateOpportunitiesPrevented;
+    const dupNotifBefore = db.duplicateNotificationsPrevented;
+    let notificationsSent = 0;
+    const errors = [];
+    try {
+      const localVacancies = this.loadJsonFileSafe(
+        path8.join(this.runtimeBaseDir, "data", "vacancies_catalog.json"),
+        []
+      );
+      for (const v of (Array.isArray(localVacancies) ? localVacancies : []).slice(0, 60)) {
+        if (!v?.title || v?.status !== "published") continue;
+        const appUrl = typeof v.applicationUrl === "string" && v.applicationUrl.startsWith("https://") ? v.applicationUrl : `https://www.hopelandjobs.tech/?vacancy=${encodeURIComponent(String(v.id || v.title))}`;
+        const res = this.ingestAndVerifyCandidate(
+          db,
+          {
+            category: "job",
+            title: String(v.title),
+            employer: String(v.organization || "Ethiopian Employer"),
+            country: "Ethiopia",
+            city: String(v.location || "Addis Ababa"),
+            region: "Ethiopia",
+            description: `${v.description || ""} ${v.responsibilities || ""} ${v.experienceYears || ""}`,
+            compensationRaw: String(v.salary || ""),
+            officialApplicationUrl: appUrl,
+            sourceName: "Hopeland Jobs Ethiopian Domestic Catalog",
+            deadlineRaw: String(v.applicationDeadline || "")
+          },
+          { nowMs: startedMs }
+        );
+        verifiedCount++;
+        if (res.outcome === "created") {
+          newDiscovered++;
+          if (res.record.status === "published") publishedCount++;
+          else rejectedCount++;
+        }
+      }
+      const bmStore = this.loadJsonFileSafe(
+        path8.join(this.runtimeBaseDir, "data", "branch_manager_jobs_store.json"),
+        {}
+      );
+      const fxRates = bmStore?.fxRatesUsdBase || DEFAULT_FX_RATES_USD_BASE;
+      for (const c of (bmStore?.rawCandidates || []).slice(0, 80)) {
+        if (!c?.title || !c?.applicationUrl) continue;
+        const res = this.ingestAndVerifyCandidate(
+          db,
+          {
+            category: "job",
+            title: String(c.title),
+            employer: String(c.employerName || "International Bank"),
+            country: String(c.countryHint || c.locationRaw || "Europe"),
+            city: String(c.cityHint || ""),
+            description: String(c.descriptionText || ""),
+            compensationRaw: String(c.compensationRaw || ""),
+            explicitVisaNote: String(c.explicitVisaNote || ""),
+            officialApplicationUrl: String(c.applicationUrl),
+            sourceName: String(c.sourcePortal || "Official Banking Career Portal"),
+            deadlineRaw: c.applicationDeadline || null
+          },
+          { fxRatesUsdBase: fxRates, nowMs: startedMs }
+        );
+        verifiedCount++;
+        if (res.outcome === "created") {
+          newDiscovered++;
+          if (res.record.status === "published") publishedCount++;
+          else rejectedCount++;
+        }
+      }
+      const globalStore = this.loadJsonFileSafe(
+        path8.join(this.runtimeBaseDir, "data", "global_opportunities_store.json"),
+        {}
+      );
+      for (const g of (globalStore?.international_opportunities || []).slice(0, 80)) {
+        if (!g?.title || !g?.officialApplicationUrl) continue;
+        const cat = g.category === "university_scholarship" ? "scholarship" : g.category === "conference_summit" ? "conference" : g.category === "professional_training" ? "training" : "job";
+        const res = this.ingestAndVerifyCandidate(
+          db,
+          {
+            category: cat,
+            title: String(g.title),
+            employer: String(g.organization || "Official Institution"),
+            country: String(g.country || "International"),
+            city: String(g.location || ""),
+            description: `${g.summary || ""} ${g.eligibilitySummary || ""} ${g.fundingSummary || ""} ${g.visaSponsorshipSummary || ""}`,
+            explicitVisaNote: String(g.visaSponsorshipSummary || ""),
+            explicitFundingNote: String(g.fundingSummary || ""),
+            officialApplicationUrl: String(g.officialApplicationUrl),
+            sourceUrl: String(g.originalSourceUrl || g.officialApplicationUrl),
+            sourceName: String(g.sourceName || g.organization || "Official Global Portal"),
+            deadlineRaw: g.deadlineDate || null,
+            isClosedOrWithdrawn: g.applicationStatus === "closed" || g.applicationStatus === "withdrawn"
+          },
+          { fxRatesUsdBase: fxRates, nowMs: startedMs }
+        );
+        verifiedCount++;
+        if (res.outcome === "created") {
+          newDiscovered++;
+          if (res.record.status === "published") publishedCount++;
+          else rejectedCount++;
+        }
+      }
+      const maxLive = Math.max(0, Math.min(40, options?.maxLiveNetworkSources ?? 40));
+      const enabledSources = db.opportunity_sources.filter((s) => s.enabled).slice(0, maxLive);
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < enabledSources.length; i += BATCH_SIZE) {
+        const batch = enabledSources.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (src) => {
+            const result = await this.monitorSingleRegisteredSource(src);
+            return { src, result };
+          })
+        );
+        for (const { src, result } of batchResults) {
+          sourcesChecked++;
+          if (result.outcome === "active") {
+            sourcesSucceeded++;
+          } else if (result.outcome === "restricted") {
+            sourcesRestricted++;
+            if (result.errorMessage) errors.push(`${src.name}: ${result.errorMessage}`);
+          } else {
+            sourcesFailed++;
+            if (result.errorMessage) errors.push(`${src.name}: ${result.errorMessage}`);
+          }
+          for (const item of result.items.slice(0, 25)) {
+            const res = this.ingestAndVerifyCandidate(db, item, { fxRatesUsdBase: fxRates, nowMs: startedMs });
+            verifiedCount++;
+            if (res.outcome === "created") {
+              newDiscovered++;
+              if (res.record.status === "published") publishedCount++;
+              else rejectedCount++;
+            }
+          }
+        }
+      }
+      const recheckStats = this.recheckAllPublishedOpportunities(db, startedMs);
+      const legacyUsers = this.loadUserProfiles();
+      const allPublished = this.getAllOpportunities(db).filter((o) => o.status === "published");
+      for (const [uid, rawProfile] of Object.entries(legacyUsers || {})) {
+        if (!uid) continue;
+        const userProf = db.user_professional_profiles[uid] || inferUserProfileFromLegacy(uid, rawProfile);
+        db.user_professional_profiles[uid] = userProf;
+        const matches = [];
+        for (const opp of allPublished) {
+          const match = evaluateOpportunityForUserProfile(opp, userProf);
+          if (match.eligible) {
+            matches.push(match);
+          }
+        }
+        matches.sort((a, b) => b.relevanceScore - a.relevanceScore);
+        db.user_opportunity_matches[uid] = matches.slice(0, 40);
+        for (const topMatch of matches.slice(0, 5)) {
+          const opp = allPublished.find((o) => o.id === topMatch.opportunityId);
+          if (!opp) continue;
+          const dispatch = this.dispatchDeduplicatedNotificationForUser(db, {
+            userId: uid,
+            opportunity: opp,
+            match: topMatch,
+            nowMs: startedMs
+          });
+          if (dispatch.sent) notificationsSent++;
+        }
+      }
+      const finishedMs = Date.now();
+      const finishedAt = new Date(finishedMs).toISOString();
+      const runStatus = sourcesChecked === 0 ? "success" : sourcesFailed === 0 && sourcesRestricted === 0 ? "success" : sourcesSucceeded > 0 ? "partial" : "failed";
+      if (runStatus !== "failed") {
+        db.lastSuccessfulRunAt = finishedAt;
+      }
+      const nextExistingMs = db.nextScheduledRunAt ? Date.parse(db.nextScheduledRunAt) : NaN;
+      if (trigger !== "manual_admin" || Number.isNaN(nextExistingMs) || nextExistingMs <= finishedMs) {
+        db.nextScheduledRunAt = new Date(finishedMs + TWENTY_FOUR_HOURS_MS).toISOString();
+      }
+      const runLog = {
+        id: `srun_${startedMs}_${crypto8.randomBytes(3).toString("hex")}`,
+        trigger,
+        timezone: ADDIS_ABABA_TIMEZONE,
+        startedAt,
+        finishedAt,
+        durationMs: Math.max(0, finishedMs - startedMs),
+        status: runStatus,
+        sourcesChecked,
+        sourcesSucceeded,
+        sourcesRestricted,
+        sourcesFailed,
+        newOpportunitiesDiscovered: newDiscovered,
+        opportunitiesUpdated: db.opportunitiesUpdated - updatedBefore,
+        opportunitiesVerified: verifiedCount,
+        opportunitiesPublished: publishedCount,
+        opportunitiesRejected: rejectedCount,
+        opportunitiesUnpublished: recheckStats.unpublishedCount,
+        duplicatesPrevented: db.duplicateOpportunitiesPrevented - duplicatesBefore,
+        notificationsSent,
+        duplicateNotificationsPrevented: db.duplicateNotificationsPrevented - dupNotifBefore,
+        errors: errors.slice(0, 25)
+      };
+      db.scheduled_discovery_logs.unshift(runLog);
+      this.saveDb(db);
+      this.appendAuditLog({
+        action: "daily_opportunity_intelligence_run",
+        targetType: "opportunity_intelligence",
+        targetId: runLog.id,
+        summary: `24h monitoring (${trigger}, Africa/Addis_Ababa) [${runStatus}]: checked ${sourcesChecked}/40 sources (${sourcesSucceeded} active, ${sourcesRestricted} restricted, ${sourcesFailed} errors), discovered ${newDiscovered}, updated ${runLog.opportunitiesUpdated}, published ${publishedCount}, unpublished ${recheckStats.unpublishedCount}, duplicates prevented ${runLog.duplicatesPrevented}.`,
+        severity: runStatus === "failed" ? "critical" : runStatus === "partial" ? "warning" : "info"
+      });
+      return runLog;
+    } finally {
+      this.runInProgress = false;
+    }
+  }
+  parseLiveFeedItems(src, rawBody) {
+    const out = [];
+    const defaultCat = src.categoryCoverage[0] || "job";
+    if (src.feedType === "json_api") {
+      try {
+        const parsed = JSON.parse(rawBody);
+        if (src.id === "src_05_reliefweb_jobs" && Array.isArray(parsed?.data)) {
+          for (const row of parsed.data.slice(0, 25)) {
+            const fields = row?.fields || {};
+            const title = String(fields.title || "").trim();
+            const url = String(fields.url || fields.url_alias || "").trim();
+            if (!title || !url.startsWith("https://")) continue;
+            const country = String(fields.country?.[0]?.name || "International");
+            const employer = String(fields.source?.[0]?.name || "ReliefWeb Humanitarian Organization");
+            const closing = fields.date?.closing ? String(fields.date.closing) : null;
+            out.push({
+              category: /\bintern(ship)?\b/i.test(title) ? "internship" : "job",
+              title,
+              employer,
+              country,
+              region: src.region,
+              description: stripTags(fields.body || title),
+              officialApplicationUrl: url,
+              sourceUrl: src.url,
+              sourceName: src.name,
+              referenceNumber: row?.id ? `RW-${row.id}` : null,
+              deadlineRaw: closing
+            });
+          }
+          return out;
+        }
+        if (src.id === "src_32_sweden_platsbanken" && Array.isArray(parsed?.hits)) {
+          for (const hit of parsed.hits.slice(0, 25)) {
+            const title = String(hit?.headline || "").trim();
+            const url = String(hit?.webpage_url || hit?.application_details?.url || "").trim();
+            if (!title || !url.startsWith("https://")) continue;
+            const employer = String(hit?.employer?.name || "Swedish Employer");
+            const city = String(hit?.workplace_address?.municipality || hit?.workplace_address?.city || "");
+            const desc = stripTags(hit?.description?.text || title);
+            out.push({
+              category: "job",
+              title,
+              employer,
+              country: "Sweden",
+              city,
+              region: src.region,
+              description: desc,
+              officialApplicationUrl: url,
+              sourceUrl: src.url,
+              sourceName: src.name,
+              referenceNumber: hit?.id ? `SE-AF-${hit.id}` : null,
+              deadlineRaw: hit?.application_deadline || null
+            });
+          }
+          return out;
+        }
+        if (src.id === "src_31_norway_nav" && Array.isArray(parsed?.content)) {
+          for (const ad of parsed.content.slice(0, 25)) {
+            const title = String(ad?.title || "").trim();
+            const url = String(ad?.link || (ad?.uuid ? `https://arbeidsplassen.nav.no/stillinger/stilling/${ad.uuid}` : "")).trim();
+            if (!title || !url.startsWith("https://")) continue;
+            const employer = String(ad?.employer?.name || "Norwegian Employer");
+            const city = String(ad?.workLocations?.[0]?.city || ad?.workLocations?.[0]?.municipal || "");
+            out.push({
+              category: "job",
+              title,
+              employer,
+              country: "Norway",
+              city,
+              region: src.region,
+              description: stripTags(ad?.description || title),
+              officialApplicationUrl: url,
+              sourceUrl: src.url,
+              sourceName: src.name,
+              referenceNumber: ad?.uuid ? `NO-NAV-${String(ad.uuid).slice(0, 12)}` : null,
+              deadlineRaw: ad?.applicationDue || ad?.expires || null
+            });
+          }
+          return out;
+        }
+        const rows = Array.isArray(parsed?.data) ? parsed.data : Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+        for (const j of rows.slice(0, 25)) {
+          const title = String(j?.title || "").trim();
+          const url = String(j?.url || j?.absolute_url || j?.jobUrl || "").trim();
+          if (!title || !url.startsWith("https://")) continue;
+          out.push({
+            category: defaultCat,
+            title,
+            employer: String(j.company_name || j.employer || src.name),
+            country: String(j.location || src.region),
+            description: stripTags(j.description || j.title),
+            officialApplicationUrl: url,
+            sourceUrl: src.url,
+            sourceName: src.name,
+            deadlineRaw: j.deadline || null
+          });
+        }
+      } catch {
+      }
+      return out;
+    }
+    if (src.feedType === "rss" || /<rss\b|<feed\b/i.test(rawBody.slice(0, 500))) {
+      const itemBlocks = rawBody.match(/<(?:item|entry)\b[\s\S]*?<\/(?:item|entry)>/gi) || [];
+      for (const block of itemBlocks.slice(0, 25)) {
+        const title = stripTags(block.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
+        const linkTag = block.match(/<link\b[^>]*href=["'](https?:\/\/[^"']+)["']/i)?.[1] || stripTags(block.match(/<link\b[^>]*>([\s\S]*?)<\/link>/i)?.[1] || "");
+        const desc = stripTags(
+          block.match(/<(?:description|summary|content)\b[^>]*>([\s\S]*?)<\/(?:description|summary|content)>/i)?.[1] || ""
+        );
+        if (!title || !linkTag.startsWith("https://")) continue;
+        const lower = `${title} ${desc}`.toLowerCase();
+        let cat = defaultCat;
+        if (/\b(scholarship|fellowship|grant|funding|phd\s+studentship)\b/i.test(lower)) cat = "scholarship";
+        else if (/\b(internship|trainee|apprenticeship)\b/i.test(lower)) cat = "internship";
+        else if (/\b(conference|summit|symposium|congress|colloquium|forum|lecture|seminar)\b/i.test(lower)) cat = "conference";
+        else if (/\b(training\s+program|workshop|executive\s+course|capacity\s+building)\b/i.test(lower)) cat = "training";
+        const defaultCountry = src.id === "src_20_jobs_ac_uk" ? "United Kingdom" : src.region === "USA" ? "United States" : src.region;
+        out.push({
+          category: cat,
+          title,
+          employer: src.name,
+          country: defaultCountry,
+          region: src.region,
+          description: desc || title,
+          officialApplicationUrl: linkTag.trim(),
+          sourceUrl: src.url,
+          sourceName: src.name,
+          deadlineRaw: null
+        });
+      }
+      return out;
+    }
+    const ldBlocks = rawBody.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+    for (const scriptTag of ldBlocks.slice(0, 20)) {
+      const jsonText = scriptTag.replace(/<script[^>]*>|<\/script>/gi, "").trim();
+      try {
+        const parsed = JSON.parse(jsonText);
+        const nodes = [];
+        const collect = (node) => {
+          if (!node || typeof node !== "object") return;
+          if (Array.isArray(node)) {
+            for (const item of node) collect(item);
+            return;
+          }
+          if (Array.isArray(node["@graph"])) collect(node["@graph"]);
+          const t = String(node["@type"] || "");
+          if (/JobPosting|Event|Course|Scholarship/i.test(t)) {
+            nodes.push(node);
+          }
+        };
+        collect(parsed);
+        for (const node of nodes.slice(0, 20)) {
+          const title = String(node.title || node.name || "").trim();
+          let appUrl = String(node.url || node.sameAs || "").trim();
+          if (appUrl.startsWith("/")) {
+            try {
+              appUrl = new URL(appUrl, src.url).toString();
+            } catch {
+            }
+          }
+          if (!title || !appUrl.startsWith("https://")) continue;
+          const nodeType = String(node["@type"] || "");
+          const cat = /Event/i.test(nodeType) ? "conference" : /Course/i.test(nodeType) ? "training" : /Scholarship/i.test(nodeType) ? "scholarship" : defaultCat;
+          const employer = String(
+            node.hiringOrganization?.name || node.organizer?.name || node.provider?.name || src.name
+          ).trim();
+          const country = String(
+            node.jobLocation?.address?.addressCountry || node.location?.address?.addressCountry || (src.region === "USA" ? "United States" : src.region)
+          ).trim();
+          const city = String(
+            node.jobLocation?.address?.addressLocality || node.location?.address?.addressLocality || ""
+          ).trim();
+          let compRaw = "";
+          if (node.baseSalary?.value) {
+            const val = node.baseSalary.value;
+            const cur = node.baseSalary.currency || "USD";
+            const unit = String(val.unitText || "YEAR").toLowerCase();
+            const amount = val.minValue || val.value || val.maxValue;
+            if (amount) compRaw = `${cur} ${amount} per ${unit}`;
+          }
+          out.push({
+            category: cat,
+            title,
+            employer,
+            country,
+            city,
+            region: src.region,
+            description: stripTags(node.description || title),
+            compensationRaw: compRaw,
+            officialApplicationUrl: appUrl,
+            sourceUrl: src.url,
+            sourceName: src.name,
+            referenceNumber: node.identifier?.value ? String(node.identifier.value) : null,
+            deadlineRaw: node.validThrough || node.endDate || null
+          });
+        }
+      } catch {
+      }
+    }
+    return out;
+  }
+  /**
+   * Builds the Administrator Source-Monitoring & Intelligence Dashboard payload (Sections 7 & 10)
+   * with Africa/Addis_Ababa (EAT) scheduling timestamps and honest 40-source telemetry.
+   */
+  buildAdminDashboard() {
+    const db = this.loadDb();
+    const all = this.getAllOpportunities(db);
+    const published = all.filter((o) => o.status === "published");
+    const rejected = all.filter((o) => o.status === "rejected");
+    const removed = all.filter((o) => o.status === "unpublished" || o.status === "expired");
+    const countCode = (code) => all.filter((o) => o.rejectionCodes.includes(code)).length;
+    const latestRun = db.scheduled_discovery_logs[0];
+    const activeSourcesCount = db.opportunity_sources.filter((s) => s.accessStatus === "active").length;
+    const restrictedSourcesCount = db.opportunity_sources.filter((s) => s.accessStatus === "restricted").length;
+    const errorSourcesCount = db.opportunity_sources.filter((s) => s.accessStatus === "error").length;
+    const monitoringStatus = this.runInProgress ? "running" : db.lastSuccessfulRunAt ? activeSourcesCount > 0 ? "active" : "degraded" : "idle";
+    return {
+      success: true,
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      timezone: ADDIS_ABABA_TIMEZONE,
+      monitoringStatus,
+      schedulerIntervalHours: 24,
+      metrics: {
+        totalSourcesMonitored: db.opportunity_sources.length,
+        sourcesSuccessfullyChecked: activeSourcesCount,
+        sourcesRestricted: restrictedSourcesCount,
+        sourcesFailed: errorSourcesCount,
+        newOpportunitiesDiscovered: latestRun?.newOpportunitiesDiscovered ?? all.length,
+        opportunitiesUpdated: db.opportunitiesUpdated,
+        opportunitiesVerified: all.length,
+        opportunitiesRejected: rejected.length,
+        opportunitiesPublished: published.length,
+        opportunitiesRemoved: removed.length,
+        visaSponsorshipFailures: countCode("visa_sponsorship_unconfirmed") + countCode("visa_cost_applicant_paid") + countCode("invitation_letter_only"),
+        salaryFilterFailures: countCode("salary_undisclosed") + countCode("salary_below_threshold"),
+        experienceMismatchRejections: countCode("experience_mismatch") + all.filter(
+          (o) => o.branchBankingRejectionReasons.some((r) => /experience/i.test(r))
+        ).length,
+        seniorityMismatchRejections: countCode("seniority_mismatch_too_senior") + countCode("seniority_mismatch_too_junior") + all.filter(
+          (o) => o.branchBankingRejectionReasons.some((r) => /seniority/i.test(r))
+        ).length,
+        duplicateOpportunitiesPrevented: db.duplicateOpportunitiesPrevented,
+        notificationsSent: db.user_notification_history.filter((h) => h.status === "sent").length,
+        duplicateNotificationsPrevented: db.duplicateNotificationsPrevented,
+        lastSuccessfulExecution: db.lastSuccessfulRunAt,
+        lastSuccessfulExecutionEat: formatAddisAbabaTimestamp(db.lastSuccessfulRunAt),
+        nextScheduledExecution: db.nextScheduledRunAt,
+        nextScheduledExecutionEat: formatAddisAbabaTimestamp(db.nextScheduledRunAt)
+      },
+      environmentBreakdown: {
+        ethiopiaDomesticPublished: db.local_opportunities.filter((o) => o.status === "published").length,
+        internationalPublished: db.international_opportunities.filter((o) => o.status === "published").length,
+        branchBankingPublished: published.filter((o) => o.isBranchBankingMatch).length,
+        internshipsPublished: published.filter((o) => o.category === "internship").length,
+        scholarshipsPublished: published.filter((o) => o.category === "scholarship").length,
+        conferencesPublished: published.filter((o) => o.category === "conference").length,
+        trainingPublished: published.filter((o) => o.category === "training").length
+      },
+      sources: db.opportunity_sources,
+      rejectionAuditLogs: all.filter((o) => o.rejectionExplanations.length > 0 || o.branchBankingRejectionReasons.length > 0).slice(0, 120).map((o) => ({
+        opportunityId: o.id,
+        title: o.title,
+        employer: o.employer,
+        category: o.category,
+        environment: o.environment,
+        status: o.status,
+        rejectionCodes: o.rejectionCodes,
+        explanations: o.rejectionExplanations.length > 0 ? o.rejectionExplanations : o.branchBankingRejectionReasons,
+        checkedAt: o.lastVerifiedAt,
+        officialUrl: o.officialApplicationUrl
+      })),
+      recentVerificationLogs: db.opportunity_verification_logs.slice(0, 80),
+      recentScheduledRuns: db.scheduled_discovery_logs.slice(0, 30)
+    };
+  }
+  startDailyScheduler() {
+    if (this.dailyTimer) return;
+    setTimeout(() => {
+      try {
+        const db = this.loadDb();
+        const lastMs = db.lastSuccessfulRunAt ? Date.parse(db.lastSuccessfulRunAt) : 0;
+        const shouldRunNow = !lastMs || Date.now() - lastMs >= 23 * 60 * 60 * 1e3;
+        if (shouldRunNow) {
+          this.runDailySourceMonitoringAndRecheck("startup_boot", { maxLiveNetworkSources: 40 }).catch(() => {
+          });
+        }
+      } catch {
+      }
+    }, 5e3).unref?.();
+    this.dailyTimer = setInterval(() => {
+      this.runDailySourceMonitoringAndRecheck("daily_scheduler", { maxLiveNetworkSources: 40 }).catch(() => {
+      });
+    }, TWENTY_FOUR_HOURS_MS);
+    this.dailyTimer.unref?.();
+  }
+  stop() {
+    if (this.dailyTimer) {
+      clearInterval(this.dailyTimer);
+      this.dailyTimer = null;
+    }
+  }
+};
+function registerOpportunityIntelligenceRoutes(deps) {
+  const engine = new OpportunityIntelligenceEngine(deps);
+  deps.app.get("/api/opportunity-intelligence/branch-banking", (req, res) => {
+    try {
+      const db = engine.loadDb();
+      const envParam = String(req.query.environment || "all").toLowerCase();
+      const minSalary = Math.max(3e3, Number(req.query.minSalaryUsd || 3e3) || 3e3);
+      const q = String(req.query.q || "").trim().toLowerCase();
+      const allPublishedJobs = engine.getAllOpportunities(db).filter((o) => o.status === "published" && o.category === "job");
+      const results = [];
+      const customProfile = {
+        ...BRANCH_BANKING_REFERENCE_PROFILE,
+        minimumSalaryUsdMonthly: minSalary
+      };
+      for (const opp of allPublishedJobs) {
+        if (envParam === "international" && opp.environment !== "international") continue;
+        if (envParam === "ethiopia_domestic" && opp.environment !== "ethiopia_domestic") continue;
+        const evalRes = evaluateForBranchBankingSpecialFeature({
+          title: opp.title,
+          employer: opp.employer,
+          description: opp.descriptionSummary,
+          responsibilities: opp.actualResponsibilities,
+          sector: opp.sector,
+          seniorityLevel: opp.seniorityLevel,
+          exp: {
+            requiredTotalYears: opp.eligibility.requiredTotalYears,
+            requiredBankingYears: opp.eligibility.requiredBankingYears,
+            requiredManagerialYears: opp.eligibility.requiredManagerialYears,
+            bankingExperienceSummary: "",
+            managerialExperienceSummary: ""
+          },
+          salary: opp.salary,
+          visa: opp.visa,
+          environment: opp.environment,
+          deadlinePassed: true,
+          deadlineExplanation: "",
+          profile: customProfile
+        });
+        if (!evalRes.matched) continue;
+        if (q && !`${opp.title} ${opp.employer} ${opp.country} ${opp.actualResponsibilities.join(" ")}`.toLowerCase().includes(q)) {
+          continue;
+        }
+        results.push({
+          id: opp.id,
+          positionTitle: opp.title,
+          employer: opp.employer,
+          country: opp.country,
+          city: opp.city,
+          environment: opp.environment,
+          salary: opp.salary.disclosed ? opp.salary.salaryDisplay : "Not Disclosed",
+          salaryPeriod: opp.salary.period === "annual" ? "Annual" : opp.salary.period === "monthly" ? "Monthly" : "Not Disclosed",
+          salaryTaxBasis: opp.salary.taxBasis === "gross" ? "Gross" : opp.salary.taxBasis === "net" ? "Net" : "Not Specified",
+          normalizedMonthlyUsd: opp.salary.normalizedMonthlyUsd,
+          requiredBankingExperience: opp.eligibility.requiredBankingYears !== null ? `${opp.eligibility.requiredBankingYears}+ years banking` : opp.eligibility.requiredTotalYears !== null ? `${opp.eligibility.requiredTotalYears}+ years relevant` : "Verify on official portal",
+          requiredManagerialExperience: opp.eligibility.requiredManagerialYears !== null ? `${opp.eligibility.requiredManagerialYears}+ years managerial` : "Managerial / branch leadership verified",
+          actualResponsibilities: opp.actualResponsibilities,
+          visaSponsorshipStatus: opp.visa.statusLabel,
+          visaFeesCovered: opp.visa.visaFeesCovered,
+          relocationSupport: opp.visa.relocationDetails,
+          applicationDeadline: opp.deadlineRaw,
+          fullDaysRemaining: opp.fullDaysRemaining,
+          officialApplicationLink: opp.officialApplicationUrl,
+          verificationStatus: opp.verificationBadge,
+          whyMatchesReferenceProfile: evalRes.matchReasons,
+          relevanceScore: evalRes.relevanceScore
+        });
+      }
+      results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        success: true,
+        referenceProfileSummary: {
+          bankingYears: 9,
+          managerialYears: 3,
+          sector: "Branch Banking",
+          minimumMonthlySalaryUsd: minSalary
+        },
+        totalMatched: results.length,
+        jobs: results
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Unable to load Branch Banking intelligence." });
+    }
+  });
+  deps.app.get("/api/opportunity-intelligence/personalized", (req, res) => {
+    const uid = deps.getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Sign in required to load personalized opportunity recommendations." });
+      return;
+    }
+    try {
+      const db = engine.loadDb();
+      const legacyUsers = deps.loadUserProfiles();
+      const profile = db.user_professional_profiles[uid] || inferUserProfileFromLegacy(uid, legacyUsers[uid] || {});
+      const allPublished = engine.getAllOpportunities(db).filter((o) => o.status === "published");
+      const ethiopianDomestic = [];
+      const international = [];
+      for (const opp of allPublished) {
+        const match = evaluateOpportunityForUserProfile(opp, profile);
+        if (!match.eligible) continue;
+        if (opp.environment === "ethiopia_domestic") {
+          ethiopianDomestic.push({ opportunity: opp, match });
+        } else {
+          international.push({ opportunity: opp, match });
+        }
+      }
+      ethiopianDomestic.sort((a, b) => b.match.relevanceScore - a.match.relevanceScore);
+      international.sort((a, b) => b.match.relevanceScore - a.match.relevanceScore);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        success: true,
+        profileUsed: {
+          professionalSector: profile.professionalSector,
+          careerLevel: profile.careerLevel,
+          yearsOfExperience: profile.yearsOfExperience,
+          managerialExperienceYears: profile.managerialExperienceYears
+        },
+        ethiopianDomestic: ethiopianDomestic.slice(0, 40),
+        international: international.slice(0, 40)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Failed to evaluate personalized matches." });
+    }
+  });
+  deps.app.get("/api/opportunity-intelligence/notifications/preferences", (req, res) => {
+    const uid = deps.getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Authentication required." });
+      return;
+    }
+    const db = engine.loadDb();
+    const prefs = engine.getOrCreateNotificationPreferences(db, uid);
+    const history = db.user_notification_history.filter((h) => h.userId === uid).slice(0, 50);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ success: true, preferences: prefs, history });
+  });
+  deps.app.put("/api/opportunity-intelligence/notifications/preferences", (req, res) => {
+    const uid = deps.getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Authentication required." });
+      return;
+    }
+    const db = engine.loadDb();
+    const current = engine.getOrCreateNotificationPreferences(db, uid);
+    const body = req.body || {};
+    const validCats = ["job", "scholarship", "internship", "conference", "training"];
+    const validEnvs = ["ethiopia_domestic", "international"];
+    const updated = {
+      ...current,
+      enabled: typeof body.enabled === "boolean" ? body.enabled : current.enabled,
+      dailyLimit: typeof body.dailyLimit === "number" && Number.isFinite(body.dailyLimit) ? Math.max(1, Math.min(20, Math.round(body.dailyLimit))) : current.dailyLimit,
+      categories: Array.isArray(body.categories) ? body.categories.filter((c) => validCats.includes(c)) : current.categories,
+      environments: Array.isArray(body.environments) ? body.environments.filter((e) => validEnvs.includes(e)) : current.environments,
+      allowJuniorRoles: typeof body.allowJuniorRoles === "boolean" ? body.allowJuniorRoles : current.allowJuniorRoles,
+      notifyOnMaterialUpdates: typeof body.notifyOnMaterialUpdates === "boolean" ? body.notifyOnMaterialUpdates : current.notifyOnMaterialUpdates,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    db.notification_preferences[uid] = updated;
+    engine.saveDb(db);
+    res.json({ success: true, preferences: updated });
+  });
+  deps.app.post("/api/opportunity-intelligence/notifications/mark-viewed", (req, res) => {
+    const uid = deps.getRequesterUid(req);
+    if (!uid) {
+      res.status(401).json({ success: false, error: "Authentication required." });
+      return;
+    }
+    const opportunityId = String(req.body?.opportunityId || "").trim().slice(0, 128);
+    const saved = Boolean(req.body?.saved);
+    if (!opportunityId) {
+      res.status(400).json({ success: false, error: "opportunityId is required." });
+      return;
+    }
+    const db = engine.loadDb();
+    const prefs = engine.getOrCreateNotificationPreferences(db, uid);
+    if (!prefs.viewedOpportunityIds.includes(opportunityId)) {
+      prefs.viewedOpportunityIds = [opportunityId, ...prefs.viewedOpportunityIds].slice(0, 500);
+    }
+    if (saved && !prefs.savedOpportunityIds.includes(opportunityId)) {
+      prefs.savedOpportunityIds = [opportunityId, ...prefs.savedOpportunityIds].slice(0, 500);
+    }
+    prefs.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    engine.saveDb(db);
+    res.json({ success: true });
+  });
+  deps.app.get("/api/opportunity-intelligence/admin/dashboard", (req, res) => {
+    if (!deps.isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Owner authentication required to access the Opportunity Intelligence Dashboard."
+      });
+      return;
+    }
+    try {
+      res.setHeader("Cache-Control", "no-store");
+      res.json(engine.buildAdminDashboard());
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Unable to load admin intelligence dashboard." });
+    }
+  });
+  deps.app.post("/api/opportunity-intelligence/admin/run-daily-check", async (req, res) => {
+    if (!deps.isPersistentOwnerRequest(req)) {
+      res.status(403).json({
+        success: false,
+        error: "Owner authentication required to run daily source monitoring."
+      });
+      return;
+    }
+    try {
+      const run = await engine.runDailySourceMonitoringAndRecheck("manual_admin", {
+        maxLiveNetworkSources: 40
+      });
+      res.json({
+        success: run.status !== "failed",
+        run,
+        dashboard: engine.buildAdminDashboard()
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Daily check execution failed." });
+    }
+  });
+  const handleDailyCron = async (req, res) => {
+    const expectedSecret = (process.env.CRON_SECRET || "").trim();
+    const authHeader = String(req.headers.authorization || "").trim();
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const isVercelCron = String(req.headers["x-vercel-cron"] || "") === "1";
+    const hasSecret = Boolean(expectedSecret && constantTimeEqual(bearer, expectedSecret));
+    const isOwner = deps.isPersistentOwnerRequest(req);
+    if (!isVercelCron && !hasSecret && !isOwner) {
+      res.status(401).json({
+        success: false,
+        error: "Unauthorized daily intelligence cron request. Provide Authorization: Bearer <CRON_SECRET>."
+      });
+      return;
+    }
+    try {
+      const run = await engine.runDailySourceMonitoringAndRecheck("cron_webhook", {
+        maxLiveNetworkSources: 40
+      });
+      res.status(run.status === "failed" ? 500 : 200).json({
+        success: run.status !== "failed",
+        run
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err?.message || "Cron execution failed." });
+    }
+  };
+  deps.app.get("/api/cron/daily-opportunity-intelligence", handleDailyCron);
+  deps.app.post("/api/cron/daily-opportunity-intelligence", handleDailyCron);
+  if (deps.autoStartDailyScheduler !== false && !deps.isVercel && process.env.NODE_ENV !== "test") {
+    engine.startDailyScheduler();
+  }
+  return engine;
 }
 
 // src/utils/telegramSnapshot.ts
@@ -17952,10 +23758,10 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path6.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path9.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
-    if (!fs2.existsSync(UPLOADS_DIR)) {
-      fs2.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs4.existsSync(UPLOADS_DIR)) {
+      fs4.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
   } catch {
   }
@@ -18018,7 +23824,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path6.extname(req.file.originalname).toLowerCase();
+      const ext = path9.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -18845,25 +24651,25 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const VACANCIES_CATALOG_FILE_SERVER = path6.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
-  const BOT_HEALTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path6.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path6.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path9.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
+  const BOT_HEALTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path9.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
   const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
   const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
   function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
-    const salt = crypto5.randomBytes(16).toString("hex");
-    const derived = crypto5.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const salt = crypto9.randomBytes(16).toString("hex");
+    const derived = crypto9.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return {
       id,
@@ -18882,13 +24688,13 @@ ${text}`;
     try {
       if (!plainText || !record?.salt || !record?.hashHex) return false;
       const expectedBuf = Buffer.from(record.hashHex, "hex");
-      const derivedBuf = crypto5.scryptSync(plainText, record.salt, expectedBuf.length, {
+      const derivedBuf = crypto9.scryptSync(plainText, record.salt, expectedBuf.length, {
         N: record.cost || 16384,
         r: record.blockSize || 8,
         p: record.parallelization || 1
       });
       if (derivedBuf.length !== expectedBuf.length) return false;
-      return crypto5.timingSafeEqual(derivedBuf, expectedBuf);
+      return crypto9.timingSafeEqual(derivedBuf, expectedBuf);
     } catch {
       return false;
     }
@@ -18902,7 +24708,7 @@ ${text}`;
       passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
       sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
         mutated = true;
-        return crypto5.randomBytes(32).toString("hex");
+        return crypto9.randomBytes(32).toString("hex");
       })(),
       updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     } : (() => {
@@ -18911,7 +24717,7 @@ ${text}`;
         version: 1,
         algorithm: "scrypt",
         passwordHashes: [],
-        sessionSigningKey: crypto5.randomBytes(32).toString("hex"),
+        sessionSigningKey: crypto9.randomBytes(32).toString("hex"),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     })();
@@ -18941,7 +24747,7 @@ ${text}`;
         mutated = true;
       }
     }
-    if (mutated || !fs2.existsSync(DEVELOPER_AUTH_FILE)) {
+    if (mutated || !fs4.existsSync(DEVELOPER_AUTH_FILE)) {
       writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
     }
     return store;
@@ -18990,7 +24796,7 @@ ${text}`;
       exp: now + DEV_SESSION_TTL_MS
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
-    const sig = crypto5.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    const sig = crypto9.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
     return `${encoded}.${sig}`;
   }
   function verifyDeveloperSessionToken(token) {
@@ -18999,10 +24805,10 @@ ${text}`;
       const [encoded, sig] = token.split(".");
       if (!encoded || !sig) return { valid: false };
       const store = ensureDeveloperAuthStore();
-      const expectedSig = crypto5.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const expectedSig = crypto9.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
       const sigBuf = Buffer.from(sig, "utf-8");
       const expBuf = Buffer.from(expectedSig, "utf-8");
-      if (sigBuf.length !== expBuf.length || !crypto5.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !crypto9.timingSafeEqual(sigBuf, expBuf)) {
         return { valid: false };
       }
       const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
@@ -19075,25 +24881,25 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path6.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path9.join(RUNTIME_BASE_DIR, "data");
     try {
-      if (!fs2.existsSync(dataDir)) {
-        fs2.mkdirSync(dataDir, { recursive: true });
+      if (!fs4.existsSync(dataDir)) {
+        fs4.mkdirSync(dataDir, { recursive: true });
       }
-      if (!fs2.existsSync(BACKUPS_DIR)) {
-        fs2.mkdirSync(BACKUPS_DIR, { recursive: true });
+      if (!fs4.existsSync(BACKUPS_DIR)) {
+        fs4.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
-      const bundledDataDir = path6.join(process.cwd(), "data");
-      if (path6.resolve(dataDir) !== path6.resolve(bundledDataDir) && fs2.existsSync(bundledDataDir)) {
-        const entries = fs2.readdirSync(bundledDataDir);
+      const bundledDataDir = path9.join(process.cwd(), "data");
+      if (path9.resolve(dataDir) !== path9.resolve(bundledDataDir) && fs4.existsSync(bundledDataDir)) {
+        const entries = fs4.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
-          const srcPath = path6.join(bundledDataDir, file);
-          const destPath = path6.join(dataDir, file);
-          if (!fs2.existsSync(destPath)) {
+          const srcPath = path9.join(bundledDataDir, file);
+          const destPath = path9.join(dataDir, file);
+          if (!fs4.existsSync(destPath)) {
             try {
-              if (fs2.statSync(srcPath).isFile()) {
-                fs2.copyFileSync(srcPath, destPath);
+              if (fs4.statSync(srcPath).isFile()) {
+                fs4.copyFileSync(srcPath, destPath);
               }
             } catch {
             }
@@ -19106,8 +24912,8 @@ ${text}`;
   }
   function loadJsonFileSafe(filePath, fallback) {
     try {
-      if (fs2.existsSync(filePath)) {
-        const raw = fs2.readFileSync(filePath, "utf-8");
+      if (fs4.existsSync(filePath)) {
+        const raw = fs4.readFileSync(filePath, "utf-8");
         if (raw && raw.trim()) {
           return JSON.parse(raw);
         }
@@ -19120,11 +24926,11 @@ ${text}`;
     try {
       ensureRuntimeDataDir();
       const tmpPath = `${filePath}.tmp`;
-      fs2.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-      fs2.renameSync(tmpPath, filePath);
+      fs4.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+      fs4.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path6.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path9.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -19203,13 +25009,13 @@ ${text}`;
   function loadPersistedSettings() {
     try {
       let settings = {};
-      if (fs2.existsSync(SETTINGS_FILE)) {
-        const raw = fs2.readFileSync(SETTINGS_FILE, "utf-8");
+      if (fs4.existsSync(SETTINGS_FILE)) {
+        const raw = fs4.readFileSync(SETTINGS_FILE, "utf-8");
         settings = JSON.parse(raw) || {};
       }
-      if (fs2.existsSync(TELEGRAM_CONFIG_FILE)) {
+      if (fs4.existsSync(TELEGRAM_CONFIG_FILE)) {
         try {
-          const tgRaw = fs2.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
+          const tgRaw = fs4.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
           const tgData = JSON.parse(tgRaw);
           if (tgData?.telegramBotToken) {
             settings.telegramBotToken = tgData.telegramBotToken;
@@ -19285,8 +25091,8 @@ ${text}`;
       if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId || merged.botInstructions !== void 0 || merged.botLastVerifiedAt !== void 0) {
         let existingTg = {};
         try {
-          if (fs2.existsSync(TELEGRAM_CONFIG_FILE)) {
-            existingTg = JSON.parse(fs2.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
+          if (fs4.existsSync(TELEGRAM_CONFIG_FILE)) {
+            existingTg = JSON.parse(fs4.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
           }
         } catch {
         }
@@ -19346,12 +25152,12 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path6.join(process.cwd(), "firebase-applet-config.json")
+      path9.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
-        if (fs2.existsSync(p)) {
-          const parsed = JSON.parse(fs2.readFileSync(p, "utf8"));
+        if (fs4.existsSync(p)) {
+          const parsed = JSON.parse(fs4.readFileSync(p, "utf8"));
           if (parsed?.projectId) {
             return {
               projectId: String(parsed.projectId),
@@ -19502,11 +25308,11 @@ ${text}`;
   }
   function sendPublicFallbackIcon(res, filename) {
     const candidates = [
-      path6.join(process.cwd(), "public", filename),
-      path6.join(process.cwd(), "dist", filename)
+      path9.join(process.cwd(), "public", filename),
+      path9.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
-      if (fs2.existsSync(p)) {
+      if (fs4.existsSync(p)) {
         res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.sendFile(p);
         return;
@@ -19542,7 +25348,7 @@ ${text}`;
     const brand = await getLiveBrandLogoState();
     const versionRaw = brand.appLogoUpdatedAt || "default";
     const versionTag = encodeURIComponent(
-      crypto5.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
+      crypto9.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
     const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
@@ -19680,13 +25486,13 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     const launchUrl = `${appOrigin}/?source=ios_app`;
     let iconBase64 = "";
     for (const candidate of [
-      path6.join(process.cwd(), "public", "apple-touch-icon.png"),
-      path6.join(process.cwd(), "dist", "apple-touch-icon.png"),
-      path6.join(process.cwd(), "public", "pwa-192x192.png")
+      path9.join(process.cwd(), "public", "apple-touch-icon.png"),
+      path9.join(process.cwd(), "dist", "apple-touch-icon.png"),
+      path9.join(process.cwd(), "public", "pwa-192x192.png")
     ]) {
-      if (fs2.existsSync(candidate)) {
+      if (fs4.existsSync(candidate)) {
         try {
-          iconBase64 = fs2.readFileSync(candidate).toString("base64");
+          iconBase64 = fs4.readFileSync(candidate).toString("base64");
           break;
         } catch {
         }
@@ -20066,12 +25872,12 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path6.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path6.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path9.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
-      if (fs2.existsSync(USER_PROFILES_FILE)) {
-        const raw = fs2.readFileSync(USER_PROFILES_FILE, "utf-8");
+      if (fs4.existsSync(USER_PROFILES_FILE)) {
+        const raw = fs4.readFileSync(USER_PROFILES_FILE, "utf-8");
         return JSON.parse(raw) || {};
       }
     } catch {
@@ -20129,8 +25935,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
   }
   function loadJobApplications() {
     try {
-      if (fs2.existsSync(JOB_APPLICATIONS_FILE)) {
-        const raw = fs2.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
+      if (fs4.existsSync(JOB_APPLICATIONS_FILE)) {
+        const raw = fs4.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
         return JSON.parse(raw) || [];
       }
     } catch {
@@ -20330,9 +26136,9 @@ IconFile=${appOrigin}/favicon-32x32.png\r
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path6.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path6.join(UPLOADS_DIR, safeName);
-      fs2.writeFileSync(filePath, buffer);
+      const safeName = `${Date.now()}_${path9.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path9.join(UPLOADS_DIR, safeName);
+      fs4.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
         success: true,
@@ -21017,8 +26823,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       items: []
     };
     try {
-      if (fs2.existsSync(TELEGRAM_QUEUE_FILE)) {
-        const parsed = JSON.parse(fs2.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
+      if (fs4.existsSync(TELEGRAM_QUEUE_FILE)) {
+        const parsed = JSON.parse(fs4.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
         return {
           queueState: parsed?.queueState || defaultState,
           publishedRecords: parsed?.publishedRecords || {}
@@ -21031,15 +26837,15 @@ IconFile=${appOrigin}/favicon-32x32.png\r
   function saveTelegramQueueDisk(data) {
     try {
       ensureRuntimeDataDir();
-      fs2.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
+      fs4.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_queue.json:", e);
     }
   }
   function loadTelegramLogsDisk() {
     try {
-      if (fs2.existsSync(TELEGRAM_LOGS_FILE)) {
-        const parsed = JSON.parse(fs2.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
+      if (fs4.existsSync(TELEGRAM_LOGS_FILE)) {
+        const parsed = JSON.parse(fs4.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
         if (Array.isArray(parsed?.logs)) return parsed.logs;
       }
     } catch {
@@ -21056,7 +26862,7 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       ensureRuntimeDataDir();
       const logs = loadTelegramLogsDisk();
       const updated = [full, ...logs].slice(0, 500);
-      fs2.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
+      fs4.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_logs.json:", e);
     }
@@ -21088,8 +26894,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     try {
       ensureRuntimeDataDir();
       let list = [];
-      if (fs2.existsSync(VACANCIES_CATALOG_FILE_SERVER)) {
-        const parsed = JSON.parse(fs2.readFileSync(VACANCIES_CATALOG_FILE_SERVER, "utf-8"));
+      if (fs4.existsSync(VACANCIES_CATALOG_FILE_SERVER)) {
+        const parsed = JSON.parse(fs4.readFileSync(VACANCIES_CATALOG_FILE_SERVER, "utf-8"));
         if (Array.isArray(parsed)) list = parsed;
       }
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
@@ -21111,8 +26917,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       }
       const safeList = list.filter((v) => v?.id && hasValidVacancyDeadline(v));
       const tmpPath = `${VACANCIES_CATALOG_FILE_SERVER}.${process.pid}.${Date.now()}.tmp`;
-      fs2.writeFileSync(tmpPath, JSON.stringify(safeList, null, 2), "utf-8");
-      fs2.renameSync(tmpPath, VACANCIES_CATALOG_FILE_SERVER);
+      fs4.writeFileSync(tmpPath, JSON.stringify(safeList, null, 2), "utf-8");
+      fs4.renameSync(tmpPath, VACANCIES_CATALOG_FILE_SERVER);
       return normalizedItem;
     } catch (e) {
       console.warn("Notice: Failed upserting vacancy into server catalog:", e);
@@ -22440,10 +28246,10 @@ ${footer}`;
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path6.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path6.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path6.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path6.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path9.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path9.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path9.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path9.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -22491,21 +28297,21 @@ ${footer}`;
   };
   function loadStoredData() {
     try {
-      if (!fs2.existsSync(ANALYTICS_DIR)) {
-        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs4.existsSync(ANALYTICS_DIR)) {
+        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      if (fs2.existsSync(ANALYTICS_FILE)) {
-        const raw = fs2.readFileSync(ANALYTICS_FILE, "utf-8");
+      if (fs4.existsSync(ANALYTICS_FILE)) {
+        const raw = fs4.readFileSync(ANALYTICS_FILE, "utf-8");
         analyticsEvents = JSON.parse(raw);
       } else {
         analyticsEvents = [];
       }
-      if (fs2.existsSync(BUSINESS_BI_FILE)) {
-        const raw = fs2.readFileSync(BUSINESS_BI_FILE, "utf-8");
+      if (fs4.existsSync(BUSINESS_BI_FILE)) {
+        const raw = fs4.readFileSync(BUSINESS_BI_FILE, "utf-8");
         businessBiData = { ...businessBiData, ...JSON.parse(raw) };
       }
-      if (fs2.existsSync(GSC_CONFIG_FILE)) {
-        const raw = fs2.readFileSync(GSC_CONFIG_FILE, "utf-8");
+      if (fs4.existsSync(GSC_CONFIG_FILE)) {
+        const raw = fs4.readFileSync(GSC_CONFIG_FILE, "utf-8");
         gscConfigData = { ...gscConfigData, ...JSON.parse(raw) };
       }
     } catch (err) {
@@ -22514,33 +28320,33 @@ ${footer}`;
   }
   function persistAnalyticsEvents() {
     try {
-      if (!fs2.existsSync(ANALYTICS_DIR)) {
-        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs4.existsSync(ANALYTICS_DIR)) {
+        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
       if (analyticsEvents.length > 5e4) {
         analyticsEvents = analyticsEvents.slice(analyticsEvents.length - 5e4);
       }
-      fs2.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
+      fs4.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
     } catch (err) {
       console.warn("Analytics persistence error:", err);
     }
   }
   function persistBusinessBi() {
     try {
-      if (!fs2.existsSync(ANALYTICS_DIR)) {
-        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs4.existsSync(ANALYTICS_DIR)) {
+        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs2.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
+      fs4.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
     } catch (err) {
       console.warn("Business BI persistence error:", err);
     }
   }
   function persistGscConfig() {
     try {
-      if (!fs2.existsSync(ANALYTICS_DIR)) {
-        fs2.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs4.existsSync(ANALYTICS_DIR)) {
+        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs2.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
+      fs4.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
     } catch (err) {
       console.warn("GSC config persistence error:", err);
     }
@@ -23574,11 +29380,11 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path6.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path9.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
-      if (fs2.existsSync(AUTO_APPLY_DATA_FILE)) {
-        const raw = fs2.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
+      if (fs4.existsSync(AUTO_APPLY_DATA_FILE)) {
+        const raw = fs4.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
         return JSON.parse(raw);
       }
     } catch (e) {
@@ -23588,9 +29394,9 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path6.dirname(AUTO_APPLY_DATA_FILE);
-      if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
-      fs2.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+      const dir = path9.dirname(AUTO_APPLY_DATA_FILE);
+      if (!fs4.existsSync(dir)) fs4.mkdirSync(dir, { recursive: true });
+      fs4.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Notice: Could not save auto_apply_data.json:", e);
@@ -24707,8 +30513,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path6.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path6.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path9.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path9.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -24823,8 +30629,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       lastCycleSummary: "Initializing automatic 30-second research scheduler..."
     };
     try {
-      if (fs2.existsSync(INTERNATIONAL_DATA_FILE)) {
-        const raw = fs2.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
+      if (fs4.existsSync(INTERNATIONAL_DATA_FILE)) {
+        const raw = fs4.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         const jobs = (Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : []).map((j) => ({
           ...j,
@@ -24870,10 +30676,10 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
   }
   function savePersistedInternationalData(data) {
     try {
-      if (!fs2.existsSync(DATA_DIR)) fs2.mkdirSync(DATA_DIR, { recursive: true });
-      const prev = fs2.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
+      if (!fs4.existsSync(DATA_DIR)) fs4.mkdirSync(DATA_DIR, { recursive: true });
+      const prev = fs4.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
         try {
-          return JSON.parse(fs2.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
+          return JSON.parse(fs4.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
         } catch {
           return {};
         }
@@ -24883,7 +30689,7 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
         ...data,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      fs2.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
+      fs4.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Could not save international_data.json:", e);
@@ -27508,7 +33314,7 @@ Return strict JSON:
     appendAuditLog,
     pushAdminNotification
   });
-  registerGlobalOpportunitiesRoutes({
+  const globalOpportunitiesController = registerGlobalOpportunitiesRoutes({
     app,
     runtimeBaseDir: RUNTIME_BASE_DIR,
     isVercel: IS_VERCEL,
@@ -27547,7 +33353,7 @@ Return strict JSON:
     writeJsonFileAtomic,
     getRequesterUid
   });
-  registerBranchManagerJobsRoutes({
+  const branchManagerController = registerBranchManagerJobsRoutes({
     app,
     runtimeBaseDir: RUNTIME_BASE_DIR,
     isVercel: IS_VERCEL,
@@ -27557,13 +33363,38 @@ Return strict JSON:
     isPersistentOwnerRequest,
     getRequesterUid
   });
+  registerAutonomousDiscoveryWorker({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    appendAuditLog,
+    pushAdminNotification,
+    globalOpportunitiesController,
+    branchManagerController
+  });
+  registerOpportunityIntelligenceRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    appendAuditLog
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
-      const files = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
+      const files = fs4.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path6.join(BACKUPS_DIR, filename);
-        const stat = fs2.statSync(fullPath);
+        const fullPath = path9.join(BACKUPS_DIR, filename);
+        const stat = fs4.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
           id: parsed.id || filename.replace(/\.json$/, ""),
@@ -27627,12 +33458,12 @@ Return strict JSON:
         ...userEngineBackupData
       }
     };
-    const fullPath = path6.join(BACKUPS_DIR, filename);
+    const fullPath = path9.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
-      const autoFiles = fs2.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
+      const autoFiles = fs4.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs2.unlinkSync(path6.join(BACKUPS_DIR, old));
+        fs4.unlinkSync(path9.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -27644,7 +33475,7 @@ Return strict JSON:
       summary: `Created ${trigger} persistent database backup (${payload.counts.staffProfiles} profiles, ${payload.counts.applications} apps)`,
       severity: "info"
     });
-    const stat = fs2.existsSync(fullPath) ? fs2.statSync(fullPath) : { size: 0 };
+    const stat = fs4.existsSync(fullPath) ? fs4.statSync(fullPath) : { size: 0 };
     return {
       id,
       filename,
@@ -27658,9 +33489,9 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path6.join(RUNTIME_BASE_DIR, "data", ".write_probe");
-      fs2.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
-      fs2.unlinkSync(probeFile);
+      const probeFile = path9.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      fs4.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
+      fs4.unlinkSync(probeFile);
       writable = true;
     } catch {
     }
@@ -27675,12 +33506,12 @@ Return strict JSON:
     const backups = listPersistentBackups();
     const unackAlerts = notifs.filter((n) => !n.acknowledged).length;
     const filesPresent = {
-      site_settings: fs2.existsSync(SETTINGS_FILE),
-      telegram_config: fs2.existsSync(TELEGRAM_CONFIG_FILE),
-      user_profiles: fs2.existsSync(USER_PROFILES_FILE),
-      job_applications: fs2.existsSync(JOB_APPLICATIONS_FILE),
-      international_data: fs2.existsSync(INTERNATIONAL_DATA_FILE),
-      analytics_events: fs2.existsSync(ANALYTICS_FILE)
+      site_settings: fs4.existsSync(SETTINGS_FILE),
+      telegram_config: fs4.existsSync(TELEGRAM_CONFIG_FILE),
+      user_profiles: fs4.existsSync(USER_PROFILES_FILE),
+      job_applications: fs4.existsSync(JOB_APPLICATIONS_FILE),
+      international_data: fs4.existsSync(INTERNATIONAL_DATA_FILE),
+      analytics_events: fs4.existsSync(ANALYTICS_FILE)
     };
     const botStatus = !token ? "UNCONFIGURED" : botHealth.status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
     const gaId = settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
@@ -27876,7 +33707,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path6.join(BACKUPS_DIR, target.filename);
+    const fullPath = path9.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });

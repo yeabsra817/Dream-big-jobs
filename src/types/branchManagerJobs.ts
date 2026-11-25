@@ -13,7 +13,19 @@ export const ALLOWED_BRANCH_MANAGER_REGIONS: BranchManagerRegionScope[] = [
 
 export const TARGET_BRANCH_MANAGER_POSITIONS: string[] = [
   'Branch Manager',
+  'Senior Branch Manager',
+  'Branch Operations Manager',
   'Banking Operations Manager',
+  'Area Branch Manager',
+  'Regional Branch Manager',
+  'Deputy Branch Manager',
+  'Assistant Branch Manager',
+  'Banking Service Manager',
+  'Retail Banking Manager',
+  'Branch Network Manager',
+  'Banking Relationship Manager',
+  'Banking Business Development Manager',
+  'Banking Operations and Administration Manager',
   'Finance Manager',
   'Finance and Administration Manager',
   'Financial Controller',
@@ -120,6 +132,12 @@ export interface VerifiedBranchManagerJob {
   matchedTargetPosition: string;
   employerReputationScore: number;
   rankingScore: number;
+  salaryPeriod?: 'Monthly' | 'Annual' | 'Not Disclosed';
+  salaryTaxBasis?: 'Gross' | 'Net' | 'Not Specified';
+  requiredBankingExperience?: string;
+  requiredManagerialExperience?: string;
+  verificationStatus?: string;
+  seniorityLevel?: string;
 }
 
 export interface StrictGateAuditSummary {
@@ -131,6 +149,7 @@ export interface StrictGateAuditSummary {
   excludedOutsideAllowedRegions: number;
   excludedLocalAfricanNonInternational: number;
   excludedNonMatchingRole: number;
+  excludedSeniorityOrExperienceMismatch?: number;
   excludedEthiopianIneligible: number;
   excludedExpiredOrDuplicate: number;
   sourcesChecked: string[];

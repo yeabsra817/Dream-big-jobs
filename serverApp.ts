@@ -9,6 +9,7 @@ import { registerNexusClientFinderRoutes } from './serverNexusClientFinder';
 import { registerGlobalMigrationHubRoutes } from './serverGlobalMigrationHub';
 import { registerBranchManagerJobsRoutes } from './serverBranchManagerJobs';
 import { registerAutonomousDiscoveryWorker } from './serverAutonomousDiscoveryWorker';
+import { registerOpportunityIntelligenceRoutes } from './serverOpportunityIntelligence';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11440,6 +11441,19 @@ Return strict JSON:
     pushAdminNotification,
     globalOpportunitiesController,
     branchManagerController,
+  });
+
+  registerOpportunityIntelligenceRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    loadUserProfiles,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    appendAuditLog,
   });
 
   function listPersistentBackups(): any[] {
