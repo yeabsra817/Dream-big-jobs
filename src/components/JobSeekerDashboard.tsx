@@ -66,6 +66,7 @@ import {
   isRunningInEmbeddedIframe,
   buildStandalonePushActivationUrl,
 } from '../lib/notificationService';
+import { GlobalReachPanel } from './admin/GlobalReachPanel';
 
 const RECOMMENDED_SECTOR_OPTIONS = [
   'Commercial Banking & Finance',
@@ -153,7 +154,8 @@ interface Props {
     | 'experience'
     | 'documents'
     | 'applications'
-    | 'saved';
+    | 'saved'
+    | 'globalReach';
   notifications?: UserNotificationItem[];
   unreadNotificationsCount?: number;
   notificationPrefs?: NotificationPreferencesRecord | null;
@@ -203,6 +205,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
     | 'documents'
     | 'applications'
     | 'saved'
+    | 'globalReach'
   >(initialTab);
 
   React.useEffect(() => {
@@ -647,6 +650,7 @@ export const JobSeekerDashboard: React.FC<Props> = ({
             { id: 'documents', label: 'CV & Document Vault', icon: FileText, count: formProfile.documents?.length },
             { id: 'applications', label: 'My Applications', icon: Clock, count: applications.length },
             { id: 'saved', label: 'Saved Jobs', icon: Heart, count: savedVacancies.length },
+            { id: 'globalReach', label: 'Global Reach', icon: Globe },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -3289,6 +3293,14 @@ export const JobSeekerDashboard: React.FC<Props> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'globalReach' && (
+            <GlobalReachPanel
+              actorEmail={profile.email || null}
+              actorUid={profile.uid || null}
+              compactMode
+            />
           )}
         </div>
       </div>

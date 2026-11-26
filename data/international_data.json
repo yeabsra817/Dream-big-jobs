@@ -3160,6 +3160,743 @@
   ],
   "researchHistory": [
     {
+      "id": "run_auto_1795697293291",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:48:02.700Z",
+      "completedAt": "2026-11-26T12:48:13.291Z",
+      "regionsResearched": [
+        "Americas & Oceania",
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Australia",
+        "United Kingdom",
+        "Sweden"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #869 (interval_30s): polled 3 official sources (Australia, United Kingdom, Sweden), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697264462",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:47:32.682Z",
+      "completedAt": "2026-11-26T12:47:44.462Z",
+      "regionsResearched": [
+        "Far East & Asia",
+        "Americas & Oceania"
+      ],
+      "countriesResearched": [
+        "Singapore",
+        "Malaysia",
+        "Canada"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #868 (interval_30s): polled 3 official sources (Singapore, Malaysia, Canada), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697227277",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:47:02.681Z",
+      "completedAt": "2026-11-26T12:47:07.277Z",
+      "regionsResearched": [
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "South Korea",
+        "Japan",
+        "China"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #867 (interval_30s): polled 3 official sources (South Korea, Japan, China), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697194291",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:46:32.679Z",
+      "completedAt": "2026-11-26T12:46:34.291Z",
+      "regionsResearched": [
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "Bahrain",
+        "Oman",
+        "Jordan"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #866 (interval_30s): polled 3 official sources (Bahrain, Oman, Jordan), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697169576",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:46:02.535Z",
+      "completedAt": "2026-11-26T12:46:09.576Z",
+      "regionsResearched": [
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "United Arab Emirates",
+        "Saudi Arabia",
+        "Qatar"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #865 (interval_30s): polled 3 official sources (United Arab Emirates, Saudi Arabia, Qatar), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697132990",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:45:32.531Z",
+      "completedAt": "2026-11-26T12:45:32.990Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Serbia",
+        "Georgia",
+        "United Kingdom"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #864 (interval_30s): polled 3 official sources (Serbia, Georgia, United Kingdom), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697103954",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:45:02.531Z",
+      "completedAt": "2026-11-26T12:45:03.954Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Sweden",
+        "Norway",
+        "Denmark"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #863 (interval_30s): polled 3 official sources (Sweden, Norway, Denmark), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697073780",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:44:32.526Z",
+      "completedAt": "2026-11-26T12:44:33.780Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Lithuania",
+        "Romania",
+        "Croatia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #862 (interval_30s): polled 3 official sources (Lithuania, Romania, Croatia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697044415",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:44:02.525Z",
+      "completedAt": "2026-11-26T12:44:04.415Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Finland",
+        "Estonia",
+        "Latvia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #861 (interval_30s): polled 3 official sources (Finland, Estonia, Latvia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795697013440",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:43:32.522Z",
+      "completedAt": "2026-11-26T12:43:33.440Z",
+      "regionsResearched": [
+        "Europe",
+        "Africa & Other"
+      ],
+      "countriesResearched": [
+        "International",
+        "Switzerland / International",
+        "Germany"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #860 (interval_30s): polled 3 official sources (International, Switzerland / International, Germany), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696983185",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:43:02.521Z",
+      "completedAt": "2026-11-26T12:43:03.185Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "United Kingdom",
+        "Sweden",
+        "United Kingdom / International"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #859 (interval_30s): polled 3 official sources (United Kingdom, Sweden, United Kingdom / International), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696953363",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:42:32.520Z",
+      "completedAt": "2026-11-26T12:42:33.363Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Sweden",
+        "International"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #858 (interval_30s): polled 3 official sources (Sweden, Sweden, International), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696922986",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:42:02.520Z",
+      "completedAt": "2026-11-26T12:42:02.986Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Romania",
+        "Serbia",
+        "United Kingdom"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #857 (interval_30s): polled 3 official sources (Romania, Serbia, United Kingdom), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696893923",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:41:32.519Z",
+      "completedAt": "2026-11-26T12:41:33.923Z",
+      "regionsResearched": [
+        "Far East & Asia",
+        "Europe",
+        "Africa & Other"
+      ],
+      "countriesResearched": [
+        "China",
+        "International",
+        "Switzerland / International"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #856 (interval_30s): polled 3 official sources (China, International, Switzerland / International), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696868980",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:41:02.469Z",
+      "completedAt": "2026-11-26T12:41:08.980Z",
+      "regionsResearched": [
+        "Europe",
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "Hungary",
+        "South Korea",
+        "Japan"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #855 (interval_30s): polled 3 official sources (Hungary, South Korea, Japan), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696839423",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:40:32.467Z",
+      "completedAt": "2026-11-26T12:40:39.423Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "United Kingdom",
+        "Sweden",
+        "Germany"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #854 (interval_30s): polled 3 official sources (United Kingdom, Sweden, Germany), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696813294",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:40:01.999Z",
+      "completedAt": "2026-11-26T12:40:13.294Z",
+      "regionsResearched": [
+        "Far East & Asia",
+        "Americas & Oceania"
+      ],
+      "countriesResearched": [
+        "Malaysia",
+        "Canada",
+        "Australia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #853 (interval_30s): polled 3 official sources (Malaysia, Canada, Australia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696776396",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:39:31.998Z",
+      "completedAt": "2026-11-26T12:39:36.396Z",
+      "regionsResearched": [
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "Japan",
+        "China",
+        "Singapore"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #852 (interval_30s): polled 3 official sources (Japan, China, Singapore), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696746137",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:39:01.998Z",
+      "completedAt": "2026-11-26T12:39:06.137Z",
+      "regionsResearched": [
+        "Middle East",
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "Oman",
+        "Jordan",
+        "South Korea"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #851 (interval_30s): polled 3 official sources (Oman, Jordan, South Korea), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696712904",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:38:31.996Z",
+      "completedAt": "2026-11-26T12:38:32.904Z",
+      "regionsResearched": [
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "Saudi Arabia",
+        "Qatar",
+        "Bahrain"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #850 (interval_30s): polled 3 official sources (Saudi Arabia, Qatar, Bahrain), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696688788",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:38:01.998Z",
+      "completedAt": "2026-11-26T12:38:08.788Z",
+      "regionsResearched": [
+        "Europe",
+        "Middle East"
+      ],
+      "countriesResearched": [
+        "Georgia",
+        "United Kingdom",
+        "United Arab Emirates"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 2,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 1,
+      "summary": "Cycle #849 (interval_30s): polled 3 official sources (Georgia, United Kingdom, United Arab Emirates), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696653143",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:37:31.999Z",
+      "completedAt": "2026-11-26T12:37:33.143Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Norway",
+        "Denmark",
+        "Serbia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #848 (interval_30s): polled 3 official sources (Norway, Denmark, Serbia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696628805",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:37:01.996Z",
+      "completedAt": "2026-11-26T12:37:08.805Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Romania",
+        "Croatia",
+        "Sweden"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #847 (interval_30s): polled 3 official sources (Romania, Croatia, Sweden), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696595436",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:36:31.995Z",
+      "completedAt": "2026-11-26T12:36:35.436Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Estonia",
+        "Latvia",
+        "Lithuania"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #846 (interval_30s): polled 3 official sources (Estonia, Latvia, Lithuania), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696570195",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:36:01.994Z",
+      "completedAt": "2026-11-26T12:36:10.195Z",
+      "regionsResearched": [
+        "Africa & Other",
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Switzerland / International",
+        "Germany",
+        "Finland"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #845 (interval_30s): polled 3 official sources (Switzerland / International, Germany, Finland), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696547061",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:35:31.993Z",
+      "completedAt": "2026-11-26T12:35:47.061Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Sweden",
+        "United Kingdom / International",
+        "International"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #844 (interval_30s): polled 3 official sources (Sweden, United Kingdom / International, International), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696511113",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:35:01.994Z",
+      "completedAt": "2026-11-26T12:35:11.113Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Sweden",
+        "International",
+        "United Kingdom"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #843 (interval_30s): polled 3 official sources (Sweden, International, United Kingdom), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696488258",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:34:31.993Z",
+      "completedAt": "2026-11-26T12:34:48.258Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Serbia",
+        "United Kingdom",
+        "Sweden"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #842 (interval_30s): polled 3 official sources (Serbia, United Kingdom, Sweden), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696447969",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:34:01.991Z",
+      "completedAt": "2026-11-26T12:34:07.969Z",
+      "regionsResearched": [
+        "Europe",
+        "Africa & Other"
+      ],
+      "countriesResearched": [
+        "International",
+        "Switzerland / International",
+        "Romania"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #841 (interval_30s): polled 3 official sources (International, Switzerland / International, Romania), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696431730",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:33:31.989Z",
+      "completedAt": "2026-11-26T12:33:51.730Z",
+      "regionsResearched": [
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "South Korea",
+        "Japan",
+        "China"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #840 (interval_30s): polled 3 official sources (South Korea, Japan, China), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696397445",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:33:01.994Z",
+      "completedAt": "2026-11-26T12:33:17.445Z",
+      "regionsResearched": [
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Sweden",
+        "Germany",
+        "Hungary"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 0,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 3,
+      "summary": "Cycle #839 (interval_30s): polled 3 official sources (Sweden, Germany, Hungary), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696368269",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
+      "startedAt": "2026-11-26T12:32:31.989Z",
+      "completedAt": "2026-11-26T12:32:48.269Z",
+      "regionsResearched": [
+        "Americas & Oceania",
+        "Europe"
+      ],
+      "countriesResearched": [
+        "Canada",
+        "Australia",
+        "United Kingdom"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 2,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 1,
+      "summary": "Cycle #838 (interval_30s): polled 3 official sources (Canada, Australia, United Kingdom), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
+      "id": "run_auto_1795696322228",
+      "runType": "international_jobs",
+      "triggeredBy": "System 2 Auto-Scheduler (startup)",
+      "startedAt": "2026-11-26T12:31:37.983Z",
+      "completedAt": "2026-11-26T12:32:02.228Z",
+      "regionsResearched": [
+        "Far East & Asia"
+      ],
+      "countriesResearched": [
+        "China",
+        "Singapore",
+        "Malaysia"
+      ],
+      "discoveredCount": 0,
+      "verifiedCount": 0,
+      "unverifiedCount": 1,
+      "rejectedCount": 0,
+      "duplicatesSkipped": 2,
+      "summary": "Cycle #837 (startup): polled 3 official sources (China, Singapore, Malaysia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
+      "status": "completed"
+    },
+    {
       "id": "run_auto_1795625780621",
       "runType": "international_jobs",
       "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
@@ -4655,744 +5392,6 @@
       "duplicatesSkipped": 3,
       "summary": "Cycle #770 (interval_30s): polled 3 official sources (Lithuania, Romania, Croatia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
       "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622976994",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:09:35.403Z",
-      "completedAt": "2026-11-25T16:09:36.994Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Finland",
-        "Estonia",
-        "Latvia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #769 (interval_30s): polled 3 official sources (Finland, Estonia, Latvia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622946398",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:09:05.402Z",
-      "completedAt": "2026-11-25T16:09:06.398Z",
-      "regionsResearched": [
-        "Europe",
-        "Africa & Other"
-      ],
-      "countriesResearched": [
-        "International",
-        "Switzerland / International",
-        "Germany"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #768 (interval_30s): polled 3 official sources (International, Switzerland / International, Germany), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622915836",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:08:35.403Z",
-      "completedAt": "2026-11-25T16:08:35.836Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "United Kingdom",
-        "Sweden",
-        "United Kingdom / International"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #767 (interval_30s): polled 3 official sources (United Kingdom, Sweden, United Kingdom / International), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622886289",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:08:05.401Z",
-      "completedAt": "2026-11-25T16:08:06.289Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Sweden",
-        "International"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #766 (interval_30s): polled 3 official sources (Sweden, Sweden, International), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622855926",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:07:35.399Z",
-      "completedAt": "2026-11-25T16:07:35.926Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Romania",
-        "Serbia",
-        "United Kingdom"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #765 (interval_30s): polled 3 official sources (Romania, Serbia, United Kingdom), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622826636",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:07:05.402Z",
-      "completedAt": "2026-11-25T16:07:06.636Z",
-      "regionsResearched": [
-        "Far East & Asia",
-        "Europe",
-        "Africa & Other"
-      ],
-      "countriesResearched": [
-        "China",
-        "International",
-        "Switzerland / International"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #764 (interval_30s): polled 3 official sources (China, International, Switzerland / International), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622803477",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:06:35.398Z",
-      "completedAt": "2026-11-25T16:06:43.477Z",
-      "regionsResearched": [
-        "Europe",
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "Hungary",
-        "South Korea",
-        "Japan"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #763 (interval_30s): polled 3 official sources (Hungary, South Korea, Japan), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622772390",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:06:05.399Z",
-      "completedAt": "2026-11-25T16:06:12.390Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "United Kingdom",
-        "Sweden",
-        "Germany"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #762 (interval_30s): polled 3 official sources (United Kingdom, Sweden, Germany), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622746843",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:05:35.397Z",
-      "completedAt": "2026-11-25T16:05:46.843Z",
-      "regionsResearched": [
-        "Far East & Asia",
-        "Americas & Oceania"
-      ],
-      "countriesResearched": [
-        "Malaysia",
-        "Canada",
-        "Australia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #761 (interval_30s): polled 3 official sources (Malaysia, Canada, Australia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622710959",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:05:05.399Z",
-      "completedAt": "2026-11-25T16:05:10.959Z",
-      "regionsResearched": [
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "Japan",
-        "China",
-        "Singapore"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #760 (interval_30s): polled 3 official sources (Japan, China, Singapore), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622678792",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:04:35.396Z",
-      "completedAt": "2026-11-25T16:04:38.791Z",
-      "regionsResearched": [
-        "Middle East",
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "Oman",
-        "Jordan",
-        "South Korea"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #759 (interval_30s): polled 3 official sources (Oman, Jordan, South Korea), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622646186",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:04:05.395Z",
-      "completedAt": "2026-11-25T16:04:06.186Z",
-      "regionsResearched": [
-        "Middle East"
-      ],
-      "countriesResearched": [
-        "Saudi Arabia",
-        "Qatar",
-        "Bahrain"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #758 (interval_30s): polled 3 official sources (Saudi Arabia, Qatar, Bahrain), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622621979",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:03:35.394Z",
-      "completedAt": "2026-11-25T16:03:41.979Z",
-      "regionsResearched": [
-        "Europe",
-        "Middle East"
-      ],
-      "countriesResearched": [
-        "Georgia",
-        "United Kingdom",
-        "United Arab Emirates"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 2,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 1,
-      "summary": "Cycle #757 (interval_30s): polled 3 official sources (Georgia, United Kingdom, United Arab Emirates), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622586396",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:03:05.394Z",
-      "completedAt": "2026-11-25T16:03:06.396Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Norway",
-        "Denmark",
-        "Serbia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #756 (interval_30s): polled 3 official sources (Norway, Denmark, Serbia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622556777",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:02:35.393Z",
-      "completedAt": "2026-11-25T16:02:36.777Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Romania",
-        "Croatia",
-        "Sweden"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #755 (interval_30s): polled 3 official sources (Romania, Croatia, Sweden), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622526979",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:02:05.393Z",
-      "completedAt": "2026-11-25T16:02:06.979Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Estonia",
-        "Latvia",
-        "Lithuania"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #754 (interval_30s): polled 3 official sources (Estonia, Latvia, Lithuania), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622496611",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:01:35.393Z",
-      "completedAt": "2026-11-25T16:01:36.611Z",
-      "regionsResearched": [
-        "Africa & Other",
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Switzerland / International",
-        "Germany",
-        "Finland"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #753 (interval_30s): polled 3 official sources (Switzerland / International, Germany, Finland), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622465999",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:01:05.390Z",
-      "completedAt": "2026-11-25T16:01:05.999Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Sweden",
-        "United Kingdom / International",
-        "International"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #752 (interval_30s): polled 3 official sources (Sweden, United Kingdom / International, International), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622435949",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:00:35.391Z",
-      "completedAt": "2026-11-25T16:00:35.949Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Sweden",
-        "International",
-        "United Kingdom"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #751 (interval_30s): polled 3 official sources (Sweden, International, United Kingdom), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622406183",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T16:00:05.389Z",
-      "completedAt": "2026-11-25T16:00:06.183Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Serbia",
-        "United Kingdom",
-        "Sweden"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #750 (interval_30s): polled 3 official sources (Serbia, United Kingdom, Sweden), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622375741",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:59:35.388Z",
-      "completedAt": "2026-11-25T15:59:35.741Z",
-      "regionsResearched": [
-        "Europe",
-        "Africa & Other"
-      ],
-      "countriesResearched": [
-        "International",
-        "Switzerland / International",
-        "Romania"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 2,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 1,
-      "summary": "Cycle #749 (interval_30s): polled 3 official sources (International, Switzerland / International, Romania), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622354778",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:59:05.388Z",
-      "completedAt": "2026-11-25T15:59:14.778Z",
-      "regionsResearched": [
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "South Korea",
-        "Japan",
-        "China"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #748 (interval_30s): polled 3 official sources (South Korea, Japan, China), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622316084",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:58:35.389Z",
-      "completedAt": "2026-11-25T15:58:36.084Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Sweden",
-        "Germany",
-        "Hungary"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #747 (interval_30s): polled 3 official sources (Sweden, Germany, Hungary), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622305708",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (startup)",
-      "startedAt": "2026-11-25T15:58:11.363Z",
-      "completedAt": "2026-11-25T15:58:25.708Z",
-      "regionsResearched": [
-        "Americas & Oceania",
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Canada",
-        "Australia",
-        "United Kingdom"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 2,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 1,
-      "summary": "Cycle #746 (startup): polled 3 official sources (Canada, Australia, United Kingdom), verified 1 sources, discovered 0 new private_pending item(s), 1 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622125045",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:55:14.475Z",
-      "completedAt": "2026-11-25T15:55:25.045Z",
-      "regionsResearched": [
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "China",
-        "Singapore",
-        "Malaysia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #745 (interval_30s): polled 3 official sources (China, Singapore, Malaysia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622086658",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:54:44.476Z",
-      "completedAt": "2026-11-25T15:54:46.658Z",
-      "regionsResearched": [
-        "Middle East",
-        "Far East & Asia"
-      ],
-      "countriesResearched": [
-        "Jordan",
-        "South Korea",
-        "Japan"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #744 (interval_30s): polled 3 official sources (Jordan, South Korea, Japan), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622055938",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:54:14.449Z",
-      "completedAt": "2026-11-25T15:54:15.938Z",
-      "regionsResearched": [
-        "Middle East"
-      ],
-      "countriesResearched": [
-        "Qatar",
-        "Bahrain",
-        "Oman"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #743 (interval_30s): polled 3 official sources (Qatar, Bahrain, Oman), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795622031386",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:53:44.449Z",
-      "completedAt": "2026-11-25T15:53:51.386Z",
-      "regionsResearched": [
-        "Europe",
-        "Middle East"
-      ],
-      "countriesResearched": [
-        "United Kingdom",
-        "United Arab Emirates",
-        "Saudi Arabia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #742 (interval_30s): polled 3 official sources (United Kingdom, United Arab Emirates, Saudi Arabia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795621994497",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:53:13.760Z",
-      "completedAt": "2026-11-25T15:53:14.497Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Denmark",
-        "Serbia",
-        "Georgia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 1,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 2,
-      "summary": "Cycle #741 (interval_30s): polled 3 official sources (Denmark, Serbia, Georgia), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795621964817",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:52:43.759Z",
-      "completedAt": "2026-11-25T15:52:44.817Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Croatia",
-        "Sweden",
-        "Norway"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #740 (interval_30s): polled 3 official sources (Croatia, Sweden, Norway), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795621936067",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:52:13.758Z",
-      "completedAt": "2026-11-25T15:52:16.067Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Latvia",
-        "Lithuania",
-        "Romania"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #739 (interval_30s): polled 3 official sources (Latvia, Lithuania, Romania), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795621905467",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:51:43.758Z",
-      "completedAt": "2026-11-25T15:51:45.467Z",
-      "regionsResearched": [
-        "Europe"
-      ],
-      "countriesResearched": [
-        "Germany",
-        "Finland",
-        "Estonia"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #738 (interval_30s): polled 3 official sources (Germany, Finland, Estonia), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
-    },
-    {
-      "id": "run_auto_1795621874753",
-      "runType": "international_jobs",
-      "triggeredBy": "System 2 Auto-Scheduler (interval_30s)",
-      "startedAt": "2026-11-25T15:51:13.759Z",
-      "completedAt": "2026-11-25T15:51:14.753Z",
-      "regionsResearched": [
-        "Europe",
-        "Africa & Other"
-      ],
-      "countriesResearched": [
-        "United Kingdom / International",
-        "International",
-        "Switzerland / International"
-      ],
-      "discoveredCount": 0,
-      "verifiedCount": 0,
-      "unverifiedCount": 0,
-      "rejectedCount": 0,
-      "duplicatesSkipped": 3,
-      "summary": "Cycle #737 (interval_30s): polled 3 official sources (United Kingdom / International, International, Switzerland / International), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered.",
-      "status": "completed"
     }
   ],
   "verificationLogs": [
@@ -6249,7 +6248,7 @@
       "checkedAt": "2026-11-15T14:34:50.023Z"
     }
   ],
-  "updatedAt": "2026-11-25T16:56:20.626Z",
+  "updatedAt": "2026-11-26T12:48:13.295Z",
   "monitoredSources": [
     {
       "id": "src_ebrd_jobs",
@@ -6265,9 +6264,9 @@
       "failedChecks": 2,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:52:48.467Z",
-      "nextScheduledCheck": "2026-11-25T16:53:18.684Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:48.467Z"
+      "lastCheckedAt": "2026-11-26T12:43:02.901Z",
+      "nextScheduledCheck": "2026-11-26T12:43:33.124Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:02.901Z"
     },
     {
       "id": "src_unesco_jobs",
@@ -6283,9 +6282,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:52:48.755Z",
-      "nextScheduledCheck": "2026-11-25T16:53:18.878Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:48.755Z"
+      "lastCheckedAt": "2026-11-26T12:43:32.540Z",
+      "nextScheduledCheck": "2026-11-26T12:44:02.680Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:32.540Z"
     },
     {
       "id": "src_icrc_jobs",
@@ -6301,9 +6300,9 @@
       "failedChecks": 1,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:52:48.981Z",
-      "nextScheduledCheck": "2026-11-25T16:53:19.401Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:48.981Z"
+      "lastCheckedAt": "2026-11-26T12:43:32.788Z",
+      "nextScheduledCheck": "2026-11-26T12:44:03.152Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:32.788Z"
     },
     {
       "id": "src_de_makeit",
@@ -6319,9 +6318,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:53:18.465Z",
-      "nextScheduledCheck": "2026-11-25T16:53:48.587Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:18.465Z"
+      "lastCheckedAt": "2026-11-26T12:43:33.227Z",
+      "nextScheduledCheck": "2026-11-26T12:44:03.368Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:33.227Z"
     },
     {
       "id": "src_fi_work",
@@ -6337,9 +6336,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:53:18.661Z",
-      "nextScheduledCheck": "2026-11-25T16:53:49.078Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:18.661Z"
+      "lastCheckedAt": "2026-11-26T12:44:02.530Z",
+      "nextScheduledCheck": "2026-11-26T12:44:32.966Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:02.530Z"
     },
     {
       "id": "src_ee_work",
@@ -6355,9 +6354,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:53:19.157Z",
-      "nextScheduledCheck": "2026-11-25T16:53:49.945Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:19.157Z"
+      "lastCheckedAt": "2026-11-26T12:44:03.061Z",
+      "nextScheduledCheck": "2026-11-26T12:44:33.976Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:03.061Z"
     },
     {
       "id": "src_lv_pmlp",
@@ -6373,9 +6372,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:53:48.468Z",
-      "nextScheduledCheck": "2026-11-25T16:54:18.843Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:48.468Z"
+      "lastCheckedAt": "2026-11-26T12:44:04.053Z",
+      "nextScheduledCheck": "2026-11-26T12:44:34.348Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:04.053Z"
     },
     {
       "id": "src_lt_migracija",
@@ -6391,9 +6390,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:53:48.977Z",
-      "nextScheduledCheck": "2026-11-25T16:54:19.139Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:48.977Z"
+      "lastCheckedAt": "2026-11-26T12:44:32.530Z",
+      "nextScheduledCheck": "2026-11-26T12:45:02.728Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:32.530Z"
     },
     {
       "id": "src_ro_igi",
@@ -6409,9 +6408,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:53:49.208Z",
-      "nextScheduledCheck": "2026-11-25T16:54:19.760Z",
-      "lastSuccessfulCheck": "2026-11-25T16:53:49.208Z"
+      "lastCheckedAt": "2026-11-26T12:44:32.816Z",
+      "nextScheduledCheck": "2026-11-26T12:45:03.472Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:32.816Z"
     },
     {
       "id": "src_hr_mup",
@@ -6427,9 +6426,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:18.469Z",
-      "nextScheduledCheck": "2026-11-25T16:54:48.658Z",
-      "lastSuccessfulCheck": "2026-11-25T16:54:18.469Z"
+      "lastCheckedAt": "2026-11-26T12:44:33.547Z",
+      "nextScheduledCheck": "2026-11-26T12:45:03.713Z",
+      "lastSuccessfulCheck": "2026-11-26T12:44:33.547Z"
     },
     {
       "id": "src_se_mig",
@@ -6445,9 +6444,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:18.742Z",
-      "nextScheduledCheck": "2026-11-25T16:54:49.235Z",
-      "lastSuccessfulCheck": "2026-11-25T16:54:18.742Z"
+      "lastCheckedAt": "2026-11-26T12:45:02.539Z",
+      "nextScheduledCheck": "2026-11-26T12:45:33.153Z",
+      "lastSuccessfulCheck": "2026-11-26T12:45:02.539Z"
     },
     {
       "id": "src_no_udi",
@@ -6463,9 +6462,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:19.309Z",
-      "nextScheduledCheck": "2026-11-25T16:54:51.149Z",
-      "lastSuccessfulCheck": "2026-11-25T16:54:19.309Z"
+      "lastCheckedAt": "2026-11-26T12:45:03.241Z",
+      "nextScheduledCheck": "2026-11-26T12:45:33.523Z",
+      "lastSuccessfulCheck": "2026-11-26T12:45:03.241Z"
     },
     {
       "id": "src_dk_siri",
@@ -6481,9 +6480,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:48.470Z",
-      "nextScheduledCheck": "2026-11-25T16:55:18.773Z",
-      "lastSuccessfulCheck": "2026-11-25T16:54:48.470Z"
+      "lastCheckedAt": "2026-11-26T12:45:03.605Z",
+      "nextScheduledCheck": "2026-11-26T12:45:33.886Z",
+      "lastSuccessfulCheck": "2026-11-26T12:45:03.605Z"
     },
     {
       "id": "src_rs_welcome",
@@ -6499,9 +6498,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:48.863Z",
-      "nextScheduledCheck": "2026-11-25T16:55:19.119Z",
-      "lastSuccessfulCheck": "2026-11-25T16:54:48.863Z"
+      "lastCheckedAt": "2026-11-26T12:45:32.536Z",
+      "nextScheduledCheck": "2026-11-26T12:46:02.730Z",
+      "lastSuccessfulCheck": "2026-11-26T12:45:32.536Z"
     },
     {
       "id": "src_ge_migration",
@@ -6514,10 +6513,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 55,
+      "failedChecks": 57,
       "verificationStatus": "FAILED",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:54:49.255Z",
+      "lastCheckedAt": "2026-11-26T12:45:32.860Z",
       "lastError": "fetch failed"
     },
     {
@@ -6534,9 +6533,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:55:18.472Z",
-      "nextScheduledCheck": "2026-11-25T16:55:48.521Z",
-      "lastSuccessfulCheck": "2026-11-25T16:55:18.472Z"
+      "lastCheckedAt": "2026-11-26T12:45:32.868Z",
+      "nextScheduledCheck": "2026-11-26T12:46:02.911Z",
+      "lastSuccessfulCheck": "2026-11-26T12:45:32.868Z"
     },
     {
       "id": "src_ae_mohre",
@@ -6549,10 +6548,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 55,
+      "failedChecks": 57,
       "verificationStatus": "FAILED",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:55:18.602Z",
+      "lastCheckedAt": "2026-11-26T12:46:02.540Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -6569,9 +6568,9 @@
       "failedChecks": 2,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:55:25.103Z",
-      "nextScheduledCheck": "2026-11-25T16:55:55.402Z",
-      "lastSuccessfulCheck": "2026-11-25T16:55:25.103Z"
+      "lastCheckedAt": "2026-11-26T12:46:09.042Z",
+      "nextScheduledCheck": "2026-11-26T12:46:39.250Z",
+      "lastSuccessfulCheck": "2026-11-26T12:46:09.042Z"
     },
     {
       "id": "src_qa_hukoomi",
@@ -6587,9 +6586,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:55:48.474Z",
-      "nextScheduledCheck": "2026-11-25T16:56:18.695Z",
-      "lastSuccessfulCheck": "2026-11-25T16:55:48.474Z"
+      "lastCheckedAt": "2026-11-26T12:46:09.331Z",
+      "nextScheduledCheck": "2026-11-26T12:46:39.511Z",
+      "lastSuccessfulCheck": "2026-11-26T12:46:09.331Z"
     },
     {
       "id": "src_bh_lmra",
@@ -6605,9 +6604,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:55:48.785Z",
-      "nextScheduledCheck": "2026-11-25T16:56:18.870Z",
-      "lastSuccessfulCheck": "2026-11-25T16:55:48.785Z"
+      "lastCheckedAt": "2026-11-26T12:46:32.684Z",
+      "nextScheduledCheck": "2026-11-26T12:47:02.776Z",
+      "lastSuccessfulCheck": "2026-11-26T12:46:32.684Z"
     },
     {
       "id": "src_om_rop",
@@ -6623,9 +6622,9 @@
       "failedChecks": 12,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:55:48.941Z",
-      "nextScheduledCheck": "2026-11-25T16:56:20.027Z",
-      "lastSuccessfulCheck": "2026-11-25T16:55:48.941Z"
+      "lastCheckedAt": "2026-11-26T12:46:32.872Z",
+      "nextScheduledCheck": "2026-11-26T12:47:03.956Z",
+      "lastSuccessfulCheck": "2026-11-26T12:46:32.872Z"
     },
     {
       "id": "src_jo_moi",
@@ -6641,9 +6640,9 @@
       "failedChecks": 14,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:56:18.472Z",
-      "nextScheduledCheck": "2026-11-25T16:56:48.683Z",
-      "lastSuccessfulCheck": "2026-11-25T16:56:18.472Z"
+      "lastCheckedAt": "2026-11-26T12:46:34.026Z",
+      "nextScheduledCheck": "2026-11-26T12:47:04.230Z",
+      "lastSuccessfulCheck": "2026-11-26T12:46:34.026Z"
     },
     {
       "id": "src_kr_hikorea",
@@ -6659,9 +6658,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:56:18.772Z",
-      "nextScheduledCheck": "2026-11-25T16:56:50.430Z",
-      "lastSuccessfulCheck": "2026-11-25T16:56:18.772Z"
+      "lastCheckedAt": "2026-11-26T12:47:02.686Z",
+      "nextScheduledCheck": "2026-11-26T12:47:34.049Z",
+      "lastSuccessfulCheck": "2026-11-26T12:47:02.686Z"
     },
     {
       "id": "src_jp_mofa",
@@ -6677,9 +6676,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:56:20.503Z",
-      "nextScheduledCheck": "2026-11-25T16:56:50.543Z",
-      "lastSuccessfulCheck": "2026-11-25T16:56:20.503Z"
+      "lastCheckedAt": "2026-11-26T12:47:04.146Z",
+      "nextScheduledCheck": "2026-11-26T12:47:34.227Z",
+      "lastSuccessfulCheck": "2026-11-26T12:47:04.146Z"
     },
     {
       "id": "src_cn_nia",
@@ -6692,12 +6691,12 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 1,
-      "failedChecks": 2,
+      "failedChecks": 3,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:48:50.289Z",
-      "nextScheduledCheck": "2026-11-25T16:49:25.124Z",
-      "lastSuccessfulCheck": "2026-11-25T16:48:50.289Z"
+      "lastCheckedAt": "2026-11-26T12:47:04.305Z",
+      "nextScheduledCheck": "2026-11-26T12:47:37.204Z",
+      "lastSuccessfulCheck": "2026-11-26T12:47:04.305Z"
     },
     {
       "id": "src_sg_mom",
@@ -6713,9 +6712,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:49:18.455Z",
-      "nextScheduledCheck": "2026-11-25T16:49:48.814Z",
-      "lastSuccessfulCheck": "2026-11-25T16:49:18.455Z"
+      "lastCheckedAt": "2026-11-26T12:47:32.687Z",
+      "nextScheduledCheck": "2026-11-26T12:48:03.181Z",
+      "lastSuccessfulCheck": "2026-11-26T12:47:32.687Z"
     },
     {
       "id": "src_my_imi",
@@ -6731,9 +6730,9 @@
       "failedChecks": 11,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:49:18.886Z",
-      "nextScheduledCheck": "2026-11-25T16:49:53.139Z",
-      "lastSuccessfulCheck": "2026-11-25T16:49:18.886Z"
+      "lastCheckedAt": "2026-11-26T12:47:33.255Z",
+      "nextScheduledCheck": "2026-11-26T12:48:07.869Z",
+      "lastSuccessfulCheck": "2026-11-26T12:47:33.255Z"
     },
     {
       "id": "src_ca_ircc",
@@ -6746,10 +6745,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 54,
+      "failedChecks": 57,
       "verificationStatus": "FAILED",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:49:23.227Z",
+      "lastCheckedAt": "2026-11-26T12:47:37.959Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -6766,9 +6765,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:49:48.459Z",
-      "nextScheduledCheck": "2026-11-25T16:50:18.507Z",
-      "lastSuccessfulCheck": "2026-11-25T16:49:48.459Z"
+      "lastCheckedAt": "2026-11-26T12:48:02.709Z",
+      "nextScheduledCheck": "2026-11-26T12:48:36.358Z",
+      "lastSuccessfulCheck": "2026-11-26T12:48:02.709Z"
     },
     {
       "id": "src_sch_chevening",
@@ -6781,10 +6780,10 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 54,
+      "failedChecks": 57,
       "verificationStatus": "FAILED",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:49:48.581Z",
+      "lastCheckedAt": "2026-11-26T12:48:06.498Z",
       "lastError": "The operation was aborted due to timeout"
     },
     {
@@ -6801,9 +6800,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:49:55.083Z",
-      "nextScheduledCheck": "2026-11-25T16:50:25.284Z",
-      "lastSuccessfulCheck": "2026-11-25T16:49:55.083Z"
+      "lastCheckedAt": "2026-11-26T12:48:13.000Z",
+      "nextScheduledCheck": "2026-11-26T12:48:43.204Z",
+      "lastSuccessfulCheck": "2026-11-26T12:48:13.000Z"
     },
     {
       "id": "src_sch_daad",
@@ -6819,9 +6818,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:50:18.455Z",
-      "nextScheduledCheck": "2026-11-25T16:50:48.538Z",
-      "lastSuccessfulCheck": "2026-11-25T16:50:18.455Z"
+      "lastCheckedAt": "2026-11-26T12:40:39.259Z",
+      "nextScheduledCheck": "2026-11-26T12:41:09.359Z",
+      "lastSuccessfulCheck": "2026-11-26T12:40:39.259Z"
     },
     {
       "id": "src_sch_hu",
@@ -6837,9 +6836,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:50:18.624Z",
-      "nextScheduledCheck": "2026-11-25T16:50:48.845Z",
-      "lastSuccessfulCheck": "2026-11-25T16:50:18.624Z"
+      "lastCheckedAt": "2026-11-26T12:41:02.474Z",
+      "nextScheduledCheck": "2026-11-26T12:41:32.632Z",
+      "lastSuccessfulCheck": "2026-11-26T12:41:02.474Z"
     },
     {
       "id": "src_sch_gks",
@@ -6855,9 +6854,9 @@
       "failedChecks": 1,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:50:18.919Z",
-      "nextScheduledCheck": "2026-11-25T16:50:53.653Z",
-      "lastSuccessfulCheck": "2026-11-25T16:50:18.919Z"
+      "lastCheckedAt": "2026-11-26T12:41:02.733Z",
+      "nextScheduledCheck": "2026-11-26T12:41:37.383Z",
+      "lastSuccessfulCheck": "2026-11-26T12:41:02.733Z"
     },
     {
       "id": "src_sch_mext",
@@ -6873,9 +6872,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:50:48.458Z",
-      "nextScheduledCheck": "2026-11-25T16:51:18.971Z",
-      "lastSuccessfulCheck": "2026-11-25T16:50:48.458Z"
+      "lastCheckedAt": "2026-11-26T12:41:07.466Z",
+      "nextScheduledCheck": "2026-11-26T12:41:38.898Z",
+      "lastSuccessfulCheck": "2026-11-26T12:41:07.466Z"
     },
     {
       "id": "src_sch_csc",
@@ -6888,11 +6887,11 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 54,
+      "failedChecks": 56,
       "verificationStatus": "FAILED",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:50:49.072Z",
-      "nextScheduledCheck": "2026-11-25T16:51:19.915Z",
+      "lastCheckedAt": "2026-11-26T12:41:32.525Z",
+      "nextScheduledCheck": "2026-11-26T12:42:03.406Z",
       "lastError": "HTTP 412"
     },
     {
@@ -6909,9 +6908,9 @@
       "failedChecks": 33,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:50:49.915Z",
-      "nextScheduledCheck": "2026-11-25T16:51:20.229Z",
-      "lastSuccessfulCheck": "2026-11-25T16:50:49.915Z"
+      "lastCheckedAt": "2026-11-26T12:41:33.406Z",
+      "nextScheduledCheck": "2026-11-26T12:42:03.659Z",
+      "lastSuccessfulCheck": "2026-11-26T12:41:33.406Z"
     },
     {
       "id": "src_auto_1794755106061_ask2",
@@ -6927,9 +6926,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:51:18.460Z",
-      "nextScheduledCheck": "2026-11-25T16:51:48.568Z",
-      "lastSuccessfulCheck": "2026-11-25T16:51:18.460Z"
+      "lastCheckedAt": "2026-11-26T12:41:33.759Z",
+      "nextScheduledCheck": "2026-11-26T12:42:03.858Z",
+      "lastSuccessfulCheck": "2026-11-26T12:41:33.759Z"
     },
     {
       "id": "src_auto_1794755164736_bgsa",
@@ -6942,11 +6941,11 @@
       "pollIntervalSeconds": 30,
       "enabled": true,
       "newAnnouncementsDetected": 0,
-      "failedChecks": 54,
+      "failedChecks": 56,
       "verificationStatus": "FAILED",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:51:18.647Z",
-      "nextScheduledCheck": "2026-11-25T16:51:48.734Z",
+      "lastCheckedAt": "2026-11-26T12:42:02.525Z",
+      "nextScheduledCheck": "2026-11-26T12:42:32.619Z",
       "lastError": "HTTP 404"
     },
     {
@@ -6963,9 +6962,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "immigration_ministry",
-      "lastCheckedAt": "2026-11-25T16:51:18.735Z",
-      "nextScheduledCheck": "2026-11-25T16:51:48.972Z",
-      "lastSuccessfulCheck": "2026-11-25T16:51:18.735Z"
+      "lastCheckedAt": "2026-11-26T12:42:02.619Z",
+      "nextScheduledCheck": "2026-11-26T12:42:32.806Z",
+      "lastSuccessfulCheck": "2026-11-26T12:42:02.619Z"
     },
     {
       "id": "src_auto_1794761442252_dexo",
@@ -6981,9 +6980,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:51:48.459Z",
-      "nextScheduledCheck": "2026-11-25T16:52:18.502Z",
-      "lastSuccessfulCheck": "2026-11-25T16:51:48.459Z"
+      "lastCheckedAt": "2026-11-26T12:42:02.886Z",
+      "nextScheduledCheck": "2026-11-26T12:42:32.930Z",
+      "lastSuccessfulCheck": "2026-11-26T12:42:02.886Z"
     },
     {
       "id": "src_auto_1794761592396_2bvo",
@@ -6999,9 +6998,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "scholarship_body",
-      "lastCheckedAt": "2026-11-25T16:51:48.590Z",
-      "nextScheduledCheck": "2026-11-25T16:52:18.901Z",
-      "lastSuccessfulCheck": "2026-11-25T16:51:48.590Z"
+      "lastCheckedAt": "2026-11-26T12:42:32.525Z",
+      "nextScheduledCheck": "2026-11-26T12:43:02.839Z",
+      "lastSuccessfulCheck": "2026-11-26T12:42:32.525Z"
     },
     {
       "id": "src_auto_1794761592396_vviy",
@@ -7017,9 +7016,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "official_university",
-      "lastCheckedAt": "2026-11-25T16:51:48.962Z",
-      "nextScheduledCheck": "2026-11-25T16:52:19.120Z",
-      "lastSuccessfulCheck": "2026-11-25T16:51:48.962Z"
+      "lastCheckedAt": "2026-11-26T12:42:32.928Z",
+      "nextScheduledCheck": "2026-11-26T12:43:03.043Z",
+      "lastSuccessfulCheck": "2026-11-26T12:42:32.928Z"
     },
     {
       "id": "src_auto_1794761652458_a28c",
@@ -7035,9 +7034,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:52:18.466Z",
-      "nextScheduledCheck": "2026-11-25T16:52:48.653Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:18.466Z"
+      "lastCheckedAt": "2026-11-26T12:42:33.113Z",
+      "nextScheduledCheck": "2026-11-26T12:43:03.296Z",
+      "lastSuccessfulCheck": "2026-11-26T12:42:33.113Z"
     },
     {
       "id": "src_auto_1794761682616_75hv",
@@ -7053,9 +7052,9 @@
       "failedChecks": 0,
       "verificationStatus": "HEALTHY",
       "authorityType": "government_portal",
-      "lastCheckedAt": "2026-11-25T16:52:18.757Z",
-      "nextScheduledCheck": "2026-11-25T16:52:48.814Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:18.757Z"
+      "lastCheckedAt": "2026-11-26T12:43:02.526Z",
+      "nextScheduledCheck": "2026-11-26T12:43:32.575Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:02.526Z"
     },
     {
       "id": "src_auto_1794761683079_669v",
@@ -7071,9 +7070,9 @@
       "failedChecks": 29,
       "verificationStatus": "HEALTHY",
       "authorityType": "international_org",
-      "lastCheckedAt": "2026-11-25T16:52:18.920Z",
-      "nextScheduledCheck": "2026-11-25T16:52:49.133Z",
-      "lastSuccessfulCheck": "2026-11-25T16:52:18.920Z"
+      "lastCheckedAt": "2026-11-26T12:43:02.658Z",
+      "nextScheduledCheck": "2026-11-26T12:43:32.814Z",
+      "lastSuccessfulCheck": "2026-11-26T12:43:02.658Z"
     }
   ],
   "developerNotifications": [
@@ -7983,12 +7982,12 @@
   "schedulerConfig": {
     "enabled": true,
     "intervalSeconds": 30,
-    "cycleCount": 836,
-    "sourceCursorIndex": 24,
-    "lastRunAt": "2026-11-25T16:56:20.621Z",
-    "lastSuccessfulRunAt": "2026-11-25T16:56:20.621Z",
+    "cycleCount": 869,
+    "sourceCursorIndex": 31,
+    "lastRunAt": "2026-11-26T12:48:13.291Z",
+    "lastSuccessfulRunAt": "2026-11-26T12:48:13.291Z",
     "lastError": null,
     "aiProviderStatus": "degraded (Gemini 429 quota exceeded) — Live Official Crawler active",
-    "lastCycleSummary": "Cycle #836 (interval_30s): polled 3 official sources (Jordan, South Korea, Japan), verified 3 sources, discovered 0 new private_pending item(s), 3 duplicates skipped, 0 new source(s) registered."
+    "lastCycleSummary": "Cycle #869 (interval_30s): polled 3 official sources (Australia, United Kingdom, Sweden), verified 2 sources, discovered 0 new private_pending item(s), 2 duplicates skipped, 0 new source(s) registered."
   }
 }

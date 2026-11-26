@@ -58,6 +58,7 @@ import { HomepageWebsiteEditor } from './HomepageWebsiteEditor';
 import { NexusClientFinderPanel } from './NexusClientFinderPanel';
 import { AutonomousCrawlerOpsPanel } from './AutonomousCrawlerOpsPanel';
 import { OpportunityIntelligenceAdminPanel } from './OpportunityIntelligenceAdminPanel';
+import { GlobalReachPanel } from './GlobalReachPanel';
 import {
   auth,
   googleProvider,
@@ -162,6 +163,7 @@ export const AdminDashboard: React.FC<Props> = ({
     | 'international'
     | 'autonomousOps'
     | 'opportunityIntelligence'
+    | 'globalReach'
     | 'telegramQueue'
     | 'manual'
     | 'duplicates'
@@ -605,6 +607,18 @@ export const AdminDashboard: React.FC<Props> = ({
             )}
 
             <button
+              onClick={() => setActiveTab('globalReach')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors border cursor-pointer ${
+                activeTab === 'globalReach'
+                  ? 'bg-emerald-400 text-slate-950 shadow-sm font-black border-emerald-300'
+                  : 'text-emerald-300 hover:text-white hover:bg-slate-800 border-emerald-500/35'
+              }`}
+            >
+              <Globe className="w-4 h-4 text-emerald-400" />
+              <span>Global Reach (24/7 Outreach)</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('telegramQueue')}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl whitespace-nowrap transition-colors ${
                 activeTab === 'telegramQueue'
@@ -963,6 +977,10 @@ export const AdminDashboard: React.FC<Props> = ({
 
         {activeTab === 'nexusClientFinder' && isYeabsraOwner && (
           <NexusClientFinderPanel adminEmail={adminEmail} />
+        )}
+
+        {activeTab === 'globalReach' && (
+          <GlobalReachPanel actorEmail={adminEmail} actorUid={auth.currentUser?.uid || null} />
         )}
 
         {activeTab === 'telegram' && (

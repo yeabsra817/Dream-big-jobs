@@ -1,7 +1,7 @@
 // serverApp.ts
-import * as path9 from "path";
-import * as fs4 from "fs";
-import * as crypto9 from "crypto";
+import * as path10 from "path";
+import * as fs5 from "fs";
+import * as crypto10 from "crypto";
 
 // serverUserEngine.ts
 import * as path from "path";
@@ -24185,6 +24185,2974 @@ function registerOpportunityIntelligenceRoutes(deps) {
   return engine;
 }
 
+// serverGlobalReach.ts
+import * as fs4 from "fs";
+import * as path9 from "path";
+import * as crypto9 from "crypto";
+
+// src/utils/globalReachEngine.ts
+var GLOBAL_REACH_CATEGORY_LABELS = {
+  potential_employers: "Potential Employers",
+  banking_executives: "Banking Executives",
+  finance_professionals: "Finance Professionals",
+  business_owners: "Business Owners",
+  entrepreneurs: "Entrepreneurs",
+  investors: "Investors",
+  mentors: "Mentors",
+  philanthropists: "Philanthropists",
+  ngos_and_foundations: "NGOs and Foundations",
+  website_development_clients: "Website Development Clients",
+  international_recruitment_professionals: "International Recruitment Professionals",
+  other_professional_connections: "Other Professional Connections"
+};
+var GLOBAL_REACH_APPROACH_LABELS = {
+  employment_request: "Employment Request",
+  banking_finance_career: "Banking & Finance Career Introduction",
+  website_development: "Website Development Services",
+  business_partnership: "Business Partnership",
+  professional_mentorship: "Professional Mentorship",
+  employment_referral: "Employment Referral",
+  international_relocation_guidance: "International Relocation Guidance",
+  professional_networking: "Professional Networking"
+};
+var GLOBAL_REACH_ALL_CATEGORIES = Object.keys(
+  GLOBAL_REACH_CATEGORY_LABELS
+);
+var GLOBAL_REACH_ALL_APPROACHES = Object.keys(
+  GLOBAL_REACH_APPROACH_LABELS
+);
+function sanitizeExternalHttpUrl(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+function extractDomainFromUrl(raw) {
+  const safe = sanitizeExternalHttpUrl(raw);
+  if (!safe) return "";
+  try {
+    return new URL(safe).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+function extractDomainFromEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.lastIndexOf("@");
+  if (at <= 0 || at === trimmed.length - 1) return "";
+  return trimmed.slice(at + 1);
+}
+function isValidPublicEmailSyntax(email) {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim().toLowerCase();
+  return /^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{2,253}\.[a-z]{2,24}$/.test(trimmed);
+}
+function normalizePublishedWhatsAppDigits(rawPhoneOrUrl) {
+  if (!rawPhoneOrUrl || typeof rawPhoneOrUrl !== "string") return null;
+  const trimmed = rawPhoneOrUrl.trim();
+  if (!trimmed) return null;
+  const waMatch = trimmed.match(/(?:wa\.me\/|api\.whatsapp\.com\/send\?phone=)(\+?\d[\d\s\-()]{6,19})/i);
+  const candidate = waMatch ? waMatch[1] : trimmed;
+  if (!waMatch && !candidate.startsWith("+") && !candidate.startsWith("00")) {
+    return null;
+  }
+  let digits = candidate.replace(/[^\d]/g, "");
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+  if (digits.length < 8 || digits.length > 15) return null;
+  if (/^0+$/.test(digits)) return null;
+  return digits;
+}
+function buildWhatsAppChatUrl(publishedWhatsAppNumberOrUrl, prefilledMessage) {
+  const digits = normalizePublishedWhatsAppDigits(publishedWhatsAppNumberOrUrl);
+  if (!digits) return null;
+  const base = `https://wa.me/${digits}`;
+  const msg = (prefilledMessage || "").trim();
+  if (!msg) return base;
+  return `${base}?text=${encodeURIComponent(msg.slice(0, 1400))}`;
+}
+function inspectLinkedInUrl(raw) {
+  const safe = sanitizeExternalHttpUrl(raw);
+  if (!safe) {
+    return {
+      validUrl: null,
+      profileType: "unknown",
+      messagingNote: "No public LinkedIn profile URL available."
+    };
+  }
+  try {
+    const parsed = new URL(safe);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith("linkedin.com")) {
+      return {
+        validUrl: null,
+        profileType: "unknown",
+        messagingNote: "Link is not an official linkedin.com URL."
+      };
+    }
+    const p = parsed.pathname.toLowerCase();
+    if (p.startsWith("/in/")) {
+      return {
+        validUrl: safe,
+        profileType: "person",
+        messagingNote: "Direct LinkedIn messaging may require a connection request or InMail depending on their LinkedIn privacy settings."
+      };
+    }
+    if (p.startsWith("/company/") || p.startsWith("/school/")) {
+      return {
+        validUrl: safe,
+        profileType: "company",
+        messagingNote: "Official LinkedIn organization page. Follow or review Jobs/People tabs; direct page messaging depends on page settings."
+      };
+    }
+    return {
+      validUrl: safe,
+      profileType: "unknown",
+      messagingNote: "Official LinkedIn link. Direct messaging depends on LinkedIn connection/InMail rules."
+    };
+  } catch {
+    return {
+      validUrl: null,
+      profileType: "unknown",
+      messagingNote: "Invalid LinkedIn URL."
+    };
+  }
+}
+function inspectInstagramUrl(raw) {
+  const safe = sanitizeExternalHttpUrl(raw);
+  if (!safe) {
+    return { validUrl: null, messagingNote: "No public Instagram profile URL available." };
+  }
+  try {
+    const parsed = new URL(safe);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith("instagram.com")) {
+      return { validUrl: null, messagingNote: "Link is not an official instagram.com URL." };
+    }
+    return {
+      validUrl: safe,
+      messagingNote: "Public Instagram professional profile. Message delivery is governed by Instagram message-request settings."
+    };
+  } catch {
+    return { validUrl: null, messagingNote: "Invalid Instagram URL." };
+  }
+}
+function formatEatTimestamp(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Addis_Ababa",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(d) + " EAT";
+  } catch {
+    return null;
+  }
+}
+function scoreGlobalReachContact(contact, profile) {
+  let score = 20;
+  const reasons = [];
+  const haystack = [
+    contact.fullName,
+    contact.companyName,
+    contact.positionOrRole,
+    contact.industry,
+    contact.sponsorshipEvidenceNote,
+    contact.verificationNotes,
+    ...contact.tags || []
+  ].filter(Boolean).join(" ").toLowerCase();
+  const profileKeywords = [
+    ...profile.coreExperienceAreas,
+    ...profile.additionalCapabilities,
+    ...profile.targetIndustries,
+    profile.currentOrRecentRole,
+    profile.educationDegree
+  ].join(" ").toLowerCase();
+  const bankingSignals = ["bank", "finance", "financial", "microfinance", "fintech", "credit", "accounting", "treasury", "audit", "wealth", "capital", "investment"];
+  const userHasFinance = bankingSignals.some((k) => profileKeywords.includes(k));
+  const contactHasFinance = bankingSignals.some((k) => haystack.includes(k));
+  if (userHasFinance && contactHasFinance) {
+    score += 22;
+    reasons.push(
+      `Direct alignment with ${profile.totalExperienceYears > 0 ? `${profile.totalExperienceYears}-year ` : ""}banking, finance, and accounting background`
+    );
+  }
+  const webSignals = ["web", "software", "digital", "agency", "startup", "technology", "ecommerce", "saas", "it ", "consulting", "small business"];
+  const userHasWeb = webSignals.some((k) => profileKeywords.includes(k)) || profileKeywords.includes("website");
+  if (userHasWeb && (contact.websiteDevProspect || webSignals.some((k) => haystack.includes(k)))) {
+    score += 12;
+    reasons.push("Potential fit for website development, digital projects, or business collaboration");
+  }
+  if (contact.sponsorshipTier === "confirmed_sponsorship") {
+    score += 22;
+    reasons.push("Confirmed international visa/work-permit sponsorship evidence on official source");
+  } else if (contact.sponsorshipTier === "previous_sponsorship_evidence") {
+    score += 17;
+    reasons.push("Evidence of prior international hiring or sponsorship history");
+  } else if (contact.sponsorshipTier === "international_recruiter" || contact.internationalRecruiterSignal) {
+    score += 13;
+    reasons.push("Organization recruits internationally or operates cross-border teams");
+  }
+  if (contact.mentorshipAvailable || contact.category === "mentors") {
+    score += 12;
+    reasons.push("Publicly connected to mentorship, leadership guidance, or career support");
+  }
+  if (contact.category === "ngos_and_foundations" || haystack.includes("ngo") || haystack.includes("foundation") || haystack.includes("humanitarian")) {
+    score += 10;
+    reasons.push("International NGO or foundation active in cross-border finance, operations, or development");
+  }
+  if (contact.entityType === "individual" && /(founder|ceo|director|manager|head of|vp|executive|partner|owner|hr|talent|recruit)/i.test(
+    contact.positionOrRole || ""
+  )) {
+    score += 10;
+    reasons.push(`Decision-maker or senior leader (${contact.positionOrRole})`);
+  }
+  if (contact.verificationStatus === "verified_public_professional_contact") {
+    score += 12;
+    reasons.push("Verified public professional contact matching official domain");
+  } else if (contact.verificationStatus === "verified_organization") {
+    score += 9;
+    reasons.push("Verified live official organization website");
+  } else if (contact.verificationStatus === "invalid_or_outdated_contact") {
+    score -= 25;
+    reasons.push("Contact link or domain failed live verification");
+  }
+  const channels = [];
+  if (contact.publicEmail) channels.push("public email");
+  if (contact.whatsAppBusinessUrl || contact.whatsAppBusinessNumber) channels.push("WhatsApp Business");
+  if (contact.linkedInUrl) channels.push("LinkedIn");
+  if (contact.instagramUrl) channels.push("Instagram");
+  if (contact.contactPageUrl) channels.push("official contact page");
+  if (channels.length >= 2) {
+    score += 7;
+    reasons.push(`Multiple public channels available (${channels.join(", ")})`);
+  } else if (channels.length === 1) {
+    score += 3;
+    reasons.push(`Public channel available (${channels[0]})`);
+  }
+  if (contact.region && Array.isArray(profile.targetRegions) && profile.targetRegions.includes(contact.region)) {
+    score += 5;
+    reasons.push(`Located in target region (${contact.country || contact.region})`);
+  }
+  if (reasons.length === 0) {
+    reasons.push("Relevant international professional contact for networking and career exploration");
+  }
+  return {
+    score: Math.max(5, Math.min(99, Math.round(score))),
+    reasons: reasons.slice(0, 5)
+  };
+}
+function buildEditableOutreachTemplate(contact, profile, approach) {
+  const recipientSalutation = contact.entityType === "individual" && contact.fullName ? `Dear ${contact.fullName},` : `Dear ${contact.companyName || contact.fullName} Team,`;
+  const senderName = profile.fullName || "Professional Applicant";
+  const experienceLine = profile.totalExperienceYears > 0 ? `${profile.totalExperienceYears} years of experience${profile.managementExperienceYears > 0 ? `, including ${profile.managementExperienceYears} years in ${profile.currentOrRecentRole || "management"}` : ""}` : profile.currentOrRecentRole || "professional experience";
+  const educationLine = profile.educationDegree && profile.educationInstitution ? `I hold a ${profile.educationDegree} from ${profile.educationInstitution}${profile.graduationYear ? ` (${profile.graduationYear})` : ""}.` : "";
+  const locationContext = [contact.city, contact.country].filter(Boolean).join(", ") || contact.region;
+  const orgLabel = contact.companyName || contact.fullName;
+  const approachBodies = {
+    employment_request: {
+      subject: `International Employment Inquiry \u2014 ${senderName} (${profile.currentOrRecentRole || "Banking & Finance"})`,
+      body: `${recipientSalutation}
+
+I came across ${orgLabel}${locationContext ? ` in ${locationContext}` : ""} while researching respected organizations in ${contact.industry || "international business"}. I am ${senderName}, a ${profile.nationality || "global"} professional currently based in ${profile.currentCountry || "my home country"} with ${experienceLine}. ${educationLine}
+
+My background covers ${profile.coreExperienceAreas.slice(0, 5).join(", ")}. I am actively seeking a legitimate international employment opportunity where I can contribute measurable operational and financial discipline while building a stable future for my family.
+
+If ${orgLabel} considers international candidates or has upcoming openings that fit my background, I would be grateful to share my CV or follow your official application process.
+
+Thank you very much for your time and consideration.
+
+Warm regards,
+${senderName}
+${profile.email}`,
+      wa: `Hello${contact.entityType === "individual" ? ` ${contact.fullName}` : ""}, I am ${senderName} from ${profile.currentCountry}. I have ${experienceLine} and admired ${orgLabel}'s work in ${contact.industry}. Would you be open to letting me know if your team accepts international applications? Thank you.`,
+      li: `Hello ${contact.entityType === "individual" ? contact.fullName : `${orgLabel} team`}, I'm ${senderName} (${experienceLine}). I'm exploring international opportunities in ${contact.industry} and would value connecting with you.`
+    },
+    banking_finance_career: {
+      subject: `Banking & Finance Professional Introduction \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I am writing to introduce myself as a banking and finance professional interested in ${orgLabel}'s work in ${contact.industry || "financial services"}. I bring ${experienceLine}, specializing in ${profile.coreExperienceAreas.slice(0, 6).join(", ")}. ${educationLine}
+
+I am working toward continuing my banking and finance career internationally so I can contribute strong branch operations, customer growth, and risk-conscious administration to an international institution while supporting my family's future.
+
+I would greatly appreciate any advice on how international banking professionals can best qualify for roles within ${orgLabel} or your wider network.
+
+Respectfully,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName}, a banking professional from ${profile.currentCountry} with ${experienceLine}. I admire ${orgLabel}'s work and would appreciate knowing if you consider international banking/finance applicants.`,
+      li: `Hello ${contact.entityType === "individual" ? contact.fullName : ""}, I bring ${experienceLine} in banking operations and branch leadership. I'd be honored to connect and learn about finance opportunities in ${contact.country}.`
+    },
+    website_development: {
+      subject: `Website & Digital Project Collaboration Inquiry \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I hope this message finds you well. Alongside my background in banking and financial operations (${experienceLine}), I work independently in ${profile.additionalCapabilities.slice(0, 4).join(", ")}.
+
+After reviewing ${orgLabel}'s online presence, I wanted to respectfully introduce myself in case you ever need dependable remote support with website updates, modern web applications, or digital project coordination. I focus on clear communication, practical business results, and reliable delivery.
+
+If a short introduction or portfolio overview would be helpful now or in the future, I would be glad to send it over.
+
+Best regards,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName}. Alongside my finance background, I build modern business websites and digital tools remotely. If ${orgLabel} ever needs dependable website support, I'd be happy to share my work.`,
+      li: `Hello, I'm ${senderName}. In addition to my finance background, I develop business websites and manage web projects remotely. Happy to connect if ${orgLabel} ever needs web support.`
+    },
+    business_partnership: {
+      subject: `Cross-Border Business & Digital Collaboration \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I came across ${orgLabel} and was impressed by your work in ${contact.industry || "business"} (${locationContext}). I am ${senderName}, combining ${experienceLine} in commercial banking and branch management with hands-on website and digital business development.
+
+I am building long-term, ethical international business relationships and exploring partnerships where financial operations discipline and digital execution can add real value across markets.
+
+If you are open to a brief introductory exchange, I would appreciate the opportunity to learn about your priorities and see if there are constructive ways to collaborate.
+
+Kind regards,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName} from ${profile.currentCountry}, combining ${experienceLine} in banking with digital business development. I'd value exploring constructive collaboration with ${orgLabel}.`,
+      li: `Hello, I'm ${senderName} \u2014 banking operations leader & web developer. I'd appreciate connecting regarding potential cross-border collaboration with ${orgLabel}.`
+    },
+    professional_mentorship: {
+      subject: `Brief Professional Mentorship Inquiry \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I respect the work you and ${orgLabel} have built in ${contact.industry || "your field"}. I am ${senderName}, a ${profile.nationality || ""} professional based in ${profile.currentCountry || ""} with ${experienceLine}. ${educationLine}
+
+I am committed to growing professionally and pursuing a legitimate international career path to build a stronger future for my family. I am not asking for favors or shortcuts\u2014only hoping to learn from experienced leaders about the certifications, positioning, or steps that truly matter when transitioning into international roles.
+
+If you ever have ten minutes to share brief guidance or point me to a useful resource, I would be deeply appreciative.
+
+Sincerely,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName}, a banking professional from ${profile.currentCountry} with ${experienceLine}. I deeply respect your work at ${orgLabel} and would be grateful for any brief career advice on transitioning internationally.`,
+      li: `Hello ${contact.entityType === "individual" ? contact.fullName : ""}, I'm ${senderName} (${experienceLine} in banking). I admire your career at ${orgLabel} and would value connecting to learn from your experience.`
+    },
+    employment_referral: {
+      subject: `Seeking Career Guidance & Potential Referral \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I hope you are doing well. I am ${senderName}, currently based in ${profile.currentCountry} with ${experienceLine} in ${profile.coreExperienceAreas.slice(0, 4).join(", ")}. ${educationLine}
+
+I am actively applying for international banking, finance, and operations positions where my leadership and customer-growth track record can deliver value. If you happen to know hiring teams or recruiters in ${locationContext || "your network"} who welcome qualified international candidates, I would be sincerely grateful for a referral or recommendation on where to apply.
+
+I am happy to send my concise CV at your convenience.
+
+Thank you for your time,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName} (${experienceLine} in banking & finance). I'm seeking legitimate international roles and would appreciate any pointer to hiring teams in ${contact.country} who welcome international applicants.`,
+      li: `Hello, I'm ${senderName} with ${experienceLine} in banking & finance. If you know teams in ${contact.country} open to international professionals, I'd be grateful to connect.`
+    },
+    international_relocation_guidance: {
+      subject: `Guidance on Legal International Career Pathways \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I discovered ${orgLabel} while researching respected organizations and professionals in ${locationContext || "international markets"}. I am ${senderName}, an ${profile.nationality} professional with ${experienceLine} in banking and branch leadership, alongside independent website development skills. ${educationLine}
+
+My goal is to pursue a legal, employer-sponsored or skilled international career pathway so I can contribute professionally abroad and support my family's future. Because navigating international hiring norms from abroad can be challenging, I would deeply value any practical guidance you might share regarding realistic entry paths in ${contact.country || "your region"}.
+
+Thank you kindly for reading my note.
+
+Warm regards,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName} from ${profile.currentCountry} (${experienceLine} in banking + web dev). I'm researching legal international career pathways in ${contact.country} and would appreciate any brief guidance.`,
+      li: `Hello, I'm ${senderName} (${experienceLine} in banking + web development). I'm researching legal skilled-migration and hiring pathways in ${contact.country} and would love to connect.`
+    },
+    professional_networking: {
+      subject: `Professional Connection from ${profile.currentCountry || "Ethiopia"} \u2014 ${senderName}`,
+      body: `${recipientSalutation}
+
+I came across ${orgLabel}'s work in ${contact.industry || "your industry"} and wanted to reach out respectfully to introduce myself. I am ${senderName}, with ${experienceLine} in ${profile.coreExperienceAreas.slice(0, 4).join(", ")} as well as independent website development.
+
+I enjoy connecting with thoughtful international founders, finance leaders, and organizations to exchange ideas and stay informed about cross-border opportunities.
+
+Wishing you and your team continued success in ${locationContext || "your work"}.
+
+Best regards,
+${senderName}
+${profile.email}`,
+      wa: `Hello, I'm ${senderName} from ${profile.currentCountry} (${experienceLine} in banking & web development). I came across ${orgLabel}'s work and wanted to introduce myself professionally.`,
+      li: `Hello, I'm ${senderName} \u2014 banking branch leader & independent web developer in ${profile.currentCountry}. Impressed by ${orgLabel}'s work and would love to connect.`
+    }
+  };
+  const chosen = approachBodies[approach];
+  return {
+    contactId: contact.id,
+    contactName: contact.fullName,
+    companyName: contact.companyName,
+    approach,
+    subject: chosen.subject,
+    message: chosen.body,
+    whatsappShortMessage: chosen.wa,
+    linkedInNote: chosen.li.slice(0, 290),
+    followUpMessage: `${recipientSalutation}
+
+I hope your week is going well. I am following up respectfully on my earlier note regarding ${GLOBAL_REACH_APPROACH_LABELS[approach].toLowerCase()}. I completely understand how busy schedules get\u2014if now is not a convenient time, please feel free to ignore this note or let me know if you prefer not to be contacted again.
+
+Warm regards,
+${senderName}`,
+    generatedBy: "manual_template",
+    generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+
+// serverGlobalReach.ts
+var OWNER_WORKSPACE_ID = "owner_yeabsra";
+var HOURLY_INTERVAL_MS = 60 * 60 * 1e3;
+var STALE_LOCK_MS = 15 * 60 * 1e3;
+var MAX_CONTACTS_PER_WORKSPACE = 1200;
+var MAX_CYCLES_HISTORY = 120;
+var MAX_NOTIFICATIONS2 = 150;
+var FETCH_TIMEOUT_MS = 7500;
+var MAX_HTML_BYTES = 55e4;
+var USER_AGENT3 = "HopelandGlobalReach/1.0 (+https://www.hopelandjobs.tech; respectful public contact discovery)";
+var DISPOSABLE_OR_SUSPICIOUS_DOMAINS = /* @__PURE__ */ new Set([
+  "mailinator.com",
+  "guerrillamail.com",
+  "10minutemail.com",
+  "tempmail.com",
+  "yopmail.com",
+  "trashmail.com",
+  "sharklasers.com",
+  "example.com",
+  "example.org",
+  "example.net",
+  "test.com",
+  "localhost",
+  "sentry.io",
+  "wixpress.com",
+  "cloudflare.com",
+  "w3.org",
+  "schema.org",
+  "googleusercontent.com"
+]);
+var IGNORED_EMAIL_PREFIXES = [
+  "noreply",
+  "no-reply",
+  "donotreply",
+  "do-not-reply",
+  "mailer-daemon",
+  "postmaster",
+  "abuse",
+  "webmaster",
+  "privacy",
+  "gdpr",
+  "dpo",
+  "security",
+  "dmca",
+  "copyright",
+  "unsubscribe",
+  "bounce"
+];
+function createYeabsraOwnerProfile() {
+  return {
+    userId: OWNER_WORKSPACE_ID,
+    isOwnerProfile: true,
+    fullName: "Yeabsra Tefera",
+    nationality: "Ethiopian",
+    currentCountry: "Ethiopia",
+    email: "yeabsra45@gmail.com",
+    educationDegree: "BA in Accounting and Finance",
+    educationInstitution: "Mekelle University",
+    graduationYear: "2016",
+    totalExperienceYears: 9,
+    managementExperienceYears: 3,
+    currentOrRecentRole: "Bank Branch Manager",
+    coreExperienceAreas: [
+      "Banking operations",
+      "Branch management",
+      "Financial management",
+      "Customer service",
+      "Deposit mobilization",
+      "Business development",
+      "Staff supervision",
+      "Financial services",
+      "Banking administration"
+    ],
+    additionalCapabilities: [
+      "Independent website development",
+      "Digital business development",
+      "Website project management",
+      "Technology and online business projects"
+    ],
+    primaryObjectives: [
+      "International banking employment",
+      "Finance and accounting employment",
+      "NGO and international organization employment",
+      "Employer-sponsored international employment",
+      "Legal work visa and relocation opportunities",
+      "Website development contracts",
+      "Business partnerships",
+      "Professional mentorship",
+      "Referrals and professional introductions",
+      "Genuine individuals or organizations willing to guide toward international opportunities"
+    ],
+    personalStorySummary: "Ethiopian banking professional with 9 years in banking (including 3 years as Branch Manager) and independent website development capabilities, seeking genuine international opportunities to contribute skills and improve the future of my mother, wife, and children.",
+    targetRegions: [
+      "Europe",
+      "North America",
+      "Middle East",
+      "Asia",
+      "Africa",
+      "Australia & Oceania",
+      "South America"
+    ],
+    targetIndustries: [
+      "Banking & Financial Services",
+      "Accounting & Finance",
+      "Fintech & Microfinance",
+      "International NGOs & Foundations",
+      "Small & Medium Businesses",
+      "Technology & Web Development",
+      "International Recruitment"
+    ],
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function createDefaultRegisteredUserProfile(userId, email) {
+  return {
+    userId,
+    isOwnerProfile: false,
+    fullName: "",
+    nationality: "",
+    currentCountry: "",
+    email: email || "",
+    educationDegree: "",
+    educationInstitution: "",
+    graduationYear: "",
+    totalExperienceYears: 0,
+    managementExperienceYears: 0,
+    currentOrRecentRole: "",
+    coreExperienceAreas: [],
+    additionalCapabilities: [],
+    primaryObjectives: [
+      "International employment opportunities",
+      "Professional mentorship",
+      "Business partnerships",
+      "Professional networking"
+    ],
+    personalStorySummary: "",
+    targetRegions: [
+      "Europe",
+      "North America",
+      "Middle East",
+      "Asia",
+      "Africa",
+      "Australia & Oceania",
+      "South America"
+    ],
+    targetIndustries: [],
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function createInitialSources() {
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim());
+  const hasTavily = Boolean(process.env.TAVILY_API_KEY?.trim());
+  const hasBrave = Boolean(process.env.BRAVE_SEARCH_API_KEY?.trim());
+  return [
+    {
+      id: "official_org_websites",
+      name: "Official Organization, Chamber, Bank & Foundation Websites",
+      category: "official_web",
+      status: "operational",
+      description: "SSRF-guarded live discovery & verification across real global public websites (banks, fintechs, chambers of commerce, international NGOs, foundations, small businesses, and mentorship networks).",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "reliefweb_public_api",
+      name: "ReliefWeb Official Public API (Global NGOs, UN & Foundations)",
+      category: "public_api",
+      status: "operational",
+      description: "Public humanitarian, development, finance, and international organization directory API with verified organization homepages and country metadata.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "gleif_lei_registry",
+      name: "GLEIF Official Global LEI Registry (Banks, PLCs & Enterprises)",
+      category: "public_api",
+      status: "operational",
+      description: "Global Legal Entity Identifier public registry covering verified banks, financial institutions, PLCs, and enterprises worldwide.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "github_public_founders",
+      name: "GitHub Public Profiles & Tech Organizations API",
+      category: "public_api",
+      status: "operational",
+      description: "Publicly listed founders, CTOs, small web/software businesses, and fintech teams that voluntarily publish business emails, websites, and social links.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "gemini_search_grounding",
+      name: "Gemini AI Outreach & Optional Search Enrichment",
+      category: "optional_api",
+      status: hasGemini ? "operational" : "requires_api_key",
+      envVarName: "GEMINI_API_KEY",
+      description: hasGemini ? "Configured on server for personalized AI introduction drafting across all 8 outreach approaches." : "Set GEMINI_API_KEY on the server to enable AI-personalized message drafting.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "tavily_search_api",
+      name: "Tavily Web Search API (Optional Expansion)",
+      category: "optional_api",
+      status: hasTavily ? "operational" : "requires_api_key",
+      envVarName: "TAVILY_API_KEY",
+      description: hasTavily ? "Configured on server for additional web search expansion." : "Optional \u2014 requires TAVILY_API_KEY on server for broader search engine queries.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "brave_search_api",
+      name: "Brave Search API (Optional Expansion)",
+      category: "optional_api",
+      status: hasBrave ? "operational" : "requires_api_key",
+      envVarName: "BRAVE_SEARCH_API_KEY",
+      description: hasBrave ? "Configured on server for additional web search expansion." : "Optional \u2014 requires BRAVE_SEARCH_API_KEY on server for broader search engine queries.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "linkedin_official_api",
+      name: "LinkedIn Direct API Integration",
+      category: "platform_restricted",
+      status: "requires_platform_permission",
+      description: "LinkedIn prohibits unauthorized automated scraping. Global Reach discovers official LinkedIn links published on public websites/APIs and opens exact profile URLs for human review and connection.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "instagram_graph_api",
+      name: "Instagram Graph API Integration",
+      category: "platform_restricted",
+      status: "requires_platform_permission",
+      description: "Instagram prohibits unauthorized scraping. Global Reach extracts official public Instagram business links from verified company websites and opens them directly.",
+      contactsDiscoveredTotal: 0
+    },
+    {
+      id: "whatsapp_business_api",
+      name: "WhatsApp Business Cloud API",
+      category: "platform_restricted",
+      status: "requires_platform_permission",
+      description: "Global Reach never scrapes private phone numbers. Official wa.me click-to-chat links are generated strictly from exact published WhatsApp Business numbers found on official websites.",
+      contactsDiscoveredTotal: 0
+    }
+  ];
+}
+function createInitialSchedulerState() {
+  const nextRun = new Date(Date.now() + HOURLY_INTERVAL_MS).toISOString();
+  return {
+    status: "active_waiting",
+    enabled: true,
+    paused: false,
+    intervalMinutes: 60,
+    isRunningNow: false,
+    lockAcquiredAt: null,
+    lastAttemptAt: null,
+    lastSuccessfulRunAt: null,
+    lastSuccessfulRunEat: null,
+    nextScheduledRunAt: nextRun,
+    nextScheduledRunEat: formatEatTimestamp(nextRun),
+    totalCyclesCompleted: 0,
+    totalCyclesFailed: 0,
+    consecutiveFailures: 0,
+    lastError: null,
+    checkpointIndex: 0,
+    lastRegionScanned: null,
+    recoveryNotes: null
+  };
+}
+function createWorkspace(workspaceId, isOwnerWorkspace, email) {
+  return {
+    workspaceId,
+    isOwnerWorkspace,
+    profile: isOwnerWorkspace ? createYeabsraOwnerProfile() : createDefaultRegisteredUserProfile(workspaceId, email),
+    contacts: [],
+    notifications: [],
+    suppressionList: [],
+    recentCycles: [],
+    scheduler: createInitialSchedulerState(),
+    sources: createInitialSources(),
+    apiErrorCount: 0
+  };
+}
+var GLOBAL_ROTATION_SLOTS = [
+  {
+    region: "Europe",
+    countries: [
+      { name: "Germany", iso2: "DE", city: "Frankfurt" },
+      { name: "United Kingdom", iso2: "GB", city: "London" },
+      { name: "Netherlands", iso2: "NL", city: "Amsterdam" },
+      { name: "Ireland", iso2: "IE", city: "Dublin" }
+    ],
+    githubLocations: ["London", "Berlin", "Amsterdam", "Dublin"],
+    officialDirectorySeeds: [
+      {
+        name: "Triodos Bank",
+        country: "Netherlands",
+        city: "Zeist",
+        industry: "Sustainable Banking & Financial Services",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "potential_employers",
+        website: "https://www.triodos.com/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Oikocredit International",
+        country: "Netherlands",
+        city: "Amersfoort",
+        industry: "Microfinance & Impact Investing",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "finance_professionals",
+        website: "https://www.oikocredit.coop/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "FMO Entrepreneurial Development Bank",
+        country: "Netherlands",
+        city: "The Hague",
+        industry: "Development Banking & Finance",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "banking_executives",
+        website: "https://www.fmo.nl/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "ProCredit Holding",
+        country: "Germany",
+        city: "Frankfurt",
+        industry: "SME Commercial Banking",
+        entityType: "organization",
+        organizationSize: "plc_listed",
+        category: "potential_employers",
+        website: "https://www.procredit-holding.com/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "European Microfinance Network (EMN)",
+        country: "Belgium",
+        city: "Brussels",
+        industry: "Microfinance & Financial Inclusion Network",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "mentors",
+        website: "https://www.european-microfinance.org/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "MicroMentor (Mercy Corps)",
+        country: "United Kingdom",
+        city: "Edinburgh",
+        industry: "Global Business Mentorship & Entrepreneurship",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "mentors",
+        website: "https://www.micromentor.org/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      }
+    ]
+  },
+  {
+    region: "Middle East",
+    countries: [
+      { name: "United Arab Emirates", iso2: "AE", city: "Dubai" },
+      { name: "Qatar", iso2: "QA", city: "Doha" },
+      { name: "Saudi Arabia", iso2: "SA", city: "Riyadh" },
+      { name: "Bahrain", iso2: "BH", city: "Manama" }
+    ],
+    githubLocations: ["Dubai", "Abu Dhabi", "Riyadh", "Doha"],
+    officialDirectorySeeds: [
+      {
+        name: "Dubai International Financial Centre (DIFC)",
+        country: "United Arab Emirates",
+        city: "Dubai",
+        industry: "Banking, Fintech & Financial Services Hub",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "banking_executives",
+        website: "https://www.difc.ae/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Dubai Chamber of Commerce",
+        country: "United Arab Emirates",
+        city: "Dubai",
+        industry: "Chamber of Commerce & Business Network",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "business_owners",
+        website: "https://www.dubaichamber.com/",
+        sponsorshipHint: "unknown_sponsorship",
+        webDevHint: true
+      },
+      {
+        name: "Qatar Financial Centre (QFC)",
+        country: "Qatar",
+        city: "Doha",
+        industry: "Financial Services & International Business",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "finance_professionals",
+        website: "https://www.qfc.qa/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Bahrain FinTech Bay",
+        country: "Bahrain",
+        city: "Manama",
+        industry: "Fintech & Digital Banking Ecosystem",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "entrepreneurs",
+        website: "https://www.bahrainfintechbay.com/",
+        sponsorshipHint: "unknown_sponsorship",
+        webDevHint: true,
+        mentorshipHint: true
+      },
+      {
+        name: "AstroLabs MENA",
+        country: "United Arab Emirates",
+        city: "Dubai",
+        industry: "Startup Expansion, Tech & Business Services",
+        entityType: "organization",
+        organizationSize: "small_business",
+        category: "entrepreneurs",
+        website: "https://astrolabs.com/",
+        sponsorshipHint: "international_recruiter",
+        webDevHint: true,
+        mentorshipHint: true
+      }
+    ]
+  },
+  {
+    region: "North America",
+    countries: [
+      { name: "Canada", iso2: "CA", city: "Toronto" },
+      { name: "United States", iso2: "US", city: "New York" },
+      { name: "Canada", iso2: "CA", city: "Vancouver" }
+    ],
+    githubLocations: ["Toronto", "Vancouver", "New York", "Austin"],
+    officialDirectorySeeds: [
+      {
+        name: "Accion International",
+        country: "United States",
+        city: "Washington, D.C.",
+        industry: "Global Financial Inclusion & Banking NGO",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "ngos_and_foundations",
+        website: "https://www.accion.org/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Kiva Microfunds",
+        country: "United States",
+        city: "San Francisco",
+        industry: "Microfinance & Social Impact Lending",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "finance_professionals",
+        website: "https://www.kiva.org/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Toronto Region Immigrant Employment Council (TRIEC)",
+        country: "Canada",
+        city: "Toronto",
+        industry: "International Talent & Mentorship Network",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "mentors",
+        website: "https://triec.ca/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "Windmill Microlending",
+        country: "Canada",
+        city: "Calgary",
+        industry: "Skilled Immigrant Career Finance & Support",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "mentors",
+        website: "https://windmillmicrolending.org/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "Opportunity International",
+        country: "United States",
+        city: "Chicago",
+        industry: "Microfinance, Banking & Global Development",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "ngos_and_foundations",
+        website: "https://opportunity.org/",
+        sponsorshipHint: "international_recruiter"
+      }
+    ]
+  },
+  {
+    region: "Europe",
+    countries: [
+      { name: "Switzerland", iso2: "CH", city: "Zurich" },
+      { name: "Sweden", iso2: "SE", city: "Stockholm" },
+      { name: "Norway", iso2: "NO", city: "Oslo" },
+      { name: "Luxembourg", iso2: "LU", city: "Luxembourg" }
+    ],
+    githubLocations: ["Stockholm", "Zurich", "Oslo", "Copenhagen"],
+    officialDirectorySeeds: [
+      {
+        name: "responsAbility Investments",
+        country: "Switzerland",
+        city: "Zurich",
+        industry: "Impact Asset Management & Financial Inclusion",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "investors",
+        website: "https://www.responsability.com/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "BlueOrchard Finance",
+        country: "Switzerland",
+        city: "Zurich",
+        industry: "Impact Investing & Microfinance",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "investors",
+        website: "https://www.blueorchard.com/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "ADA Microfinance Luxembourg",
+        country: "Luxembourg",
+        city: "Luxembourg",
+        industry: "Inclusive Finance & International NGO",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "ngos_and_foundations",
+        website: "https://www.ada-microfinance.org/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Norfund (Norwegian Investment Fund)",
+        country: "Norway",
+        city: "Oslo",
+        industry: "Development Finance & Banking Investments",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "investors",
+        website: "https://www.norfund.no/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Swedfund International",
+        country: "Sweden",
+        city: "Stockholm",
+        industry: "Development Finance Institution",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "finance_professionals",
+        website: "https://www.swedfund.se/",
+        sponsorshipHint: "international_recruiter"
+      }
+    ]
+  },
+  {
+    region: "Asia",
+    countries: [
+      { name: "Singapore", iso2: "SG", city: "Singapore" },
+      { name: "Japan", iso2: "JP", city: "Tokyo" },
+      { name: "Malaysia", iso2: "MY", city: "Kuala Lumpur" }
+    ],
+    githubLocations: ["Singapore", "Tokyo", "Kuala Lumpur"],
+    officialDirectorySeeds: [
+      {
+        name: "Singapore FinTech Association",
+        country: "Singapore",
+        city: "Singapore",
+        industry: "Fintech & Digital Financial Services",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "banking_executives",
+        website: "https://singaporefintech.org/",
+        sponsorshipHint: "unknown_sponsorship",
+        webDevHint: true
+      },
+      {
+        name: "AVPN (Asian Venture Philanthropy Network)",
+        country: "Singapore",
+        city: "Singapore",
+        industry: "Philanthropy, Impact Investors & Foundations",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "philanthropists",
+        website: "https://avpn.asia/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "Asian Development Bank Institute (ADBI)",
+        country: "Japan",
+        city: "Tokyo",
+        industry: "Development Banking & Economic Policy",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "finance_professionals",
+        website: "https://www.adb.org/adbi",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Impact Investment Exchange (IIX)",
+        country: "Singapore",
+        city: "Singapore",
+        industry: "Impact Finance & Sustainable Markets",
+        entityType: "organization",
+        organizationSize: "small_business",
+        category: "investors",
+        website: "https://iixglobal.com/",
+        sponsorshipHint: "international_recruiter"
+      }
+    ]
+  },
+  {
+    region: "Africa",
+    countries: [
+      { name: "Kenya", iso2: "KE", city: "Nairobi" },
+      { name: "South Africa", iso2: "ZA", city: "Johannesburg" },
+      { name: "Rwanda", iso2: "RW", city: "Kigali" },
+      { name: "Mauritius", iso2: "MU", city: "Port Louis" }
+    ],
+    githubLocations: ["Nairobi", "Cape Town", "Kigali", "Johannesburg"],
+    officialDirectorySeeds: [
+      {
+        name: "Trade and Development Bank Group (TDB)",
+        country: "Kenya",
+        city: "Nairobi",
+        industry: "Regional Development & Commercial Banking",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "potential_employers",
+        website: "https://www.tdbgroup.org/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Afreximbank",
+        country: "Egypt",
+        city: "Cairo",
+        industry: "Pan-African Trade & Export-Import Banking",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "potential_employers",
+        website: "https://www.afreximbank.com/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Kigali International Financial Centre",
+        country: "Rwanda",
+        city: "Kigali",
+        industry: "International Financial Services & Fintech Hub",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "banking_executives",
+        website: "https://kifc.rw/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "Tony Elumelu Foundation",
+        country: "Nigeria",
+        city: "Lagos",
+        industry: "Entrepreneurship, Mentorship & Philanthropy",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "philanthropists",
+        website: "https://www.tonyelumelufoundation.org/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "FSD Africa",
+        country: "Kenya",
+        city: "Nairobi",
+        industry: "Financial Sector Deepening & Capital Markets",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "finance_professionals",
+        website: "https://fsdafrica.org/",
+        sponsorshipHint: "international_recruiter"
+      }
+    ]
+  },
+  {
+    region: "Australia & Oceania",
+    countries: [
+      { name: "Australia", iso2: "AU", city: "Sydney" },
+      { name: "New Zealand", iso2: "NZ", city: "Auckland" }
+    ],
+    githubLocations: ["Sydney", "Melbourne", "Auckland"],
+    officialDirectorySeeds: [
+      {
+        name: "Good Return",
+        country: "Australia",
+        city: "Sydney",
+        industry: "Responsible Finance & Impact Investment NGO",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "ngos_and_foundations",
+        website: "https://goodreturn.org.au/",
+        sponsorshipHint: "international_recruiter"
+      },
+      {
+        name: "FinTech Australia",
+        country: "Australia",
+        city: "Sydney",
+        industry: "Fintech & Financial Innovation Network",
+        entityType: "organization",
+        organizationSize: "small_business",
+        category: "entrepreneurs",
+        website: "https://www.fintechaustralia.org.au/",
+        sponsorshipHint: "unknown_sponsorship",
+        webDevHint: true
+      },
+      {
+        name: "FinTechNZ",
+        country: "New Zealand",
+        city: "Auckland",
+        industry: "Financial Technology & Digital Banking Network",
+        entityType: "organization",
+        organizationSize: "small_business",
+        category: "entrepreneurs",
+        website: "https://fintechnz.org.nz/",
+        sponsorshipHint: "unknown_sponsorship",
+        webDevHint: true
+      }
+    ]
+  },
+  {
+    region: "South America",
+    countries: [
+      { name: "Brazil", iso2: "BR", city: "Sao Paulo" },
+      { name: "Chile", iso2: "CL", city: "Santiago" },
+      { name: "Colombia", iso2: "CO", city: "Bogota" }
+    ],
+    githubLocations: ["Sao Paulo", "Santiago", "Bogota"],
+    officialDirectorySeeds: [
+      {
+        name: "Start-Up Chile",
+        country: "Chile",
+        city: "Santiago",
+        industry: "Global Startup Accelerator & Entrepreneur Visa Hub",
+        entityType: "organization",
+        organizationSize: "medium_enterprise",
+        category: "entrepreneurs",
+        website: "https://startupchile.org/",
+        sponsorshipHint: "international_recruiter",
+        webDevHint: true,
+        mentorshipHint: true
+      },
+      {
+        name: "Endeavor Global",
+        country: "Brazil",
+        city: "Sao Paulo",
+        industry: "High-Impact Entrepreneurship & Mentorship Network",
+        entityType: "organization",
+        organizationSize: "ngo_foundation",
+        category: "mentors",
+        website: "https://endeavor.org/",
+        sponsorshipHint: "mentorship_networking",
+        mentorshipHint: true
+      },
+      {
+        name: "CAF Development Bank of Latin America",
+        country: "Colombia",
+        city: "Bogota",
+        industry: "Multilateral Development Banking",
+        entityType: "organization",
+        organizationSize: "large_international",
+        category: "banking_executives",
+        website: "https://www.caf.com/",
+        sponsorshipHint: "international_recruiter"
+      }
+    ]
+  }
+];
+var ISO2_COUNTRY_TO_REGION = {
+  DE: { name: "Germany", region: "Europe" },
+  GB: { name: "United Kingdom", region: "Europe" },
+  UK: { name: "United Kingdom", region: "Europe" },
+  NL: { name: "Netherlands", region: "Europe" },
+  IE: { name: "Ireland", region: "Europe" },
+  CH: { name: "Switzerland", region: "Europe" },
+  SE: { name: "Sweden", region: "Europe" },
+  NO: { name: "Norway", region: "Europe" },
+  LU: { name: "Luxembourg", region: "Europe" },
+  FR: { name: "France", region: "Europe" },
+  BE: { name: "Belgium", region: "Europe" },
+  DK: { name: "Denmark", region: "Europe" },
+  FI: { name: "Finland", region: "Europe" },
+  AT: { name: "Austria", region: "Europe" },
+  ES: { name: "Spain", region: "Europe" },
+  IT: { name: "Italy", region: "Europe" },
+  AE: { name: "United Arab Emirates", region: "Middle East" },
+  QA: { name: "Qatar", region: "Middle East" },
+  SA: { name: "Saudi Arabia", region: "Middle East" },
+  BH: { name: "Bahrain", region: "Middle East" },
+  OM: { name: "Oman", region: "Middle East" },
+  KW: { name: "Kuwait", region: "Middle East" },
+  JO: { name: "Jordan", region: "Middle East" },
+  CA: { name: "Canada", region: "North America" },
+  US: { name: "United States", region: "North America" },
+  SG: { name: "Singapore", region: "Asia" },
+  JP: { name: "Japan", region: "Asia" },
+  MY: { name: "Malaysia", region: "Asia" },
+  KR: { name: "South Korea", region: "Asia" },
+  IN: { name: "India", region: "Asia" },
+  KE: { name: "Kenya", region: "Africa" },
+  ZA: { name: "South Africa", region: "Africa" },
+  RW: { name: "Rwanda", region: "Africa" },
+  MU: { name: "Mauritius", region: "Africa" },
+  EG: { name: "Egypt", region: "Africa" },
+  NG: { name: "Nigeria", region: "Africa" },
+  ET: { name: "Ethiopia", region: "Africa" },
+  AU: { name: "Australia", region: "Australia & Oceania" },
+  NZ: { name: "New Zealand", region: "Australia & Oceania" },
+  BR: { name: "Brazil", region: "South America" },
+  CL: { name: "Chile", region: "South America" },
+  CO: { name: "Colombia", region: "South America" }
+};
+function inferRegionFromCountry(country, fallback = "Europe") {
+  const c = (country || "").toLowerCase();
+  if (!c) return fallback;
+  if (/germany|united kingdom|uk|britain|netherlands|ireland|switzerland|sweden|norway|finland|denmark|luxembourg|belgium|france|austria|spain|italy|poland|portugal|czech|europe/.test(c)) {
+    return "Europe";
+  }
+  if (/united arab emirates|uae|dubai|abu dhabi|qatar|saudi|bahrain|oman|kuwait|jordan|israel|middle east/.test(c)) {
+    return "Middle East";
+  }
+  if (/canada|united states|usa|america|mexico/.test(c)) {
+    return "North America";
+  }
+  if (/singapore|japan|malaysia|korea|india|china|hong kong|thailand|vietnam|indonesia|philippines|asia/.test(c)) {
+    return "Asia";
+  }
+  if (/australia|new zealand|oceania/.test(c)) {
+    return "Australia & Oceania";
+  }
+  if (/brazil|chile|colombia|argentina|peru|uruguay|ecuador|south america/.test(c)) {
+    return "South America";
+  }
+  if (/kenya|south africa|rwanda|mauritius|egypt|nigeria|ghana|ethiopia|morocco|tanzania|uganda|africa/.test(c)) {
+    return "Africa";
+  }
+  return fallback;
+}
+function buildCanonicalDedupKey(input) {
+  const email = (input.publicEmail || "").trim().toLowerCase();
+  if (email && isValidPublicEmailSyntax(email)) {
+    return `email:${email}`;
+  }
+  const li = inspectLinkedInUrl(input.linkedInUrl).validUrl;
+  if (li) {
+    return `li:${li.toLowerCase().replace(/\/+$/, "")}`;
+  }
+  const waDigits = normalizePublishedWhatsAppDigits(input.whatsAppBusinessNumber);
+  if (waDigits) {
+    return `wa:${waDigits}`;
+  }
+  const domain = extractDomainFromUrl(input.officialWebsite);
+  const nameSlug = (input.fullName || input.companyName || "").toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 48);
+  if (domain) {
+    return `dom:${domain}|${nameSlug}`;
+  }
+  return `name:${nameSlug || crypto9.randomUUID()}`;
+}
+async function safePublicFetch2(rawUrl, options) {
+  let currentUrl = rawUrl;
+  const maxRedirects = 3;
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const check = await validatePublicCrawlUrl(currentUrl);
+    if (!check.ok || !check.normalizedUrl) {
+      return {
+        ok: false,
+        status: 0,
+        finalUrl: currentUrl,
+        body: "",
+        error: check.reason || "Blocked by SSRF security check"
+      };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options?.timeoutMs || FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(check.normalizedUrl, {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": USER_AGENT3,
+          Accept: options?.accept || "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+          ...options?.headers || {}
+        }
+      });
+      clearTimeout(timer);
+      if (resp.status >= 300 && resp.status < 400) {
+        const loc = resp.headers.get("location");
+        if (loc) {
+          currentUrl = new URL(loc, check.normalizedUrl).toString();
+          continue;
+        }
+      }
+      const text = await resp.text();
+      const body = text.slice(0, options?.maxBytes || MAX_HTML_BYTES);
+      return {
+        ok: resp.status >= 200 && resp.status < 400,
+        status: resp.status,
+        finalUrl: check.normalizedUrl,
+        body
+      };
+    } catch (err) {
+      clearTimeout(timer);
+      return {
+        ok: false,
+        status: 0,
+        finalUrl: currentUrl,
+        body: "",
+        error: err?.name === "AbortError" ? "Request timed out" : String(err?.message || "Network error")
+      };
+    }
+  }
+  return {
+    ok: false,
+    status: 0,
+    finalUrl: currentUrl,
+    body: "",
+    error: "Too many redirects"
+  };
+}
+function extractPublicContactsFromHtml(html, pageUrl) {
+  const officialDomain = extractDomainFromUrl(pageUrl);
+  const emailsFound = [];
+  const mailtoRegex = /href\s*=\s*["']mailto:([^"'?#\s]+)["']/gi;
+  let m;
+  while ((m = mailtoRegex.exec(html)) !== null) {
+    const candidate = decodeURIComponent(m[1]).trim().toLowerCase();
+    if (isValidPublicEmailSyntax(candidate)) {
+      emailsFound.push(candidate);
+    }
+  }
+  const visibleText = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  const emailRegex = /\b([a-z0-9._%+-]{2,64}@[a-z0-9.-]{2,120}\.[a-z]{2,16})\b/gi;
+  while ((m = emailRegex.exec(visibleText)) !== null) {
+    const candidate = m[1].trim().toLowerCase();
+    if (isValidPublicEmailSyntax(candidate)) {
+      emailsFound.push(candidate);
+    }
+  }
+  const filteredEmails = Array.from(new Set(emailsFound)).filter((em) => {
+    const [local, dom] = em.split("@");
+    if (!local || !dom) return false;
+    if (DISPOSABLE_OR_SUSPICIOUS_DOMAINS.has(dom)) return false;
+    if (/\.(png|jpg|jpeg|svg|webp|gif|css|js)$/i.test(em)) return false;
+    if (IGNORED_EMAIL_PREFIXES.some((p) => local === p || local.startsWith(`${p}.`) || local.startsWith(`${p}-`))) {
+      return false;
+    }
+    return true;
+  });
+  const domainMatchingEmail = filteredEmails.find((em) => {
+    const dom = extractDomainFromEmail(em);
+    return officialDomain && (dom === officialDomain || dom.endsWith(`.${officialDomain}`) || officialDomain.endsWith(`.${dom}`));
+  });
+  const chosenEmail = domainMatchingEmail || filteredEmails[0];
+  let linkedInUrl;
+  const liMatch = html.match(/https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in|school)\/[a-zA-Z0-9\-_%]+/i);
+  if (liMatch) {
+    const checked = inspectLinkedInUrl(liMatch[0]);
+    if (checked.validUrl) linkedInUrl = checked.validUrl;
+  }
+  let instagramUrl;
+  const igMatch = html.match(/https?:\/\/(?:www\.)?instagram\.com\/(?!p\/|reel\/|explore\/|accounts\/)[a-zA-Z0-9._]{2,40}\/?/i);
+  if (igMatch) {
+    const checked = inspectInstagramUrl(igMatch[0]);
+    if (checked.validUrl) instagramUrl = checked.validUrl;
+  }
+  let whatsAppBusinessNumber;
+  let whatsAppBusinessUrl;
+  const waMatch = html.match(/https?:\/\/(?:wa\.me\/|api\.whatsapp\.com\/send\?phone=)\+?\d[\d\s\-]{7,18}/i);
+  if (waMatch) {
+    const digits = normalizePublishedWhatsAppDigits(waMatch[0]);
+    if (digits) {
+      whatsAppBusinessNumber = `+${digits}`;
+      whatsAppBusinessUrl = buildWhatsAppChatUrl(whatsAppBusinessNumber) || void 0;
+    }
+  }
+  let publicBusinessPhone;
+  const telMatch = html.match(/href\s*=\s*["']tel:(\+?[0-9\s\-().]{7,24})["']/i);
+  if (telMatch) {
+    const cleaned = telMatch[1].trim();
+    const digitCount = cleaned.replace(/[^\d]/g, "").length;
+    if (digitCount >= 8 && digitCount <= 16) {
+      publicBusinessPhone = cleaned;
+    }
+  }
+  let contactPageUrl;
+  const hrefRegex = /href\s*=\s*["']([^"'#]+)["']/gi;
+  while ((m = hrefRegex.exec(html)) !== null) {
+    const href = m[1].trim();
+    if (/(?:^|\/)(?:contact|contact-us|contactus|get-in-touch|connect|about\/contact|careers)(?:\/|$|\?)/i.test(href)) {
+      try {
+        const resolved = new URL(href, pageUrl).toString();
+        const resDom = extractDomainFromUrl(resolved);
+        if (resDom && officialDomain && (resDom === officialDomain || resDom.endsWith(`.${officialDomain}`))) {
+          contactPageUrl = resolved;
+          break;
+        }
+      } catch {
+      }
+    }
+  }
+  const lower = visibleText.toLowerCase();
+  let sponsorshipTierDetected;
+  let sponsorshipNote;
+  if (/visa sponsorship available|we sponsor work visas|work permit sponsorship provided|employer-sponsored visa/i.test(lower)) {
+    sponsorshipTierDetected = "confirmed_sponsorship";
+    sponsorshipNote = "Official webpage explicitly references visa or work-permit sponsorship.";
+  } else if (/sponsored international|previously sponsored|tier 2 sponsor|licensed sponsor|blue card/i.test(lower)) {
+    sponsorshipTierDetected = "previous_sponsorship_evidence";
+    sponsorshipNote = "Official webpage references licensed sponsor status or international work-permit pathways.";
+  } else if (/international applicants|global careers|worldwide remote|relocation support|diverse global team|careers/i.test(lower)) {
+    sponsorshipTierDetected = "international_recruiter";
+    sponsorshipNote = "Official webpage indicates international hiring or global team operations (sponsorship not independently confirmed).";
+  }
+  const mentorshipDetected = /\b(mentor|mentorship|mentoring|fellowship|career coaching|advisory network)\b/i.test(lower);
+  const internationalRecruiterDetected = sponsorshipTierDetected === "confirmed_sponsorship" || sponsorshipTierDetected === "previous_sponsorship_evidence" || sponsorshipTierDetected === "international_recruiter";
+  return {
+    publicEmail: chosenEmail,
+    emailMatchesOfficialDomain: Boolean(domainMatchingEmail),
+    linkedInUrl,
+    instagramUrl,
+    whatsAppBusinessNumber,
+    whatsAppBusinessUrl,
+    publicBusinessPhone,
+    contactPageUrl,
+    sponsorshipTierDetected,
+    sponsorshipNote,
+    mentorshipDetected,
+    internationalRecruiterDetected
+  };
+}
+async function verifyLiveContact(contact) {
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const emailDomain = extractDomainFromEmail(contact.publicEmail);
+  if (emailDomain && DISPOSABLE_OR_SUSPICIOUS_DOMAINS.has(emailDomain)) {
+    return {
+      verificationStatus: "invalid_or_outdated_contact",
+      verificationNotes: `Blocked suspicious or disposable email domain (${emailDomain}).`,
+      emailMatchesOfficialDomain: false,
+      enrichedFields: {},
+      lastVerifiedAt: nowIso
+    };
+  }
+  const targetWebsite = sanitizeExternalHttpUrl(contact.officialWebsite || contact.sourceUrl);
+  if (!targetWebsite) {
+    return {
+      verificationStatus: contact.publicEmail ? "public_contact_unverified" : "unverified_contact",
+      verificationNotes: "No valid official website URL available for live verification.",
+      emailMatchesOfficialDomain: false,
+      enrichedFields: {},
+      lastVerifiedAt: nowIso
+    };
+  }
+  const homeFetch = await safePublicFetch2(targetWebsite);
+  if (!homeFetch.ok) {
+    return {
+      verificationStatus: homeFetch.status >= 400 || homeFetch.error?.includes("SSRF") || homeFetch.error?.includes("Blocked") ? "invalid_or_outdated_contact" : "public_contact_unverified",
+      verificationNotes: homeFetch.error ? `Live verification check failed: ${homeFetch.error}` : `Official website returned HTTP ${homeFetch.status}.`,
+      httpStatus: homeFetch.status || void 0,
+      emailMatchesOfficialDomain: false,
+      enrichedFields: {},
+      lastVerifiedAt: nowIso
+    };
+  }
+  let extracted = extractPublicContactsFromHtml(homeFetch.body, homeFetch.finalUrl);
+  if (!extracted.publicEmail && extracted.contactPageUrl && extracted.contactPageUrl !== homeFetch.finalUrl) {
+    const contactFetch = await safePublicFetch2(extracted.contactPageUrl, { timeoutMs: 5500 });
+    if (contactFetch.ok) {
+      const contactSignals = extractPublicContactsFromHtml(contactFetch.body, contactFetch.finalUrl);
+      extracted = {
+        ...extracted,
+        publicEmail: contactSignals.publicEmail || extracted.publicEmail,
+        emailMatchesOfficialDomain: contactSignals.emailMatchesOfficialDomain || extracted.emailMatchesOfficialDomain,
+        linkedInUrl: extracted.linkedInUrl || contactSignals.linkedInUrl,
+        instagramUrl: extracted.instagramUrl || contactSignals.instagramUrl,
+        whatsAppBusinessNumber: extracted.whatsAppBusinessNumber || contactSignals.whatsAppBusinessNumber,
+        whatsAppBusinessUrl: extracted.whatsAppBusinessUrl || contactSignals.whatsAppBusinessUrl,
+        publicBusinessPhone: extracted.publicBusinessPhone || contactSignals.publicBusinessPhone,
+        sponsorshipTierDetected: contactSignals.sponsorshipTierDetected || extracted.sponsorshipTierDetected,
+        sponsorshipNote: contactSignals.sponsorshipNote || extracted.sponsorshipNote,
+        mentorshipDetected: extracted.mentorshipDetected || contactSignals.mentorshipDetected,
+        internationalRecruiterDetected: extracted.internationalRecruiterDetected || contactSignals.internationalRecruiterDetected
+      };
+    }
+  }
+  const finalEmail = contact.publicEmail || extracted.publicEmail;
+  const officialDomain = extractDomainFromUrl(homeFetch.finalUrl);
+  const finalEmailDom = extractDomainFromEmail(finalEmail);
+  const domainMatches = Boolean(
+    finalEmail && officialDomain && finalEmailDom && (finalEmailDom === officialDomain || finalEmailDom.endsWith(`.${officialDomain}`) || officialDomain.endsWith(`.${finalEmailDom}`))
+  );
+  let status = "verified_organization";
+  let notes = `Live official website verified (HTTP ${homeFetch.status} on ${officialDomain}).`;
+  if (finalEmail && domainMatches) {
+    status = "verified_public_professional_contact";
+    notes = `Live official website verified (HTTP ${homeFetch.status}) and public email matches official domain (${officialDomain}).`;
+  } else if (finalEmail && !domainMatches) {
+    status = "public_contact_unverified";
+    notes = `Official website verified (HTTP ${homeFetch.status}), but public email (${finalEmailDom}) uses a different domain than ${officialDomain}.`;
+  }
+  const enrichedFields = {
+    officialWebsite: homeFetch.finalUrl,
+    publicEmail: finalEmail,
+    linkedInUrl: contact.linkedInUrl || extracted.linkedInUrl,
+    instagramUrl: contact.instagramUrl || extracted.instagramUrl,
+    whatsAppBusinessNumber: contact.whatsAppBusinessNumber || extracted.whatsAppBusinessNumber,
+    whatsAppBusinessUrl: contact.whatsAppBusinessUrl || extracted.whatsAppBusinessUrl,
+    publicBusinessPhone: contact.publicBusinessPhone || extracted.publicBusinessPhone,
+    contactPageUrl: contact.contactPageUrl || extracted.contactPageUrl,
+    mentorshipAvailable: contact.mentorshipAvailable || extracted.mentorshipDetected,
+    internationalRecruiterSignal: contact.internationalRecruiterSignal || extracted.internationalRecruiterDetected
+  };
+  if (extracted.sponsorshipTierDetected && (contact.sponsorshipTier === "unknown_sponsorship" || extracted.sponsorshipTierDetected === "confirmed_sponsorship")) {
+    enrichedFields.sponsorshipTier = extracted.sponsorshipTierDetected;
+    if (extracted.sponsorshipNote) {
+      enrichedFields.sponsorshipEvidenceNote = extracted.sponsorshipNote;
+    }
+  }
+  return {
+    verificationStatus: status,
+    verificationNotes: notes,
+    httpStatus: homeFetch.status,
+    emailMatchesOfficialDomain: domainMatches,
+    enrichedFields,
+    lastVerifiedAt: nowIso
+  };
+}
+async function discoverFromOfficialSeeds(slot, countryFilter, limit = 4) {
+  const candidates = [];
+  const errors = [];
+  const seeds = slot.officialDirectorySeeds.filter(
+    (s) => countryFilter ? s.country.toLowerCase().includes(countryFilter.toLowerCase()) : true
+  );
+  const chosen = (seeds.length > 0 ? seeds : slot.officialDirectorySeeds).slice(0, limit);
+  for (const seed of chosen) {
+    candidates.push({
+      entityType: seed.entityType,
+      fullName: seed.name,
+      companyName: seed.name,
+      positionOrRole: seed.entityType === "organization" ? "Official Organization Contact" : "Leadership",
+      industry: seed.industry,
+      organizationSize: seed.organizationSize,
+      country: seed.country,
+      city: seed.city,
+      region: inferRegionFromCountry(seed.country, slot.region),
+      officialWebsite: seed.website,
+      sourceUrl: seed.website,
+      sourceName: "Official Organization Website",
+      sourceId: "official_org_websites",
+      sponsorshipTier: seed.sponsorshipHint,
+      sponsorshipEvidenceNote: seed.sponsorshipHint === "mentorship_networking" ? "Mentorship, networking, or career guidance organization (not an automatic visa sponsor)." : seed.sponsorshipHint === "international_recruiter" ? "Organization operates internationally; verify individual role sponsorship on official careers page." : "Sponsorship policy not independently confirmed.",
+      mentorshipAvailable: Boolean(seed.mentorshipHint),
+      websiteDevProspect: Boolean(seed.webDevHint),
+      internationalRecruiterSignal: seed.sponsorshipHint === "international_recruiter",
+      category: seed.category,
+      tags: [seed.industry, seed.country, slot.region]
+    });
+  }
+  return { candidates, errors };
+}
+async function discoverFromReliefWebApi(slot, offset) {
+  const candidates = [];
+  const errors = [];
+  const url = `https://api.reliefweb.int/v1/sources?appname=hopelandjobs&limit=10&offset=${offset * 5 % 80}&preset=latest&fields[include][]=name&fields[include][]=homepage&fields[include][]=country&fields[include][]=type&fields[include][]=url`;
+  const resp = await safePublicFetch2(url, { accept: "application/json", timeoutMs: 7e3 });
+  if (!resp.ok) {
+    errors.push(`ReliefWeb API returned status ${resp.status}: ${resp.error || "unavailable"}`);
+    return { candidates, errors };
+  }
+  try {
+    const parsed = JSON.parse(resp.body);
+    const items = Array.isArray(parsed?.data) ? parsed.data : [];
+    for (const item of items) {
+      const fields = item?.fields || {};
+      const name = String(fields.name || "").trim();
+      const homepage = sanitizeExternalHttpUrl(fields.homepage);
+      if (!name || !homepage) continue;
+      const countryObj = Array.isArray(fields.country) ? fields.country[0] : fields.country;
+      const countryName = String(countryObj?.name || slot.countries[0]?.name || "International").trim();
+      const typeName = String(fields.type?.name || "International Organization");
+      const region = inferRegionFromCountry(countryName, slot.region);
+      candidates.push({
+        entityType: "organization",
+        fullName: name,
+        companyName: name,
+        positionOrRole: `${typeName} \u2014 Official Headquarters`,
+        industry: "International NGO, Humanitarian & Development Finance",
+        organizationSize: "ngo_foundation",
+        country: countryName,
+        region,
+        officialWebsite: homepage,
+        sourceUrl: sanitizeExternalHttpUrl(fields.url) || homepage,
+        sourceName: "ReliefWeb Official Public API",
+        sourceId: "reliefweb_public_api",
+        sponsorshipTier: "international_recruiter",
+        sponsorshipEvidenceNote: "Listed international NGO / organization in ReliefWeb public directory; visa sponsorship depends on specific international vacancy.",
+        mentorshipAvailable: false,
+        websiteDevProspect: false,
+        internationalRecruiterSignal: true,
+        category: "ngos_and_foundations",
+        tags: ["NGO", "International Organization", typeName, countryName]
+      });
+      if (candidates.length >= 3) break;
+    }
+  } catch (err) {
+    errors.push(`ReliefWeb API JSON parse failed: ${err?.message || "unknown error"}`);
+  }
+  return { candidates, errors };
+}
+async function discoverFromGleifApi(slot, pageSeed) {
+  const candidates = [];
+  const errors = [];
+  const targetCountry = slot.countries[pageSeed % slot.countries.length] || slot.countries[0];
+  if (!targetCountry) return { candidates, errors };
+  const searchTerms = ["Bank", "Finance", "Capital", "Microfinance", "Fintech"];
+  const term = searchTerms[pageSeed % searchTerms.length];
+  const url = `https://api.gleif.org/api/v1/lei-records?filter[entity.legalAddress.country]=${encodeURIComponent(
+    targetCountry.iso2
+  )}&filter[entity.legalName]=${encodeURIComponent(term)}&page[size]=6&page[number]=1`;
+  const resp = await safePublicFetch2(url, { accept: "application/vnd.api+json,application/json", timeoutMs: 7e3 });
+  if (!resp.ok) {
+    errors.push(`GLEIF LEI API (${targetCountry.iso2}) returned status ${resp.status}: ${resp.error || "unavailable"}`);
+    return { candidates, errors };
+  }
+  try {
+    const parsed = JSON.parse(resp.body);
+    const items = Array.isArray(parsed?.data) ? parsed.data : [];
+    for (const item of items) {
+      const attrs = item?.attributes || {};
+      const entity = attrs?.entity || {};
+      const legalName = String(entity?.legalName?.name || "").trim();
+      const status = String(entity?.status || "").toUpperCase();
+      if (!legalName || status !== "ACTIVE") continue;
+      const lei = String(item?.id || "").trim();
+      const city = String(entity?.legalAddress?.city || targetCountry.city || "").trim();
+      const countryMeta = ISO2_COUNTRY_TO_REGION[targetCountry.iso2] || {
+        name: targetCountry.name,
+        region: slot.region
+      };
+      const isPlc = /\b(plc|ag|nv|se|inc\.|corp\.|sa|ltd)\b/i.test(legalName);
+      const isBank = /\b(bank|banking|credit|microfinance)\b/i.test(legalName);
+      candidates.push({
+        entityType: "organization",
+        fullName: legalName,
+        companyName: legalName,
+        positionOrRole: "Registered Legal Financial Institution (GLEIF LEI Active)",
+        industry: isBank ? "Banking & Financial Services" : "Finance & Capital Services",
+        organizationSize: isPlc ? "plc_listed" : "medium_enterprise",
+        country: countryMeta.name,
+        city: city || void 0,
+        region: countryMeta.region,
+        officialWebsite: void 0,
+        sourceUrl: lei ? `https://search.gleif.org/#/record/${encodeURIComponent(lei)}` : "https://www.gleif.org/",
+        sourceName: "GLEIF Official Global LEI Registry",
+        sourceId: "gleif_lei_registry",
+        sponsorshipTier: "unknown_sponsorship",
+        sponsorshipEvidenceNote: "Verified active legal entity in GLEIF Global LEI Registry; visa sponsorship policy is unknown until checked directly.",
+        mentorshipAvailable: false,
+        websiteDevProspect: false,
+        internationalRecruiterSignal: isBank,
+        category: isBank ? "potential_employers" : "finance_professionals",
+        tags: ["GLEIF LEI Verified", term, countryMeta.name]
+      });
+      if (candidates.length >= 2) break;
+    }
+  } catch (err) {
+    errors.push(`GLEIF LEI API parse error: ${err?.message || "unknown error"}`);
+  }
+  return { candidates, errors };
+}
+async function discoverFromGitHubPublicProfiles(slot, cycleSeed, customQuery) {
+  const candidates = [];
+  const errors = [];
+  const loc = slot.githubLocations[cycleSeed % slot.githubLocations.length] || slot.countries[0]?.city || "London";
+  const topicList = ["founder", "fintech", "finance", "ceo", "agency", "mentor"];
+  const topic = (customQuery || topicList[cycleSeed % topicList.length]).replace(/[^\w\s-]/g, "").trim();
+  const q = encodeURIComponent(`${topic} location:"${loc}"`);
+  const searchUrl = `https://api.github.com/search/users?q=${q}&per_page=5&page=1`;
+  const ghHeaders = {
+    Accept: "application/vnd.github+json"
+  };
+  if (process.env.GITHUB_TOKEN?.trim()) {
+    ghHeaders.Authorization = `Bearer ${process.env.GITHUB_TOKEN.trim()}`;
+  }
+  const searchResp = await safePublicFetch2(searchUrl, {
+    accept: "application/vnd.github+json",
+    timeoutMs: 6500,
+    headers: ghHeaders
+  });
+  if (!searchResp.ok) {
+    errors.push(`GitHub Public API returned HTTP ${searchResp.status}: ${searchResp.error || "rate limited"}`);
+    return { candidates, errors };
+  }
+  try {
+    const parsed = JSON.parse(searchResp.body);
+    const items = Array.isArray(parsed?.items) ? parsed.items : [];
+    for (const userStub of items.slice(0, 3)) {
+      const login = String(userStub?.login || "").trim();
+      if (!login) continue;
+      const profileResp = await safePublicFetch2(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+        accept: "application/vnd.github+json",
+        timeoutMs: 5500,
+        headers: ghHeaders
+      });
+      if (!profileResp.ok) continue;
+      const u = JSON.parse(profileResp.body);
+      const displayName = String(u?.name || u?.login || "").trim();
+      const rawBlog = String(u?.blog || "").trim();
+      const normalizedBlog = rawBlog ? sanitizeExternalHttpUrl(rawBlog.startsWith("http") ? rawBlog : `https://${rawBlog}`) : null;
+      const publicEmail = isValidPublicEmailSyntax(u?.email) ? String(u.email).trim().toLowerCase() : void 0;
+      const bio = String(u?.bio || "").trim();
+      const company = String(u?.company || "").replace(/^@/, "").trim() || displayName;
+      const isOrg = String(u?.type || "").toLowerCase() === "organization";
+      if (!normalizedBlog && !publicEmail) continue;
+      const countryName = slot.countries[0]?.name || "International";
+      const isFounderOrOwner = /\b(founder|ceo|owner|director|cto|co-founder|entrepreneur|agency)\b/i.test(
+        `${bio} ${company}`
+      );
+      const isFinance = /\b(bank|finance|fintech|accounting|payment|wealth|invest)\b/i.test(`${bio} ${company}`);
+      const isMentor = /\b(mentor|advisor|coach|community|open source)\b/i.test(bio);
+      candidates.push({
+        entityType: isOrg ? "organization" : "individual",
+        fullName: displayName,
+        companyName: company,
+        positionOrRole: bio.slice(0, 95) || (isOrg ? "Technology / Business Organization" : "Founder / Technology Professional"),
+        industry: isFinance ? "Fintech & Financial Technology" : "Technology, Web & Digital Business",
+        organizationSize: isOrg ? "small_business" : "solo_founder",
+        country: countryName,
+        city: String(u?.location || loc).slice(0, 60),
+        region: slot.region,
+        officialWebsite: normalizedBlog || void 0,
+        publicEmail,
+        sourceUrl: sanitizeExternalHttpUrl(u?.html_url) || `https://github.com/${login}`,
+        sourceName: "GitHub Public Profiles API",
+        sourceId: "github_public_founders",
+        sponsorshipTier: isMentor ? "mentorship_networking" : "unknown_sponsorship",
+        sponsorshipEvidenceNote: isMentor ? "Public technology leader/mentor profile; suitable for networking, mentorship, or web collaboration." : "Public founder/organization profile; visa sponsorship policy is unknown.",
+        mentorshipAvailable: isMentor,
+        websiteDevProspect: true,
+        internationalRecruiterSignal: false,
+        category: isFinance ? "finance_professionals" : isMentor ? "mentors" : isFounderOrOwner ? "entrepreneurs" : "website_development_clients",
+        tags: ["Public Profile", isFounderOrOwner ? "Founder/Leader" : "Tech", loc]
+      });
+    }
+  } catch (err) {
+    errors.push(`GitHub Public API parse error: ${err?.message || "unknown error"}`);
+  }
+  return { candidates, errors };
+}
+function computeRealDatabaseStats(ws) {
+  const nowMs = Date.now();
+  const oneHourAgoMs = nowMs - HOURLY_INTERVAL_MS;
+  const contacts = ws.contacts;
+  const newContactsThisHour = contacts.filter((c) => {
+    const t = Date.parse(c.discoveredAt);
+    return !Number.isNaN(t) && t >= oneHourAgoMs;
+  }).length;
+  const uniqueCompanies = new Set(
+    contacts.map((c) => (c.companyName || "").trim().toLowerCase()).filter(Boolean)
+  ).size;
+  const verifiedContactsFound = contacts.filter(
+    (c) => c.verificationStatus === "verified_organization" || c.verificationStatus === "verified_public_professional_contact"
+  ).length;
+  const potentialEmployersFound = contacts.filter(
+    (c) => c.category === "potential_employers" || c.category === "banking_executives" || c.category === "international_recruitment_professionals" || c.internationalRecruiterSignal
+  ).length;
+  const potentialMentorsFound = contacts.filter(
+    (c) => c.mentorshipAvailable || c.category === "mentors"
+  ).length;
+  const contactsWithPublicEmail = contacts.filter((c) => Boolean(c.publicEmail)).length;
+  const contactsWithPublicWhatsApp = contacts.filter(
+    (c) => Boolean(c.whatsAppBusinessUrl || c.whatsAppBusinessNumber)
+  ).length;
+  const contactsWithLinkedIn = contacts.filter((c) => Boolean(c.linkedInUrl)).length;
+  const contactsWithInstagram = contacts.filter((c) => Boolean(c.instagramUrl)).length;
+  const potentialSponsorshipOpportunities = contacts.filter(
+    (c) => c.sponsorshipTier === "confirmed_sponsorship" || c.sponsorshipTier === "previous_sponsorship_evidence" || c.sponsorshipTier === "international_recruiter"
+  ).length;
+  const websiteDevelopmentProspects = contacts.filter(
+    (c) => c.websiteDevProspect || c.category === "website_development_clients"
+  ).length;
+  const outreachSentCount = contacts.reduce(
+    (sum, c) => sum + (Array.isArray(c.outreachHistory) ? c.outreachHistory.length : 0),
+    0
+  );
+  const upcomingFollowUpsCount = contacts.filter((c) => Boolean(c.nextFollowUpDate)).length;
+  return {
+    automationStatus: ws.scheduler.status,
+    lastSuccessfulSearchAt: ws.scheduler.lastSuccessfulRunAt,
+    lastSuccessfulSearchEat: ws.scheduler.lastSuccessfulRunEat,
+    nextScheduledSearchAt: ws.scheduler.nextScheduledRunAt,
+    nextScheduledSearchEat: ws.scheduler.nextScheduledRunEat,
+    totalSearchCyclesCompleted: ws.scheduler.totalCyclesCompleted,
+    newContactsThisHour,
+    totalContacts: contacts.length,
+    newCompaniesDiscovered: uniqueCompanies,
+    verifiedContactsFound,
+    potentialEmployersFound,
+    potentialMentorsFound,
+    contactsWithPublicEmail,
+    contactsWithPublicWhatsApp,
+    contactsWithLinkedIn,
+    contactsWithInstagram,
+    potentialSponsorshipOpportunities,
+    websiteDevelopmentProspects,
+    searchFailures: ws.scheduler.totalCyclesFailed,
+    apiErrors: ws.apiErrorCount,
+    outreachSentCount,
+    upcomingFollowUpsCount
+  };
+}
+function registerGlobalReachRoutes(deps) {
+  const {
+    app,
+    runtimeBaseDir,
+    isVercel,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification,
+    getAiClient
+  } = deps;
+  const dbPath = path9.join(runtimeBaseDir, "data", "global_reach_db.json");
+  const backupPath = `${dbPath}.bak`;
+  function loadDb() {
+    ensureRuntimeDataDir();
+    let loaded = null;
+    try {
+      if (fs4.existsSync(dbPath)) {
+        const raw = fs4.readFileSync(dbPath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed.workspaces) {
+          loaded = parsed;
+        }
+      }
+    } catch {
+      try {
+        if (fs4.existsSync(backupPath)) {
+          const bakRaw = fs4.readFileSync(backupPath, "utf8");
+          const bakParsed = JSON.parse(bakRaw);
+          if (bakParsed && typeof bakParsed === "object" && bakParsed.workspaces) {
+            loaded = bakParsed;
+          }
+        }
+      } catch {
+      }
+    }
+    if (!loaded) {
+      loaded = loadJsonFileSafe(dbPath, {
+        version: 1,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        workspaces: {}
+      });
+    }
+    if (!loaded.workspaces) loaded.workspaces = {};
+    if (!loaded.workspaces[OWNER_WORKSPACE_ID]) {
+      loaded.workspaces[OWNER_WORKSPACE_ID] = createWorkspace(
+        OWNER_WORKSPACE_ID,
+        true,
+        "yeabsra45@gmail.com"
+      );
+    }
+    for (const ws of Object.values(loaded.workspaces)) {
+      const freshSources = createInitialSources();
+      const existingMap = new Map((ws.sources || []).map((s) => [s.id, s]));
+      ws.sources = freshSources.map((fsItem) => {
+        const prev = existingMap.get(fsItem.id);
+        return prev ? {
+          ...fsItem,
+          lastRunAt: prev.lastRunAt,
+          lastError: prev.lastError,
+          contactsDiscoveredTotal: prev.contactsDiscoveredTotal || 0
+        } : fsItem;
+      });
+      if (!ws.scheduler) ws.scheduler = createInitialSchedulerState();
+      if (!Array.isArray(ws.contacts)) ws.contacts = [];
+      if (!Array.isArray(ws.notifications)) ws.notifications = [];
+      if (!Array.isArray(ws.suppressionList)) ws.suppressionList = [];
+      if (!Array.isArray(ws.recentCycles)) ws.recentCycles = [];
+    }
+    return loaded;
+  }
+  function saveDb(db) {
+    ensureRuntimeDataDir();
+    db.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      if (fs4.existsSync(dbPath)) {
+        fs4.copyFileSync(dbPath, backupPath);
+      }
+    } catch {
+    }
+    writeJsonFileAtomic(dbPath, db);
+  }
+  function resolveAuthenticatedWorkspace(req) {
+    if (isPersistentOwnerRequest(req)) {
+      return {
+        workspaceId: OWNER_WORKSPACE_ID,
+        isOwner: true,
+        actorEmail: getRequesterEmail(req) || "yeabsra45@gmail.com"
+      };
+    }
+    const uid = (getRequesterUid(req) || "").trim();
+    const email = (getRequesterEmail(req) || "").trim().toLowerCase();
+    if (!uid && !email) {
+      return null;
+    }
+    const safeKey = (uid || email).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+    if (!safeKey) return null;
+    return {
+      workspaceId: `user_${safeKey}`,
+      isOwner: false,
+      actorEmail: email || uid
+    };
+  }
+  function getOrCreateWorkspace(db, identity) {
+    if (!db.workspaces[identity.workspaceId]) {
+      db.workspaces[identity.workspaceId] = createWorkspace(
+        identity.workspaceId,
+        identity.isOwner,
+        identity.actorEmail
+      );
+      saveDb(db);
+    }
+    return db.workspaces[identity.workspaceId];
+  }
+  function pushWorkspaceNotification(ws, notif) {
+    const entry = {
+      id: `grn_${Date.now()}_${crypto9.randomBytes(3).toString("hex")}`,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      read: false,
+      ...notif
+    };
+    ws.notifications.unshift(entry);
+    if (ws.notifications.length > MAX_NOTIFICATIONS2) {
+      ws.notifications = ws.notifications.slice(0, MAX_NOTIFICATIONS2);
+    }
+    if (ws.isOwnerWorkspace && pushAdminNotification) {
+      pushAdminNotification({
+        type: `global_reach_${notif.type}`,
+        title: `Global Reach: ${notif.title}`,
+        message: notif.message,
+        severity: notif.type === "search_failure" || notif.type === "automation_stopped" ? "warning" : "info"
+      });
+    }
+  }
+  function isSuppressed(ws, email, website) {
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const dom = extractDomainFromEmail(cleanEmail) || extractDomainFromUrl(website);
+    return ws.suppressionList.some((s) => {
+      if (s.email && cleanEmail && s.email.toLowerCase() === cleanEmail) return true;
+      if (s.domain && dom && s.domain.toLowerCase() === dom) return true;
+      return false;
+    });
+  }
+  async function runDiscoveryCycleForWorkspace(workspaceId, options) {
+    const db = loadDb();
+    const ws = db.workspaces[workspaceId];
+    if (!ws) {
+      throw new Error(`Workspace ${workspaceId} not found`);
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    if (options.trigger !== "manual" && (!ws.scheduler.enabled || ws.scheduler.paused)) {
+      const skipped = {
+        id: `grc_${Date.now()}`,
+        trigger: options.trigger,
+        startedAt: nowIso,
+        finishedAt: nowIso,
+        durationMs: 0,
+        status: "skipped_paused",
+        regionScanned: ws.scheduler.lastRegionScanned || "Europe",
+        countriesScanned: [],
+        sourcesChecked: 0,
+        newContactsAdded: 0,
+        duplicatesPrevented: 0,
+        verifiedCount: 0,
+        errors: []
+      };
+      return { cycleLog: skipped, newContacts: [] };
+    }
+    if (ws.scheduler.isRunningNow) {
+      const lockMs = ws.scheduler.lockAcquiredAt ? Date.parse(ws.scheduler.lockAcquiredAt) : 0;
+      if (!Number.isNaN(lockMs) && Date.now() - lockMs < STALE_LOCK_MS) {
+        const skipped = {
+          id: `grc_${Date.now()}`,
+          trigger: options.trigger,
+          startedAt: nowIso,
+          finishedAt: nowIso,
+          durationMs: 0,
+          status: "skipped_locked",
+          regionScanned: ws.scheduler.lastRegionScanned || "Europe",
+          countriesScanned: [],
+          sourcesChecked: 0,
+          newContactsAdded: 0,
+          duplicatesPrevented: 0,
+          verifiedCount: 0,
+          errors: ["Previous discovery cycle still in progress (overlap lock active)."]
+        };
+        return { cycleLog: skipped, newContacts: [] };
+      }
+      ws.scheduler.recoveryNotes = `Recovered stale lock from ${ws.scheduler.lockAcquiredAt} at ${nowIso}.`;
+    }
+    const startMs = Date.now();
+    ws.scheduler.isRunningNow = true;
+    ws.scheduler.lockAcquiredAt = nowIso;
+    ws.scheduler.lastAttemptAt = nowIso;
+    ws.scheduler.status = "running";
+    saveDb(db);
+    let slot = GLOBAL_ROTATION_SLOTS[ws.scheduler.checkpointIndex % GLOBAL_ROTATION_SLOTS.length];
+    if (options.regionFilter) {
+      const matchedSlot = GLOBAL_ROTATION_SLOTS.find((s) => s.region === options.regionFilter);
+      if (matchedSlot) slot = matchedSlot;
+    }
+    const cycleErrors = [];
+    const newContacts = [];
+    let duplicatesPrevented = 0;
+    let verifiedCount = 0;
+    let sourcesChecked = 0;
+    try {
+      const [officialRes, reliefRes, gleifRes, githubRes] = await Promise.all([
+        discoverFromOfficialSeeds(slot, options.countryFilter, 3),
+        discoverFromReliefWebApi(slot, ws.scheduler.checkpointIndex),
+        discoverFromGleifApi(slot, ws.scheduler.checkpointIndex),
+        discoverFromGitHubPublicProfiles(slot, ws.scheduler.checkpointIndex, options.customQuery)
+      ]);
+      sourcesChecked = 4;
+      const sourceResults = [
+        { id: "official_org_websites", ...officialRes },
+        { id: "reliefweb_public_api", ...reliefRes },
+        { id: "gleif_lei_registry", ...gleifRes },
+        { id: "github_public_founders", ...githubRes }
+      ];
+      const allCandidates = [];
+      for (const sr of sourceResults) {
+        const srcRec = ws.sources.find((s) => s.id === sr.id);
+        if (srcRec) {
+          srcRec.lastRunAt = (/* @__PURE__ */ new Date()).toISOString();
+          if (sr.errors.length > 0) {
+            srcRec.lastError = sr.errors[0];
+          } else {
+            srcRec.lastError = void 0;
+          }
+        }
+        if (sr.errors.length > 0) {
+          cycleErrors.push(...sr.errors);
+          ws.apiErrorCount += sr.errors.length;
+        }
+        allCandidates.push(...sr.candidates);
+      }
+      const existingDedupKeys = new Set(ws.contacts.map((c) => c.dedupKey));
+      for (const raw of allCandidates.slice(0, 10)) {
+        if (options.countryFilter && !raw.country.toLowerCase().includes(options.countryFilter.toLowerCase())) {
+          continue;
+        }
+        const provisionalKey = buildCanonicalDedupKey({
+          publicEmail: raw.publicEmail,
+          linkedInUrl: raw.linkedInUrl,
+          whatsAppBusinessNumber: raw.whatsAppBusinessNumber,
+          officialWebsite: raw.officialWebsite,
+          fullName: raw.fullName,
+          companyName: raw.companyName
+        });
+        if (existingDedupKeys.has(provisionalKey)) {
+          duplicatesPrevented += 1;
+          continue;
+        }
+        const discoveredIso = (/* @__PURE__ */ new Date()).toISOString();
+        let contact = {
+          id: `grc_${Date.now()}_${crypto9.randomBytes(3).toString("hex")}`,
+          ownerUserId: workspaceId,
+          entityType: raw.entityType,
+          fullName: raw.fullName,
+          companyName: raw.companyName,
+          positionOrRole: raw.positionOrRole,
+          industry: raw.industry,
+          organizationSize: raw.organizationSize,
+          country: raw.country,
+          city: raw.city,
+          region: raw.region,
+          officialWebsite: raw.officialWebsite,
+          publicEmail: raw.publicEmail,
+          publicBusinessPhone: raw.publicBusinessPhone,
+          whatsAppBusinessNumber: raw.whatsAppBusinessNumber,
+          whatsAppBusinessUrl: raw.whatsAppBusinessUrl,
+          linkedInUrl: raw.linkedInUrl,
+          instagramUrl: raw.instagramUrl,
+          contactPageUrl: raw.contactPageUrl,
+          sourceUrl: raw.sourceUrl,
+          sourceName: raw.sourceName,
+          discoveredAt: discoveredIso,
+          verificationStatus: raw.officialWebsite ? "public_contact_unverified" : raw.sourceId === "gleif_lei_registry" ? "verified_organization" : "unverified_contact",
+          verificationNotes: raw.sourceId === "gleif_lei_registry" ? "Active registered legal entity confirmed via GLEIF Global LEI public registry." : "Discovered from public source; pending live website verification.",
+          emailMatchesOfficialDomain: false,
+          sponsorshipTier: raw.sponsorshipTier,
+          sponsorshipEvidenceNote: raw.sponsorshipEvidenceNote,
+          mentorshipAvailable: raw.mentorshipAvailable,
+          websiteDevProspect: raw.websiteDevProspect,
+          internationalRecruiterSignal: raw.internationalRecruiterSignal,
+          category: raw.category,
+          relevanceScore: 50,
+          relevanceReasons: [],
+          isImportant: false,
+          isSavedByUser: false,
+          personalNotes: "",
+          outreachHistory: [],
+          tags: raw.tags,
+          dedupKey: provisionalKey,
+          updatedAt: discoveredIso
+        };
+        if (contact.officialWebsite) {
+          const verification = await verifyLiveContact(contact);
+          contact = {
+            ...contact,
+            ...verification.enrichedFields,
+            verificationStatus: verification.verificationStatus,
+            verificationNotes: verification.verificationNotes,
+            httpStatus: verification.httpStatus,
+            emailMatchesOfficialDomain: verification.emailMatchesOfficialDomain,
+            lastVerifiedAt: verification.lastVerifiedAt
+          };
+          contact.dedupKey = buildCanonicalDedupKey(contact);
+        } else if (raw.sourceId === "gleif_lei_registry") {
+          contact.lastVerifiedAt = discoveredIso;
+        }
+        if (existingDedupKeys.has(contact.dedupKey)) {
+          duplicatesPrevented += 1;
+          continue;
+        }
+        if (contact.verificationStatus === "invalid_or_outdated_contact") {
+          continue;
+        }
+        if (isSuppressed(ws, contact.publicEmail, contact.officialWebsite)) {
+          continue;
+        }
+        const scored = scoreGlobalReachContact(contact, ws.profile);
+        contact.relevanceScore = scored.score;
+        contact.relevanceReasons = scored.reasons;
+        existingDedupKeys.add(contact.dedupKey);
+        ws.contacts.unshift(contact);
+        newContacts.push(contact);
+        if (contact.verificationStatus === "verified_organization" || contact.verificationStatus === "verified_public_professional_contact") {
+          verifiedCount += 1;
+        }
+        const srcRec = ws.sources.find((s) => s.id === raw.sourceId);
+        if (srcRec) {
+          srcRec.contactsDiscoveredTotal = (srcRec.contactsDiscoveredTotal || 0) + 1;
+        }
+        if (contact.sponsorshipTier === "confirmed_sponsorship" || contact.sponsorshipTier === "previous_sponsorship_evidence") {
+          pushWorkspaceNotification(ws, {
+            type: "sponsorship_evidence",
+            title: `Sponsorship signal: ${contact.companyName}`,
+            message: `${contact.companyName} (${contact.country}) shows sponsorship evidence \u2014 score ${contact.relevanceScore}/100.`,
+            contactId: contact.id
+          });
+        } else if (contact.relevanceScore >= 75) {
+          const isBanking = /bank|finance|microfinance|fintech|accounting/i.test(contact.industry);
+          pushWorkspaceNotification(ws, {
+            type: isBanking ? "banking_finance_opportunity" : contact.mentorshipAvailable ? "mentor_found" : contact.websiteDevProspect ? "web_dev_prospect" : "high_relevance_contact",
+            title: `High-relevance contact (${contact.relevanceScore}/100): ${contact.fullName}`,
+            message: `Discovered in ${contact.country} via ${contact.sourceName}. ${contact.relevanceReasons[0] || ""}`,
+            contactId: contact.id
+          });
+        }
+      }
+      if (ws.contacts.length > MAX_CONTACTS_PER_WORKSPACE) {
+        ws.contacts.sort((a, b) => {
+          const pinA = a.isImportant || a.isSavedByUser ? 1 : 0;
+          const pinB = b.isImportant || b.isSavedByUser ? 1 : 0;
+          if (pinA !== pinB) return pinB - pinA;
+          return Date.parse(b.discoveredAt) - Date.parse(a.discoveredAt);
+        });
+        ws.contacts = ws.contacts.slice(0, MAX_CONTACTS_PER_WORKSPACE);
+      }
+      const finishedIso = (/* @__PURE__ */ new Date()).toISOString();
+      const nextScheduledIso = new Date(Date.now() + HOURLY_INTERVAL_MS).toISOString();
+      ws.scheduler.checkpointIndex = (ws.scheduler.checkpointIndex + 1) % GLOBAL_ROTATION_SLOTS.length;
+      ws.scheduler.lastRegionScanned = slot.region;
+      ws.scheduler.lastSuccessfulRunAt = finishedIso;
+      ws.scheduler.lastSuccessfulRunEat = formatEatTimestamp(finishedIso);
+      ws.scheduler.nextScheduledRunAt = ws.scheduler.enabled && !ws.scheduler.paused ? nextScheduledIso : null;
+      ws.scheduler.nextScheduledRunEat = ws.scheduler.nextScheduledRunAt ? formatEatTimestamp(ws.scheduler.nextScheduledRunAt) : null;
+      ws.scheduler.totalCyclesCompleted += 1;
+      ws.scheduler.consecutiveFailures = 0;
+      ws.scheduler.lastError = cycleErrors.length > 0 ? cycleErrors[0] : null;
+      ws.scheduler.isRunningNow = false;
+      ws.scheduler.lockAcquiredAt = null;
+      ws.scheduler.status = !ws.scheduler.enabled ? "disabled" : ws.scheduler.paused ? "paused" : "active_waiting";
+      const cycleLog = {
+        id: `grc_${Date.now()}_${crypto9.randomBytes(2).toString("hex")}`,
+        trigger: options.trigger,
+        startedAt: nowIso,
+        finishedAt: finishedIso,
+        durationMs: Date.now() - startMs,
+        status: cycleErrors.length > 0 && newContacts.length === 0 ? "partial" : "completed",
+        regionScanned: slot.region,
+        countriesScanned: slot.countries.map((c) => c.name),
+        sourcesChecked,
+        newContactsAdded: newContacts.length,
+        duplicatesPrevented,
+        verifiedCount,
+        errors: cycleErrors.slice(0, 8)
+      };
+      ws.recentCycles.unshift(cycleLog);
+      if (ws.recentCycles.length > MAX_CYCLES_HISTORY) {
+        ws.recentCycles = ws.recentCycles.slice(0, MAX_CYCLES_HISTORY);
+      }
+      saveDb(db);
+      return { cycleLog, newContacts };
+    } catch (err) {
+      const finishedIso = (/* @__PURE__ */ new Date()).toISOString();
+      const errMsg = String(err?.message || "Unexpected discovery cycle failure");
+      ws.scheduler.isRunningNow = false;
+      ws.scheduler.lockAcquiredAt = null;
+      ws.scheduler.totalCyclesFailed += 1;
+      ws.scheduler.consecutiveFailures += 1;
+      ws.scheduler.lastError = errMsg;
+      ws.scheduler.status = "error";
+      ws.apiErrorCount += 1;
+      pushWorkspaceNotification(ws, {
+        type: "search_failure",
+        title: "Hourly Global Reach search cycle failed",
+        message: `Discovery cycle encountered an error: ${errMsg}. Automatic retry scheduled on next cycle.`
+      });
+      const cycleLog = {
+        id: `grc_${Date.now()}_${crypto9.randomBytes(2).toString("hex")}`,
+        trigger: options.trigger,
+        startedAt: nowIso,
+        finishedAt: finishedIso,
+        durationMs: Date.now() - startMs,
+        status: "failed",
+        regionScanned: slot.region,
+        countriesScanned: slot.countries.map((c) => c.name),
+        sourcesChecked,
+        newContactsAdded: 0,
+        duplicatesPrevented: 0,
+        verifiedCount: 0,
+        errors: [errMsg]
+      };
+      ws.recentCycles.unshift(cycleLog);
+      if (ws.recentCycles.length > MAX_CYCLES_HISTORY) {
+        ws.recentCycles = ws.recentCycles.slice(0, MAX_CYCLES_HISTORY);
+      }
+      saveDb(db);
+      return { cycleLog, newContacts: [] };
+    }
+  }
+  app.get("/api/global-reach/dashboard", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required to access Global Reach." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const qSearch = String(req.query.search || "").trim().toLowerCase();
+    const qCountry = String(req.query.country || "all").trim();
+    const qRegion = String(req.query.region || "all").trim();
+    const qIndustry = String(req.query.industry || "all").trim();
+    const qEntityType = String(req.query.entityType || "all").trim();
+    const qCategory = String(req.query.category || "all").trim();
+    const qChannel = String(req.query.channel || "all").trim();
+    const qVerification = String(req.query.verificationStatus || "all").trim();
+    const qSponsorship = String(req.query.sponsorshipTier || "all").trim();
+    const qImportantOnly = req.query.importantOnly === "true";
+    const filteredContacts = ws.contacts.filter((c) => {
+      if (qCountry !== "all" && c.country.toLowerCase() !== qCountry.toLowerCase()) return false;
+      if (qRegion !== "all" && c.region !== qRegion) return false;
+      if (qIndustry !== "all" && c.industry.toLowerCase() !== qIndustry.toLowerCase()) return false;
+      if (qEntityType !== "all" && c.entityType !== qEntityType) return false;
+      if (qCategory !== "all" && c.category !== qCategory) return false;
+      if (qVerification !== "all" && c.verificationStatus !== qVerification) return false;
+      if (qSponsorship !== "all" && c.sponsorshipTier !== qSponsorship) return false;
+      if (qImportantOnly && !c.isImportant) return false;
+      if (qChannel !== "all") {
+        if (qChannel === "gmail" && !c.publicEmail) return false;
+        if (qChannel === "whatsapp" && !(c.whatsAppBusinessUrl || c.whatsAppBusinessNumber)) return false;
+        if (qChannel === "linkedin" && !c.linkedInUrl) return false;
+        if (qChannel === "instagram" && !c.instagramUrl) return false;
+        if (qChannel === "contact_page" && !c.contactPageUrl) return false;
+        if (qChannel === "phone" && !c.publicBusinessPhone) return false;
+      }
+      if (qSearch) {
+        const hay = [
+          c.fullName,
+          c.companyName,
+          c.positionOrRole,
+          c.industry,
+          c.country,
+          c.city,
+          c.publicEmail,
+          c.personalNotes,
+          ...c.tags || []
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(qSearch)) return false;
+      }
+      return true;
+    });
+    const availableCountries = Array.from(new Set(ws.contacts.map((c) => c.country).filter(Boolean))).sort();
+    const availableIndustries = Array.from(new Set(ws.contacts.map((c) => c.industry).filter(Boolean))).sort();
+    const payload = {
+      success: true,
+      workspaceId: ws.workspaceId,
+      isOwnerWorkspace: ws.isOwnerWorkspace,
+      profile: ws.profile,
+      contacts: filteredContacts,
+      stats: computeRealDatabaseStats(ws),
+      scheduler: ws.scheduler,
+      sources: ws.sources,
+      recentCycles: ws.recentCycles.slice(0, 25),
+      notifications: ws.notifications.slice(0, 40),
+      unreadNotificationsCount: ws.notifications.filter((n) => !n.read).length,
+      suppressionList: ws.suppressionList,
+      availableCountries,
+      availableIndustries,
+      aiProviderConfigured: Boolean(process.env.GEMINI_API_KEY?.trim())
+    };
+    return res.json(payload);
+  });
+  app.put("/api/global-reach/profile", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const body = req.body || {};
+    const cleanArray = (val, max = 20) => Array.isArray(val) ? val.map((v) => String(v || "").trim()).filter(Boolean).slice(0, max) : [];
+    ws.profile = {
+      ...ws.profile,
+      fullName: typeof body.fullName === "string" ? body.fullName.trim().slice(0, 120) : ws.profile.fullName,
+      nationality: typeof body.nationality === "string" ? body.nationality.trim().slice(0, 80) : ws.profile.nationality,
+      currentCountry: typeof body.currentCountry === "string" ? body.currentCountry.trim().slice(0, 80) : ws.profile.currentCountry,
+      email: typeof body.email === "string" ? body.email.trim().slice(0, 140) : ws.profile.email,
+      educationDegree: typeof body.educationDegree === "string" ? body.educationDegree.trim().slice(0, 140) : ws.profile.educationDegree,
+      educationInstitution: typeof body.educationInstitution === "string" ? body.educationInstitution.trim().slice(0, 140) : ws.profile.educationInstitution,
+      graduationYear: typeof body.graduationYear === "string" ? body.graduationYear.trim().slice(0, 10) : ws.profile.graduationYear,
+      totalExperienceYears: typeof body.totalExperienceYears === "number" && Number.isFinite(body.totalExperienceYears) ? Math.max(0, Math.min(60, Math.round(body.totalExperienceYears))) : ws.profile.totalExperienceYears,
+      managementExperienceYears: typeof body.managementExperienceYears === "number" && Number.isFinite(body.managementExperienceYears) ? Math.max(0, Math.min(50, Math.round(body.managementExperienceYears))) : ws.profile.managementExperienceYears,
+      currentOrRecentRole: typeof body.currentOrRecentRole === "string" ? body.currentOrRecentRole.trim().slice(0, 120) : ws.profile.currentOrRecentRole,
+      coreExperienceAreas: Array.isArray(body.coreExperienceAreas) ? cleanArray(body.coreExperienceAreas, 25) : ws.profile.coreExperienceAreas,
+      additionalCapabilities: Array.isArray(body.additionalCapabilities) ? cleanArray(body.additionalCapabilities, 20) : ws.profile.additionalCapabilities,
+      primaryObjectives: Array.isArray(body.primaryObjectives) ? cleanArray(body.primaryObjectives, 15) : ws.profile.primaryObjectives,
+      personalStorySummary: typeof body.personalStorySummary === "string" ? body.personalStorySummary.trim().slice(0, 1200) : ws.profile.personalStorySummary,
+      targetRegions: Array.isArray(body.targetRegions) ? cleanArray(body.targetRegions, 7) : ws.profile.targetRegions,
+      targetIndustries: Array.isArray(body.targetIndustries) ? cleanArray(body.targetIndustries, 20) : ws.profile.targetIndustries,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    for (const c of ws.contacts) {
+      const scored = scoreGlobalReachContact(c, ws.profile);
+      c.relevanceScore = scored.score;
+      c.relevanceReasons = scored.reasons;
+    }
+    saveDb(db);
+    return res.json({ success: true, profile: ws.profile });
+  });
+  app.post("/api/global-reach/discover-now", async (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    getOrCreateWorkspace(db, identity);
+    const countryFilter = typeof req.body?.country === "string" ? req.body.country.trim().slice(0, 80) : void 0;
+    const regionFilter = typeof req.body?.region === "string" && req.body.region !== "all" ? req.body.region.trim() : void 0;
+    const customQuery = typeof req.body?.query === "string" ? req.body.query.trim().slice(0, 80) : void 0;
+    const result = await runDiscoveryCycleForWorkspace(identity.workspaceId, {
+      trigger: "manual",
+      countryFilter: countryFilter || void 0,
+      regionFilter,
+      customQuery: customQuery || void 0
+    });
+    const refreshed = loadDb().workspaces[identity.workspaceId];
+    appendAuditLog({
+      actorEmail: identity.actorEmail,
+      action: "global_reach_manual_discovery",
+      entityType: "global_reach",
+      details: `Added ${result.cycleLog.newContactsAdded} contacts, prevented ${result.cycleLog.duplicatesPrevented} duplicates (${result.cycleLog.regionScanned}).`
+    });
+    return res.json({
+      success: true,
+      cycleLog: result.cycleLog,
+      newContacts: result.newContacts,
+      stats: computeRealDatabaseStats(refreshed),
+      scheduler: refreshed.scheduler
+    });
+  });
+  app.post("/api/global-reach/contacts", async (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const body = req.body || {};
+    const fullName = String(body.fullName || "").trim().slice(0, 140);
+    const companyName = String(body.companyName || fullName).trim().slice(0, 160);
+    if (!fullName) {
+      return res.status(400).json({ success: false, error: "Contact name or organization name is required." });
+    }
+    const officialWebsite = sanitizeExternalHttpUrl(body.officialWebsite) || void 0;
+    const publicEmail = isValidPublicEmailSyntax(body.publicEmail) ? String(body.publicEmail).trim().toLowerCase() : void 0;
+    const linkedInUrl = inspectLinkedInUrl(body.linkedInUrl).validUrl || void 0;
+    const instagramUrl = inspectInstagramUrl(body.instagramUrl).validUrl || void 0;
+    const waDigits = normalizePublishedWhatsAppDigits(body.whatsAppBusinessNumber || body.whatsAppBusinessUrl);
+    const whatsAppBusinessNumber = waDigits ? `+${waDigits}` : void 0;
+    const whatsAppBusinessUrl = whatsAppBusinessNumber ? buildWhatsAppChatUrl(whatsAppBusinessNumber) || void 0 : void 0;
+    const dedupKey = buildCanonicalDedupKey({
+      publicEmail,
+      linkedInUrl,
+      whatsAppBusinessNumber,
+      officialWebsite,
+      fullName,
+      companyName
+    });
+    if (ws.contacts.some((c) => c.dedupKey === dedupKey)) {
+      return res.status(409).json({
+        success: false,
+        error: "Duplicate contact already exists in your Global Reach directory."
+      });
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const country = String(body.country || "International").trim().slice(0, 80);
+    const contact = {
+      id: `grc_${Date.now()}_${crypto9.randomBytes(3).toString("hex")}`,
+      ownerUserId: identity.workspaceId,
+      entityType: body.entityType === "individual" ? "individual" : "organization",
+      fullName,
+      companyName,
+      positionOrRole: String(body.positionOrRole || "Professional Contact").trim().slice(0, 120),
+      industry: String(body.industry || "General Business").trim().slice(0, 100),
+      organizationSize: body.organizationSize || "unknown",
+      country,
+      city: typeof body.city === "string" ? body.city.trim().slice(0, 80) : void 0,
+      region: body.region || inferRegionFromCountry(country),
+      officialWebsite,
+      publicEmail,
+      publicBusinessPhone: typeof body.publicBusinessPhone === "string" ? body.publicBusinessPhone.trim().slice(0, 40) : void 0,
+      whatsAppBusinessNumber,
+      whatsAppBusinessUrl,
+      linkedInUrl,
+      instagramUrl,
+      contactPageUrl: sanitizeExternalHttpUrl(body.contactPageUrl) || void 0,
+      sourceUrl: sanitizeExternalHttpUrl(body.sourceUrl) || officialWebsite || "https://www.hopelandjobs.tech",
+      sourceName: String(body.sourceName || "Manual User Entry").trim().slice(0, 100),
+      discoveredAt: nowIso,
+      verificationStatus: "unverified_contact",
+      verificationNotes: "Manually added by user; run live verification to confirm official website/domain.",
+      emailMatchesOfficialDomain: Boolean(
+        publicEmail && officialWebsite && extractDomainFromEmail(publicEmail) === extractDomainFromUrl(officialWebsite)
+      ),
+      sponsorshipTier: body.sponsorshipTier || "unknown_sponsorship",
+      sponsorshipEvidenceNote: String(body.sponsorshipEvidenceNote || "Sponsorship policy not independently verified.").slice(0, 240),
+      mentorshipAvailable: Boolean(body.mentorshipAvailable),
+      websiteDevProspect: Boolean(body.websiteDevProspect),
+      internationalRecruiterSignal: Boolean(body.internationalRecruiterSignal),
+      category: body.category || "other_professional_connections",
+      relevanceScore: 50,
+      relevanceReasons: [],
+      isImportant: Boolean(body.isImportant),
+      isSavedByUser: true,
+      personalNotes: String(body.personalNotes || "").trim().slice(0, 2e3),
+      nextFollowUpDate: typeof body.nextFollowUpDate === "string" ? body.nextFollowUpDate.trim() || void 0 : void 0,
+      outreachHistory: [],
+      tags: Array.isArray(body.tags) ? body.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 12) : [],
+      dedupKey,
+      updatedAt: nowIso
+    };
+    const scored = scoreGlobalReachContact(contact, ws.profile);
+    contact.relevanceScore = scored.score;
+    contact.relevanceReasons = scored.reasons;
+    ws.contacts.unshift(contact);
+    saveDb(db);
+    return res.status(201).json({ success: true, contact, stats: computeRealDatabaseStats(ws) });
+  });
+  app.patch("/api/global-reach/contacts/:id", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const contact = ws.contacts.find((c) => c.id === req.params.id);
+    if (!contact) {
+      return res.status(404).json({ success: false, error: "Contact not found." });
+    }
+    const body = req.body || {};
+    if (typeof body.fullName === "string" && body.fullName.trim()) contact.fullName = body.fullName.trim().slice(0, 140);
+    if (typeof body.companyName === "string" && body.companyName.trim()) contact.companyName = body.companyName.trim().slice(0, 160);
+    if (typeof body.positionOrRole === "string") contact.positionOrRole = body.positionOrRole.trim().slice(0, 120);
+    if (typeof body.industry === "string") contact.industry = body.industry.trim().slice(0, 100);
+    if (typeof body.country === "string" && body.country.trim()) contact.country = body.country.trim().slice(0, 80);
+    if (typeof body.city === "string") contact.city = body.city.trim().slice(0, 80) || void 0;
+    if (typeof body.category === "string") contact.category = body.category;
+    if (typeof body.sponsorshipTier === "string") contact.sponsorshipTier = body.sponsorshipTier;
+    if (typeof body.personalNotes === "string") contact.personalNotes = body.personalNotes.slice(0, 2e3);
+    if (typeof body.isImportant === "boolean") contact.isImportant = body.isImportant;
+    if (typeof body.isSavedByUser === "boolean") contact.isSavedByUser = body.isSavedByUser;
+    if (typeof body.mentorshipAvailable === "boolean") contact.mentorshipAvailable = body.mentorshipAvailable;
+    if (typeof body.websiteDevProspect === "boolean") contact.websiteDevProspect = body.websiteDevProspect;
+    if (body.nextFollowUpDate === null || body.nextFollowUpDate === "") {
+      contact.nextFollowUpDate = void 0;
+    } else if (typeof body.nextFollowUpDate === "string") {
+      contact.nextFollowUpDate = body.nextFollowUpDate.trim().slice(0, 40);
+    }
+    if (typeof body.publicEmail === "string") {
+      contact.publicEmail = isValidPublicEmailSyntax(body.publicEmail) ? body.publicEmail.trim().toLowerCase() : void 0;
+    }
+    if (typeof body.linkedInUrl === "string") {
+      contact.linkedInUrl = inspectLinkedInUrl(body.linkedInUrl).validUrl || void 0;
+    }
+    if (typeof body.instagramUrl === "string") {
+      contact.instagramUrl = inspectInstagramUrl(body.instagramUrl).validUrl || void 0;
+    }
+    if (typeof body.whatsAppBusinessNumber === "string") {
+      const digits = normalizePublishedWhatsAppDigits(body.whatsAppBusinessNumber);
+      contact.whatsAppBusinessNumber = digits ? `+${digits}` : void 0;
+      contact.whatsAppBusinessUrl = contact.whatsAppBusinessNumber ? buildWhatsAppChatUrl(contact.whatsAppBusinessNumber) || void 0 : void 0;
+    }
+    const scored = scoreGlobalReachContact(contact, ws.profile);
+    contact.relevanceScore = scored.score;
+    contact.relevanceReasons = scored.reasons;
+    contact.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveDb(db);
+    return res.json({ success: true, contact, stats: computeRealDatabaseStats(ws) });
+  });
+  app.delete("/api/global-reach/contacts/:id", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const before = ws.contacts.length;
+    ws.contacts = ws.contacts.filter((c) => c.id !== req.params.id);
+    if (ws.contacts.length === before) {
+      return res.status(404).json({ success: false, error: "Contact not found." });
+    }
+    saveDb(db);
+    return res.json({ success: true, stats: computeRealDatabaseStats(ws) });
+  });
+  app.post("/api/global-reach/contacts/:id/verify", async (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const idx = ws.contacts.findIndex((c) => c.id === req.params.id);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, error: "Contact not found." });
+    }
+    const verification = await verifyLiveContact(ws.contacts[idx]);
+    const updated = {
+      ...ws.contacts[idx],
+      ...verification.enrichedFields,
+      verificationStatus: verification.verificationStatus,
+      verificationNotes: verification.verificationNotes,
+      httpStatus: verification.httpStatus,
+      emailMatchesOfficialDomain: verification.emailMatchesOfficialDomain,
+      lastVerifiedAt: verification.lastVerifiedAt,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const scored = scoreGlobalReachContact(updated, ws.profile);
+    updated.relevanceScore = scored.score;
+    updated.relevanceReasons = scored.reasons;
+    ws.contacts[idx] = updated;
+    saveDb(db);
+    return res.json({ success: true, contact: updated, stats: computeRealDatabaseStats(ws) });
+  });
+  app.post("/api/global-reach/ai/draft", async (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const contactIds = Array.isArray(req.body?.contactIds) ? req.body.contactIds.slice(0, 10).map((v) => String(v)) : req.body?.contactId ? [String(req.body.contactId)] : [];
+    const approach = req.body?.approach || "employment_request";
+    const mode = req.body?.mode === "manual_template" ? "manual_template" : "ai";
+    if (contactIds.length === 0) {
+      return res.status(400).json({ success: false, error: "At least one contactId is required." });
+    }
+    const targets = contactIds.map((id) => ws.contacts.find((c) => c.id === id)).filter((c) => Boolean(c));
+    if (targets.length === 0) {
+      return res.status(404).json({ success: false, error: "Selected contact(s) not found in your workspace." });
+    }
+    if (mode === "manual_template") {
+      const drafts2 = targets.map((c) => buildEditableOutreachTemplate(c, ws.profile, approach));
+      return res.json({ success: true, drafts: drafts2 });
+    }
+    const ai = getAiClient();
+    if (!ai) {
+      return res.status(503).json({
+        success: false,
+        error: 'GEMINI_API_KEY is not configured on the server. Use "Editable Template" mode or configure GEMINI_API_KEY in server environment variables.'
+      });
+    }
+    const drafts = [];
+    const approachLabel = GLOBAL_REACH_APPROACH_LABELS[approach] || approach;
+    try {
+      for (const contact of targets) {
+        const prompt = `You are drafting a respectful, concise, natural, human-sounding professional outreach message on behalf of the sender below.
+
+STRICT ETHICS & ACCURACY RULES:
+- Represent the sender's REAL background accurately. NEVER invent credentials, degrees, employers, or past work.
+- NEVER sound desperate, spammy, robotic, or entitled. NEVER demand money or favors.
+- NEVER falsely claim the recipient is wealthy, definitely willing to help, or confirmed to sponsor visas unless explicitly stated in the contact's verified info.
+- Tailor specifically to this recipient's industry, country, and role so messages are never identical templates.
+- Keep the email body under 210 words, crisp and dignified.
+
+SENDER PROFILE:
+- Name: ${ws.profile.fullName || "Professional Applicant"}
+- Nationality / Country: ${ws.profile.nationality || "International"} / ${ws.profile.currentCountry || "N/A"}
+- Education: ${ws.profile.educationDegree || "N/A"} (${ws.profile.educationInstitution || ""} ${ws.profile.graduationYear || ""})
+- Experience: ${ws.profile.totalExperienceYears} years total, ${ws.profile.managementExperienceYears} years management (${ws.profile.currentOrRecentRole || "Professional"})
+- Core experience: ${ws.profile.coreExperienceAreas.join(", ") || "Professional services"}
+- Additional capabilities: ${ws.profile.additionalCapabilities.join(", ") || "None specified"}
+- Motivation: ${ws.profile.personalStorySummary || "Seeking legitimate international career growth"}
+
+TARGET RECIPIENT:
+- Name: ${contact.fullName}
+- Entity type: ${contact.entityType}
+- Organization: ${contact.companyName}
+- Role/Position: ${contact.positionOrRole}
+- Industry: ${contact.industry}
+- Location: ${[contact.city, contact.country].filter(Boolean).join(", ")} (${contact.region})
+- Sponsorship evidence status: ${contact.sponsorshipTier} (${contact.sponsorshipEvidenceNote})
+
+OUTREACH APPROACH: ${approachLabel}
+
+Return ONLY valid JSON with keys:
+{
+  "subject": "string (clear professional email subject line, max 110 chars)",
+  "message": "string (complete email body with greeting and sign-off using sender name and email)",
+  "whatsappShortMessage": "string (concise polite WhatsApp introduction under 350 chars)",
+  "linkedInNote": "string (polite LinkedIn connection note strictly under 280 chars)",
+  "followUpMessage": "string (polite brief follow-up email 7-10 days later with easy opt-out courtesy)"
+}`;
+        const response = await ai.models.generateContent({
+          model: "gemini-4-hydrogen",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.6
+          }
+        });
+        const rawText = (response.text || "").trim();
+        const parsed = JSON.parse(rawText);
+        drafts.push({
+          contactId: contact.id,
+          contactName: contact.fullName,
+          companyName: contact.companyName,
+          approach,
+          subject: String(parsed.subject || `${approachLabel} \u2014 ${ws.profile.fullName}`).slice(0, 180),
+          message: String(parsed.message || "").trim(),
+          whatsappShortMessage: String(parsed.whatsappShortMessage || "").slice(0, 500),
+          linkedInNote: String(parsed.linkedInNote || "").slice(0, 295),
+          followUpMessage: String(parsed.followUpMessage || "").trim(),
+          generatedBy: "gemini_ai",
+          modelUsed: "gemini-4-hydrogen",
+          generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      }
+      return res.json({ success: true, drafts });
+    } catch (err) {
+      ws.apiErrorCount += 1;
+      saveDb(db);
+      return res.status(502).json({
+        success: false,
+        error: `Gemini AI draft generation failed: ${err?.message || "Upstream AI service error"}`
+      });
+    }
+  });
+  app.post("/api/global-reach/outreach/log", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const contactIds = Array.isArray(req.body?.contactIds) ? req.body.contactIds.map((v) => String(v)) : req.body?.contactId ? [String(req.body.contactId)] : [];
+    if (contactIds.length === 0) {
+      return res.status(400).json({ success: false, error: "contactIds required." });
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    let recordedCount = 0;
+    let skippedSuppressedCount = 0;
+    for (const id of contactIds) {
+      const contact = ws.contacts.find((c) => c.id === id);
+      if (!contact) continue;
+      if (isSuppressed(ws, contact.publicEmail, contact.officialWebsite)) {
+        skippedSuppressedCount += 1;
+        continue;
+      }
+      const logEntry = {
+        id: `grol_${Date.now()}_${crypto9.randomBytes(2).toString("hex")}`,
+        channel: req.body?.channel || "gmail",
+        approach: req.body?.approach || "employment_request",
+        subject: typeof req.body?.subject === "string" ? req.body.subject.slice(0, 200) : void 0,
+        messagePreview: String(req.body?.messagePreview || "").slice(0, 400),
+        recipientAddress: contact.publicEmail || contact.whatsAppBusinessNumber || contact.linkedInUrl,
+        mode: req.body?.mode === "bulk_bcc" ? "bulk_bcc" : "single",
+        approvedByHuman: true,
+        sentAt: nowIso,
+        status: "opened_in_platform",
+        notes: typeof req.body?.notes === "string" ? req.body.notes.slice(0, 300) : void 0
+      };
+      contact.outreachHistory.unshift(logEntry);
+      if (typeof req.body?.nextFollowUpDate === "string" && req.body.nextFollowUpDate.trim()) {
+        contact.nextFollowUpDate = req.body.nextFollowUpDate.trim().slice(0, 40);
+      }
+      contact.updatedAt = nowIso;
+      recordedCount += 1;
+    }
+    saveDb(db);
+    return res.json({
+      success: true,
+      recordedCount,
+      skippedSuppressedCount,
+      stats: computeRealDatabaseStats(ws)
+    });
+  });
+  app.post("/api/global-reach/scheduler/control", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const action = String(req.body?.action || "").toLowerCase();
+    if (action === "pause") {
+      ws.scheduler.paused = true;
+      ws.scheduler.status = "paused";
+      ws.scheduler.nextScheduledRunAt = null;
+      ws.scheduler.nextScheduledRunEat = null;
+      pushWorkspaceNotification(ws, {
+        type: "automation_stopped",
+        title: "Hourly Global Reach automation paused",
+        message: "Automatic hourly discovery has been paused by user control."
+      });
+    } else if (action === "resume" || action === "enable") {
+      ws.scheduler.enabled = true;
+      ws.scheduler.paused = false;
+      ws.scheduler.status = ws.scheduler.isRunningNow ? "running" : "active_waiting";
+      const nextIso = new Date(Date.now() + HOURLY_INTERVAL_MS).toISOString();
+      ws.scheduler.nextScheduledRunAt = nextIso;
+      ws.scheduler.nextScheduledRunEat = formatEatTimestamp(nextIso);
+    } else if (action === "disable") {
+      ws.scheduler.enabled = false;
+      ws.scheduler.paused = true;
+      ws.scheduler.status = "disabled";
+      ws.scheduler.nextScheduledRunAt = null;
+      ws.scheduler.nextScheduledRunEat = null;
+      pushWorkspaceNotification(ws, {
+        type: "automation_stopped",
+        title: "Hourly Global Reach automation disabled",
+        message: "Automatic hourly discovery has been disabled until re-enabled."
+      });
+    } else {
+      return res.status(400).json({ success: false, error: "Invalid scheduler action. Use pause, resume, enable, or disable." });
+    }
+    saveDb(db);
+    appendAuditLog({
+      actorEmail: identity.actorEmail,
+      action: `global_reach_scheduler_${action}`,
+      entityType: "global_reach"
+    });
+    return res.json({
+      success: true,
+      scheduler: ws.scheduler,
+      stats: computeRealDatabaseStats(ws)
+    });
+  });
+  app.post("/api/global-reach/notifications/ack", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const id = typeof req.body?.id === "string" ? req.body.id : null;
+    if (id) {
+      const target = ws.notifications.find((n) => n.id === id);
+      if (target) target.read = true;
+    } else {
+      for (const n of ws.notifications) n.read = true;
+    }
+    saveDb(db);
+    return res.json({
+      success: true,
+      unreadNotificationsCount: ws.notifications.filter((n) => !n.read).length
+    });
+  });
+  app.post("/api/global-reach/suppression", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    const email = isValidPublicEmailSyntax(req.body?.email) ? String(req.body.email).trim().toLowerCase() : void 0;
+    const domain = typeof req.body?.domain === "string" ? req.body.domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] : void 0;
+    if (!email && !domain) {
+      return res.status(400).json({ success: false, error: "Provide a valid email or domain to suppress." });
+    }
+    const entry = {
+      id: `grs_${Date.now()}_${crypto9.randomBytes(2).toString("hex")}`,
+      email,
+      domain: domain || void 0,
+      contactName: typeof req.body?.contactName === "string" ? req.body.contactName.slice(0, 120) : void 0,
+      reason: String(req.body?.reason || "User opt-out / do not contact").slice(0, 240),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    ws.suppressionList.unshift(entry);
+    saveDb(db);
+    return res.status(201).json({ success: true, suppressionList: ws.suppressionList });
+  });
+  app.delete("/api/global-reach/suppression/:id", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    ws.suppressionList = ws.suppressionList.filter((s) => s.id !== req.params.id);
+    saveDb(db);
+    return res.json({ success: true, suppressionList: ws.suppressionList });
+  });
+  app.delete("/api/global-reach/privacy/purge", (req, res) => {
+    const identity = resolveAuthenticatedWorkspace(req);
+    if (!identity) {
+      return res.status(401).json({ success: false, error: "Authentication required." });
+    }
+    const db = loadDb();
+    const ws = getOrCreateWorkspace(db, identity);
+    ws.contacts = [];
+    ws.notifications = [];
+    saveDb(db);
+    return res.json({ success: true, stats: computeRealDatabaseStats(ws) });
+  });
+  const handleHourlyCron = async (req, res) => {
+    const configuredSecret = (process.env.CRON_SECRET || "").trim();
+    const authHeader = String(req.headers.authorization || "");
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const altSecret = String(req.headers["x-cron-secret"] || "").trim();
+    const authorized = isPersistentOwnerRequest(req) || configuredSecret.length > 0 && (bearer === configuredSecret || altSecret === configuredSecret);
+    if (!authorized) {
+      return res.status(401).json({ success: false, error: "Unauthorized hourly cron request." });
+    }
+    const db = loadDb();
+    const activeWorkspaceIds = Object.keys(db.workspaces).filter(
+      (id) => db.workspaces[id]?.scheduler?.enabled && !db.workspaces[id]?.scheduler?.paused
+    );
+    const results = [];
+    for (const wid of activeWorkspaceIds.slice(0, 5)) {
+      const r = await runDiscoveryCycleForWorkspace(wid, { trigger: "vercel_cron" });
+      results.push({ workspaceId: wid, cycleLog: r.cycleLog });
+    }
+    return res.json({
+      success: true,
+      executedWorkspaces: results.length,
+      results
+    });
+  };
+  app.get("/api/cron/global-reach", handleHourlyCron);
+  app.post("/api/cron/global-reach", handleHourlyCron);
+  let hourlyTimer = null;
+  let startupTimer = null;
+  function bootAutonomousHourlyScheduler() {
+    const db = loadDb();
+    let changed = false;
+    for (const ws of Object.values(db.workspaces)) {
+      if (ws.scheduler.isRunningNow) {
+        ws.scheduler.isRunningNow = false;
+        ws.scheduler.lockAcquiredAt = null;
+        ws.scheduler.status = ws.scheduler.enabled && !ws.scheduler.paused ? "active_waiting" : ws.scheduler.paused ? "paused" : "disabled";
+        ws.scheduler.recoveryNotes = `Recovered gracefully after server restart at ${(/* @__PURE__ */ new Date()).toISOString()}.`;
+        changed = true;
+      }
+    }
+    if (changed) saveDb(db);
+    if (isVercel || process.env.DISABLE_BACKGROUND_SCHEDULERS === "true") {
+      return;
+    }
+    startupTimer = setTimeout(() => {
+      const currentDb = loadDb();
+      const ownerWs = currentDb.workspaces[OWNER_WORKSPACE_ID];
+      if (!ownerWs || !ownerWs.scheduler.enabled || ownerWs.scheduler.paused) return;
+      const lastRunMs = ownerWs.scheduler.lastSuccessfulRunAt ? Date.parse(ownerWs.scheduler.lastSuccessfulRunAt) : 0;
+      const isDueNow = ownerWs.contacts.length === 0 || !lastRunMs || Number.isNaN(lastRunMs) || Date.now() - lastRunMs >= HOURLY_INTERVAL_MS - 3e4;
+      if (isDueNow) {
+        runDiscoveryCycleForWorkspace(OWNER_WORKSPACE_ID, { trigger: "startup_auto" }).catch(
+          (err) => console.error("[GlobalReach] Initial discovery cycle failed:", err?.message || err)
+        );
+      }
+    }, 3500);
+    hourlyTimer = setInterval(() => {
+      const currentDb = loadDb();
+      const workspaceIds = Object.keys(currentDb.workspaces).filter(
+        (id) => currentDb.workspaces[id]?.scheduler?.enabled && !currentDb.workspaces[id]?.scheduler?.paused
+      );
+      for (const wid of workspaceIds) {
+        runDiscoveryCycleForWorkspace(wid, { trigger: "hourly_scheduler" }).catch(
+          (err) => console.error(`[GlobalReach] Hourly cycle failed for ${wid}:`, err?.message || err)
+        );
+      }
+    }, HOURLY_INTERVAL_MS);
+    if (typeof hourlyTimer.unref === "function") hourlyTimer.unref();
+    if (typeof startupTimer.unref === "function") startupTimer.unref();
+  }
+  bootAutonomousHourlyScheduler();
+  return {
+    runDiscoveryCycleForWorkspace,
+    loadDb,
+    stopScheduler: () => {
+      if (hourlyTimer) clearInterval(hourlyTimer);
+      if (startupTimer) clearTimeout(startupTimer);
+    }
+  };
+}
+
 // src/utils/telegramSnapshot.ts
 function clip(val, maxLen) {
   const s = String(val ?? "").trim();
@@ -24316,10 +27284,10 @@ async function buildExpressApp() {
   const app = express();
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-  const UPLOADS_DIR = path9.join(RUNTIME_BASE_DIR, "public", "uploads");
+  const UPLOADS_DIR = path10.join(RUNTIME_BASE_DIR, "public", "uploads");
   try {
-    if (!fs4.existsSync(UPLOADS_DIR)) {
-      fs4.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs5.existsSync(UPLOADS_DIR)) {
+      fs5.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
   } catch {
   }
@@ -24382,7 +27350,7 @@ async function buildExpressApp() {
         res.status(400).json({ error: "No file uploaded" });
         return;
       }
-      const ext = path9.extname(req.file.originalname).toLowerCase();
+      const ext = path10.extname(req.file.originalname).toLowerCase();
       let extractedText = "";
       if (ext === ".txt") {
         extractedText = req.file.buffer.toString("utf-8");
@@ -25209,25 +28177,25 @@ ${text}`;
       res.status(500).json({ error: "Failed to audit existing duplicates." });
     }
   });
-  const SETTINGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
-  const TELEGRAM_CONFIG_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
-  const TELEGRAM_QUEUE_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
-  const TELEGRAM_LOGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
-  const VACANCIES_CATALOG_FILE_SERVER = path9.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
-  const BOT_HEALTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
-  const SYSTEM_HEALTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "system_health.json");
-  const AUDIT_LOGS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
-  const ADMIN_NOTIFICATIONS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
-  const DEVELOPER_AUTH_FILE = path9.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
-  const BACKUPS_DIR = path9.join(RUNTIME_BASE_DIR, "data", "backups");
+  const SETTINGS_FILE = path10.join(RUNTIME_BASE_DIR, "data", "site_settings.json");
+  const TELEGRAM_CONFIG_FILE = path10.join(RUNTIME_BASE_DIR, "data", "telegram_config.json");
+  const TELEGRAM_QUEUE_FILE = path10.join(RUNTIME_BASE_DIR, "data", "telegram_queue.json");
+  const TELEGRAM_LOGS_FILE = path10.join(RUNTIME_BASE_DIR, "data", "telegram_logs.json");
+  const VACANCIES_CATALOG_FILE_SERVER = path10.join(RUNTIME_BASE_DIR, "data", "vacancies_catalog.json");
+  const BOT_HEALTH_FILE = path10.join(RUNTIME_BASE_DIR, "data", "bot_health.json");
+  const SYSTEM_HEALTH_FILE = path10.join(RUNTIME_BASE_DIR, "data", "system_health.json");
+  const AUDIT_LOGS_FILE = path10.join(RUNTIME_BASE_DIR, "data", "audit_logs.json");
+  const ADMIN_NOTIFICATIONS_FILE = path10.join(RUNTIME_BASE_DIR, "data", "admin_notifications.json");
+  const DEVELOPER_AUTH_FILE = path10.join(RUNTIME_BASE_DIR, "data", "developer_auth.json");
+  const BACKUPS_DIR = path10.join(RUNTIME_BASE_DIR, "data", "backups");
   const DEFAULT_GA_MEASUREMENT_ID = "G-KH6X73105S";
   const PERSISTENT_OWNER_EMAILS = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   const SERVER_BOOT_TIME_MS = Date.now();
   const DEV_SESSION_COOKIE_NAME = "hopeland_dev_session";
   const DEV_SESSION_TTL_MS = 24 * 60 * 60 * 1e3;
   function hashDeveloperPasswordScrypt(plainText, id = "primary", label = "Primary Developer Password") {
-    const salt = crypto9.randomBytes(16).toString("hex");
-    const derived = crypto9.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
+    const salt = crypto10.randomBytes(16).toString("hex");
+    const derived = crypto10.scryptSync(plainText, salt, 64, { N: 16384, r: 8, p: 1 });
     const now = (/* @__PURE__ */ new Date()).toISOString();
     return {
       id,
@@ -25246,13 +28214,13 @@ ${text}`;
     try {
       if (!plainText || !record?.salt || !record?.hashHex) return false;
       const expectedBuf = Buffer.from(record.hashHex, "hex");
-      const derivedBuf = crypto9.scryptSync(plainText, record.salt, expectedBuf.length, {
+      const derivedBuf = crypto10.scryptSync(plainText, record.salt, expectedBuf.length, {
         N: record.cost || 16384,
         r: record.blockSize || 8,
         p: record.parallelization || 1
       });
       if (derivedBuf.length !== expectedBuf.length) return false;
-      return crypto9.timingSafeEqual(derivedBuf, expectedBuf);
+      return crypto10.timingSafeEqual(derivedBuf, expectedBuf);
     } catch {
       return false;
     }
@@ -25266,7 +28234,7 @@ ${text}`;
       passwordHashes: Array.isArray(existing.passwordHashes) ? existing.passwordHashes : [],
       sessionSigningKey: typeof existing.sessionSigningKey === "string" && existing.sessionSigningKey.length >= 32 ? existing.sessionSigningKey : (() => {
         mutated = true;
-        return crypto9.randomBytes(32).toString("hex");
+        return crypto10.randomBytes(32).toString("hex");
       })(),
       updatedAt: existing.updatedAt || (/* @__PURE__ */ new Date()).toISOString()
     } : (() => {
@@ -25275,7 +28243,7 @@ ${text}`;
         version: 1,
         algorithm: "scrypt",
         passwordHashes: [],
-        sessionSigningKey: crypto9.randomBytes(32).toString("hex"),
+        sessionSigningKey: crypto10.randomBytes(32).toString("hex"),
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
     })();
@@ -25305,7 +28273,7 @@ ${text}`;
         mutated = true;
       }
     }
-    if (mutated || !fs4.existsSync(DEVELOPER_AUTH_FILE)) {
+    if (mutated || !fs5.existsSync(DEVELOPER_AUTH_FILE)) {
       writeJsonFileAtomic(DEVELOPER_AUTH_FILE, store);
     }
     return store;
@@ -25354,7 +28322,7 @@ ${text}`;
       exp: now + DEV_SESSION_TTL_MS
     };
     const encoded = Buffer.from(JSON.stringify(payload), "utf-8").toString("base64url");
-    const sig = crypto9.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+    const sig = crypto10.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
     return `${encoded}.${sig}`;
   }
   function verifyDeveloperSessionToken(token) {
@@ -25363,10 +28331,10 @@ ${text}`;
       const [encoded, sig] = token.split(".");
       if (!encoded || !sig) return { valid: false };
       const store = ensureDeveloperAuthStore();
-      const expectedSig = crypto9.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
+      const expectedSig = crypto10.createHmac("sha256", store.sessionSigningKey).update(encoded).digest("base64url");
       const sigBuf = Buffer.from(sig, "utf-8");
       const expBuf = Buffer.from(expectedSig, "utf-8");
-      if (sigBuf.length !== expBuf.length || !crypto9.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !crypto10.timingSafeEqual(sigBuf, expBuf)) {
         return { valid: false };
       }
       const parsed = JSON.parse(Buffer.from(encoded, "base64url").toString("utf-8"));
@@ -25439,25 +28407,25 @@ ${text}`;
     return Boolean(email && PERSISTENT_OWNER_EMAILS.has(email));
   }
   function ensureRuntimeDataDir() {
-    const dataDir = path9.join(RUNTIME_BASE_DIR, "data");
+    const dataDir = path10.join(RUNTIME_BASE_DIR, "data");
     try {
-      if (!fs4.existsSync(dataDir)) {
-        fs4.mkdirSync(dataDir, { recursive: true });
+      if (!fs5.existsSync(dataDir)) {
+        fs5.mkdirSync(dataDir, { recursive: true });
       }
-      if (!fs4.existsSync(BACKUPS_DIR)) {
-        fs4.mkdirSync(BACKUPS_DIR, { recursive: true });
+      if (!fs5.existsSync(BACKUPS_DIR)) {
+        fs5.mkdirSync(BACKUPS_DIR, { recursive: true });
       }
-      const bundledDataDir = path9.join(process.cwd(), "data");
-      if (path9.resolve(dataDir) !== path9.resolve(bundledDataDir) && fs4.existsSync(bundledDataDir)) {
-        const entries = fs4.readdirSync(bundledDataDir);
+      const bundledDataDir = path10.join(process.cwd(), "data");
+      if (path10.resolve(dataDir) !== path10.resolve(bundledDataDir) && fs5.existsSync(bundledDataDir)) {
+        const entries = fs5.readdirSync(bundledDataDir);
         for (const file of entries) {
           if (!file.endsWith(".json")) continue;
-          const srcPath = path9.join(bundledDataDir, file);
-          const destPath = path9.join(dataDir, file);
-          if (!fs4.existsSync(destPath)) {
+          const srcPath = path10.join(bundledDataDir, file);
+          const destPath = path10.join(dataDir, file);
+          if (!fs5.existsSync(destPath)) {
             try {
-              if (fs4.statSync(srcPath).isFile()) {
-                fs4.copyFileSync(srcPath, destPath);
+              if (fs5.statSync(srcPath).isFile()) {
+                fs5.copyFileSync(srcPath, destPath);
               }
             } catch {
             }
@@ -25470,8 +28438,8 @@ ${text}`;
   }
   function loadJsonFileSafe(filePath, fallback) {
     try {
-      if (fs4.existsSync(filePath)) {
-        const raw = fs4.readFileSync(filePath, "utf-8");
+      if (fs5.existsSync(filePath)) {
+        const raw = fs5.readFileSync(filePath, "utf-8");
         if (raw && raw.trim()) {
           return JSON.parse(raw);
         }
@@ -25484,11 +28452,11 @@ ${text}`;
     try {
       ensureRuntimeDataDir();
       const tmpPath = `${filePath}.tmp`;
-      fs4.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-      fs4.renameSync(tmpPath, filePath);
+      fs5.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+      fs5.renameSync(tmpPath, filePath);
       return true;
     } catch (e) {
-      console.warn(`Notice: Failed writing ${path9.basename(filePath)}:`, e);
+      console.warn(`Notice: Failed writing ${path10.basename(filePath)}:`, e);
       return false;
     }
   }
@@ -25567,13 +28535,13 @@ ${text}`;
   function loadPersistedSettings() {
     try {
       let settings = {};
-      if (fs4.existsSync(SETTINGS_FILE)) {
-        const raw = fs4.readFileSync(SETTINGS_FILE, "utf-8");
+      if (fs5.existsSync(SETTINGS_FILE)) {
+        const raw = fs5.readFileSync(SETTINGS_FILE, "utf-8");
         settings = JSON.parse(raw) || {};
       }
-      if (fs4.existsSync(TELEGRAM_CONFIG_FILE)) {
+      if (fs5.existsSync(TELEGRAM_CONFIG_FILE)) {
         try {
-          const tgRaw = fs4.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
+          const tgRaw = fs5.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8");
           const tgData = JSON.parse(tgRaw);
           if (tgData?.telegramBotToken) {
             settings.telegramBotToken = tgData.telegramBotToken;
@@ -25649,8 +28617,8 @@ ${text}`;
       if (rawTokenToStore || merged.customDomain || merged.telegramBotUsername || merged.telegramChannelId || merged.botInstructions !== void 0 || merged.botLastVerifiedAt !== void 0) {
         let existingTg = {};
         try {
-          if (fs4.existsSync(TELEGRAM_CONFIG_FILE)) {
-            existingTg = JSON.parse(fs4.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
+          if (fs5.existsSync(TELEGRAM_CONFIG_FILE)) {
+            existingTg = JSON.parse(fs5.readFileSync(TELEGRAM_CONFIG_FILE, "utf-8")) || {};
           }
         } catch {
         }
@@ -25710,12 +28678,12 @@ ${text}`;
   let cachedFirestoreBrandLogo = null;
   function readFirebaseClientConfigServer() {
     const candidates = [
-      path9.join(process.cwd(), "firebase-applet-config.json")
+      path10.join(process.cwd(), "firebase-applet-config.json")
     ];
     for (const p of candidates) {
       try {
-        if (fs4.existsSync(p)) {
-          const parsed = JSON.parse(fs4.readFileSync(p, "utf8"));
+        if (fs5.existsSync(p)) {
+          const parsed = JSON.parse(fs5.readFileSync(p, "utf8"));
           if (parsed?.projectId) {
             return {
               projectId: String(parsed.projectId),
@@ -25866,11 +28834,11 @@ ${text}`;
   }
   function sendPublicFallbackIcon(res, filename) {
     const candidates = [
-      path9.join(process.cwd(), "public", filename),
-      path9.join(process.cwd(), "dist", filename)
+      path10.join(process.cwd(), "public", filename),
+      path10.join(process.cwd(), "dist", filename)
     ];
     for (const p of candidates) {
-      if (fs4.existsSync(p)) {
+      if (fs5.existsSync(p)) {
         res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.sendFile(p);
         return;
@@ -25906,7 +28874,7 @@ ${text}`;
     const brand = await getLiveBrandLogoState();
     const versionRaw = brand.appLogoUpdatedAt || "default";
     const versionTag = encodeURIComponent(
-      crypto9.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
+      crypto10.createHash("md5").update(`${brand.appLogoUrl || "default"}:${brand.appLogo512Url || ""}:${versionRaw}`).digest("hex").slice(0, 10)
     );
     const querySuffix = `?v=${versionTag}`;
     const asset192 = await resolveCustomAppLogoAsset(brand.appLogoUrl || brand.appLogo512Url);
@@ -26044,13 +29012,13 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     const launchUrl = `${appOrigin}/?source=ios_app`;
     let iconBase64 = "";
     for (const candidate of [
-      path9.join(process.cwd(), "public", "apple-touch-icon.png"),
-      path9.join(process.cwd(), "dist", "apple-touch-icon.png"),
-      path9.join(process.cwd(), "public", "pwa-192x192.png")
+      path10.join(process.cwd(), "public", "apple-touch-icon.png"),
+      path10.join(process.cwd(), "dist", "apple-touch-icon.png"),
+      path10.join(process.cwd(), "public", "pwa-192x192.png")
     ]) {
-      if (fs4.existsSync(candidate)) {
+      if (fs5.existsSync(candidate)) {
         try {
-          iconBase64 = fs4.readFileSync(candidate).toString("base64");
+          iconBase64 = fs5.readFileSync(candidate).toString("base64");
           break;
         } catch {
         }
@@ -26430,12 +29398,12 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     }
     res.json({ success: true, restored: store.passwordHashes.length, updatedAt: store.updatedAt });
   });
-  const USER_PROFILES_FILE = path9.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
-  const JOB_APPLICATIONS_FILE = path9.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
+  const USER_PROFILES_FILE = path10.join(RUNTIME_BASE_DIR, "data", "user_profiles.json");
+  const JOB_APPLICATIONS_FILE = path10.join(RUNTIME_BASE_DIR, "data", "job_applications.json");
   function loadUserProfiles() {
     try {
-      if (fs4.existsSync(USER_PROFILES_FILE)) {
-        const raw = fs4.readFileSync(USER_PROFILES_FILE, "utf-8");
+      if (fs5.existsSync(USER_PROFILES_FILE)) {
+        const raw = fs5.readFileSync(USER_PROFILES_FILE, "utf-8");
         return JSON.parse(raw) || {};
       }
     } catch {
@@ -26493,8 +29461,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
   }
   function loadJobApplications() {
     try {
-      if (fs4.existsSync(JOB_APPLICATIONS_FILE)) {
-        const raw = fs4.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
+      if (fs5.existsSync(JOB_APPLICATIONS_FILE)) {
+        const raw = fs5.readFileSync(JOB_APPLICATIONS_FILE, "utf-8");
         return JSON.parse(raw) || [];
       }
     } catch {
@@ -26694,9 +29662,9 @@ IconFile=${appOrigin}/favicon-32x32.png\r
         res.status(400).json({ error: "No file data received." });
         return;
       }
-      const safeName = `${Date.now()}_${path9.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const filePath = path9.join(UPLOADS_DIR, safeName);
-      fs4.writeFileSync(filePath, buffer);
+      const safeName = `${Date.now()}_${path10.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path10.join(UPLOADS_DIR, safeName);
+      fs5.writeFileSync(filePath, buffer);
       const downloadUrl = `/uploads/${safeName}`;
       res.json({
         success: true,
@@ -27381,8 +30349,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       items: []
     };
     try {
-      if (fs4.existsSync(TELEGRAM_QUEUE_FILE)) {
-        const parsed = JSON.parse(fs4.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
+      if (fs5.existsSync(TELEGRAM_QUEUE_FILE)) {
+        const parsed = JSON.parse(fs5.readFileSync(TELEGRAM_QUEUE_FILE, "utf-8"));
         return {
           queueState: parsed?.queueState || defaultState,
           publishedRecords: parsed?.publishedRecords || {}
@@ -27395,15 +30363,15 @@ IconFile=${appOrigin}/favicon-32x32.png\r
   function saveTelegramQueueDisk(data) {
     try {
       ensureRuntimeDataDir();
-      fs4.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
+      fs5.writeFileSync(TELEGRAM_QUEUE_FILE, JSON.stringify(data, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_queue.json:", e);
     }
   }
   function loadTelegramLogsDisk() {
     try {
-      if (fs4.existsSync(TELEGRAM_LOGS_FILE)) {
-        const parsed = JSON.parse(fs4.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
+      if (fs5.existsSync(TELEGRAM_LOGS_FILE)) {
+        const parsed = JSON.parse(fs5.readFileSync(TELEGRAM_LOGS_FILE, "utf-8"));
         if (Array.isArray(parsed?.logs)) return parsed.logs;
       }
     } catch {
@@ -27420,7 +30388,7 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       ensureRuntimeDataDir();
       const logs = loadTelegramLogsDisk();
       const updated = [full, ...logs].slice(0, 500);
-      fs4.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
+      fs5.writeFileSync(TELEGRAM_LOGS_FILE, JSON.stringify({ logs: updated }, null, 2), "utf-8");
     } catch (e) {
       console.warn("Notice: Failed writing telegram_logs.json:", e);
     }
@@ -27452,8 +30420,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
     try {
       ensureRuntimeDataDir();
       let list = [];
-      if (fs4.existsSync(VACANCIES_CATALOG_FILE_SERVER)) {
-        const parsed = JSON.parse(fs4.readFileSync(VACANCIES_CATALOG_FILE_SERVER, "utf-8"));
+      if (fs5.existsSync(VACANCIES_CATALOG_FILE_SERVER)) {
+        const parsed = JSON.parse(fs5.readFileSync(VACANCIES_CATALOG_FILE_SERVER, "utf-8"));
         if (Array.isArray(parsed)) list = parsed;
       }
       const nowIso = (/* @__PURE__ */ new Date()).toISOString();
@@ -27475,8 +30443,8 @@ IconFile=${appOrigin}/favicon-32x32.png\r
       }
       const safeList = list.filter((v) => v?.id && hasValidVacancyDeadline(v));
       const tmpPath = `${VACANCIES_CATALOG_FILE_SERVER}.${process.pid}.${Date.now()}.tmp`;
-      fs4.writeFileSync(tmpPath, JSON.stringify(safeList, null, 2), "utf-8");
-      fs4.renameSync(tmpPath, VACANCIES_CATALOG_FILE_SERVER);
+      fs5.writeFileSync(tmpPath, JSON.stringify(safeList, null, 2), "utf-8");
+      fs5.renameSync(tmpPath, VACANCIES_CATALOG_FILE_SERVER);
       return normalizedItem;
     } catch (e) {
       console.warn("Notice: Failed upserting vacancy into server catalog:", e);
@@ -28804,10 +31772,10 @@ ${footer}`;
       res.status(500).json({ error: "Failed to check links" });
     }
   });
-  const ANALYTICS_DIR = path9.join(RUNTIME_BASE_DIR, "data");
-  const ANALYTICS_FILE = path9.join(ANALYTICS_DIR, "analytics_events.json");
-  const BUSINESS_BI_FILE = path9.join(ANALYTICS_DIR, "business_bi.json");
-  const GSC_CONFIG_FILE = path9.join(ANALYTICS_DIR, "gsc_config.json");
+  const ANALYTICS_DIR = path10.join(RUNTIME_BASE_DIR, "data");
+  const ANALYTICS_FILE = path10.join(ANALYTICS_DIR, "analytics_events.json");
+  const BUSINESS_BI_FILE = path10.join(ANALYTICS_DIR, "business_bi.json");
+  const GSC_CONFIG_FILE = path10.join(ANALYTICS_DIR, "gsc_config.json");
   let analyticsEvents = [];
   let businessBiData = {
     actualEmployerRevenueEtb: 0,
@@ -28855,21 +31823,21 @@ ${footer}`;
   };
   function loadStoredData() {
     try {
-      if (!fs4.existsSync(ANALYTICS_DIR)) {
-        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs5.existsSync(ANALYTICS_DIR)) {
+        fs5.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      if (fs4.existsSync(ANALYTICS_FILE)) {
-        const raw = fs4.readFileSync(ANALYTICS_FILE, "utf-8");
+      if (fs5.existsSync(ANALYTICS_FILE)) {
+        const raw = fs5.readFileSync(ANALYTICS_FILE, "utf-8");
         analyticsEvents = JSON.parse(raw);
       } else {
         analyticsEvents = [];
       }
-      if (fs4.existsSync(BUSINESS_BI_FILE)) {
-        const raw = fs4.readFileSync(BUSINESS_BI_FILE, "utf-8");
+      if (fs5.existsSync(BUSINESS_BI_FILE)) {
+        const raw = fs5.readFileSync(BUSINESS_BI_FILE, "utf-8");
         businessBiData = { ...businessBiData, ...JSON.parse(raw) };
       }
-      if (fs4.existsSync(GSC_CONFIG_FILE)) {
-        const raw = fs4.readFileSync(GSC_CONFIG_FILE, "utf-8");
+      if (fs5.existsSync(GSC_CONFIG_FILE)) {
+        const raw = fs5.readFileSync(GSC_CONFIG_FILE, "utf-8");
         gscConfigData = { ...gscConfigData, ...JSON.parse(raw) };
       }
     } catch (err) {
@@ -28878,33 +31846,33 @@ ${footer}`;
   }
   function persistAnalyticsEvents() {
     try {
-      if (!fs4.existsSync(ANALYTICS_DIR)) {
-        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs5.existsSync(ANALYTICS_DIR)) {
+        fs5.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
       if (analyticsEvents.length > 5e4) {
         analyticsEvents = analyticsEvents.slice(analyticsEvents.length - 5e4);
       }
-      fs4.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
+      fs5.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsEvents, null, 2), "utf-8");
     } catch (err) {
       console.warn("Analytics persistence error:", err);
     }
   }
   function persistBusinessBi() {
     try {
-      if (!fs4.existsSync(ANALYTICS_DIR)) {
-        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs5.existsSync(ANALYTICS_DIR)) {
+        fs5.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs4.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
+      fs5.writeFileSync(BUSINESS_BI_FILE, JSON.stringify(businessBiData, null, 2), "utf-8");
     } catch (err) {
       console.warn("Business BI persistence error:", err);
     }
   }
   function persistGscConfig() {
     try {
-      if (!fs4.existsSync(ANALYTICS_DIR)) {
-        fs4.mkdirSync(ANALYTICS_DIR, { recursive: true });
+      if (!fs5.existsSync(ANALYTICS_DIR)) {
+        fs5.mkdirSync(ANALYTICS_DIR, { recursive: true });
       }
-      fs4.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
+      fs5.writeFileSync(GSC_CONFIG_FILE, JSON.stringify(gscConfigData, null, 2), "utf-8");
     } catch (err) {
       console.warn("GSC config persistence error:", err);
     }
@@ -29938,11 +32906,11 @@ Respond with a JSON object adhering to this schema:
     }
     return Buffer.from(raw, "utf-8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
-  const AUTO_APPLY_DATA_FILE = path9.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
+  const AUTO_APPLY_DATA_FILE = path10.join(RUNTIME_BASE_DIR, "data", "auto_apply_data.json");
   function loadPersistedAutoApplyData() {
     try {
-      if (fs4.existsSync(AUTO_APPLY_DATA_FILE)) {
-        const raw = fs4.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
+      if (fs5.existsSync(AUTO_APPLY_DATA_FILE)) {
+        const raw = fs5.readFileSync(AUTO_APPLY_DATA_FILE, "utf-8");
         return JSON.parse(raw);
       }
     } catch (e) {
@@ -29952,9 +32920,9 @@ Respond with a JSON object adhering to this schema:
   }
   function savePersistedAutoApplyData(data) {
     try {
-      const dir = path9.dirname(AUTO_APPLY_DATA_FILE);
-      if (!fs4.existsSync(dir)) fs4.mkdirSync(dir, { recursive: true });
-      fs4.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+      const dir = path10.dirname(AUTO_APPLY_DATA_FILE);
+      if (!fs5.existsSync(dir)) fs5.mkdirSync(dir, { recursive: true });
+      fs5.writeFileSync(AUTO_APPLY_DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Notice: Could not save auto_apply_data.json:", e);
@@ -31071,8 +34039,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       res.status(500).json({ error: "Failed to draft vacancy with AI." });
     }
   });
-  const DATA_DIR = path9.join(RUNTIME_BASE_DIR, "data");
-  const INTERNATIONAL_DATA_FILE = path9.join(DATA_DIR, "international_data.json");
+  const DATA_DIR = path10.join(RUNTIME_BASE_DIR, "data");
+  const INTERNATIONAL_DATA_FILE = path10.join(DATA_DIR, "international_data.json");
   const OFFICIAL_NOT_STATED = "NOT STATED IN THE OFFICIAL ANNOUNCEMENT";
   const OWNER_EMAILS_SET = /* @__PURE__ */ new Set(["nexusitsoultion@gmail.com", "yeabsra45@gmail.com"]);
   function getCallerEmailFromReq(req) {
@@ -31187,8 +34155,8 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
       lastCycleSummary: "Initializing automatic 30-second research scheduler..."
     };
     try {
-      if (fs4.existsSync(INTERNATIONAL_DATA_FILE)) {
-        const raw = fs4.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
+      if (fs5.existsSync(INTERNATIONAL_DATA_FILE)) {
+        const raw = fs5.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         const jobs = (Array.isArray(parsed.internationalJobs) ? parsed.internationalJobs : []).map((j) => ({
           ...j,
@@ -31234,10 +34202,10 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
   }
   function savePersistedInternationalData(data) {
     try {
-      if (!fs4.existsSync(DATA_DIR)) fs4.mkdirSync(DATA_DIR, { recursive: true });
-      const prev = fs4.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
+      if (!fs5.existsSync(DATA_DIR)) fs5.mkdirSync(DATA_DIR, { recursive: true });
+      const prev = fs5.existsSync(INTERNATIONAL_DATA_FILE) ? (() => {
         try {
-          return JSON.parse(fs4.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
+          return JSON.parse(fs5.readFileSync(INTERNATIONAL_DATA_FILE, "utf-8"));
         } catch {
           return {};
         }
@@ -31247,7 +34215,7 @@ This role sits within the ${category || "Corporate"} sector and requires ${exper
         ...data,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      fs4.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
+      fs5.writeFileSync(INTERNATIONAL_DATA_FILE, JSON.stringify(payload, null, 2), "utf-8");
       return true;
     } catch (e) {
       console.warn("Could not save international_data.json:", e);
@@ -33946,13 +36914,27 @@ Return strict JSON:
     getRequesterUid,
     appendAuditLog
   });
+  registerGlobalReachRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification,
+    getAiClient
+  });
   function listPersistentBackups() {
     ensureRuntimeDataDir();
     try {
-      const files = fs4.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
+      const files = fs5.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
       return files.map((filename) => {
-        const fullPath = path9.join(BACKUPS_DIR, filename);
-        const stat = fs4.statSync(fullPath);
+        const fullPath = path10.join(BACKUPS_DIR, filename);
+        const stat = fs5.statSync(fullPath);
         const parsed = loadJsonFileSafe(fullPath, {});
         return {
           id: parsed.id || filename.replace(/\.json$/, ""),
@@ -34016,12 +36998,12 @@ Return strict JSON:
         ...userEngineBackupData
       }
     };
-    const fullPath = path9.join(BACKUPS_DIR, filename);
+    const fullPath = path10.join(BACKUPS_DIR, filename);
     writeJsonFileAtomic(fullPath, payload);
     try {
-      const autoFiles = fs4.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
+      const autoFiles = fs5.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith(".json") && (f.includes("_startup.") || f.includes("_scheduled."))).sort().reverse();
       for (const old of autoFiles.slice(20)) {
-        fs4.unlinkSync(path9.join(BACKUPS_DIR, old));
+        fs5.unlinkSync(path10.join(BACKUPS_DIR, old));
       }
     } catch {
     }
@@ -34033,7 +37015,7 @@ Return strict JSON:
       summary: `Created ${trigger} persistent database backup (${payload.counts.staffProfiles} profiles, ${payload.counts.applications} apps)`,
       severity: "info"
     });
-    const stat = fs4.existsSync(fullPath) ? fs4.statSync(fullPath) : { size: 0 };
+    const stat = fs5.existsSync(fullPath) ? fs5.statSync(fullPath) : { size: 0 };
     return {
       id,
       filename,
@@ -34047,9 +37029,9 @@ Return strict JSON:
     ensureRuntimeDataDir();
     let writable = false;
     try {
-      const probeFile = path9.join(RUNTIME_BASE_DIR, "data", ".write_probe");
-      fs4.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
-      fs4.unlinkSync(probeFile);
+      const probeFile = path10.join(RUNTIME_BASE_DIR, "data", ".write_probe");
+      fs5.writeFileSync(probeFile, (/* @__PURE__ */ new Date()).toISOString(), "utf-8");
+      fs5.unlinkSync(probeFile);
       writable = true;
     } catch {
     }
@@ -34064,12 +37046,12 @@ Return strict JSON:
     const backups = listPersistentBackups();
     const unackAlerts = notifs.filter((n) => !n.acknowledged).length;
     const filesPresent = {
-      site_settings: fs4.existsSync(SETTINGS_FILE),
-      telegram_config: fs4.existsSync(TELEGRAM_CONFIG_FILE),
-      user_profiles: fs4.existsSync(USER_PROFILES_FILE),
-      job_applications: fs4.existsSync(JOB_APPLICATIONS_FILE),
-      international_data: fs4.existsSync(INTERNATIONAL_DATA_FILE),
-      analytics_events: fs4.existsSync(ANALYTICS_FILE)
+      site_settings: fs5.existsSync(SETTINGS_FILE),
+      telegram_config: fs5.existsSync(TELEGRAM_CONFIG_FILE),
+      user_profiles: fs5.existsSync(USER_PROFILES_FILE),
+      job_applications: fs5.existsSync(JOB_APPLICATIONS_FILE),
+      international_data: fs5.existsSync(INTERNATIONAL_DATA_FILE),
+      analytics_events: fs5.existsSync(ANALYTICS_FILE)
     };
     const botStatus = !token ? "UNCONFIGURED" : botHealth.status === "CONNECTED" ? "CONNECTED" : "DISCONNECTED";
     const gaId = settings.gaMeasurementId || DEFAULT_GA_MEASUREMENT_ID;
@@ -34265,7 +37247,7 @@ Return strict JSON:
       res.status(404).json({ success: false, error: "Backup snapshot not found." });
       return;
     }
-    const fullPath = path9.join(BACKUPS_DIR, target.filename);
+    const fullPath = path10.join(BACKUPS_DIR, target.filename);
     const parsed = loadJsonFileSafe(fullPath, null);
     if (!parsed || !parsed.data) {
       res.status(400).json({ success: false, error: "Backup file is corrupt or empty." });

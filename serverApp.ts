@@ -10,6 +10,7 @@ import { registerGlobalMigrationHubRoutes } from './serverGlobalMigrationHub';
 import { registerBranchManagerJobsRoutes } from './serverBranchManagerJobs';
 import { registerAutonomousDiscoveryWorker } from './serverAutonomousDiscoveryWorker';
 import { registerOpportunityIntelligenceRoutes } from './serverOpportunityIntelligence';
+import { registerGlobalReachRoutes } from './serverGlobalReach';
 import {
   extractDirectEmployerChannels,
   hasValidVacancyDeadline,
@@ -11454,6 +11455,21 @@ Return strict JSON:
     isPersistentOwnerRequest,
     getRequesterUid,
     appendAuditLog,
+  });
+
+  registerGlobalReachRoutes({
+    app,
+    runtimeBaseDir: RUNTIME_BASE_DIR,
+    isVercel: IS_VERCEL,
+    ensureRuntimeDataDir,
+    loadJsonFileSafe,
+    writeJsonFileAtomic,
+    isPersistentOwnerRequest,
+    getRequesterUid,
+    getRequesterEmail,
+    appendAuditLog,
+    pushAdminNotification,
+    getAiClient,
   });
 
   function listPersistentBackups(): any[] {
